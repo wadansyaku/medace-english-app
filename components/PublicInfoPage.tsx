@@ -2,7 +2,6 @@ import React from 'react';
 import { ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
 import { getSubscriptionPolicy } from '../config/subscription';
 import { SubscriptionPlan } from '../types';
-import { getDemoAccessWindowLabel } from '../utils/demo';
 
 interface PublicInfoPageProps {
   onBack: () => void;
@@ -44,8 +43,8 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({ onBack }) => {
       </button>
 
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(246,109,11,0.12)]">
-        <div className="grid gap-6 border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#fff4e8_100%)] p-8 md:grid-cols-[1.05fr_0.95fr] md:p-10">
-          <div>
+        <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#fff4e8_100%)] p-8 md:p-10">
+          <div className="max-w-3xl">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-medace-500">Public Guide</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
               アプリの説明と
@@ -57,31 +56,20 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({ onBack }) => {
             </p>
           </div>
 
-          <div className="rounded-[28px] border border-medace-100 bg-white/90 p-6 shadow-sm">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Demo Access</p>
-            <div className="mt-3 text-2xl font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</div>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              体験アカウントは別端末ごとに新しい demo セッションを作ります。初回診断やテストも毎回最初から確認できます。
-            </p>
+          <div className="mt-6 grid gap-3 md:grid-cols-3">
+            {PLATFORM_HIGHLIGHTS.map((item) => (
+              <div key={item.label} className="rounded-3xl border border-slate-200 bg-white/90 px-5 py-5 shadow-sm">
+                <div className="flex items-center gap-2 text-medace-600">
+                  {item.icon}
+                  <span className="text-xs font-black uppercase tracking-[0.16em]">{item.label}</span>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.detail}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="space-y-8 p-6 md:p-8">
-          <section>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Overview</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {PLATFORM_HIGHLIGHTS.map((item) => (
-                <div key={item.label} className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
-                  <div className="flex items-center gap-2 text-medace-600">
-                    {item.icon}
-                    <span className="text-xs font-black uppercase tracking-[0.16em]">{item.label}</span>
-                  </div>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.detail}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
+        <div className="p-6 md:p-8">
           <section>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Plan Overview</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">料金体系の考え方</h2>
