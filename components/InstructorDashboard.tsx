@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { storage } from '../services/storage';
 import { generateInstructorFollowUp } from '../services/gemini';
 import { StudentSummary, StudentRiskLevel, SUBSCRIPTION_PLAN_LABELS, UserProfile } from '../types';
-import { AlertCircle, Bell, CheckCircle2, Loader2, MessageSquareText, Search, Send, Sparkles, Users } from 'lucide-react';
-import OfficialCatalogAccessPanel from './OfficialCatalogAccessPanel';
-import WorksheetPrintLauncher from './WorksheetPrintLauncher';
+import { AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Loader2, MessageSquareText, Search, Send, Sparkles, Users } from 'lucide-react';
+
+const OfficialCatalogAccessPanel = lazy(() => import('./OfficialCatalogAccessPanel'));
+const WorksheetPrintLauncher = lazy(() => import('./WorksheetPrintLauncher'));
 
 interface InstructorDashboardProps {
   user: UserProfile;
@@ -71,6 +72,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
   const [sending, setSending] = useState(false);
   const [usedAi, setUsedAi] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showCatalogPanel, setShowCatalogPanel] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -372,21 +374,22 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
         </div>
       </div>
 
-      <OfficialCatalogAccessPanel
-        user={user}
-        onSelectBook={onSelectBook}
-        eyebrow="Business Demo Catalog"
-        title="ビジネス版の既存単語帳をそのまま確認する"
-        description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・先頭2文字ヒントを切り替えることもできます。"
-      />
-
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h3 className="text-2xl font-black tracking-tight text-slate-950">フォロー対象一覧</h3>
           <p className="mt-2 text-sm text-slate-500">プラン種別、直近通知、学習停止日数までまとめて確認できます。</p>
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <WorksheetPrintLauncher user={user} />
+          <Suspense
+            fallback={
+              <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin text-medace-500" />
+                プリント機能を準備中...
+              </div>
+            }
+          >
+            <WorksheetPrintLauncher user={user} />
+          </Suspense>
           <div className="flex rounded-2xl bg-white p-1 shadow-sm border border-slate-200">
             <button
               type="button"
@@ -510,6 +513,48 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
           })
         )}
       </div>
+
+      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Optional Catalog</p>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">教材一覧は必要なときだけ開く</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
+              講師画面では生徒フォローを優先するため、既存の公式単語帳一覧は折りたたんでいます。テスト導線や教材確認が必要なときだけ開いてください。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCatalogPanel((prev) => !prev)}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700"
+            aria-expanded={showCatalogPanel}
+          >
+            {showCatalogPanel ? '単語帳を閉じる' : '単語帳を開く'}
+            {showCatalogPanel ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
+
+        {showCatalogPanel && (
+          <div className="mt-6">
+            <Suspense
+              fallback={
+                <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-slate-50 text-slate-500">
+                  <Loader2 className="h-7 w-7 animate-spin text-medace-500" />
+                  <div className="mt-3 text-sm font-medium">単語帳一覧を読み込み中...</div>
+                </div>
+              }
+            >
+              <OfficialCatalogAccessPanel
+                user={user}
+                onSelectBook={onSelectBook}
+                eyebrow="Business Demo Catalog"
+                title="ビジネス版の既存単語帳をそのまま確認する"
+                description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・先頭2文字ヒントを切り替えることもできます。"
+              />
+            </Suspense>
+          </div>
+        )}
+      </section>
     </div>
   );
 };

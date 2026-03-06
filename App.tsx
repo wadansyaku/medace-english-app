@@ -1,20 +1,21 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Layout from './components/Layout';
-import Dashboard from './components/Dashboard';
-import StudyMode from './components/StudyMode';
-import QuizMode from './components/QuizMode';
-import AdminPanel from './components/AdminPanel';
-import InstructorDashboard from './components/InstructorDashboard';
-import BusinessAdminDashboard from './components/BusinessAdminDashboard';
-import Onboarding from './components/Onboarding';
-import PublicInfoPage from './components/PublicInfoPage';
 import { OrganizationRole, UserRole, UserProfile } from './types';
 import { storage } from './services/storage';
 import { AUTH_COPY, BRAND } from './config/brand';
 import { getHomeViewForUser, isGroupAdmin } from './config/access';
 import { getDemoAccessWindowLabel, isDemoEmail } from './utils/demo';
 import { ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock, LogIn, Mail, User, UserPlus } from 'lucide-react';
+
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const StudyMode = lazy(() => import('./components/StudyMode'));
+const QuizMode = lazy(() => import('./components/QuizMode'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const InstructorDashboard = lazy(() => import('./components/InstructorDashboard'));
+const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDashboard'));
+const Onboarding = lazy(() => import('./components/Onboarding'));
+const PublicInfoPage = lazy(() => import('./components/PublicInfoPage'));
 
 const BUSINESS_DEMO_OPTIONS: Array<{
   title: string;
@@ -485,7 +486,16 @@ const App: React.FC = () => {
       currentView={currentView}
       onChangeView={setCurrentView}
     >
-      {renderContent()}
+      <Suspense
+        fallback={
+          <div className="flex min-h-[50vh] flex-col items-center justify-center text-slate-500">
+            <Loader2 className="h-10 w-10 animate-spin text-medace-500" />
+            <p className="mt-3 text-sm font-medium">画面を準備中...</p>
+          </div>
+        }
+      >
+        {renderContent()}
+      </Suspense>
     </Layout>
   );
 };
