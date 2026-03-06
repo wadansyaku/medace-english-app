@@ -2,21 +2,10 @@ name: Cloudflare Doctor
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - master
-      - 'codex/**'
-    paths:
-      - '.github/workflows/cloudflare-doctor.yml'
-      - '.github/workflows/deploy-pages.yml'
-      - '.github/workflows/deploy-pages-preview.yml'
-      - 'scripts/cf-doctor.mjs'
-      - 'package.json'
-      - 'wrangler.jsonc'
 
 jobs:
   doctor:
+    if: github.repository == 'wadansyaku/medace-english-app'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

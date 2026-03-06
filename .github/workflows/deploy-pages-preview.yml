@@ -2,22 +2,27 @@ name: Deploy Pages Preview
 
 on:
   workflow_dispatch:
-  push:
-    branches-ignore:
+  pull_request:
+    branches:
       - main
       - master
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 concurrency:
-  group: pages-preview-${{ github.ref_name }}
+  group: pages-preview-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   deploy:
-    if: github.ref_name != 'main' && github.ref_name != 'master'
+    if: github.repository == 'wadansyaku/medace-english-app' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     env:
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
+      PREVIEW_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
     permissions:
       contents: read
       deployments: write
@@ -50,7 +55,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          command: pages deploy dist --project-name ${{ env.CF_PAGES_PROJECT }} --branch=${{ github.ref_name }}
+          command: pages deploy dist --project-name ${{ env.CF_PAGES_PROJECT }} --branch=${{ env.PREVIEW_BRANCH }}
 
       - name: Inspect preview Pages secrets
         id: preview-secrets
@@ -81,7 +86,7 @@ jobs:
           {
             echo "## Preview Deployment"
             echo
-            echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Branch: \`${{ env.PREVIEW_BRANCH }}\`"
             echo "- Deployment URL: ${{ steps.deploy.outputs['deployment-url'] }}"
             echo "- Alias URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
@@ -92,35 +97,27 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update PR with preview URL
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs['deployment-url'] }}
           ALIAS_URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}
           PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs.names }}
           MISSING_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs.missing }}
+          CF_PAGES_PROJECT: ${{ env.CF_PAGES_PROJECT }}
+          CF_D1_DATABASE: ${{ env.CF_D1_DATABASE }}
+          PREVIEW_BRANCH: ${{ env.PREVIEW_BRANCH }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const head = context.ref.replace('refs/heads/', '');
-            const { data: prs } = await github.rest.pulls.list({
-              owner,
-              repo,
-              state: 'open',
-              head: `${owner}:${head}`,
-            });
-            if (prs.length === 0) {
-              core.info(`No open PR found for branch ${head}.`);
-              return;
-            }
-
-            const pr = prs[0];
+            const pr = context.payload.pull_request;
             const marker = '<!-- codex-preview-comment -->';
             const body = [
               marker,
               '## Cloudflare Preview',
               '',
-              `- Branch: \`${head}\``,
+              `- Branch: \`${process.env.PREVIEW_BRANCH}\``,
               `- Deployment URL: ${process.env.DEPLOYMENT_URL}`,
               `- Alias URL: ${process.env.ALIAS_URL || process.env.DEPLOYMENT_URL}`,
               `- Pages Project: \`${process.env.CF_PAGES_PROJECT}\``,
