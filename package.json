@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "cf:preview": "vite build && wrangler pages dev dist",
     "db:migrate:local": "wrangler d1 migrations apply medace-db --local",
+    "db:migrate:verify": "bash -lc 'tmpdir=$(mktemp -d); cleanup() { rm -rf \"$tmpdir\"; }; trap cleanup EXIT; wrangler d1 migrations apply medace-db --local --persist-to \"$tmpdir\"'",
     "db:migrate:remote": "wrangler d1 migrations apply medace-db --remote",
     "db:seed:sql": "node scripts/build-seed-sql.mjs"
   },
