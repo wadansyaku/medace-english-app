@@ -60,6 +60,8 @@ const pushRecord = (status, label, detail) => {
   records.push({ status, label, detail });
 };
 
+const isGithubInventoryPermissionError = (result) => /Resource not accessible by integration/i.test(`${result.stderr}\n${result.stdout}`);
+
 const recordCommand = (label, result, detailOnSuccess) => {
   if (result.ok) {
     pushRecord('ok', label, detailOnSuccess || result.stdout || 'ok');
@@ -94,6 +96,16 @@ if (githubReady && repoSlug) {
     REQUIRED_GITHUB_SECRETS.forEach((name) => {
       pushRecord(names.has(name) ? 'ok' : 'error', `GitHub secret ${name}`, names.has(name) ? 'present' : 'missing');
     });
+  } else if (isGithubInventoryPermissionError(ghSecrets)) {
+    pushRecord('warn', 'GitHub secret inventory', 'skipped: workflow token cannot list repository secrets');
+    REQUIRED_GITHUB_SECRETS.forEach((name) => {
+      const present = Boolean(process.env[name]);
+      pushRecord(
+        present ? 'ok' : 'error',
+        `Workflow secret ${name}`,
+        present ? 'available to current workflow' : 'missing from current workflow environment'
+      );
+    });
   }
 
   const ghVariables = run('gh', ['variable', 'list', '--repo', repoSlug]);
@@ -107,6 +119,12 @@ if (githubReady && repoSlug) {
     REQUIRED_GITHUB_VARIABLES.forEach((name) => {
       const value = map.get(name);
       pushRecord(value ? 'ok' : 'error', `GitHub variable ${name}`, value || 'missing');
+    });
+  } else if (isGithubInventoryPermissionError(ghVariables)) {
+    pushRecord('warn', 'GitHub variable inventory', 'skipped: workflow token cannot list repository variables');
+    REQUIRED_GITHUB_VARIABLES.forEach((name) => {
+      const value = process.env[name];
+      pushRecord(value ? 'ok' : 'warn', `Runtime config ${name}`, value || 'missing (using defaults or local config)');
     });
   }
 }
