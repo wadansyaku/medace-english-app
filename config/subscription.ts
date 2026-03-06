@@ -32,13 +32,13 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'フリープラン',
     audienceLabel: '個人向け',
     priceLabel: '無料',
-    pricingNote: '広告付きのセルフサーブ導線',
+    pricingNote: '広告付きのセルフサーブ導線。公式教材カタログは含みません',
     monthlyAiBudgetMilliYen: 1200,
     allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz'],
     featureSummary: [
-      '初回診断と通常学習を無理なく始められます',
+      '自分で作成した教材と通常学習を無理なく始められます',
       'AIは例文生成と小さなクイズ補助を中心に使えます',
-      '重いAI機能は抑えめにして、安定した運用を優先します',
+      '公式教材カタログは含めず、低コスト運用を優先します',
     ],
   },
   [SubscriptionPlan.TOC_PAID]: {
@@ -46,7 +46,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'パーソナルプラン',
     audienceLabel: '個人向け',
     priceLabel: '月額課金想定',
-    pricingNote: '広告なしの個人向け拡張プラン',
+    pricingNote: '広告なしの個人向け拡張プラン。公式教材カタログは含みません',
     monthlyAiBudgetMilliYen: 12000,
     allowedAiActions: [
       'generateGeminiSentence',
@@ -58,7 +58,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     featureSummary: [
       '個人向けのAI教材化と学習プラン作成まで利用できます',
       '画像やPDFからの抽出にも対応します',
-      '日々の学習を広げつつ、使いすぎは自動で抑えます',
+      '公式教材ではなく、自作教材中心で学習を広げます',
     ],
   },
   [SubscriptionPlan.TOB_FREE]: {
@@ -66,7 +66,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'ビジネスフリープラン',
     audienceLabel: '教室・法人向け',
     priceLabel: '無料トライアル',
-    pricingNote: '導入検証用。正式教材と権限運用は本導入前提',
+    pricingNote: '導入検証用。正式教材カタログと権限運用は本導入前提',
     monthlyAiBudgetMilliYen: 8000,
     allowedAiActions: [
       'generateGeminiSentence',
@@ -77,7 +77,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     featureSummary: [
       '講師フォロー通知の下書きを限定的に使えます',
       '導入前の検証に必要な範囲へ絞っています',
-      '教材生成系は控えめにして、安定運用を優先します',
+      '正式教材カタログは本導入後に開放します',
     ],
   },
   [SubscriptionPlan.TOB_PAID]: {
@@ -96,7 +96,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'generateInstructorFollowUp',
     ],
     featureSummary: [
-      '講師フォロー通知と教材生成をどちらも使えます',
+      '講師フォロー通知と正式教材カタログをどちらも使えます',
       '教室運用に必要なAI利用枠を広めに確保します',
       '高コスト機能も月次の利用枠で自動調整します',
     ],

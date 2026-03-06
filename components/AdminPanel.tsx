@@ -66,7 +66,7 @@ const AdminPanel: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState<string[]>([]);
-  const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.STEADY_STUDY_ORIGINAL);
+  const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.LICENSED_PARTNER);
 
   const fetchDashboard = async () => {
     setDashboardLoading(true);
@@ -184,7 +184,7 @@ const AdminPanel: React.FC = () => {
           setProgress(nextProgress);
         }, undefined, undefined, {
           catalogSource,
-          accessScope: catalogSource === BookCatalogSource.LICENSED_PARTNER ? BookAccessScope.BUSINESS_ONLY : BookAccessScope.ALL_PLANS,
+          accessScope: BookAccessScope.BUSINESS_ONLY,
         });
 
         setLog((previous) => [...previous, 'インポート完了。ダッシュボードを更新しています...']);
@@ -223,7 +223,7 @@ const AdminPanel: React.FC = () => {
         setProgress(nextProgress);
       }, undefined, extracted.contextSummary, {
         catalogSource,
-        accessScope: catalogSource === BookCatalogSource.LICENSED_PARTNER ? BookAccessScope.BUSINESS_ONLY : BookAccessScope.ALL_PLANS,
+        accessScope: BookAccessScope.BUSINESS_ONLY,
       });
 
       setLog((previous) => [...previous, '完了: 独自教材を追加しました。ダッシュボードを更新しています...']);
@@ -271,7 +271,7 @@ const AdminPanel: React.FC = () => {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h2 className="text-3xl font-bold text-medace-900">教材運用</h2>
-          <p className="text-medace-700/70">教材追加と、フリー版/ビジネス版の配信カタログ切り分けをこの画面から管理します。</p>
+          <p className="text-medace-700/70">教材追加と、ビジネス限定の公式カタログ運用をこの画面から管理します。</p>
         </div>
         <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
           <button
@@ -303,12 +303,15 @@ const AdminPanel: React.FC = () => {
                 <div className="font-bold">{BOOK_CATALOG_SOURCE_LABELS[source]}</div>
                 <div className="mt-1 text-sm">
                   {source === BookCatalogSource.STEADY_STUDY_ORIGINAL
-                    ? 'フリー版を含む全プランで公開する公式教材として登録します。'
-                    : 'ライセンス取得済み教材として、ビジネス版のみで公開します。'}
+                    ? 'Steady Study原本として、ビジネス限定の公式教材カタログへ登録します。'
+                    : 'ライセンス取得済み教材として、ビジネス限定の公式教材カタログへ登録します。'}
                 </div>
               </button>
             ))}
           </div>
+          <p className="mt-3 text-sm text-slate-500">
+            現在の方針では、ここで登録した公式教材は個人/無料ユーザーには表示されません。
+          </p>
         </div>
         {mode === 'ai' ? (
           <div className="space-y-6 animate-in fade-in">

@@ -411,8 +411,8 @@ const handleBatchImportWords = async (env: AppEnv, user: DbUserRow, payload: any
       meta.description || null,
       meta.sourceContext || null,
       meta.createdBy,
-      meta.catalogSource || BookCatalogSource.USER_GENERATED,
-      meta.accessScope || BookAccessScope.ALL_PLANS,
+      meta.catalogSource || (meta.createdBy ? BookCatalogSource.USER_GENERATED : BookCatalogSource.LICENSED_PARTNER),
+      meta.accessScope || (meta.createdBy ? BookAccessScope.ALL_PLANS : BookAccessScope.BUSINESS_ONLY),
       Date.now(),
       Date.now()
     ).run();

@@ -64,8 +64,8 @@ Steady Study は、塾・教室向け運用SaaSをメインにした英単語学
 
 - `STEADY_STUDY_ORIGINAL`
   - 出典: Nanjyo English App のオリジナル単語データベース
-  - 公開範囲: `ALL_PLANS`
-  - 用途: フリー版の公式教材、導入初期の基本教材
+  - 公開範囲: `BUSINESS_ONLY`
+  - 用途: ビジネス本導入向けの原本教材
 - `LICENSED_PARTNER`
   - 出典: 現在のライセンス取得済み教材データベース
   - 公開範囲: `BUSINESS_ONLY`
@@ -73,6 +73,8 @@ Steady Study は、塾・教室向け運用SaaSをメインにした英単語学
 - `USER_GENERATED`
   - 出典: ユーザー/管理者作成
   - 公開範囲: 原則 `ALL_PLANS`
+
+2026-03-06 時点の方針として、既存の公式教材は一括で `BUSINESS_ONLY` に寄せ、個人/無料ユーザーの可視性を大きく絞る。
 
 ## 7. 技術構成
 

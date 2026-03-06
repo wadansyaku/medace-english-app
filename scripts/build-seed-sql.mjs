@@ -88,7 +88,7 @@ if (originalCsvs.length === 0 && licensedCsvs.length === 0 && genericInputs.leng
     datasets.push({
       inputPath,
       catalogSource: 'STEADY_STUDY_ORIGINAL',
-      accessScope: 'ALL_PLANS',
+      accessScope: 'BUSINESS_ONLY',
     });
   });
   licensedCsvs.forEach((inputPath) => {

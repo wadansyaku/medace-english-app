@@ -207,9 +207,18 @@ const IDB_MOCK_ASSIGNMENTS = [
   { studentUid: 'student-biz-2', instructorUid: 'mock-instructor-001' },
 ];
 
+const normalizeBookVisibilityPolicy = (book: BookMetadata): BookMetadata => {
+  if (book.catalogSource === BookCatalogSource.USER_GENERATED) return book;
+  return {
+    ...book,
+    accessScope: BookAccessScope.BUSINESS_ONLY,
+  };
+};
+
 const canAccessOfficialBook = (plan: SubscriptionPlan | undefined, book: BookMetadata): boolean => {
-  if (book.catalogSource === BookCatalogSource.USER_GENERATED) return false;
-  if ((book.accessScope || BookAccessScope.ALL_PLANS) === BookAccessScope.ALL_PLANS) return true;
+  const normalizedBook = normalizeBookVisibilityPolicy(book);
+  if (normalizedBook.catalogSource === BookCatalogSource.USER_GENERATED) return false;
+  if ((normalizedBook.accessScope || BookAccessScope.ALL_PLANS) === BookAccessScope.ALL_PLANS) return true;
   return plan === SubscriptionPlan.TOB_PAID;
 };
 
@@ -412,7 +421,7 @@ class IndexedDBStorageService implements IStorageService {
     return new Promise((resolve) => {
       const request = store.getAll();
       request.onsuccess = () => {
-        const books = (request.result || []) as BookMetadata[];
+        const books = ((request.result || []) as BookMetadata[]).map(normalizeBookVisibilityPolicy);
         resolve(
           books.filter((book) =>
             isBookOwnedByUser(book, sessionUser?.uid) ||

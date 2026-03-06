@@ -67,7 +67,7 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
               <p className="text-sm text-slate-500 mb-5 line-clamp-2 h-10">
                  {isMine 
                     ? (book.sourceContext ? `AI分析: ${book.sourceContext}` : 'オリジナル単語帳') 
-                    : (book.description || (isLicensed ? 'ビジネス版向けのライセンス教材' : 'Steady Studyの公式教材'))}
+                    : (book.description || (isLicensed ? 'ビジネス版向けのライセンス教材' : 'ビジネス版向けの公式教材'))}
               </p>
 
               <div className="space-y-2">
@@ -1212,7 +1212,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                     />
                 ))
             )}
-            {(!learningPlan && books.filter(b => b.isPriority).length === 0) && <p className="text-slate-400 text-sm">推奨コースはありません</p>}
+            {books.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3">
+                    現在のプランでは公式コースは配信されていません。My単語帳を作成するか、ビジネス導入済みワークスペースで利用してください。
+                </div>
+            )}
+            {(books.length > 0 && !learningPlan && books.filter(b => b.isPriority).length === 0) && <p className="text-slate-400 text-sm">推奨コースはありません</p>}
         </div>
 
         {/* SECTION: Library (Collapsed) */}
@@ -1229,17 +1234,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
             </button>
 
             {showLibrary && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 animate-in slide-in-from-top-4">
-                    {books.map((book) => (
-                    <BookCard 
-                        key={book.id} 
-                        book={book} 
-                        progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                        onDelete={handleDeleteBook}
-                        onSelect={onSelectBook}
-                    />
-                    ))}
-                </div>
+                books.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 animate-in slide-in-from-top-4">
+                        {books.map((book) => (
+                        <BookCard 
+                            key={book.id} 
+                            book={book} 
+                            progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
+                            onDelete={handleDeleteBook}
+                            onSelect={onSelectBook}
+                        />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 animate-in slide-in-from-top-4">
+                        公式コースはビジネス本導入プラン向けに限定されています。個人利用では My単語帳 を使って学習を進めてください。
+                    </div>
+                )
             )}
         </div>
       </div>

@@ -21,12 +21,14 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 
 ## 教材カタログ戦略
 
-- フリー版公式教材: Nanjyo English App のオリジナル単語データベースを `Steady Study Original` として配布
-- ビジネス版公式教材: 現在のライセンス取得済み教材データベースを `LICENSED_PARTNER` として配布
+- ビジネス版公式教材（原本）: Nanjyo English App のオリジナル単語データベースを `Steady Study Original` として配布
+- ビジネス版公式教材（ライセンス）: 現在のライセンス取得済み教材データベースを `LICENSED_PARTNER` として配布
 - 個人/ユーザー作成教材: `USER_GENERATED`
 - 公開範囲:
   - `ALL_PLANS`: 全プランで利用可
   - `BUSINESS_ONLY`: ビジネス本導入 (`TOB_PAID`) のみ利用可
+
+2026-03-06 時点の方針として、既存の公式教材は `Steady Study Original` を含めて `BUSINESS_ONLY` に寄せます。個人/無料ユーザーは公式教材ではなく、自作教材導線を前提にします。
 
 ## 技術構成
 
@@ -54,7 +56,7 @@ npm run build
 npx wrangler d1 migrations apply medace-db --local
 ```
 
-2. フリー版原本 + ビジネス版ライセンス教材をまとめて seed SQL 化
+2. 原本教材 + ライセンス教材をまとめてビジネス限定 seed SQL 化
 
 ```bash
 node scripts/build-seed-sql.mjs \
@@ -114,6 +116,26 @@ npx wrangler d1 execute medace-db --remote --file=./tmp/d1-seed-remote.sql
 echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app
 echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app
 ```
+
+preview 環境も使う場合は、同じ secret を `--env preview` 付きで追加してください。
+
+```bash
+echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app --env preview
+echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app --env preview
+```
+
+### GitHub Variables / Secrets
+
+GitHub Actions 側では次を使います。
+
+- Secrets:
+  - `CLOUDFLARE_API_TOKEN`
+  - `CLOUDFLARE_ACCOUNT_ID`
+- Variables:
+  - `CLOUDFLARE_PAGES_PROJECT`
+  - `CLOUDFLARE_D1_DATABASE`
+
+Variables 未設定時は workflow 側で `medace-english-app` / `medace-db` を既定値として使います。
 
 ### Frontend Environment Variables
 

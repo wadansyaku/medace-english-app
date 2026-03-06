@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccountOverview, OrganizationRole, SUBSCRIPTION_PLAN_LABELS, UserProfile, UserRole } from '../types';
+import { AccountOverview, OrganizationRole, SUBSCRIPTION_PLAN_LABELS, SubscriptionPlan, UserProfile, UserRole } from '../types';
 import { isAdSupportedPlan, isBusinessPlan } from '../config/subscription';
 import { getWorkspaceRoleLabel } from '../config/access';
 import AdSenseSlot from './AdSenseSlot';
@@ -28,6 +28,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
   const isBusinessWorkspace = isBusinessPlan(plan) && !!user.organizationName;
   const isBusinessStudent = user.organizationRole === OrganizationRole.STUDENT || (isBusinessWorkspace && user.role === UserRole.STUDENT);
   const isFreePlan = isAdSupportedPlan(plan);
+  const hasBusinessCatalog = plan === SubscriptionPlan.TOB_PAID;
 
   if (isFreePlan) {
     return (
@@ -43,7 +44,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
           </div>
           <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">まずは無料で学習習慣を作る</h3>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、`Steady Study Original` の公式教材と小さなAI補助に絞ってテンポ良く使えます。
+            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、自分で作った教材と小さなAI補助に絞ってテンポ良く使えます。
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -84,7 +85,9 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
     const businessBenefits = [
       '広告なしで集中しやすい学習画面',
       '講師フォロー通知とグループ進行に対応',
-      'Steady Study Original とライセンス教材を運用に応じて配布',
+      hasBusinessCatalog
+        ? 'Steady Study Original とライセンス教材をビジネス限定で配布'
+        : '正式教材カタログは本導入後に開放',
     ];
 
     return (
@@ -123,7 +126,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">対象教材</div>
                 <div className="mt-2 text-lg font-black text-slate-950">{plannedBookCount}冊</div>
-                <div className="mt-1 text-sm text-slate-500">原本教材とライセンス教材を反映</div>
+                <div className="mt-1 text-sm text-slate-500">{hasBusinessCatalog ? 'ビジネス限定の公式教材を反映' : 'トライアル用の範囲で反映'}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">利用環境</div>
