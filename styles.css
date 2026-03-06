@@ -6,12 +6,30 @@
   :root {
     color-scheme: light;
     font-family: "Space Grotesk", "Noto Sans JP", system-ui, sans-serif;
+    --ui-font-size: 17px;
+    --ui-line-height: 1.65;
+    --ui-control-min-height: 3rem;
   }
 
   html,
   body,
   #root {
     min-height: 100%;
+  }
+
+  html {
+    font-size: var(--ui-font-size);
+    scroll-behavior: smooth;
+  }
+
+  html[data-ui-font-size='large'] {
+    --ui-font-size: 18.5px;
+    --ui-control-min-height: 3.25rem;
+  }
+
+  html[data-ui-density='comfortable'] {
+    --ui-line-height: 1.75;
+    --ui-control-min-height: 3.4rem;
   }
 
   body {
@@ -24,6 +42,8 @@
     overscroll-behavior-y: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    line-height: var(--ui-line-height);
   }
 
   button,
@@ -31,6 +51,68 @@
   textarea,
   select {
     font: inherit;
+    min-height: var(--ui-control-min-height);
+  }
+
+  button {
+    min-width: 2.75rem;
+  }
+
+  p,
+  li,
+  label,
+  dd,
+  dt {
+    line-height: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748b;
+    opacity: 1;
+  }
+
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 3px solid rgba(246, 109, 11, 0.24);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .ui-panel {
+    @apply rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm;
+  }
+
+  .ui-panel-subtle {
+    @apply rounded-[28px] border border-slate-200 bg-slate-50 p-6;
+  }
+
+  .ui-form-label {
+    @apply mb-2 block text-sm font-bold text-slate-700;
+  }
+
+  .ui-input {
+    @apply w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100;
+  }
+
+  .ui-option-card {
+    @apply rounded-2xl border px-5 py-4 text-left transition-colors;
+  }
+
+  .ui-option-card-active {
+    @apply border-medace-500 bg-white text-medace-900 shadow-sm;
+  }
+
+  .ui-option-card-inactive {
+    @apply border-slate-200 bg-white text-slate-600 hover:bg-slate-50;
+  }
+
+  .ui-field-note {
+    @apply mt-2 text-sm leading-relaxed text-slate-500;
   }
 }
 

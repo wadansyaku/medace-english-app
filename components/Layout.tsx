@@ -32,10 +32,10 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
       <header className="bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)]">
         {isDemoUser && (
           <div className="border-b border-amber-200/80 bg-[linear-gradient(90deg,#fff8e8_0%,#fff1d1_100%)]">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Limited Demo Access</p>
-                <p className="mt-1 text-sm font-medium text-slate-700">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limited Demo Access</p>
+                <p className="mt-1 text-[0.95rem] font-medium leading-relaxed text-slate-700">
                   体験用アカウントは <span className="font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</span> です。別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
                 </p>
               </div>
@@ -43,7 +43,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
                 <button
                   type="button"
                   onClick={onResetDemo}
-                  className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-black text-amber-800 transition-colors hover:bg-amber-50"
+                  className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-2.5 text-[0.95rem] font-black text-amber-800 transition-colors hover:bg-amber-50"
                 >
                   新しい体験を開始
                 </button>
@@ -51,14 +51,14 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
             </div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 min-h-[72px] flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[80px] flex items-center justify-between py-2">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
-            <div className="bg-[linear-gradient(135deg,#FCD797_0%,#FFBF52_36%,#F66D0B_100%)] p-2.5 rounded-2xl shadow-lg shadow-medace-200/70">
+            <div className="bg-[linear-gradient(135deg,#FCD797_0%,#FFBF52_36%,#F66D0B_100%)] p-3 rounded-2xl shadow-lg shadow-medace-200/70">
               <BookOpen className="text-medace-900 w-6 h-6" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-black tracking-tight text-medace-900">{BRAND.officialName}</h1>
-              <p className="text-[11px] text-medace-700/70 font-bold tracking-[0.16em] -mt-0.5">{BRAND.productLabel}</p>
+              <h1 className="text-[1.35rem] font-black tracking-tight text-medace-900">{BRAND.officialName}</h1>
+              <p className="text-xs text-medace-700/70 font-bold tracking-[0.14em]">{BRAND.productLabel}</p>
             </div>
           </div>
 
@@ -67,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
               
               {/* Gamification HUD */}
               {user.role === UserRole.STUDENT && isGameMode && (
-                  <div className="flex items-center gap-3 md:gap-6 bg-white/90 px-4 py-2 rounded-full border border-medace-100 mr-2 shadow-sm">
+                  <div className="flex items-center gap-3 md:gap-6 bg-white/90 px-4 py-2.5 rounded-full border border-medace-100 mr-2 shadow-sm">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
                           <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-orange-500 fill-orange-500' : 'text-slate-300'}`} />
@@ -103,7 +103,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
               <nav className="hidden md:flex gap-1">
                 <button 
                   onClick={() => onChangeView(homeView)}
-                  className={`px-3 py-2 rounded-full text-sm font-bold transition-colors ${currentView === homeView ? 'bg-medace-700 text-white' : 'text-medace-900/75 hover:text-medace-600 hover:bg-medace-50'}`}
+                  className={`px-4 py-3 rounded-full text-[0.95rem] font-bold transition-colors ${currentView === homeView ? 'bg-medace-700 text-white' : 'text-medace-900/75 hover:text-medace-600 hover:bg-medace-50'}`}
                 >
                   {navLabel}
                 </button>
@@ -111,12 +111,12 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
 
               <div className="flex items-center gap-2">
                 <div className="text-right hidden lg:block">
-                  <p className="text-sm font-bold text-medace-900">{user.displayName}</p>
-                  <p className="text-[11px] font-bold tracking-[0.14em] uppercase text-medace-700/55">{workspaceLabel}</p>
+                  <p className="text-[0.95rem] font-bold text-medace-900">{user.displayName}</p>
+                  <p className="text-xs font-bold tracking-[0.12em] uppercase text-medace-700/55">{workspaceLabel}</p>
                 </div>
                 <button 
                   onClick={onLogout}
-                  className="p-2.5 text-medace-700/45 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors border border-transparent hover:border-red-100"
+                  className="p-3 text-medace-700/45 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors border border-transparent hover:border-red-100"
                   title="ログアウト"
                 >
                   <LogOut className="w-5 h-5" />
@@ -128,13 +128,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {children}
       </main>
 
       {/* Footer */}
       <footer className="bg-white/85 backdrop-blur border-t border-medace-100 py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center text-medace-800/45 text-sm font-medium">
+        <div className="max-w-7xl mx-auto px-4 text-center text-medace-800/45 text-[0.95rem] font-medium">
           &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
         </div>
       </footer>

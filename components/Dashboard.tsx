@@ -12,6 +12,12 @@ import PlanExperiencePanel from './PlanExperiencePanel';
 import AdSenseSlot from './AdSenseSlot';
 import ModalOverlay from './ModalOverlay';
 import { getDateKeyWeekdayLabel, getRelativeDateKey, getTodayDateKey } from '../utils/date';
+import {
+  DisplayDensity,
+  DisplayFontSize,
+  getStoredDisplayPreferences,
+  saveDisplayPreferences,
+} from '../utils/displayPreferences';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
@@ -39,12 +45,20 @@ const TARGET_SCORE_PRESETS = ['合格', '60点', '70点', '80点', '90点', '100
 const WEEKLY_STUDY_DAY_OPTIONS = [2, 3, 4, 5, 6, 7];
 const DAILY_STUDY_MINUTE_OPTIONS = [10, 15, 20, 30, 45, 60];
 const WEAK_SKILL_PRESETS = ['単語の意味', 'スペリング', '熟語', '長文読解', 'リスニング', '英作文'];
+const DISPLAY_FONT_SIZE_OPTIONS: Array<{ value: DisplayFontSize; label: string; description: string; }> = [
+  { value: 'standard', label: '標準', description: '情報量を保ちながら、読みやすさを整えます。' },
+  { value: 'large', label: '大きめ', description: '本文と入力欄を一段大きく表示します。' },
+];
+const DISPLAY_DENSITY_OPTIONS: Array<{ value: DisplayDensity; label: string; description: string; }> = [
+  { value: 'standard', label: '標準', description: '画面内の情報量を保ちつつ、見渡しやすく表示します。' },
+  { value: 'comfortable', label: 'ゆったり', description: '行間とボタンの余白を広めにして表示します。' },
+];
 
 const QuickChoiceButton: React.FC<QuickChoiceButtonProps> = ({ active, label, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`rounded-full border px-3 py-2 text-sm font-bold transition-colors ${
+    className={`rounded-full border px-4 py-3 text-[0.95rem] font-bold transition-colors ${
       active
         ? 'border-medace-500 bg-medace-50 text-medace-700'
         : 'border-slate-200 bg-white text-slate-500 hover:border-medace-200 hover:text-medace-700'
@@ -284,6 +298,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [editWeakSkillFocus, setEditWeakSkillFocus] = useState('');
   const [editMotivationNote, setEditMotivationNote] = useState('');
   const [editIntensity, setEditIntensity] = useState<LearningPreferenceIntensity>(LearningPreferenceIntensity.BALANCED);
+  const [editDisplayFontSize, setEditDisplayFontSize] = useState<DisplayFontSize>('standard');
+  const [editDisplayDensity, setEditDisplayDensity] = useState<DisplayDensity>('standard');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
@@ -312,6 +328,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     setEditWeakSkillFocus(learningPreference?.weakSkillFocus || '');
     setEditMotivationNote(learningPreference?.motivationNote || '');
     setEditIntensity(learningPreference?.intensity || LearningPreferenceIntensity.BALANCED);
+    const displayPreferences = getStoredDisplayPreferences(user.uid);
+    setEditDisplayFontSize(displayPreferences.fontSize);
+    setEditDisplayDensity(displayPreferences.density);
   }, [showSettingsModal, user.displayName, user.grade, user.studyMode, learningPreference]);
 
   useEffect(() => {
@@ -525,6 +544,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           await storage.updateSessionUser(updatedUser);
           const refreshedUser = await storage.getSession();
           const nextUser = refreshedUser || updatedUser;
+          saveDisplayPreferences(user.uid, {
+            fontSize: editDisplayFontSize,
+            density: editDisplayDensity,
+          });
           setLearningPreference(nextPreference);
           onUserUpdate(nextUser);
           setShowSettingsModal(false);
@@ -696,9 +719,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         {showSettingsModal && (
             <ModalOverlay
               onClose={() => setShowSettingsModal(false)}
-              panelClassName="max-w-4xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl sm:p-7"
+              panelClassName="max-w-5xl rounded-[32px] border border-slate-200 bg-white p-7 shadow-2xl sm:p-8"
             >
-              <button onClick={() => setShowSettingsModal(false)} className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+              <button onClick={() => setShowSettingsModal(false)} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
                 <X className="h-5 w-5" />
               </button>
               <div className="flex flex-wrap items-start gap-4 border-b border-slate-100 pb-5 pr-12">
@@ -706,9 +729,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                   <User className="h-6 w-6" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Profile Settings</p>
-                  <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">設定・プロフィール</h3>
-                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+                  <p className="text-sm font-bold text-slate-500">Profile Settings</p>
+                  <h3 className="mt-2 text-[1.9rem] font-black tracking-tight text-slate-950">設定・プロフィール</h3>
+                  <p className="mt-2 max-w-2xl text-[0.98rem] leading-relaxed text-slate-500">
                     よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。
                   </p>
                 </div>
@@ -716,28 +739,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
               <div className="mt-6 grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
                 <section className="space-y-5">
-                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <div className="ui-panel-subtle">
+                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
                       <User className="h-4 w-4 text-medace-600" />
                       基本プロフィール
                     </div>
                     <div className="mt-4 space-y-4">
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">表示名</label>
+                        <label className="ui-form-label">表示名</label>
                         <input
                           type="text"
                           value={editName}
                           onChange={(event) => setEditName(event.target.value)}
-                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          className="ui-input font-bold"
                           placeholder="表示名を入力"
                         />
                       </div>
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">学年・属性</label>
+                        <label className="ui-form-label">学年・属性</label>
                         <select
                           value={editGrade}
                           onChange={(event) => setEditGrade(event.target.value as UserGrade)}
-                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          className="ui-input font-bold"
                         >
                           {Object.values(UserGrade).map((grade) => (
                             <option key={grade} value={grade}>{GRADE_LABELS[grade]}</option>
@@ -745,21 +768,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                         </select>
                       </div>
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">表示モード</label>
+                        <label className="ui-form-label">表示モード</label>
                         <div className="grid grid-cols-2 gap-3">
                           {[UserStudyMode.FOCUS, UserStudyMode.GAME].map((mode) => (
                             <button
                               key={mode}
                               type="button"
                               onClick={() => setEditStudyMode(mode)}
-                              className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                              className={`ui-option-card ${
                                 editStudyMode === mode
-                                  ? 'border-medace-500 bg-white text-medace-900 shadow-sm'
-                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                  ? 'ui-option-card-active'
+                                  : 'ui-option-card-inactive'
                               }`}
                             >
-                              <div className="text-sm font-bold">{USER_STUDY_MODE_LABELS[mode]}</div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                              <div className="text-base font-bold">{USER_STUDY_MODE_LABELS[mode]}</div>
+                              <div className="mt-2 text-sm leading-relaxed text-slate-500">
                                 {mode === UserStudyMode.FOCUS
                                   ? '今日やることを優先して、落ち着いて学習します。'
                                   : '相棒・ランキングも出して、達成感を強めます。'}
@@ -771,14 +794,62 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                     </div>
                   </div>
 
-                  <div className="rounded-[28px] border border-slate-200 bg-white p-5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <div className="ui-panel">
+                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
+                      <Settings className="h-4 w-4 text-medace-600" />
+                      表示設定
+                    </div>
+                    <p className="ui-field-note">
+                      文字の大きさと余白を調整できます。ホーム画面から学習画面まで同じ表示で反映されます。
+                    </p>
+                    <div className="mt-4 space-y-5">
+                      <div>
+                        <label className="ui-form-label">文字サイズ</label>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {DISPLAY_FONT_SIZE_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setEditDisplayFontSize(option.value)}
+                              className={`ui-option-card ${
+                                editDisplayFontSize === option.value ? 'ui-option-card-active' : 'ui-option-card-inactive'
+                              }`}
+                            >
+                              <div className="text-base font-bold">{option.label}</div>
+                              <div className="mt-2 text-sm leading-relaxed text-slate-500">{option.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="ui-form-label">画面の余白</label>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {DISPLAY_DENSITY_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setEditDisplayDensity(option.value)}
+                              className={`ui-option-card ${
+                                editDisplayDensity === option.value ? 'ui-option-card-active' : 'ui-option-card-inactive'
+                              }`}
+                            >
+                              <div className="text-base font-bold">{option.label}</div>
+                              <div className="mt-2 text-sm leading-relaxed text-slate-500">{option.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ui-panel">
+                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
                       <Target className="h-4 w-4 text-medace-600" />
                       現在の学習状態
                     </div>
                     <div className="mt-4 space-y-4">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">現在のレベル</div>
+                        <div className="text-sm font-bold text-slate-500">現在のレベル</div>
                         <div className="mt-2 flex items-center justify-between gap-3">
                           <span className="text-lg font-black text-medace-700">{user.englishLevel || '未診断'}</span>
                           <button
@@ -786,7 +857,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                               setShowSettingsModal(false);
                               setShowOnboarding(true);
                             }}
-                            className="inline-flex items-center gap-1 rounded-full border border-medace-200 bg-white px-3 py-2 text-xs font-bold text-medace-700 hover:bg-medace-50"
+                            className="inline-flex items-center gap-1 rounded-full border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-700 hover:bg-medace-50"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                             レベル診断を再受講
@@ -795,10 +866,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                       </div>
                       {accountOverview && (
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">現在のプラン</div>
-                          <div className="mt-2 font-bold text-slate-900">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</div>
-                          <div className="mt-1 text-xs text-slate-500">{accountOverview.audienceLabel} / {accountOverview.priceLabel}</div>
-                          <div className="mt-2 text-sm leading-relaxed text-slate-500">{accountOverview.pricingNote}</div>
+                          <div className="text-sm font-bold text-slate-500">現在のプラン</div>
+                          <div className="mt-2 text-[1.02rem] font-bold text-slate-900">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</div>
+                          <div className="mt-1 text-sm text-slate-500">{accountOverview.audienceLabel} / {accountOverview.priceLabel}</div>
+                          <div className="mt-2 text-[0.98rem] leading-relaxed text-slate-500">{accountOverview.pricingNote}</div>
                         </div>
                       )}
                     </div>
@@ -806,18 +877,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                 </section>
 
                 <section className="space-y-5">
-                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <div className="ui-panel-subtle">
+                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
                       <Sparkles className="h-4 w-4 text-medace-600" />
                       学習の個別設定
                     </div>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                    <p className="mt-2 text-[0.98rem] leading-relaxed text-slate-500">
                       クイック選択で埋めてから、必要なところだけ自由入力できます。講師への共有メモにも使えます。
                     </p>
 
                     <div className="mt-5 space-y-5">
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">目標試験・確認対象</label>
+                        <label className="ui-form-label">目標試験・確認対象</label>
                         <div className="flex flex-wrap gap-2">
                           {TARGET_EXAM_PRESETS.map((preset) => (
                             <QuickChoiceButton
@@ -833,13 +904,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                           value={editTargetExam}
                           onChange={(event) => setEditTargetExam(event.target.value)}
                           placeholder="例: 英検2級 / 定期テスト / 共通テスト"
-                          className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          className="ui-input mt-3"
                         />
                       </div>
 
                       <div className="grid gap-4 sm:grid-cols-[0.92fr_1.08fr]">
                         <div>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">目標の目安</label>
+                          <label className="ui-form-label">目標の目安</label>
                           <div className="flex flex-wrap gap-2">
                             {TARGET_SCORE_PRESETS.map((preset) => (
                               <QuickChoiceButton
@@ -855,23 +926,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                             value={editTargetScore}
                             onChange={(event) => setEditTargetScore(event.target.value)}
                             placeholder="例: 合格 / 80点 / 偏差値60"
-                            className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                            className="ui-input mt-3"
                           />
                         </div>
                         <div>
-                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">試験日</label>
+                          <label className="ui-form-label">試験日</label>
                           <div className="flex items-center gap-2">
                             <input
                               type="date"
                               value={editExamDate}
                               onChange={(event) => setEditExamDate(event.target.value)}
-                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                              className="ui-input"
                             />
                             {editExamDate && (
                               <button
                                 type="button"
                                 onClick={() => setEditExamDate('')}
-                                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                                className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50"
                               >
                                 クリア
                               </button>
@@ -881,7 +952,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">週の学習日数</label>
+                        <label className="ui-form-label">週の学習日数</label>
                         <div className="flex flex-wrap gap-2">
                           {WEEKLY_STUDY_DAY_OPTIONS.map((days) => (
                             <QuickChoiceButton
@@ -895,7 +966,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">1日の学習時間</label>
+                        <label className="ui-form-label">1日の学習時間</label>
                         <div className="flex flex-wrap gap-2">
                           {DAILY_STUDY_MINUTE_OPTIONS.map((minutes) => (
                             <QuickChoiceButton
@@ -916,12 +987,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                             onChange={(event) => setEditDailyStudyMinutes(Number(event.target.value))}
                             className="w-full accent-[#f66d0b]"
                           />
-                          <div className="rounded-full bg-medace-50 px-3 py-1.5 text-sm font-black text-medace-700">{editDailyStudyMinutes}分</div>
+                          <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
                         </div>
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">苦手分野</label>
+                        <label className="ui-form-label">苦手分野</label>
                         <div className="flex flex-wrap gap-2">
                           {WEAK_SKILL_PRESETS.map((preset) => (
                             <QuickChoiceButton
@@ -937,26 +1008,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                           value={editWeakSkillFocus}
                           onChange={(event) => setEditWeakSkillFocus(event.target.value)}
                           placeholder="例: 長文読解 / 熟語 / 医療語彙"
-                          className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          className="ui-input mt-3"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">学習の濃さ</label>
+                        <label className="ui-form-label">学習の濃さ</label>
                         <div className="grid gap-3 sm:grid-cols-3">
                           {Object.values(LearningPreferenceIntensity).map((intensity) => (
                             <button
                               key={intensity}
                               type="button"
                               onClick={() => setEditIntensity(intensity)}
-                              className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                              className={`ui-option-card ${
                                 editIntensity === intensity
-                                  ? 'border-medace-500 bg-white text-medace-900 shadow-sm'
-                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                  ? 'ui-option-card-active'
+                                  : 'ui-option-card-inactive'
                               }`}
                             >
-                              <div className="text-sm font-bold">{LEARNING_PREFERENCE_INTENSITY_LABELS[intensity]}</div>
-                              <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                              <div className="text-base font-bold">{LEARNING_PREFERENCE_INTENSITY_LABELS[intensity]}</div>
+                              <div className="mt-2 text-sm leading-relaxed text-slate-500">
                                 {intensity === LearningPreferenceIntensity.BALANCED
                                   ? '無理なく続けやすい標準ペース'
                                   : intensity === LearningPreferenceIntensity.REVIEW_HEAVY
@@ -969,14 +1040,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                       </div>
 
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">講師に伝えたいこと</label>
+                        <label className="ui-form-label">講師に伝えたいこと</label>
                         <textarea
                           value={editMotivationNote}
                           onChange={(event) => setEditMotivationNote(event.target.value)}
                           placeholder="例: 通学中に15分だけ復習したい / テスト前は熟語を優先したい"
-                          className="h-28 w-full resize-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          className="ui-input h-32 resize-none font-medium"
                         />
-                        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                        <p className="ui-field-note">
                           ここで設定した条件をもとに、学習プランと今日の導線を調整します。講師フォローがある場合は共有の前提にもなります。
                         </p>
                       </div>
@@ -989,14 +1060,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                 <button
                   onClick={() => setShowSettingsModal(false)}
                   type="button"
-                  className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                  className="rounded-2xl border border-slate-200 px-6 py-3 text-base font-bold text-slate-600 transition-colors hover:bg-slate-50"
                 >
                   閉じる
                 </button>
                 <button
                   onClick={handleSaveProfile}
                   disabled={isSavingProfile}
-                  className="rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  className="rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
                   {isSavingProfile ? '保存中...' : '変更を保存'}
                 </button>

@@ -469,8 +469,8 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async getBooks(): Promise<BookMetadata[]> {
-    const store = await this.getStore(STORES.BOOKS);
     const sessionUser = await this.getSession();
+    const store = await this.getStore(STORES.BOOKS);
     return new Promise((resolve) => {
       const request = store.getAll();
       request.onsuccess = () => {
