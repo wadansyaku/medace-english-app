@@ -5,11 +5,12 @@ import { storage } from '../services/storage';
 import { extractVocabularyFromText, extractVocabularyFromMedia, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
 import { BRAND } from '../config/brand';
 import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription';
-import { Play, BookOpen, Star, Loader2, Zap, BrainCircuit, Trophy, Plus, Sparkles, FileText, Image as ImageIcon, UploadCloud, Flame, Trash2, Settings, RefreshCw, User, Book, Calendar, Target, ArrowRight, Library, ChevronDown, ChevronUp, BarChart, Activity, Edit2, X, Check, Medal, Crown } from 'lucide-react';
+import { Play, BookOpen, Star, Loader2, Zap, BrainCircuit, Trophy, Plus, Sparkles, FileText, Image as ImageIcon, UploadCloud, Flame, Trash2, Settings, RefreshCw, User, Book, Calendar, Target, ArrowRight, Library, ChevronDown, ChevronUp, BarChart, Activity, Edit2, X, Check, Medal, Crown, MessageSquareText } from 'lucide-react';
 import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
 import PlanExperiencePanel from './PlanExperiencePanel';
 import AdSenseSlot from './AdSenseSlot';
+import ModalOverlay from './ModalOverlay';
 import { getDateKeyWeekdayLabel, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
@@ -26,6 +27,32 @@ interface BookCardProps {
   onDelete: (e: React.MouseEvent, bookId: string, bookTitle: string) => void;
   onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
 }
+
+interface QuickChoiceButtonProps {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}
+
+const TARGET_EXAM_PRESETS = ['定期テスト', '英検5級', '英検4級', '英検3級', '英検準2級', '英検2級', '共通テスト'];
+const TARGET_SCORE_PRESETS = ['合格', '60点', '70点', '80点', '90点', '100点'];
+const WEEKLY_STUDY_DAY_OPTIONS = [2, 3, 4, 5, 6, 7];
+const DAILY_STUDY_MINUTE_OPTIONS = [10, 15, 20, 30, 45, 60];
+const WEAK_SKILL_PRESETS = ['単語の意味', 'スペリング', '熟語', '長文読解', 'リスニング', '英作文'];
+
+const QuickChoiceButton: React.FC<QuickChoiceButtonProps> = ({ active, label, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={`rounded-full border px-3 py-2 text-sm font-bold transition-colors ${
+      active
+        ? 'border-medace-500 bg-medace-50 text-medace-700'
+        : 'border-slate-200 bg-white text-slate-500 hover:border-medace-200 hover:text-medace-700'
+    }`}
+  >
+    {label}
+  </button>
+);
 
 const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, onSelect }) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
@@ -230,6 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'error'; message: string; } | null>(null);
   
   // Plan Edit Modal
   const [showPlanEditModal, setShowPlanEditModal] = useState(false);
@@ -287,17 +315,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   }, [showSettingsModal, user.displayName, user.grade, user.studyMode, learningPreference]);
 
   useEffect(() => {
-    if (!showSettingsModal) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setShowSettingsModal(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showSettingsModal]);
+    if (!pageNotice) return;
+    const timer = window.setTimeout(() => setPageNotice(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [pageNotice]);
 
   if (showOnboarding) {
       return <Onboarding 
@@ -367,11 +388,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
   const handleUpdatePlan = async () => {
       if (!learningPlan) return;
-      const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
-      await storage.saveLearningPlan(updated);
-      setLearningPlan(updated);
-      setShowPlanEditModal(false);
-      alert("プランを更新しました");
+      try {
+          const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
+          await storage.saveLearningPlan(updated);
+          setLearningPlan(updated);
+          setShowPlanEditModal(false);
+          setPageNotice({ tone: 'success', message: '学習プランを更新しました。' });
+      } catch (error) {
+          console.error(error);
+          setPageNotice({ tone: 'error', message: '学習プランの更新に失敗しました。' });
+      }
   };
 
   const togglePlanBook = (bookId: string) => {
@@ -503,9 +529,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           onUserUpdate(nextUser);
           setShowSettingsModal(false);
           await loadDashboardData();
-          alert("プロフィールを更新しました。");
+          setPageNotice({ tone: 'success', message: 'プロフィールを更新しました。' });
       } catch (e) {
-          alert("更新に失敗しました");
+          setPageNotice({ tone: 'error', message: 'プロフィールの更新に失敗しました。' });
       } finally {
           setIsSavingProfile(false);
       }
@@ -594,6 +620,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     ? preferenceSummaryParts.join(' / ')
     : '目標試験・学習時間・苦手分野を設定すると、プラン提案の精度が上がります。';
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
+  const latestCoachNotification = coachNotifications[0] || null;
 
   if (loading && planningBooks.length === 0) {
     return (
@@ -606,6 +633,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   
   return (
     <div className="space-y-6 md:space-y-10 animate-in fade-in duration-500 relative pb-20">
+        {pageNotice && (
+          <div className={`sticky top-3 z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
+            pageNotice.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}>
+            {pageNotice.message}
+          </div>
+        )}
         
         {/* MODALS */}
         
@@ -658,111 +694,314 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
         {/* Settings Modal */}
         {showSettingsModal && (
-            <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm animate-in fade-in"
-                onClick={(event) => {
-                    if (event.target === event.currentTarget) {
-                        setShowSettingsModal(false);
-                    }
-                }}
+            <ModalOverlay
+              onClose={() => setShowSettingsModal(false)}
+              panelClassName="max-w-4xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl sm:p-7"
             >
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative" onClick={(event) => event.stopPropagation()}>
-                    <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">✕</button>
-                    <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
-                        <div className="bg-slate-100 p-2 rounded-full"><User className="w-6 h-6 text-slate-600" /></div>
-                        <h3 className="text-xl font-bold text-slate-800">ユーザー設定</h3>
-                    </div>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">表示名</label>
-                            <input type="text" value={editName} onChange={e => setEditName(e.target.value)} className="w-full border p-2 rounded-lg bg-white text-slate-800" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">学年・属性</label>
-                            <select value={editGrade} onChange={e => setEditGrade(e.target.value as UserGrade)} className="w-full border p-2 rounded-lg bg-white text-slate-800">
-                                {Object.values(UserGrade).map(g => <option key={g} value={g}>{GRADE_LABELS[g]}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-2">表示モード</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {[UserStudyMode.FOCUS, UserStudyMode.GAME].map((mode) => (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        onClick={() => setEditStudyMode(mode)}
-                                        className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                                            editStudyMode === mode
-                                                ? 'border-medace-500 bg-medace-50 text-medace-900'
-                                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <div className="text-sm font-bold">{USER_STUDY_MODE_LABELS[mode]}</div>
-                                        <div className="mt-1 text-xs leading-relaxed text-slate-500">
-                                            {mode === UserStudyMode.FOCUS
-                                                ? '相棒・ランキングを隠して、今日やること中心で表示します。'
-                                                : '相棒・ごほうび・ランキングを表示して達成感を強めます。'}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                            <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Personalization</div>
-                            <div className="mt-3 grid gap-3">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input type="text" value={editTargetExam} onChange={e => setEditTargetExam(e.target.value)} placeholder="目標試験 例: 英検2級" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                    <input type="text" value={editTargetScore} onChange={e => setEditTargetScore(e.target.value)} placeholder="目標点 例: 80点" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                </div>
-                                <input type="date" value={editExamDate} onChange={e => setEditExamDate(e.target.value)} className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input type="number" min="1" max="7" value={editWeeklyStudyDays} onChange={e => setEditWeeklyStudyDays(Math.max(1, Math.min(7, Number(e.target.value) || 1)))} placeholder="週の学習日数" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                    <input type="number" min="5" max="180" value={editDailyStudyMinutes} onChange={e => setEditDailyStudyMinutes(Math.max(5, Math.min(180, Number(e.target.value) || 5)))} placeholder="1日の学習時間(分)" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                </div>
-                                <input type="text" value={editWeakSkillFocus} onChange={e => setEditWeakSkillFocus(e.target.value)} placeholder="苦手分野 例: 長文、熟語、医療語彙" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800" />
-                                <select value={editIntensity} onChange={e => setEditIntensity(e.target.value as LearningPreferenceIntensity)} className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800">
-                                    {Object.values(LearningPreferenceIntensity).map((intensity) => (
-                                        <option key={intensity} value={intensity}>{LEARNING_PREFERENCE_INTENSITY_LABELS[intensity]}</option>
-                                    ))}
-                                </select>
-                                <textarea value={editMotivationNote} onChange={e => setEditMotivationNote(e.target.value)} placeholder="講師に伝えたいこと、学習背景、通学時間など" className="w-full border border-slate-300 p-2 rounded-lg bg-white text-slate-800 h-20 resize-none" />
-                                <p className="text-xs leading-relaxed text-slate-500">ここで設定した条件をもとに、AI学習プランと今日の導線を調整します。</p>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">現在のレベル</label>
-                            <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                <span className="font-bold text-medace-600 text-lg">{user.englishLevel || '未診断'}</span>
-                                <button
-                                  onClick={() => {
-                                    setShowSettingsModal(false);
-                                    setShowOnboarding(true);
-                                  }}
-                                  className="text-xs bg-white border border-medace-200 text-medace-600 px-3 py-1.5 rounded-md font-bold hover:bg-medace-50 flex items-center gap-1"
-                                >
-                                    <RefreshCw className="w-3 h-3" /> レベル診断を再受講
-                                </button>
-                            </div>
-                        </div>
-                        {accountOverview && (
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1">現在のプラン</label>
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                                    <div className="font-bold text-slate-800">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</div>
-                                    <div className="mt-1 text-xs text-slate-500">{accountOverview.audienceLabel} / {accountOverview.priceLabel}</div>
-                                    <div className="mt-1 text-xs text-slate-500">{accountOverview.pricingNote}</div>
-                                </div>
-                            </div>
-                        )}
-                        <button onClick={handleSaveProfile} disabled={isSavingProfile} className="w-full py-3 bg-medace-700 text-white rounded-xl font-bold hover:bg-medace-800 transition-all mt-4 shadow-lg">
-                            {isSavingProfile ? '保存中...' : '変更を保存'}
-                        </button>
-                        <button onClick={() => setShowSettingsModal(false)} type="button" className="w-full py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all">
-                            閉じる
-                        </button>
-                    </div>
+              <button onClick={() => setShowSettingsModal(false)} className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+              <div className="flex flex-wrap items-start gap-4 border-b border-slate-100 pb-5 pr-12">
+                <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
+                  <User className="h-6 w-6" />
                 </div>
-            </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Profile Settings</p>
+                  <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">設定・プロフィール</h3>
+                  <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+                    よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+                <section className="space-y-5">
+                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <User className="h-4 w-4 text-medace-600" />
+                      基本プロフィール
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">表示名</label>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(event) => setEditName(event.target.value)}
+                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          placeholder="表示名を入力"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">学年・属性</label>
+                        <select
+                          value={editGrade}
+                          onChange={(event) => setEditGrade(event.target.value as UserGrade)}
+                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        >
+                          {Object.values(UserGrade).map((grade) => (
+                            <option key={grade} value={grade}>{GRADE_LABELS[grade]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">表示モード</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[UserStudyMode.FOCUS, UserStudyMode.GAME].map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => setEditStudyMode(mode)}
+                              className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                editStudyMode === mode
+                                  ? 'border-medace-500 bg-white text-medace-900 shadow-sm'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="text-sm font-bold">{USER_STUDY_MODE_LABELS[mode]}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                                {mode === UserStudyMode.FOCUS
+                                  ? '今日やることを優先して、落ち着いて学習します。'
+                                  : '相棒・ランキングも出して、達成感を強めます。'}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Target className="h-4 w-4 text-medace-600" />
+                      現在の学習状態
+                    </div>
+                    <div className="mt-4 space-y-4">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">現在のレベル</div>
+                        <div className="mt-2 flex items-center justify-between gap-3">
+                          <span className="text-lg font-black text-medace-700">{user.englishLevel || '未診断'}</span>
+                          <button
+                            onClick={() => {
+                              setShowSettingsModal(false);
+                              setShowOnboarding(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-full border border-medace-200 bg-white px-3 py-2 text-xs font-bold text-medace-700 hover:bg-medace-50"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            レベル診断を再受講
+                          </button>
+                        </div>
+                      </div>
+                      {accountOverview && (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">現在のプラン</div>
+                          <div className="mt-2 font-bold text-slate-900">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</div>
+                          <div className="mt-1 text-xs text-slate-500">{accountOverview.audienceLabel} / {accountOverview.priceLabel}</div>
+                          <div className="mt-2 text-sm leading-relaxed text-slate-500">{accountOverview.pricingNote}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-5">
+                  <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                      <Sparkles className="h-4 w-4 text-medace-600" />
+                      学習の個別設定
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                      クイック選択で埋めてから、必要なところだけ自由入力できます。講師への共有メモにも使えます。
+                    </p>
+
+                    <div className="mt-5 space-y-5">
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">目標試験・確認対象</label>
+                        <div className="flex flex-wrap gap-2">
+                          {TARGET_EXAM_PRESETS.map((preset) => (
+                            <QuickChoiceButton
+                              key={preset}
+                              active={editTargetExam === preset}
+                              label={preset}
+                              onClick={() => setEditTargetExam(preset)}
+                            />
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          value={editTargetExam}
+                          onChange={(event) => setEditTargetExam(event.target.value)}
+                          placeholder="例: 英検2級 / 定期テスト / 共通テスト"
+                          className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        />
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-[0.92fr_1.08fr]">
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">目標の目安</label>
+                          <div className="flex flex-wrap gap-2">
+                            {TARGET_SCORE_PRESETS.map((preset) => (
+                              <QuickChoiceButton
+                                key={preset}
+                                active={editTargetScore === preset}
+                                label={preset}
+                                onClick={() => setEditTargetScore(preset)}
+                              />
+                            ))}
+                          </div>
+                          <input
+                            type="text"
+                            value={editTargetScore}
+                            onChange={(event) => setEditTargetScore(event.target.value)}
+                            placeholder="例: 合格 / 80点 / 偏差値60"
+                            className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">試験日</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={editExamDate}
+                              onChange={(event) => setEditExamDate(event.target.value)}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                            />
+                            {editExamDate && (
+                              <button
+                                type="button"
+                                onClick={() => setEditExamDate('')}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                              >
+                                クリア
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">週の学習日数</label>
+                        <div className="flex flex-wrap gap-2">
+                          {WEEKLY_STUDY_DAY_OPTIONS.map((days) => (
+                            <QuickChoiceButton
+                              key={days}
+                              active={editWeeklyStudyDays === days}
+                              label={`${days}日`}
+                              onClick={() => setEditWeeklyStudyDays(days)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">1日の学習時間</label>
+                        <div className="flex flex-wrap gap-2">
+                          {DAILY_STUDY_MINUTE_OPTIONS.map((minutes) => (
+                            <QuickChoiceButton
+                              key={minutes}
+                              active={editDailyStudyMinutes === minutes}
+                              label={`${minutes}分`}
+                              onClick={() => setEditDailyStudyMinutes(minutes)}
+                            />
+                          ))}
+                        </div>
+                        <div className="mt-3 grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                          <input
+                            type="range"
+                            min={5}
+                            max={120}
+                            step={5}
+                            value={editDailyStudyMinutes}
+                            onChange={(event) => setEditDailyStudyMinutes(Number(event.target.value))}
+                            className="w-full accent-[#f66d0b]"
+                          />
+                          <div className="rounded-full bg-medace-50 px-3 py-1.5 text-sm font-black text-medace-700">{editDailyStudyMinutes}分</div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">苦手分野</label>
+                        <div className="flex flex-wrap gap-2">
+                          {WEAK_SKILL_PRESETS.map((preset) => (
+                            <QuickChoiceButton
+                              key={preset}
+                              active={editWeakSkillFocus === preset}
+                              label={preset}
+                              onClick={() => setEditWeakSkillFocus(preset)}
+                            />
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          value={editWeakSkillFocus}
+                          onChange={(event) => setEditWeakSkillFocus(event.target.value)}
+                          placeholder="例: 長文読解 / 熟語 / 医療語彙"
+                          className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">学習の濃さ</label>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {Object.values(LearningPreferenceIntensity).map((intensity) => (
+                            <button
+                              key={intensity}
+                              type="button"
+                              onClick={() => setEditIntensity(intensity)}
+                              className={`rounded-2xl border px-4 py-4 text-left transition-colors ${
+                                editIntensity === intensity
+                                  ? 'border-medace-500 bg-white text-medace-900 shadow-sm'
+                                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="text-sm font-bold">{LEARNING_PREFERENCE_INTENSITY_LABELS[intensity]}</div>
+                              <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                                {intensity === LearningPreferenceIntensity.BALANCED
+                                  ? '無理なく続けやすい標準ペース'
+                                  : intensity === LearningPreferenceIntensity.REVIEW_HEAVY
+                                    ? '復習を多めに入れて定着重視'
+                                    : '短期間で多めに進めたい'}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">講師に伝えたいこと</label>
+                        <textarea
+                          value={editMotivationNote}
+                          onChange={(event) => setEditMotivationNote(event.target.value)}
+                          placeholder="例: 通学中に15分だけ復習したい / テスト前は熟語を優先したい"
+                          className="h-28 w-full resize-none rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        />
+                        <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                          ここで設定した条件をもとに、学習プランと今日の導線を調整します。講師フォローがある場合は共有の前提にもなります。
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="sticky bottom-0 mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 bg-white/95 pt-4 backdrop-blur sm:flex-row sm:justify-end">
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  type="button"
+                  className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  閉じる
+                </button>
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={isSavingProfile}
+                  className="rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {isSavingProfile ? '保存中...' : '変更を保存'}
+                </button>
+              </div>
+            </ModalOverlay>
         )}
 
         {/* Create Modal */}
@@ -858,7 +1097,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
               <p className="mt-4 text-2xl font-black tracking-tight text-white">{heroTitle}</p>
               <p className="mt-4 max-w-2xl text-sm md:text-base leading-relaxed text-white/74">{heroCopy}</p>
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">Personalization</div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
                 <div className="mt-2 text-sm leading-relaxed text-white/80">{preferenceSummary}</div>
               </div>
 
@@ -923,6 +1162,62 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           </div>
         </div>
       </section>
+
+      {latestCoachNotification && (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl border border-medace-100 bg-medace-50 p-3 text-medace-700">
+                <MessageSquareText className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Coach Message</p>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師からのメッセージ</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                  生徒向けのメッセージ受信欄です。講師から届いた最新のフォローをここで確認できます。
+                </p>
+              </div>
+            </div>
+            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-500">
+              {coachNotifications.length}件
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-slate-900">{latestCoachNotification.instructorName}</div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  {latestCoachNotification.usedAi ? 'AI下書き' : '手動'}
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700">{latestCoachNotification.message}</p>
+              <div className="mt-4 text-xs text-slate-400">
+                {new Date(latestCoachNotification.createdAt).toLocaleString('ja-JP')}
+              </div>
+            </div>
+
+            <div className="grid gap-3">
+              {coachNotifications.slice(1, 3).map((notification) => (
+                <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-slate-900">{notification.instructorName}</div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                      {notification.usedAi ? 'AI下書き' : '手動'}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{notification.message}</p>
+                </div>
+              ))}
+              {coachNotifications.length === 1 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                  ここに次回以降の講師メッセージも並びます。
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
         <div className="flex items-center justify-between gap-4">
@@ -1008,13 +1303,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       )}
 
-      {coachNotifications.length > 0 && (
+      {coachNotifications.length > 1 && (
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
           <div className="flex items-center gap-3">
             <BrainCircuit className="w-5 h-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">講師フォロー</p>
-              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師からのフォロー</h3>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Message History</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師メッセージの履歴</h3>
             </div>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-3">

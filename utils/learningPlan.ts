@@ -32,6 +32,16 @@ const INTENSITY_MULTIPLIER: Record<LearningPreferenceIntensity, number> = {
   [LearningPreferenceIntensity.REVIEW_HEAVY]: 0.9,
   [LearningPreferenceIntensity.INTENSIVE]: 1.2,
 };
+const GRADE_PROGRESS_INDEX: Record<UserGrade, number> = {
+  [UserGrade.JHS1]: 1,
+  [UserGrade.JHS2]: 2,
+  [UserGrade.JHS3]: 3,
+  [UserGrade.SHS1]: 4,
+  [UserGrade.SHS2]: 5,
+  [UserGrade.SHS3]: 6,
+  [UserGrade.UNIVERSITY]: 6,
+  [UserGrade.ADULT]: 4,
+};
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -76,23 +86,44 @@ const getDailyGoal = (
   return clamp(weighted, 8, 36);
 };
 
+const getBookProgressionIndex = (book: BookMetadata): number | null => {
+  const haystack = `${book.title} ${book.description || ''} ${book.sourceContext || ''}`;
+  const normalized = haystack.replace(/\s+/g, '');
+  const levelMatch = normalized.match(/レベル([1-6])/);
+  if (levelMatch) return Number.parseInt(levelMatch[1], 10);
+  if (normalized.includes('中1')) return 1;
+  if (normalized.includes('中2')) return 2;
+  if (normalized.includes('中3')) return 3;
+  if (normalized.includes('高1')) return 4;
+  if (normalized.includes('高2')) return 5;
+  if (normalized.includes('高3')) return 6;
+  return null;
+};
+
 const scoreBook = (
   book: BookMetadata,
+  grade: UserGrade,
   keywords: string[],
   prefersVolume: boolean,
 ): number => {
   const haystack = `${book.title} ${book.description || ''} ${book.sourceContext || ''}`.toLowerCase();
   const keywordScore = keywords.reduce((total, keyword) => total + (haystack.includes(keyword) ? 18 : 0), 0);
   const normalizedWordCount = Math.max(book.wordCount || 0, 120);
+  const targetProgress = GRADE_PROGRESS_INDEX[grade] || GRADE_PROGRESS_INDEX[UserGrade.ADULT];
+  const bookProgress = getBookProgressionIndex(book);
+  const progressionScore = bookProgress === null
+    ? 0
+    : Math.max(0, 28 - Math.abs(bookProgress - targetProgress) * 8);
   const sizeScore = prefersVolume
     ? Math.min(normalizedWordCount / 35, 16)
     : 16 - Math.min(normalizedWordCount / 55, 10);
 
-  return keywordScore + sizeScore + (book.isPriority ? 40 : 0);
+  return keywordScore + progressionScore + sizeScore + (book.isPriority ? 40 : 0);
 };
 
 const selectBooks = (
   availableBooks: BookMetadata[],
+  grade: UserGrade,
   keywords: string[],
   dailyMinutes: number,
   intensity: LearningPreferenceIntensity,
@@ -110,8 +141,8 @@ const selectBooks = (
 
   return [...availableBooks]
     .sort((left, right) => {
-      const scoreGap = scoreBook(right, keywords, intensity === LearningPreferenceIntensity.INTENSIVE)
-        - scoreBook(left, keywords, intensity === LearningPreferenceIntensity.INTENSIVE);
+      const scoreGap = scoreBook(right, grade, keywords, intensity === LearningPreferenceIntensity.INTENSIVE)
+        - scoreBook(left, grade, keywords, intensity === LearningPreferenceIntensity.INTENSIVE);
       if (scoreGap !== 0) return scoreGap;
       return (right.wordCount || 0) - (left.wordCount || 0);
     })
@@ -161,7 +192,7 @@ export const buildFallbackLearningPlan = ({
   const daysUntilExam = getDaysUntil(examDate, now);
   const dailyWordGoal = getDailyGoal(level, dailyStudyMinutes, intensity, daysUntilExam);
   const keywords = tokenize(learningPreference?.targetExam, learningPreference?.weakSkillFocus);
-  const selectedBooks = selectBooks(availableBooks, keywords, dailyStudyMinutes, intensity);
+  const selectedBooks = selectBooks(availableBooks, grade, keywords, dailyStudyMinutes, intensity);
   const estimatedTotalWords = selectedBooks.reduce((total, book) => total + Math.max(book.wordCount || 0, 120), 0) || Math.max(dailyWordGoal * 14, 160);
   const studyDaysNeeded = Math.ceil(estimatedTotalWords / Math.max(dailyWordGoal, 1));
   let targetDays = clamp(Math.ceil((studyDaysNeeded * 7) / weeklyStudyDays), 14, 210);

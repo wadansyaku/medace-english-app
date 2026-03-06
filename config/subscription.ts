@@ -39,7 +39,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     monthlyAiBudgetMilliYen: 1200,
     allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz', 'generateDiagnosticTest'],
     featureSummary: [
-      'Steady Study Original のスターター教材と通常学習を無理なく始められます',
+      'オリジナル単語データベースのスターター教材と通常学習を無理なく始められます',
       '学習プランはAIではなく標準ロジックで自動提案します',
       'AIは例文生成と小さなクイズ補助を中心に使えます',
       'フルの既存公式教材カタログは含めず、低コスト運用を優先します',

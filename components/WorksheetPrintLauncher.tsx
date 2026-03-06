@@ -3,6 +3,7 @@ import { STATUS_LABELS, StudentSummary, StudentWorksheetSnapshot, UserProfile, W
 import { storage } from '../services/storage';
 import { GeneratedWorksheetQuestion, generateWorksheetQuestions, WORKSHEET_MODE_COPY } from '../utils/worksheet';
 import { BookOpen, ExternalLink, Eye, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
+import ModalOverlay from './ModalOverlay';
 
 type WorksheetStatusFilter = 'ALL' | 'REVIEW_PLUS' | 'GRADUATED_ONLY';
 
@@ -574,8 +575,14 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-medace-900/35 p-4 backdrop-blur-sm">
-          <div className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl">
+        <ModalOverlay
+          onClose={() => setOpen(false)}
+          panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
+        >
+          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-medace-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700 shadow-sm">
+            PDF問題作成
+          </div>
+          <div className="relative max-h-[92vh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -806,19 +813,19 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {open && showPreview && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-medace-900/45 p-4 backdrop-blur-sm"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setShowPreview(false);
-            }
-          }}
+        <ModalOverlay
+          onClose={() => setShowPreview(false)}
+          zIndexClassName="z-[60]"
+          panelClassName="max-w-6xl rounded-[32px] border border-slate-200 bg-white shadow-2xl"
         >
-          <div className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+          <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-medace-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700 shadow-sm">
+            印刷プレビュー
+          </div>
+          <div className="relative flex h-[94vh] max-h-[1100px] flex-col overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Print Preview</div>
@@ -888,7 +895,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </>
   );

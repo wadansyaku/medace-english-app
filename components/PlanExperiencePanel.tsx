@@ -44,7 +44,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
           </div>
           <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">まずは無料で学習習慣を作る</h3>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、Steady Study Original のスターター教材と小さなAI補助を軸にテンポ良く使えます。
+            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、オリジナル単語データベースのスターター教材と小さなAI補助を軸にテンポ良く使えます。
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -86,7 +86,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
       '広告なしで集中しやすい学習画面',
       '講師フォロー通知とグループ進行に対応',
       hasBusinessCatalog
-        ? 'Steady Study Original と既存公式教材をビジネス限定で配布'
+        ? 'オリジナル単語データベースと既存公式教材をビジネス限定で配布'
         : '正式教材カタログは本導入後に開放',
     ];
 

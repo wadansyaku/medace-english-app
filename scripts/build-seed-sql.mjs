@@ -11,6 +11,20 @@ const DEFAULT_ORIGINAL_CATALOG_SOURCE = 'STEADY_STUDY_ORIGINAL';
 const DEFAULT_ORIGINAL_ACCESS_SCOPE = 'BUSINESS_ONLY';
 const DEFAULT_LICENSED_CATALOG_SOURCE = 'LICENSED_PARTNER';
 const DEFAULT_LICENSED_ACCESS_SCOPE = 'BUSINESS_ONLY';
+const BALANCED_ORIGINAL_LEVELS = [
+  { title: 'レベル1', audience: '中1目安' },
+  { title: 'レベル2', audience: '中2目安' },
+  { title: 'レベル3', audience: '中3目安' },
+  { title: 'レベル4', audience: '高1目安' },
+  { title: 'レベル5', audience: '高2目安' },
+  { title: 'レベル6', audience: '高3目安' },
+];
+const ORIGINAL_STAGE_ORDER = {
+  JHS_Foundation: 1,
+  HS_Basic: 2,
+  HS_Core: 3,
+  HS_Advanced: 4,
+};
 
 const excludedBooks = new Set(DEFAULT_EXCLUDED_BOOKS);
 const positionalArgs = [];
@@ -256,6 +270,51 @@ const getFormat = (rows) => {
   return 'BOOK_CSV';
 };
 
+const toSortableNumber = (value, fallback = Number.MAX_SAFE_INTEGER) => {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const rebucketOriginalRows = (rows) => {
+  const sortedRows = [...rows].sort((left, right) => {
+    const byDefaultOrder = toSortableNumber(left['grade_bucket_default_order']) - toSortableNumber(right['grade_bucket_default_order']);
+    if (byDefaultOrder !== 0) return byDefaultOrder;
+
+    const byStage = (ORIGINAL_STAGE_ORDER[left['stage_label']] || 99) - (ORIGINAL_STAGE_ORDER[right['stage_label']] || 99);
+    if (byStage !== 0) return byStage;
+
+    const bySourceNumber = toSortableNumber(left['source_primary_number']) - toSortableNumber(right['source_primary_number']);
+    if (bySourceNumber !== 0) return bySourceNumber;
+
+    const byBookRank = toSortableNumber(left['book_rank_primary']) - toSortableNumber(right['book_rank_primary']);
+    if (byBookRank !== 0) return byBookRank;
+
+    return String(left['headword_norm'] || left['headword'] || '').localeCompare(String(right['headword_norm'] || right['headword'] || ''), 'en');
+  });
+
+  const baseSize = Math.floor(sortedRows.length / BALANCED_ORIGINAL_LEVELS.length);
+  const remainder = sortedRows.length % BALANCED_ORIGINAL_LEVELS.length;
+  const nextRows = [];
+  let offset = 0;
+
+  BALANCED_ORIGINAL_LEVELS.forEach((level, index) => {
+    const chunkSize = baseSize + (index < remainder ? 1 : 0);
+    const chunk = sortedRows.slice(offset, offset + chunkSize);
+    offset += chunkSize;
+
+    chunk.forEach((row) => {
+      nextRows.push({
+        ...row,
+        __balancedOriginalTitle: level.title,
+        __balancedOriginalAudience: level.audience,
+        __balancedOriginalOrder: String(index + 1),
+      });
+    });
+  });
+
+  return nextRows;
+};
+
 const grouped = new Map();
 let totalImportedWords = 0;
 
@@ -270,11 +329,12 @@ for (const dataset of datasets) {
   const format = getFormat(rows);
   const datasetLabel = getDatasetLabel(dataset.catalogSource);
   const inputBasename = path.basename(dataset.inputPath);
+  const normalizedRows = format === 'ORIGINAL_WORDBANK' ? rebucketOriginalRows(rows) : rows;
 
-  rows.forEach((row, index) => {
+  normalizedRows.forEach((row, index) => {
     const isOriginalWordbank = format === 'ORIGINAL_WORDBANK';
     const bookName = isOriginalWordbank
-      ? (row['grade_bucket_default_label'] || row['stage_label'] || `${datasetLabel} Imported`).trim()
+      ? (row.__balancedOriginalTitle || row['grade_bucket_default_label'] || row['stage_label'] || `${datasetLabel} Imported`).trim()
       : (row['単語帳名'] || row['BookName'] || row['book_name'] || 'Imported').trim();
     if (!bookName || excludedBooks.has(bookName)) return;
 
@@ -294,13 +354,13 @@ for (const dataset of datasets) {
         catalogSource: dataset.catalogSource,
         accessScope: dataset.accessScope,
         description: isOriginalWordbank
-          ? `オリジナル単語データベースを ${bookName} 向けに再編成`
+          ? `オリジナル単語データベースを ${bookName} (${row.__balancedOriginalAudience || row['grade_bucket_default_label'] || row['stage_label'] || '学年別'}) 向けに再編成`
           : `${datasetLabel} として ${inputBasename} から投入`,
         sourceContext: isOriginalWordbank
-          ? `オリジナル単語データベース / ${row['stage_label'] || 'Original Wordbank'}`
+          ? `オリジナル単語データベース / ${row.__balancedOriginalAudience || row['stage_label'] || 'Original Wordbank'}`
           : inputBasename,
         sortOrder: isOriginalWordbank
-          ? Number.parseInt(row['grade_bucket_default_order'] || row['group_order'] || String(grouped.size + 1), 10) || grouped.size + 1
+          ? Number.parseInt(row.__balancedOriginalOrder || row['grade_bucket_default_order'] || row['group_order'] || String(grouped.size + 1), 10) || grouped.size + 1
           : grouped.size + 1,
         words: [],
       });
