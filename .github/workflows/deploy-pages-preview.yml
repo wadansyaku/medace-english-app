@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.ref_name != 'main' && github.ref_name != 'master'
     runs-on: ubuntu-latest
     env:
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
