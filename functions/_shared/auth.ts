@@ -1,4 +1,5 @@
 import { EnglishLevel, OrganizationRole, SubscriptionPlan, UserGrade, UserProfile, UserRole, UserStats, UserStudyMode } from '../../types';
+import { getRelativeDateKey, getTodayDateKey } from '../../utils/date';
 import { HttpError } from './http';
 import { AppEnv, DbUserRow } from './types';
 
@@ -6,13 +7,9 @@ const SESSION_COOKIE_NAME = 'medace_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PBKDF2_ITERATIONS = 100000;
 
-const todayString = (): string => new Date().toISOString().split('T')[0];
+const todayString = (): string => getTodayDateKey();
 
-const getYesterdayString = (): string => {
-  const value = new Date();
-  value.setDate(value.getDate() - 1);
-  return value.toISOString().split('T')[0];
-};
+const getYesterdayString = (): string => getRelativeDateKey(-1);
 
 const encodeBase64 = (value: ArrayBuffer | Uint8Array): string => {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);

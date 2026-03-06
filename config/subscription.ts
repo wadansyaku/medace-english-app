@@ -4,6 +4,9 @@ export type MeteredAiAction =
   | 'generateGeminiSentence'
   | 'generateWordImage'
   | 'generateAIQuiz'
+  | 'generateDiagnosticTest'
+  | 'generateAdvancedDiagnosticTest'
+  | 'evaluateAdvancedTest'
   | 'extractVocabularyFromText'
   | 'extractVocabularyFromMedia'
   | 'generateLearningPlan'
@@ -32,13 +35,14 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'フリープラン',
     audienceLabel: '個人向け',
     priceLabel: '無料',
-    pricingNote: '広告付きのセルフサーブ導線。公式教材カタログは含みません',
+    pricingNote: '広告付きのセルフサーブ導線。スターター公式教材と基本学習を利用できます',
     monthlyAiBudgetMilliYen: 1200,
-    allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz'],
+    allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz', 'generateDiagnosticTest'],
     featureSummary: [
-      '自分で作成した教材と通常学習を無理なく始められます',
+      'Steady Study Original のスターター教材と通常学習を無理なく始められます',
+      '学習プランはAIではなく標準ロジックで自動提案します',
       'AIは例文生成と小さなクイズ補助を中心に使えます',
-      '公式教材カタログは含めず、低コスト運用を優先します',
+      'フルのライセンス教材カタログは含めず、低コスト運用を優先します',
     ],
   },
   [SubscriptionPlan.TOC_PAID]: {
@@ -46,19 +50,22 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'パーソナルプラン',
     audienceLabel: '個人向け',
     priceLabel: '月額課金想定',
-    pricingNote: '広告なしの個人向け拡張プラン。公式教材カタログは含みません',
+    pricingNote: '広告なしの個人向け拡張プラン。スターター公式教材に加えてAI教材化まで利用できます',
     monthlyAiBudgetMilliYen: 12000,
     allowedAiActions: [
       'generateGeminiSentence',
       'generateAIQuiz',
+      'generateDiagnosticTest',
+      'generateAdvancedDiagnosticTest',
+      'evaluateAdvancedTest',
       'extractVocabularyFromText',
       'extractVocabularyFromMedia',
       'generateLearningPlan',
     ],
     featureSummary: [
-      '個人向けのAI教材化と学習プラン作成まで利用できます',
+      'スターター公式教材に加えて、個人向けのAI教材化と学習プラン作成まで利用できます',
       '画像やPDFからの抽出にも対応します',
-      '公式教材ではなく、自作教材中心で学習を広げます',
+      'フルのライセンス教材ではなく、自作教材とスターター教材中心で学習を広げます',
     ],
   },
   [SubscriptionPlan.TOB_FREE]: {
@@ -71,6 +78,9 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     allowedAiActions: [
       'generateGeminiSentence',
       'generateAIQuiz',
+      'generateDiagnosticTest',
+      'generateAdvancedDiagnosticTest',
+      'evaluateAdvancedTest',
       'generateLearningPlan',
       'generateInstructorFollowUp',
     ],
@@ -84,12 +94,15 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     plan: SubscriptionPlan.TOB_PAID,
     label: 'ビジネスプラン',
     audienceLabel: '教室・法人向け',
-    priceLabel: '月額 + 導入費',
-    pricingNote: '固定費1万円 + 生徒1人2,000円 + 講師1人500円 + 導入費60万円',
+    priceLabel: '個別ご案内',
+    pricingNote: '費用は導入規模に応じて個別にご案内します。導入費と管理・アップデート費は現時点では未定です。',
     monthlyAiBudgetMilliYen: 40000,
     allowedAiActions: [
       'generateGeminiSentence',
       'generateAIQuiz',
+      'generateDiagnosticTest',
+      'generateAdvancedDiagnosticTest',
+      'evaluateAdvancedTest',
       'extractVocabularyFromText',
       'extractVocabularyFromMedia',
       'generateLearningPlan',
@@ -118,6 +131,21 @@ export const AI_ACTION_ESTIMATES: Record<MeteredAiAction, AiActionEstimate> = {
     label: 'AIクイズ',
     estimatedCostMilliYen: 220,
     model: 'gemini-2.5-flash',
+  },
+  generateDiagnosticTest: {
+    label: '標準診断テスト生成',
+    estimatedCostMilliYen: 260,
+    model: 'gemini-2.5-flash',
+  },
+  generateAdvancedDiagnosticTest: {
+    label: 'アドバンス診断生成',
+    estimatedCostMilliYen: 1800,
+    model: 'gemini-3-pro-preview',
+  },
+  evaluateAdvancedTest: {
+    label: 'アドバンス診断採点',
+    estimatedCostMilliYen: 1400,
+    model: 'gemini-3-pro-preview',
   },
   extractVocabularyFromText: {
     label: 'テキスト抽出',

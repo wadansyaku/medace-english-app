@@ -3,10 +3,12 @@ import { OrganizationDashboardSnapshot, OrganizationRole, StudentRiskLevel, SUBS
 import { storage } from '../services/storage';
 import { getSubscriptionPolicy } from '../config/subscription';
 import { AlertCircle, BellRing, Building2, Loader2, ShieldCheck, Users } from 'lucide-react';
+import OfficialCatalogAccessPanel from './OfficialCatalogAccessPanel';
 import WorksheetPrintLauncher from './WorksheetPrintLauncher';
 
 interface BusinessAdminDashboardProps {
   user: UserProfile;
+  onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
 const riskTone = (riskLevel: StudentRiskLevel): string => {
@@ -36,7 +38,7 @@ const MetricCard: React.FC<{ label: string; value: string; detail: string; }> = 
   </div>
 );
 
-const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user }) => {
+const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, onSelectBook }) => {
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +170,14 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user })
         <MetricCard label="未割当生徒" value={`${snapshot.unassignedStudents}`} detail="担当講師がまだ決まっていない生徒" />
       </div>
 
+      <OfficialCatalogAccessPanel
+        user={user}
+        onSelectBook={onSelectBook}
+        eyebrow="Business Demo Catalog"
+        title="ビジネス版の既存単語帳を確認する"
+        description="学校管理者体験でも、既存の公式単語帳をそのまま開けます。組織運用を見ながら、教材の中身やテスト導線まで確認できます。"
+      />
+
       <div className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">
@@ -194,7 +204,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user })
               <div className="mt-2 text-lg font-black text-slate-950">{snapshot.notifications7d}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">料金メモ</div>
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">費用補足</div>
               <div className="mt-2 text-sm font-bold leading-relaxed text-slate-950">{policy.pricingNote}</div>
             </div>
           </div>

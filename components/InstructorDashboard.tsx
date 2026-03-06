@@ -3,10 +3,12 @@ import { storage } from '../services/storage';
 import { generateInstructorFollowUp } from '../services/gemini';
 import { StudentSummary, StudentRiskLevel, SUBSCRIPTION_PLAN_LABELS, UserProfile } from '../types';
 import { AlertCircle, Bell, CheckCircle2, Loader2, MessageSquareText, Search, Send, Sparkles, Users } from 'lucide-react';
+import OfficialCatalogAccessPanel from './OfficialCatalogAccessPanel';
 import WorksheetPrintLauncher from './WorksheetPrintLauncher';
 
 interface InstructorDashboardProps {
   user: UserProfile;
+  onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
 const getRiskStyle = (risk: StudentRiskLevel) => {
@@ -56,7 +58,7 @@ const getTriggerReason = (student: StudentSummary): string => {
   return '継続称賛フォロー';
 };
 
-const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user }) => {
+const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelectBook }) => {
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -369,6 +371,14 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user }) => {
           </div>
         </div>
       </div>
+
+      <OfficialCatalogAccessPanel
+        user={user}
+        onSelectBook={onSelectBook}
+        eyebrow="Business Demo Catalog"
+        title="ビジネス版の既存単語帳をそのまま確認する"
+        description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・先頭2文字ヒントを切り替えることもできます。"
+      />
 
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>

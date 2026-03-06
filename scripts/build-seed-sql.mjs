@@ -4,10 +4,13 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 const DEFAULT_EXCLUDED_BOOKS = new Set(['TOEFLテスト英単語3800']);
 const DEFAULT_LICENSED_INPUT = '/Users/Yodai/projects/language_database_2_2/output_curated/20260208_225334/MASTER_DATABASE_REFINED.csv';
-const DEFAULT_ORIGINAL_INPUT = '/Users/Yodai/projects/NanjyoEnglishApp/docs/wordbank_pos_audit/20260208_225334/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv';
 const DEFAULT_OUTPUT = './tmp/d1-seed.sql';
 const DEFAULT_CATALOG_SOURCE = 'LICENSED_PARTNER';
 const DEFAULT_ACCESS_SCOPE = 'BUSINESS_ONLY';
+const DEFAULT_ORIGINAL_CATALOG_SOURCE = 'STEADY_STUDY_ORIGINAL';
+const DEFAULT_ORIGINAL_ACCESS_SCOPE = 'BUSINESS_ONLY';
+const DEFAULT_LICENSED_CATALOG_SOURCE = 'LICENSED_PARTNER';
+const DEFAULT_LICENSED_ACCESS_SCOPE = 'BUSINESS_ONLY';
 
 const excludedBooks = new Set(DEFAULT_EXCLUDED_BOOKS);
 const positionalArgs = [];
@@ -17,6 +20,10 @@ const genericInputs = [];
 let remoteMode = false;
 let fallbackCatalogSource = DEFAULT_CATALOG_SOURCE;
 let fallbackAccessScope = DEFAULT_ACCESS_SCOPE;
+let originalCatalogSource = DEFAULT_ORIGINAL_CATALOG_SOURCE;
+let originalAccessScope = DEFAULT_ORIGINAL_ACCESS_SCOPE;
+let licensedCatalogSource = DEFAULT_LICENSED_CATALOG_SOURCE;
+let licensedAccessScope = DEFAULT_LICENSED_ACCESS_SCOPE;
 
 for (let index = 0; index < args.length; index += 1) {
   const value = args[index];
@@ -38,8 +45,28 @@ for (let index = 0; index < args.length; index += 1) {
     index += 1;
     continue;
   }
+  if (value === '--original-catalog-source') {
+    originalCatalogSource = args[index + 1] || DEFAULT_ORIGINAL_CATALOG_SOURCE;
+    index += 1;
+    continue;
+  }
+  if (value === '--licensed-catalog-source') {
+    licensedCatalogSource = args[index + 1] || DEFAULT_LICENSED_CATALOG_SOURCE;
+    index += 1;
+    continue;
+  }
   if (value === '--access-scope') {
     fallbackAccessScope = args[index + 1] || DEFAULT_ACCESS_SCOPE;
+    index += 1;
+    continue;
+  }
+  if (value === '--original-access-scope') {
+    originalAccessScope = args[index + 1] || DEFAULT_ORIGINAL_ACCESS_SCOPE;
+    index += 1;
+    continue;
+  }
+  if (value === '--licensed-access-scope') {
+    licensedAccessScope = args[index + 1] || DEFAULT_LICENSED_ACCESS_SCOPE;
     index += 1;
     continue;
   }
@@ -87,15 +114,15 @@ if (originalCsvs.length === 0 && licensedCsvs.length === 0 && genericInputs.leng
   originalCsvs.forEach((inputPath) => {
     datasets.push({
       inputPath,
-      catalogSource: 'STEADY_STUDY_ORIGINAL',
-      accessScope: 'BUSINESS_ONLY',
+      catalogSource: originalCatalogSource,
+      accessScope: originalAccessScope,
     });
   });
   licensedCsvs.forEach((inputPath) => {
     datasets.push({
       inputPath,
-      catalogSource: 'LICENSED_PARTNER',
-      accessScope: 'BUSINESS_ONLY',
+      catalogSource: licensedCatalogSource,
+      accessScope: licensedAccessScope,
     });
   });
   genericInputs.forEach((inputPath) => {
@@ -267,10 +294,10 @@ for (const dataset of datasets) {
         catalogSource: dataset.catalogSource,
         accessScope: dataset.accessScope,
         description: isOriginalWordbank
-          ? `Nanjyo English App のオリジナル単語データベースを ${bookName} 向けに再編成`
+          ? `オリジナル単語データベースを ${bookName} 向けに再編成`
           : `${datasetLabel} として ${inputBasename} から投入`,
         sourceContext: isOriginalWordbank
-          ? `Nanjyo English App / ${row['stage_label'] || 'Original Wordbank'}`
+          ? `オリジナル単語データベース / ${row['stage_label'] || 'Original Wordbank'}`
           : inputBasename,
         sortOrder: isOriginalWordbank
           ? Number.parseInt(row['grade_bucket_default_order'] || row['group_order'] || String(grouped.size + 1), 10) || grouped.size + 1

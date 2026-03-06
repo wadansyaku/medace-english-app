@@ -4,16 +4,19 @@ import { AccountOverview, BOOK_CATALOG_SOURCE_LABELS, BookCatalogSource, BookMet
 import { storage } from '../services/storage';
 import { extractVocabularyFromText, extractVocabularyFromMedia, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
 import { BRAND } from '../config/brand';
-import { isAdSupportedPlan, isBusinessPlan } from '../config/subscription';
+import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription';
 import { Play, BookOpen, Star, Loader2, Zap, BrainCircuit, Trophy, Plus, Sparkles, FileText, Image as ImageIcon, UploadCloud, Flame, Trash2, Settings, RefreshCw, User, Book, Calendar, Target, ArrowRight, Library, ChevronDown, ChevronUp, BarChart, Activity, Edit2, X, Check, Medal, Crown } from 'lucide-react';
 import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
 import PlanExperiencePanel from './PlanExperiencePanel';
 import AdSenseSlot from './AdSenseSlot';
+import { getDateKeyWeekdayLabel, getRelativeDateKey, getTodayDateKey } from '../utils/date';
+import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
   user: UserProfile;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
+  onUserUpdate: (user: UserProfile) => void;
 }
 
 interface BookCardProps {
@@ -106,27 +109,24 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
 };
 
 const ActivityBarChart: React.FC<{ logs: ActivityLog[], dailyGoal?: number }> = ({ logs, dailyGoal = 20 }) => {
-    const today = new Date();
     const DAYS_TO_SHOW = 7; 
     
     const chartData = [];
-    const weekDays = ['日', '月', '火', '水', '木', '金', '土'];
+    const todayKey = getTodayDateKey();
 
     let maxCount = 0;
 
     for (let i = DAYS_TO_SHOW - 1; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = getRelativeDateKey(-i);
         const log = logs.find(l => l.date === dateStr);
         const count = log ? log.count : 0;
         if (count > maxCount) maxCount = count;
         
         chartData.push({
             date: dateStr,
-            dayLabel: weekDays[d.getDay()],
+            dayLabel: getDateKeyWeekdayLabel(dateStr),
             count: count,
-            isToday: i === 0,
+            isToday: dateStr === todayKey,
             isGoalMet: count >= dailyGoal
         });
     }
@@ -211,10 +211,8 @@ const getLeague = (level: number) => {
     return { name: 'ブロンズ', icon: <Medal className="w-3 h-3 fill-orange-300 text-orange-600" />, color: 'bg-orange-50 text-orange-800 border-orange-200' };
 };
 
-const getTodayKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(new Date());
 
-
-const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate }) => {
   const [books, setBooks] = useState<BookMetadata[]>([]);
   const [myBooks, setMyBooks] = useState<BookMetadata[]>([]);
   const [progressMap, setProgressMap] = useState<Record<string, BookProgress>>({});
@@ -296,16 +294,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
     setEditIntensity(learningPreference?.intensity || LearningPreferenceIntensity.BALANCED);
   }, [showSettingsModal, user.displayName, user.grade, user.studyMode, learningPreference]);
 
+  useEffect(() => {
+    if (!showSettingsModal) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSettingsModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSettingsModal]);
+
   if (showOnboarding) {
       return <Onboarding 
                 user={user} 
                 isRetake={true}
                 historySummary={`現在レベル: ${user.englishLevel}, XP: ${user.stats?.xp}, 学年・属性: ${GRADE_LABELS[user.grade || UserGrade.ADULT]}`}
                 onComplete={(updated) => {
-                    storage.updateSessionUser(updated); 
+                    onUserUpdate(updated);
                     setShowOnboarding(false);
-                    window.location.reload(); 
+                    loadDashboardData();
                 }} 
+                onCancel={() => {
+                    setShowOnboarding(false);
+                    setShowSettingsModal(true);
+                }}
              />;
   }
 
@@ -332,13 +347,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
   };
 
   const handleGeneratePlan = async () => {
+      if (!hasStudyBooks) return;
       setGeneratingPlan(true);
       try {
-          const plan = await generateLearningPlan(user.grade || UserGrade.ADULT, user.englishLevel || EnglishLevel.B1, books, learningPreference);
+          const plan = canGenerateAiPlan
+            ? await generateLearningPlan(user.grade || UserGrade.ADULT, user.englishLevel || EnglishLevel.B1, planningBooks, learningPreference)
+            : buildFallbackLearningPlan({
+                uid: user.uid,
+                grade: user.grade || UserGrade.ADULT,
+                level: user.englishLevel || EnglishLevel.B1,
+                availableBooks: planningBooks,
+                learningPreference,
+              });
           if (plan) {
               plan.uid = user.uid;
               await storage.saveLearningPlan(plan);
               setLearningPlan(plan);
+          } else {
+              alert("プラン作成に失敗しました");
           }
       } catch (e) {
           alert("プラン作成に失敗しました");
@@ -479,10 +505,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
           };
           await storage.saveLearningPreference(nextPreference);
           await storage.updateSessionUser(updatedUser);
+          const refreshedUser = await storage.getSession();
+          const nextUser = refreshedUser || updatedUser;
           setLearningPreference(nextPreference);
-          alert("プロフィールを更新しました。");
+          onUserUpdate(nextUser);
           setShowSettingsModal(false);
-          window.location.reload();
+          await loadDashboardData();
+          alert("プロフィールを更新しました。");
       } catch (e) {
           alert("更新に失敗しました");
       } finally {
@@ -490,12 +519,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
       }
   };
 
-  const plannedBooks = learningPlan && learningPlan.selectedBookIds.length > 0
-    ? books.filter((book) => learningPlan.selectedBookIds.includes(book.id))
-    : books.filter((book) => book.isPriority).slice(0, 3);
+  const planningBooks = [...books, ...myBooks];
+  const hasStudyBooks = planningBooks.length > 0;
   const studyMode = user.studyMode || UserStudyMode.FOCUS;
   const isGameMode = studyMode === UserStudyMode.GAME;
-  const todayKey = getTodayKey();
+  const todayKey = getTodayDateKey();
   const todayCount = activityLogs.find((log) => log.date === todayKey)?.count ?? 0;
   const weekTotal = activityLogs.reduce((sum, log) => sum + log.count, 0);
   const stabilizedWords = (masteryDist?.graduated ?? 0) + (masteryDist?.review ?? 0);
@@ -507,15 +535,54 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
   const reviewFirstCount = dueCount > 0 ? Math.min(dueCount, Math.max(remainingWords, Math.min(todayWordGoal, 8))) : 0;
   const estimatedMinutes = Math.max(3, Math.ceil((remainingWords > 0 ? remainingWords : Math.max(6, Math.min(todayWordGoal, 10))) / 4));
   const todayProgressPercent = todayWordGoal > 0 ? Math.min(100, Math.round((todayCount / todayWordGoal) * 100)) : 0;
-  const heroTitle = remainingWords > 0 ? `あと${remainingWords}語で今日の目標です` : '今日はここまでで十分です';
-  const heroCopy = remainingWords > 0
-    ? dueCount > 0
-      ? `まずは復習待ちの ${reviewFirstCount} 語から始めれば、そのまま今日のノルマに入れます。`
-      : '今日は短く区切って進めれば十分です。まずはクエストを1回だけ始めましょう。'
-    : '余力があればテストかMy単語帳に進み、無理ならここで終えても流れは崩れません。';
-  const questButtonLabel = remainingWords > 0 ? '今日のクエストを開始' : '復習をもう1セットやる';
   const currentPlan = accountOverview?.subscriptionPlan || user.subscriptionPlan || SubscriptionPlan.TOC_FREE;
+  const currentPlanPolicy = getSubscriptionPolicy(currentPlan);
   const showAdSlots = isAdSupportedPlan(currentPlan);
+  const canGenerateAiPlan = currentPlanPolicy.allowedAiActions.includes('generateLearningPlan');
+  const canCreateFromText = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromText');
+  const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
+  const canUseSelectedCreateMode = createMode === 'TEXT' ? canCreateFromText : canCreateFromFile;
+  const fallbackPlanSuggestion = hasStudyBooks
+    ? buildFallbackLearningPlan({
+        uid: user.uid,
+        grade: user.grade || UserGrade.ADULT,
+        level: user.englishLevel || EnglishLevel.B1,
+        availableBooks: planningBooks,
+        learningPreference,
+      })
+    : null;
+  const plannedBooks = learningPlan && learningPlan.selectedBookIds.length > 0
+    ? planningBooks.filter((book) => learningPlan.selectedBookIds.includes(book.id))
+    : (() => {
+        const prioritized = planningBooks.filter((book) => book.isPriority);
+        return (prioritized.length > 0 ? prioritized : planningBooks).slice(0, 3);
+      })();
+  const recommendedOfficialBooks = learningPlan && learningPlan.selectedBookIds.length > 0
+    ? books.filter((book) => learningPlan.selectedBookIds.includes(book.id))
+    : (() => {
+        const fallbackIds = fallbackPlanSuggestion?.selectedBookIds ?? [];
+        const suggested = books.filter((book) => fallbackIds.includes(book.id));
+        if (suggested.length > 0) return suggested;
+        const prioritized = books.filter((book) => book.isPriority);
+        return (prioritized.length > 0 ? prioritized : books).slice(0, 3);
+      })();
+  const heroTitle = !hasStudyBooks
+    ? '学習を始める教材がまだありません'
+    : remainingWords > 0
+      ? `あと${remainingWords}語で今日の目標です`
+      : '今日はここまでで十分です';
+  const heroCopy = !hasStudyBooks
+    ? '現在のワークスペースには学習対象の教材がありません。公式教材の配信か、利用可能な教材作成導線の追加が必要です。'
+    : remainingWords > 0
+      ? dueCount > 0
+        ? `まずは復習待ちの ${reviewFirstCount} 語から始めれば、そのまま今日のノルマに入れます。`
+        : '今日は短く区切って進めれば十分です。まずはクエストを1回だけ始めましょう。'
+      : '余力があればテストかMy単語帳に進み、無理ならここで終えても流れは崩れません。';
+  const questButtonLabel = !hasStudyBooks
+    ? '学習できる教材がありません'
+    : remainingWords > 0
+      ? '今日のクエストを開始'
+      : '復習をもう1セットやる';
   const aiBudgetPercent = accountOverview
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
     : 0;
@@ -536,7 +603,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
     : '目標試験・学習時間・苦手分野を設定すると、プラン提案の精度が上がります。';
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
 
-  if (loading && books.length === 0) {
+  if (loading && planningBooks.length === 0) {
     return (
       <div className="flex flex-col justify-center items-center h-[60vh] text-medace-500">
         <Loader2 className="h-10 w-10 animate-spin mb-2" />
@@ -574,7 +641,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                         <div>
                             <label className="block text-sm font-bold text-slate-700 mb-2">学習対象のコースを選択</label>
                             <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                                {books.map(b => (
+                                {planningBooks.map(b => (
                                     <div key={b.id} onClick={() => togglePlanBook(b.id)} className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 ${selectedPlanBooks.includes(b.id) ? 'bg-medace-50' : ''}`}>
                                         <div className={`w-5 h-5 rounded border flex items-center justify-center ${selectedPlanBooks.includes(b.id) ? 'bg-medace-500 border-medace-500 text-white' : 'border-slate-300 bg-white'}`}>
                                             {selectedPlanBooks.includes(b.id) && <Check className="w-3 h-3" />}
@@ -599,8 +666,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
 
         {/* Settings Modal */}
         {showSettingsModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm animate-in fade-in"
+                onClick={(event) => {
+                    if (event.target === event.currentTarget) {
+                        setShowSettingsModal(false);
+                    }
+                }}
+            >
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 relative" onClick={(event) => event.stopPropagation()}>
                     <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">✕</button>
                     <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-4">
                         <div className="bg-slate-100 p-2 rounded-full"><User className="w-6 h-6 text-slate-600" /></div>
@@ -667,7 +741,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                             <label className="block text-xs font-bold text-slate-500 mb-1">現在のレベル</label>
                             <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
                                 <span className="font-bold text-medace-600 text-lg">{user.englishLevel || '未診断'}</span>
-                                <button onClick={() => setShowOnboarding(true)} className="text-xs bg-white border border-medace-200 text-medace-600 px-3 py-1.5 rounded-md font-bold hover:bg-medace-50 flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setShowSettingsModal(false);
+                                    setShowOnboarding(true);
+                                  }}
+                                  className="text-xs bg-white border border-medace-200 text-medace-600 px-3 py-1.5 rounded-md font-bold hover:bg-medace-50 flex items-center gap-1"
+                                >
                                     <RefreshCw className="w-3 h-3" /> レベル診断を再受講
                                 </button>
                             </div>
@@ -684,6 +764,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                         )}
                         <button onClick={handleSaveProfile} disabled={isSavingProfile} className="w-full py-3 bg-medace-700 text-white rounded-xl font-bold hover:bg-medace-800 transition-all mt-4 shadow-lg">
                             {isSavingProfile ? '保存中...' : '変更を保存'}
+                        </button>
+                        <button onClick={() => setShowSettingsModal(false)} type="button" className="w-full py-3 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all">
+                            閉じる
                         </button>
                     </div>
                 </div>
@@ -735,7 +818,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                                 </div>
                              </div>
                          )}
-                         <button onClick={handleCreatePhrasebook} disabled={creating || !newBookTitle} className="w-full py-3 bg-medace-600 text-white rounded-xl font-bold hover:bg-medace-700 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:bg-slate-300 disabled:cursor-not-allowed">
+                         {!canUseSelectedCreateMode && (
+                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+                                 {createMode === 'TEXT'
+                                     ? `${currentPlanPolicy.label} ではテキストからのAI教材化は使えません。`
+                                     : `${currentPlanPolicy.label} では画像/PDFからのAI教材化は使えません。`}
+                             </div>
+                         )}
+                         <button onClick={handleCreatePhrasebook} disabled={creating || !newBookTitle || !canUseSelectedCreateMode} className="w-full py-3 bg-medace-600 text-white rounded-xl font-bold hover:bg-medace-700 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:bg-slate-300 disabled:cursor-not-allowed">
                             {creating ? <Loader2 className="animate-spin w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
                             {creating ? "AIが文脈を分析中..." : "作成する"}
                          </button>
@@ -783,7 +873,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
               <div className="mt-7 flex flex-wrap gap-3">
                 <button
                   onClick={() => onSelectBook('smart-session', 'study')}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50"
+                  disabled={!hasStudyBooks}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-medace-900/40"
                 >
                   <Play className="w-4 h-4 fill-current" /> {questButtonLabel}
                 </button>
@@ -797,7 +888,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
                 ) : (
                   <button
                     onClick={handleGeneratePlan}
-                    disabled={generatingPlan}
+                    disabled={generatingPlan || !hasStudyBooks}
                     className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50"
                   >
                     {generatingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -895,9 +986,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
             <p className="text-sm leading-relaxed text-white/75">
               診断結果に加えて、目標試験・試験日・学習時間・苦手分野をもとに、毎日の単語数とコースを自動で提案します。
             </p>
+            {!canGenerateAiPlan && (
+              <p className="mt-3 text-xs leading-relaxed text-white/70">
+                現在のプランでは、AIを使わずに教材と学習時間から標準プランを作成します。
+              </p>
+            )}
             <button
               onClick={handleGeneratePlan}
-              disabled={generatingPlan}
+              disabled={generatingPlan || !hasStudyBooks}
               className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-medace-900 hover:bg-medace-50 disabled:opacity-50"
             >
               {generatingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -907,7 +1003,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
         )}
       </section>
 
-      {isGameMode && (
+      {isGameMode && hasStudyBooks && (
         <StudyCompanion
           user={user}
           dueCount={dueCount}
@@ -1193,35 +1289,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook }) => {
             <h3 className="text-xl font-bold text-slate-800 border-l-4 border-medace-500 pl-3">推奨コース</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {learningPlan && learningPlan.selectedBookIds.length > 0 ? (
-                // Filter by plan
-                books.filter(b => learningPlan.selectedBookIds.includes(b.id)).map(book => (
-                    <BookCard 
-                        key={book.id} 
-                        book={book} 
-                        progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                        onDelete={handleDeleteBook}
-                        onSelect={onSelectBook}
-                    />
-                ))
-            ) : (
-                // Default Fallback (Priority Only)
-                books.filter(b => b.isPriority).slice(0, 3).map(book => (
-                    <BookCard 
-                        key={book.id} 
-                        book={book} 
-                        progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                        onDelete={handleDeleteBook}
-                        onSelect={onSelectBook}
-                    />
-                ))
-            )}
+            {recommendedOfficialBooks.map(book => (
+                <BookCard 
+                    key={book.id} 
+                    book={book} 
+                    progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
+                    onDelete={handleDeleteBook}
+                    onSelect={onSelectBook}
+                />
+            ))}
             {books.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3">
-                    現在のプランでは公式コースは配信されていません。My単語帳を作成するか、ビジネス導入済みワークスペースで利用してください。
+                    現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
                 </div>
             )}
-            {(books.length > 0 && !learningPlan && books.filter(b => b.isPriority).length === 0) && <p className="text-slate-400 text-sm">推奨コースはありません</p>}
+            {(books.length > 0 && recommendedOfficialBooks.length === 0) && <p className="text-slate-400 text-sm">推奨コースはありません</p>}
         </div>
 
         {/* SECTION: Library (Collapsed) */}

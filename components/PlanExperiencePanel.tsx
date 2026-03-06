@@ -44,7 +44,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
           </div>
           <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">まずは無料で学習習慣を作る</h3>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、自分で作った教材と小さなAI補助に絞ってテンポ良く使えます。
+            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、Steady Study Original のスターター教材と小さなAI補助を軸にテンポ良く使えます。
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -146,7 +146,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
               </div>
             ))}
             <div className="rounded-3xl border border-dashed border-medace-200 bg-white px-4 py-4 text-sm leading-relaxed text-slate-600">
-              料金メモ: {accountOverview.pricingNote}
+              費用補足: {accountOverview.pricingNote}
             </div>
           </div>
         </div>

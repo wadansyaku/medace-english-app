@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Compass, GraduationCap, Radar, Sparkles, Target } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Compass, GraduationCap, Radar, Sparkles, Target, X } from 'lucide-react';
 import { DIAGNOSTIC_PHASE_LABELS, DIAGNOSTIC_QUESTIONS, SELF_ASSESSMENT_OPTIONS, SelfAssessmentKey, evaluateDiagnostic } from '../data/diagnostic';
 import { EnglishLevel, GRADE_LABELS, UserGrade, UserProfile } from '../types';
 import { storage } from '../services/storage';
@@ -9,6 +9,7 @@ interface OnboardingProps {
   onComplete: (updatedUser: UserProfile) => void;
   isRetake?: boolean;
   historySummary?: string;
+  onCancel?: () => void;
 }
 
 const GRADES = [
@@ -31,7 +32,7 @@ const LEVEL_BADGE_STYLE: Record<EnglishLevel, string> = {
   [EnglishLevel.C2]: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
 };
 
-const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = false }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = false, onCancel }) => {
   const [step, setStep] = useState<'PROFILE' | 'TEST' | 'RESULT'>('PROFILE');
   const [selectedGrade, setSelectedGrade] = useState<UserGrade>(user.grade || UserGrade.ADULT);
   const [selfAssessment, setSelfAssessment] = useState<SelfAssessmentKey | null>(null);
@@ -161,8 +162,19 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                   {isRetake ? 'いまの実感を更新する' : '学年と現在地を選ぶ'}
                 </h2>
               </div>
-              <div className="rounded-full bg-medace-50 border border-medace-100 px-4 py-2 text-sm font-bold text-medace-700">
-                まずは 2 ステップ
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-medace-50 border border-medace-100 px-4 py-2 text-sm font-bold text-medace-700">
+                  まずは 2 ステップ
+                </div>
+                {isRetake && onCancel && (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    <X className="h-4 w-4" /> 閉じる
+                  </button>
+                )}
               </div>
             </div>
 
@@ -246,7 +258,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.16),_transparent_32%),linear-gradient(180deg,#fffaf4_0%,#fff 42%,#fff3e2_100%)] px-4 py-10">
         <div className="max-w-6xl mx-auto space-y-6">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-xl">
+        <div className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-xl">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <p className="text-xs font-bold tracking-[0.18em] uppercase text-slate-400">Placement Result</p>
@@ -254,7 +266,17 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                 <p className="mt-3 text-sm md:text-base text-slate-600 max-w-2xl leading-relaxed">{result.summaryBody}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 min-w-[280px]">
+              <div className="flex flex-col gap-3">
+                {isRetake && onCancel && (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="self-end inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    <X className="h-4 w-4" /> 閉じる
+                  </button>
+                )}
+                <div className="grid grid-cols-2 gap-3 min-w-[280px]">
                 <div className={`rounded-3xl border px-5 py-5 ${LEVEL_BADGE_STYLE[finalLevel]}`}>
                   <div className="text-xs font-bold tracking-[0.18em] uppercase">Estimated Level</div>
                   <div className="mt-3 text-4xl font-black tracking-tight">{finalLevel}</div>
@@ -266,6 +288,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                   <div className="mt-2 text-sm text-slate-600">{result.correctCount} / {result.totalQuestions} 問正解</div>
                   <div className="text-sm text-slate-500">Weighted score {result.weightedScore}</div>
                 </div>
+              </div>
               </div>
             </div>
 
@@ -462,6 +485,17 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                   {currentQuestion.level}
                 </div>
               </div>
+              {isRetake && onCancel && (
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    <X className="h-4 w-4" /> 閉じる
+                  </button>
+                </div>
+              )}
 
               <div className="mt-8 rounded-[28px] border border-medace-100 bg-[#fff8ef] p-5 md:p-6">
                 {currentQuestion.prompt && (

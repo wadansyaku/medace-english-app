@@ -15,20 +15,20 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 - `TOC_FREE`: 個人フリー。広告付きセルフサーブ
 - `TOC_PAID`: 個人有料。広告なし個人拡張
 - `TOB_FREE`: 教室導入前の無料トライアル
-- `TOB_PAID`: 固定費1万円/月 + 生徒1人あたり2,000円/月 + 講師1人あたり500円/月 + 導入費60万円
+- `TOB_PAID`: 教室規模に応じた個別見積。導入費と管理・アップデート費は現時点では未定
 
 商用プラン定義は [config/subscription.ts](/Users/Yodai/projects/MedAce英単語アプリ/config/subscription.ts) にあります。
 
 ## 教材カタログ戦略
 
-- ビジネス版公式教材（原本）: Nanjyo English App のオリジナル単語データベースを `Steady Study Original` として配布
+- 公式スターター教材（原本）: オリジナル単語データベースを `Steady Study Original` として配布
 - ビジネス版公式教材（ライセンス）: 現在のライセンス取得済み教材データベースを `LICENSED_PARTNER` として配布
 - 個人/ユーザー作成教材: `USER_GENERATED`
 - 公開範囲:
   - `ALL_PLANS`: 全プランで利用可
   - `BUSINESS_ONLY`: ビジネス本導入 (`TOB_PAID`) のみ利用可
 
-2026-03-06 時点の方針として、既存の公式教材は `Steady Study Original` を含めて `BUSINESS_ONLY` に寄せます。個人/無料ユーザーは公式教材ではなく、自作教材導線を前提にします。
+2026-03-06 時点の実装方針として、ライセンス教材は `BUSINESS_ONLY` を維持しつつ、`Steady Study Original` は個人フリーを含むスターター導線として `ALL_PLANS` でも投入できるようにします。
 
 ## 技術構成
 
@@ -56,16 +56,17 @@ npm run build
 npx wrangler d1 migrations apply medace-db --local
 ```
 
-2. 原本教材 + ライセンス教材をまとめてビジネス限定 seed SQL 化
+2. 原本教材 + ライセンス教材を seed SQL 化
 
 ```bash
 node scripts/build-seed-sql.mjs \
-  --original-csv /Users/Yodai/projects/NanjyoEnglishApp/docs/wordbank_pos_audit/20260208_225334/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
+  --original-access-scope ALL_PLANS \
+  --original-csv /path/to/original_wordbank/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
   --licensed-csv /Users/Yodai/projects/language_database_2_2/output_curated/20260208_225334/MASTER_DATABASE_REFINED.csv \
   ./tmp/d1-seed.sql
 ```
 
-このスクリプトは入力CSVの形式を自動判定します。`--original-csv` は Nanjyo English App の原本CSVを学年帯別教材へ再編し、`--licensed-csv` は既存の単語帳CSVをそのまま教材化します。`TOEFLテスト英単語3800` はデフォルトで除外され、追加除外は `--exclude-book "書名"` で指定できます。
+このスクリプトは入力CSVの形式を自動判定します。`--original-csv` はオリジナル単語データベースの原本CSVを学年帯別教材へ再編し、`--licensed-csv` は既存の単語帳CSVをそのまま教材化します。`--original-access-scope` / `--licensed-access-scope` で公開範囲を個別に切り替えられます。`TOEFLテスト英単語3800` はデフォルトで除外され、追加除外は `--exclude-book "書名"` で指定できます。
 
 3. ローカル D1 に投入
 
@@ -101,7 +102,8 @@ remote D1 では `BEGIN TRANSACTION` を含む SQL を使えないため、`--re
 
 ```bash
 node scripts/build-seed-sql.mjs --remote \
-  --original-csv /Users/Yodai/projects/NanjyoEnglishApp/docs/wordbank_pos_audit/20260208_225334/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
+  --original-access-scope ALL_PLANS \
+  --original-csv /path/to/original_wordbank/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
   --licensed-csv /Users/Yodai/projects/language_database_2_2/output_curated/20260208_225334/MASTER_DATABASE_REFINED.csv \
   ./tmp/d1-seed-remote.sql
 

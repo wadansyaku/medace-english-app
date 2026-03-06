@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, SubscriptionPlan, UserGrade, WordData } from '../../types';
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy, MeteredAiAction } from '../../config/subscription';
+import { formatDateKey, formatMonthKey } from '../../utils/date';
 import { buildFallbackLearningPlan } from '../../utils/learningPlan';
 import { HttpError } from './http';
 import { AppEnv, DbUserRow } from './types';
@@ -55,7 +56,7 @@ const handleAiError = (error: unknown, fallbackMessage: string): never => {
   throw new HttpError(502, fallbackMessage);
 };
 
-const currentMonthKey = (): string => new Date().toISOString().slice(0, 7);
+const currentMonthKey = (): string => formatMonthKey(new Date());
 
 const getUserSubscriptionPlan = (user: DbUserRow): SubscriptionPlan => {
   return (user.subscription_plan as SubscriptionPlan | null) || SubscriptionPlan.TOC_FREE;
@@ -372,7 +373,7 @@ const generateLearningPlan = async (env: AppEnv, payload: any): Promise<Learning
     return {
       uid: '',
       createdAt: Date.now(),
-      targetDate: targetDate.toISOString().split('T')[0],
+      targetDate: formatDateKey(targetDate),
       goalDescription: parsed.goalDescription,
       dailyWordGoal: parsed.dailyWordGoal,
       selectedBookIds: parsed.selectedBookIds,
@@ -586,11 +587,11 @@ export const handleAiAction = async (env: AppEnv, user: DbUserRow, body: AiReque
     case 'generateInstructorFollowUp':
       return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, body.payload));
     case 'generateDiagnosticTest':
-      return generateDiagnosticTest(env, body.payload);
+      return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, body.payload));
     case 'generateAdvancedDiagnosticTest':
-      return generateAdvancedDiagnosticTest(env, body.payload);
+      return runMeteredAiAction(env, user, 'generateAdvancedDiagnosticTest', () => generateAdvancedDiagnosticTest(env, body.payload));
     case 'evaluateAdvancedTest':
-      return evaluateAdvancedTest(env, body.payload);
+      return runMeteredAiAction(env, user, 'evaluateAdvancedTest', () => evaluateAdvancedTest(env, body.payload));
     default:
       throw new HttpError(404, '未知のAI操作です。');
   }

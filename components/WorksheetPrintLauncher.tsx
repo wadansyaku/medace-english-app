@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { STATUS_LABELS, StudentSummary, StudentWorksheetSnapshot, UserProfile, WorksheetQuestionMode } from '../types';
 import { storage } from '../services/storage';
 import { GeneratedWorksheetQuestion, generateWorksheetQuestions, WORKSHEET_MODE_COPY } from '../utils/worksheet';
-import { BookOpen, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
+import { BookOpen, ExternalLink, Eye, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
 
 type WorksheetStatusFilter = 'ALL' | 'REVIEW_PLUS' | 'GRADUATED_ONLY';
 
@@ -11,6 +11,8 @@ interface WorksheetPrintLauncherProps {
   buttonLabel?: string;
   buttonClassName?: string;
 }
+
+type WorksheetPrintVariant = 'HANDOUT' | 'ANSWER_KEY';
 
 const STATUS_FILTER_COPY: Record<WorksheetStatusFilter, { label: string; description: string; }> = {
   ALL: {
@@ -41,52 +43,99 @@ const shouldIncludeStatus = (filter: WorksheetStatusFilter, status: string): boo
   return true;
 };
 
+const MAX_PRINTABLE_WORDS = 40;
+
+const PRINT_VARIANT_COPY: Record<WorksheetPrintVariant, {
+  label: string;
+  shortLabel: string;
+  description: string;
+  previewNote: string;
+}> = {
+  HANDOUT: {
+    label: '問題',
+    shortLabel: '問題',
+    description: '答え欄を空欄にした問題シートです。鉛筆で書き込みやすい余白を確保します。',
+    previewNote: '答え欄を空欄にした問題シートです。書き込み用の余白を確保しています。',
+  },
+  ANSWER_KEY: {
+    label: '解答',
+    shortLabel: '解答',
+    description: '問題シートと同じ答え欄に、正解を赤字で記入した解答シートです。',
+    previewNote: '問題シートと同じ答え欄に、正解を赤字で記入した解答シートです。',
+  },
+};
+
 const buildPrintableWorksheetHtml = (
   user: UserProfile,
   student: StudentSummary | undefined,
   snapshot: StudentWorksheetSnapshot,
   questions: GeneratedWorksheetQuestion[],
+  variant: WorksheetPrintVariant,
 ): string => {
+  const variantCopy = PRINT_VARIANT_COPY[variant];
+  const isProblemSheet = variant === 'HANDOUT';
   const modeLabel = questions[0] ? WORKSHEET_MODE_COPY[questions[0].mode].label : '問題';
-  const questionMarkup = questions.map((question, index) => {
-    if (question.mode === 'SPELLING_HINT') {
-      return `
-        <section class="question-card">
-          <div class="question-header">Q${index + 1}. ${question.promptText}</div>
-          <div class="question-note">ヒント: ${question.maskedAnswer}</div>
-          <div class="answer-line"></div>
-          <div class="book-tag">${question.bookTitle || '単語帳'}</div>
-        </section>
-      `;
-    }
+  const promptColumnLabel = questions[0]?.mode === 'EN_TO_JA'
+    ? '英単語'
+    : questions[0]?.mode === 'JA_TO_EN'
+      ? '日本語'
+      : '意味 / ヒント';
+  const answerLabel = questions[0]?.mode === 'EN_TO_JA' ? '和訳' : '答え';
+  const wordsPerColumn = Math.ceil(questions.length / 2);
+  const footerNote = isProblemSheet
+    ? '問題: 答え欄は空欄です。鉛筆で書き込みながら確認できます。'
+    : '解答: 問題シートと同じ答え欄に、赤字で正解を記入しています。';
+  const questionColumns = [
+    questions.slice(0, wordsPerColumn),
+    questions.slice(wordsPerColumn),
+  ];
 
-    const optionsMarkup = (question.options || []).map((option, optionIndex) => `
-      <li><span class="option-label">${String.fromCharCode(65 + optionIndex)}.</span> ${option}</li>
-    `).join('');
-
-    return `
-      <section class="question-card">
-        <div class="question-header">Q${index + 1}. ${question.promptText}</div>
-        <ul class="option-list">${optionsMarkup}</ul>
-        <div class="book-tag">${question.bookTitle || '単語帳'}</div>
-      </section>
-    `;
-  }).join('');
-
-  const answerMarkup = questions.map((question, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>${question.promptText}</td>
-      <td>${question.answer}</td>
-      <td>${question.bookTitle || '単語帳'}</td>
-    </tr>
+  const columnMarkup = questionColumns.map((column, columnIndex) => `
+    <section class="table-column" data-column="${columnIndex + 1}">
+      <table class="word-table" aria-label="worksheet column ${columnIndex + 1}">
+        <thead>
+          <tr>
+            <th class="index-head">No.</th>
+            <th>${promptColumnLabel}</th>
+            <th class="answer-head">${answerLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+      ${column.map((question, index) => {
+        const questionIndex = columnIndex * wordsPerColumn + index + 1;
+        const promptText = question.mode === 'SPELLING_HINT'
+          ? `${question.promptText} / ${question.maskedAnswer || question.answer}`
+          : question.promptText;
+        const answerMarkup = isProblemSheet
+          ? `
+            <div class="answer-blank" aria-label="${answerLabel}記入欄">
+              <span class="answer-line"></span>
+            </div>
+          `
+          : `
+            <div class="answer-blank answer-blank--filled" aria-label="${answerLabel}解答欄">
+              <span class="answer-fill">${question.answer}</span>
+              <span class="answer-line"></span>
+            </div>
+          `;
+        return `
+          <tr>
+            <td class="index-cell">${questionIndex}</td>
+            <td class="prompt-cell">${promptText}</td>
+            <td class="answer-cell ${isProblemSheet ? 'answer-cell--blank' : 'answer-cell--key'}">${answerMarkup}</td>
+          </tr>
+        `;
+      }).join('')}
+        </tbody>
+      </table>
+    </section>
   `).join('');
 
   return `<!DOCTYPE html>
   <html lang="ja">
     <head>
       <meta charset="UTF-8" />
-      <title>${snapshot.studentName} - ${modeLabel} ワークシート</title>
+      <title>${snapshot.studentName} - ${modeLabel} ワークシート (${variantCopy.label})</title>
       <style>
         :root {
           color-scheme: light;
@@ -101,191 +150,270 @@ const buildPrintableWorksheetHtml = (
         }
         body {
           margin: 0;
-          padding: 28px;
           font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
           color: var(--ink);
           background: white;
         }
+        .page {
+          width: 210mm;
+          min-height: 297mm;
+          padding: 4.8mm 4.8mm 4mm;
+        }
         .sheet-header {
-          border: 2px solid var(--accent);
-          border-radius: 20px;
-          padding: 20px 22px;
+          border: 1.3px solid var(--accent);
+          border-radius: 4mm;
+          padding: 2.35mm 2.8mm;
           background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
         }
+        .header-top {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 3mm;
+        }
         .eyebrow {
-          font-size: 11px;
+          font-size: 6.9pt;
           letter-spacing: 0.18em;
           text-transform: uppercase;
           color: var(--muted);
           font-weight: 700;
         }
         .title {
-          margin: 10px 0 0;
-          font-size: 28px;
+          margin: 1mm 0 0;
+          font-size: 14.1pt;
           font-weight: 800;
+          line-height: 1.15;
+        }
+        .header-chips {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 1.2mm;
+        }
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: #fff1e5;
+          border: 1px solid #fed7aa;
+          color: #9a3412;
+          font-size: 7pt;
+          font-weight: 800;
+          padding: 1.3mm 2.2mm;
+        }
+        .chip-subtle {
+          background: white;
+          border-color: #fdba74;
+          color: #c2410c;
         }
         .meta-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 18px;
+          gap: 1.5mm;
+          margin-top: 1.5mm;
         }
         .meta-card {
           border: 1px solid var(--line);
-          border-radius: 16px;
-          padding: 12px 14px;
+          border-radius: 2.6mm;
+          padding: 1.3mm 1.6mm;
           background: white;
         }
         .meta-card .label {
-          font-size: 11px;
+          font-size: 6pt;
           font-weight: 700;
           color: var(--muted);
           text-transform: uppercase;
-          letter-spacing: 0.14em;
+          letter-spacing: 0.08em;
         }
         .meta-card .value {
-          margin-top: 8px;
-          font-size: 16px;
+          margin-top: 0.4mm;
+          font-size: 7.1pt;
           font-weight: 800;
+          line-height: 1.15;
         }
-        .question-grid {
+        .sheet-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 14px;
-          margin-top: 24px;
+          gap: 2.2mm;
+          margin-top: 1.8mm;
         }
-        .question-card {
-          min-height: 182px;
-          border: 1px solid var(--line);
-          border-radius: 18px;
-          padding: 16px 18px;
+        .table-column {
+          min-width: 0;
+        }
+        .word-table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          table-layout: fixed;
+          background: white;
+        }
+        .word-table th {
+          border: 1px solid #fdba74;
+          background: #fff4e8;
+          color: #9a3412;
+          font-size: 6.2pt;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          padding: 1mm 1.2mm;
+          line-height: 1.1;
+        }
+        .word-table th:first-child {
+          border-top-left-radius: 2.2mm;
+        }
+        .word-table th:last-child {
+          border-top-right-radius: 2.2mm;
+        }
+        .word-table td {
+          border-right: 1px solid var(--line);
+          border-bottom: 1px solid var(--line);
+          padding: 0.9mm 1.15mm;
+          vertical-align: middle;
+          background: white;
+          line-height: 1.15;
           break-inside: avoid;
         }
-        .question-header {
-          font-size: 18px;
-          font-weight: 700;
-          line-height: 1.45;
+        .word-table td:first-child {
+          border-left: 1px solid var(--line);
         }
-        .question-note {
-          margin-top: 12px;
-          display: inline-block;
-          padding: 8px 12px;
-          border-radius: 999px;
-          background: var(--soft);
-          color: #9a3412;
-          font-weight: 700;
-          letter-spacing: 0.2em;
+        .index-head, .index-cell {
+          width: 8mm;
+          text-align: center;
         }
-        .option-list {
-          margin: 16px 0 0;
-          padding: 0;
-          list-style: none;
+        .answer-head, .answer-cell {
+          width: 56%;
         }
-        .option-list li {
-          margin-top: 10px;
-          font-size: 15px;
-          line-height: 1.5;
-        }
-        .option-label {
-          display: inline-block;
-          width: 24px;
+        .index-cell {
+          font-size: 7pt;
           font-weight: 800;
+          color: #c2410c;
+          background: #fffaf5;
+        }
+        .prompt-cell {
+          font-size: 7.25pt;
+          font-weight: 800;
+          color: #1f2937;
+          word-break: break-word;
+        }
+        .answer-cell {
+          word-break: break-word;
+        }
+        .answer-cell--blank {
+          padding: 0.5mm 1.15mm;
+          background: white;
+        }
+        .answer-cell--key {
+          padding: 0.5mm 1.15mm;
+          background: #fff8f8;
+        }
+        .answer-blank {
+          min-height: 8.6mm;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          gap: 0.35mm;
+        }
+        .answer-blank--filled {
+          gap: 0.5mm;
+        }
+        .answer-fill {
+          font-size: 6.45pt;
+          font-weight: 800;
+          color: #dc2626;
+          line-height: 1.12;
         }
         .answer-line {
-          margin-top: 26px;
-          border-bottom: 2px solid #9ca3af;
-          height: 36px;
-        }
-        .book-tag {
-          margin-top: 16px;
-          font-size: 12px;
-          color: var(--muted);
-        }
-        .answer-sheet {
-          margin-top: 40px;
-          break-before: page;
-        }
-        table {
+          display: block;
           width: 100%;
-          border-collapse: collapse;
-          margin-top: 14px;
+          border-bottom: 1px solid #cbd5e1;
         }
-        th, td {
-          border: 1px solid var(--line);
-          padding: 10px 12px;
-          text-align: left;
-          vertical-align: top;
-          font-size: 13px;
-          line-height: 1.45;
+        .word-table tbody tr:last-child td:first-child {
+          border-bottom-left-radius: 2.2mm;
         }
-        th {
-          background: #f8fafc;
-          font-weight: 800;
+        .word-table tbody tr:last-child td:last-child {
+          border-bottom-right-radius: 2.2mm;
         }
         .footer {
-          margin-top: 18px;
-          font-size: 11px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 2mm;
+          margin-top: 1.2mm;
+          font-size: 6.2pt;
           color: var(--muted);
+          line-height: 1.15;
         }
         @page {
-          size: A4;
-          margin: 14mm;
+          size: A4 portrait;
+          margin: 0;
         }
         @media print {
           body {
             padding: 0;
           }
+          .page {
+            padding: 4.8mm 4.8mm 4mm;
+          }
+        }
+        @media screen {
+          body {
+            background: #e2e8f0;
+            padding: 12px;
+          }
+          .page {
+            margin: 0 auto;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+          }
+        }
+        @media print, screen {
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
         }
       </style>
     </head>
     <body>
-      <header class="sheet-header">
-        <div class="eyebrow">PDF Worksheet</div>
-        <h1 class="title">${snapshot.studentName} さん用 ${modeLabel} ワークシート</h1>
-        <div class="meta-grid">
-          <div class="meta-card">
-            <div class="label">作成者</div>
-            <div class="value">${user.displayName}</div>
+      <main class="page">
+        <header class="sheet-header">
+          <div class="header-top">
+            <div>
+              <div class="eyebrow">Vocabulary Check Sheet</div>
+              <h1 class="title">${snapshot.studentName} さん用 ${modeLabel} チェック</h1>
+            </div>
+            <div class="header-chips">
+              <div class="chip chip-subtle">${variantCopy.label}</div>
+              <div class="chip">A4 / 2列 / 最大 ${MAX_PRINTABLE_WORDS} 語</div>
+            </div>
           </div>
-          <div class="meta-card">
-            <div class="label">生徒</div>
-            <div class="value">${student?.name || snapshot.studentName}</div>
+          <div class="meta-grid">
+            <div class="meta-card">
+              <div class="label">作成者</div>
+              <div class="value">${user.displayName}</div>
+            </div>
+            <div class="meta-card">
+              <div class="label">生徒</div>
+              <div class="value">${student?.name || snapshot.studentName}</div>
+            </div>
+            <div class="meta-card">
+              <div class="label">語数</div>
+              <div class="value">${questions.length} / ${MAX_PRINTABLE_WORDS}</div>
+            </div>
+            <div class="meta-card">
+              <div class="label">作成日時</div>
+              <div class="value">${formatDate(Date.now())}</div>
+            </div>
           </div>
-          <div class="meta-card">
-            <div class="label">組織</div>
-            <div class="value">${snapshot.organizationName || '-'}</div>
-          </div>
-          <div class="meta-card">
-            <div class="label">作成日時</div>
-            <div class="value">${formatDate(Date.now())}</div>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <main class="question-grid">${questionMarkup}</main>
+        <section class="sheet-grid">${columnMarkup}</section>
 
-      <section class="answer-sheet">
-        <div class="eyebrow">Answer Key</div>
-        <h2 class="title" style="font-size: 22px;">解答一覧</h2>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 60px;">No.</th>
-              <th>問題</th>
-              <th>正解</th>
-              <th style="width: 160px;">単語帳</th>
-            </tr>
-          </thead>
-          <tbody>${answerMarkup}</tbody>
-        </table>
-      </section>
-
-      <div class="footer">ブラウザの印刷ダイアログで「PDF に保存」を選ぶと、そのまま配布用PDFとして保存できます。</div>
-      <script>
-        window.addEventListener('load', () => {
-          setTimeout(() => window.print(), 300);
-        });
-      </script>
+        <footer class="footer">
+          <span>${footerNote}</span>
+          <span>${snapshot.organizationName || 'Steady Study'}</span>
+        </footer>
+      </main>
     </body>
   </html>`;
 };
@@ -302,10 +430,13 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const [snapshot, setSnapshot] = useState<StudentWorksheetSnapshot | null>(null);
   const [selectedStudentUid, setSelectedStudentUid] = useState('');
   const [selectedBookId, setSelectedBookId] = useState('ALL');
-  const [questionCount, setQuestionCount] = useState(12);
-  const [questionMode, setQuestionMode] = useState<WorksheetQuestionMode>('JA_TO_EN');
-  const [statusFilter, setStatusFilter] = useState<WorksheetStatusFilter>('REVIEW_PLUS');
+  const [questionCount, setQuestionCount] = useState(MAX_PRINTABLE_WORDS);
+  const [questionMode, setQuestionMode] = useState<WorksheetQuestionMode>('EN_TO_JA');
+  const [statusFilter, setStatusFilter] = useState<WorksheetStatusFilter>('ALL');
   const [error, setError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewVariant, setPreviewVariant] = useState<WorksheetPrintVariant>('HANDOUT');
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -369,24 +500,70 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     });
   }, [selectedBookId, snapshot, statusFilter]);
 
-  const handlePrint = () => {
-    if (!snapshot || filteredWords.length === 0) return;
+  const generatedQuestions = useMemo(() => {
+    if (!snapshot || filteredWords.length === 0) return [];
+    return generateWorksheetQuestions(filteredWords, questionMode, Math.min(questionCount, MAX_PRINTABLE_WORDS));
+  }, [filteredWords, questionCount, questionMode, snapshot]);
 
-    const questions = generateWorksheetQuestions(filteredWords, questionMode, questionCount);
-    if (questions.length === 0) {
+  const printableHtmlByVariant = useMemo<Record<WorksheetPrintVariant, string>>(() => {
+    if (!snapshot || generatedQuestions.length === 0) {
+      return {
+        HANDOUT: '',
+        ANSWER_KEY: '',
+      };
+    }
+    return {
+      HANDOUT: buildPrintableWorksheetHtml(user, selectedStudent, snapshot, generatedQuestions, 'HANDOUT'),
+      ANSWER_KEY: buildPrintableWorksheetHtml(user, selectedStudent, snapshot, generatedQuestions, 'ANSWER_KEY'),
+    };
+  }, [generatedQuestions, selectedStudent, snapshot, user]);
+
+  const printableHtml = printableHtmlByVariant[previewVariant];
+  const previewVariantCopy = PRINT_VARIANT_COPY[previewVariant];
+
+  useEffect(() => {
+    if (!open) {
+      setShowPreview(false);
+      setPreviewVariant('HANDOUT');
+    }
+  }, [open]);
+
+  const handleOpenPreview = (variant: WorksheetPrintVariant) => {
+    if (generatedQuestions.length === 0) {
       setError('問題に使える単語が不足しています。条件を緩めてください。');
       return;
     }
+    setError(null);
+    setPreviewVariant(variant);
+    setShowPreview(true);
+  };
 
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
-    if (!printWindow) {
-      setError('印刷ウィンドウを開けませんでした。ポップアップを許可してください。');
+  const handlePrint = () => {
+    const previewWindow = previewFrameRef.current?.contentWindow;
+    if (!previewWindow || !printableHtml) {
+      setError('印刷プレビューの準備ができていません。もう一度お試しください。');
       return;
     }
 
-    printWindow.document.open();
-    printWindow.document.write(buildPrintableWorksheetHtml(user, selectedStudent, snapshot, questions));
-    printWindow.document.close();
+    previewWindow.focus();
+    previewWindow.print();
+  };
+
+  const handleOpenInNewTab = () => {
+    if (!printableHtml) {
+      setError('プレビュー用データを作成できませんでした。');
+      return;
+    }
+
+    const blob = new Blob([printableHtml], { type: 'text/html;charset=utf-8' });
+    const previewUrl = URL.createObjectURL(blob);
+    const printWindow = window.open(previewUrl, '_blank', 'noopener,noreferrer,width=1200,height=900');
+    if (!printWindow) {
+      URL.revokeObjectURL(previewUrl);
+      setError('プレビュータブを開けませんでした。ポップアップを許可してください。');
+      return;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
   };
 
   return (
@@ -410,13 +587,13 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">PDF Worksheet</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学習済み単語から配布用問題を作る</h3>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学習済み単語を A4 1枚で確認する</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  講師またはグループ管理者が、生徒の学習履歴に合わせた確認問題を印刷または PDF 保存できます。
+                  問題と解答を分けて作れます。解答は問題シートと同じ欄に赤字で答えを入れ、主に英語から和訳を確認しやすい A4 1枚の確認シートです。
                 </p>
               </div>
               <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                ブラウザ印刷 {'->'} PDF保存対応
+                A4 / 2列 / 最大40語
               </div>
             </div>
 
@@ -507,11 +684,12 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                   <input
                     type="number"
                     min={4}
-                    max={30}
+                    max={MAX_PRINTABLE_WORDS}
                     value={questionCount}
-                    onChange={(event) => setQuestionCount(Math.max(4, Math.min(30, Number(event.target.value) || 4)))}
+                    onChange={(event) => setQuestionCount(Math.max(4, Math.min(MAX_PRINTABLE_WORDS, Number(event.target.value) || 4)))}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
                   />
+                  <p className="mt-2 text-xs text-slate-500">A4 1ページに収める前提で、最大 {MAX_PRINTABLE_WORDS} 語まで出力します。</p>
                 </div>
               </div>
 
@@ -583,6 +761,15 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                       </div>
                     </div>
 
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      {(Object.keys(PRINT_VARIANT_COPY) as WorksheetPrintVariant[]).map((variant) => (
+                        <div key={variant} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                          <div className="text-sm font-bold text-slate-900">{PRINT_VARIANT_COPY[variant].label}</div>
+                          <div className="mt-1 text-sm leading-relaxed text-slate-500">{PRINT_VARIANT_COPY[variant].description}</div>
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
                       <button
                         type="button"
@@ -593,12 +780,21 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={handlePrint}
-                        disabled={filteredWords.length === 0}
+                        onClick={() => handleOpenPreview('HANDOUT')}
+                        disabled={generatedQuestions.length === 0}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-medace-200 bg-white px-5 py-3 text-sm font-bold text-medace-700 hover:bg-medace-50 disabled:opacity-50"
+                      >
+                        <Eye className="h-4 w-4" />
+                        問題を開く
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenPreview('ANSWER_KEY')}
+                        disabled={generatedQuestions.length === 0}
                         className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
                       >
-                        <Printer className="h-4 w-4" />
-                        PDF / 印刷を開く
+                        <Eye className="h-4 w-4" />
+                        解答を開く
                       </button>
                     </div>
                   </>
@@ -608,6 +804,88 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {open && showPreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-medace-900/45 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowPreview(false);
+            }
+          }}
+        >
+          <div className="relative flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Print Preview</div>
+                <div className="mt-1 text-lg font-black text-slate-950">
+                  {snapshot?.studentName || '生徒'} さん向け {previewVariantCopy.label}
+                </div>
+                <div className="mt-1 text-sm text-slate-500">
+                  {previewVariantCopy.previewNote} 印刷ダイアログで「PDF に保存」を選ぶと、そのまま PDF にできます。
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(Object.keys(PRINT_VARIANT_COPY) as WorksheetPrintVariant[]).map((variant) => (
+                    <button
+                      key={variant}
+                      type="button"
+                      onClick={() => setPreviewVariant(variant)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
+                        previewVariant === variant
+                          ? 'border-medace-500 bg-medace-50 text-medace-700'
+                          : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {PRINT_VARIANT_COPY[variant].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenInNewTab}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  この版を新しいタブで開く
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                >
+                  <Printer className="h-4 w-4" />
+                  この版を印刷 / PDF保存
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  <X className="h-4 w-4" />
+                  閉じる
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 bg-slate-100 p-3">
+              {printableHtml ? (
+                <iframe
+                  ref={previewFrameRef}
+                  title="Worksheet print preview"
+                  srcDoc={printableHtml}
+                  className="h-full w-full rounded-[24px] border border-slate-200 bg-white"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-white text-sm text-slate-500">
+                  プレビューを作成できませんでした。
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -8,15 +8,74 @@ import AdminPanel from './components/AdminPanel';
 import InstructorDashboard from './components/InstructorDashboard';
 import BusinessAdminDashboard from './components/BusinessAdminDashboard';
 import Onboarding from './components/Onboarding';
-import { OrganizationRole, UserRole, UserProfile } from './types';
+import { OrganizationRole, SubscriptionPlan, UserRole, UserProfile } from './types';
 import { storage } from './services/storage';
 import { AUTH_COPY, BRAND } from './config/brand';
 import { getHomeViewForUser, isGroupAdmin } from './config/access';
-import { ArrowRight, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock, LogIn, Mail, User, UserPlus } from 'lucide-react';
+import { getSubscriptionPolicy } from './config/subscription';
+import { ArrowRight, BookOpen, Building2, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock, LogIn, Mail, Sparkles, User, UserPlus } from 'lucide-react';
+
+const LOGIN_PLAN_PREVIEWS = [
+  SubscriptionPlan.TOC_FREE,
+  SubscriptionPlan.TOC_PAID,
+  SubscriptionPlan.TOB_PAID,
+].map((plan) => getSubscriptionPolicy(plan));
+
+const PLATFORM_HIGHLIGHTS = [
+  {
+    icon: <BookOpen className="h-4 w-4" />,
+    label: '個人学習',
+    detail: '診断、復習、学習プランまでを1つの流れで進められます。',
+  },
+  {
+    icon: <Building2 className="h-4 w-4" />,
+    label: '学校・教室運用',
+    detail: '講師フォロー、担当割当、教材権限まで同じ画面群で管理できます。',
+  },
+  {
+    icon: <Sparkles className="h-4 w-4" />,
+    label: '教材活用',
+    detail: '既存の公式単語帳と My単語帳の両方を使い分けられます。',
+  },
+];
+
+const BUSINESS_DEMO_OPTIONS: Array<{
+  title: string;
+  description: string;
+  role: UserRole;
+  organizationRole?: OrganizationRole;
+  compact?: boolean;
+}> = [
+  {
+    title: 'ビジネス版 生徒体験',
+    description: '既存の公式単語帳を開き、学習とテスト導線をそのまま確認できます。',
+    role: UserRole.STUDENT,
+    organizationRole: OrganizationRole.STUDENT,
+  },
+  {
+    title: '先生',
+    description: '講師フォロー導線に加えて、既存単語帳の中身とテスト導線まで確認できます。',
+    role: UserRole.INSTRUCTOR,
+    organizationRole: OrganizationRole.INSTRUCTOR,
+  },
+  {
+    title: '学校管理者',
+    description: '組織ダッシュボード、担当割当、既存単語帳へのアクセスをまとめて確認できます。',
+    role: UserRole.INSTRUCTOR,
+    organizationRole: OrganizationRole.GROUP_ADMIN,
+  },
+  {
+    title: 'サービス管理者',
+    description: '教材カタログ全体とサービス運用画面を確認できます。',
+    role: UserRole.ADMIN,
+    compact: true,
+  },
+];
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [currentView, setCurrentView] = useState('login'); 
+  const [returnView, setReturnView] = useState('dashboard');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   
@@ -127,6 +186,7 @@ const App: React.FC = () => {
     setUser(null);
     await storage.clearSession();
     setCurrentView('login');
+    setReturnView('dashboard');
     setSelectedBookId(null);
     setDisplayName('');
     setEmail('');
@@ -137,13 +197,14 @@ const App: React.FC = () => {
   };
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
+    setReturnView(currentView);
     setSelectedBookId(bookId);
     setCurrentView(mode);
   };
 
   const handleSessionComplete = (updatedUser: UserProfile) => {
     setUser(updatedUser);
-    setCurrentView('dashboard');
+    setCurrentView(returnView);
   };
 
   // --- Render Views ---
@@ -192,7 +253,9 @@ const App: React.FC = () => {
 
                 <div className="rounded-2xl border border-white/15 bg-medace-900/15 p-5">
                   <p className="text-xs font-bold tracking-[0.18em] uppercase text-white/70">{AUTH_COPY.demoEyebrow}</p>
-                  <p className="mt-2 text-sm text-white/85">まずは生徒として入れる入口を前に出し、先生・管理者向けの体験はあとから開ける形にしています。</p>
+                  <p className="mt-2 text-sm text-white/85">
+                    生徒の学習導線だけでなく、学校・教室向けのビジネス版デモもこの画面からそのまま確認できます。
+                  </p>
                   <button
                     onClick={() => handleDemoLogin(UserRole.STUDENT)}
                     className="mt-4 w-full rounded-2xl bg-white py-3.5 text-sm font-bold text-medace-700 shadow-sm transition-colors hover:bg-orange-50"
@@ -209,32 +272,23 @@ const App: React.FC = () => {
                   </button>
                   {showAlternateAccess && (
                     <div className="mt-3 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <button
-                        onClick={() => handleDemoLogin(UserRole.STUDENT, OrganizationRole.STUDENT)}
-                        className="rounded-xl border border-white/20 bg-white/10 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-                      >
-                        学校・塾の生徒
-                      </button>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          onClick={() => handleDemoLogin(UserRole.INSTRUCTOR, OrganizationRole.INSTRUCTOR)}
-                          className="rounded-xl border border-white/20 bg-white/10 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-                        >
-                          先生
-                        </button>
-                        <button
-                          onClick={() => handleDemoLogin(UserRole.INSTRUCTOR, OrganizationRole.GROUP_ADMIN)}
-                          className="rounded-xl border border-white/20 bg-white/10 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-                        >
-                          学校管理者
-                        </button>
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-medium leading-relaxed text-white/75">
+                        ここから先はすべてビジネス版デモです。既存の公式単語帳、学校向け運用画面、講師通知導線までそのまま確認できます。
                       </div>
-                      <button
-                        onClick={() => handleDemoLogin(UserRole.ADMIN)}
-                        className="rounded-xl border border-white/20 bg-white/10 py-3 text-xs font-bold text-white/90 transition-colors hover:bg-white/15"
-                      >
-                        サービス管理者
-                      </button>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {BUSINESS_DEMO_OPTIONS.map((option) => (
+                          <button
+                            key={option.title}
+                            onClick={() => handleDemoLogin(option.role, option.organizationRole)}
+                            className={`rounded-2xl border border-white/20 bg-white/10 px-4 py-4 text-left text-white transition-colors hover:bg-white/15 ${
+                              option.compact ? 'md:col-span-2' : ''
+                            }`}
+                          >
+                            <div className="text-sm font-bold">{option.title}</div>
+                            <div className="mt-2 text-xs leading-relaxed text-white/72">{option.description}</div>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -356,6 +410,38 @@ const App: React.FC = () => {
                   {authMode === 'LOGIN' ? AUTH_COPY.helperLogin : AUTH_COPY.helperSignup}
                 </div>
               </form>
+
+              <div className="mt-6 border-t border-slate-100 pt-6">
+                <div className="grid gap-3 md:grid-cols-3">
+                  {PLATFORM_HIGHLIGHTS.map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                      <div className="flex items-center gap-2 text-medace-600">
+                        {item.icon}
+                        <span className="text-xs font-bold uppercase tracking-[0.16em]">{item.label}</span>
+                      </div>
+                      <div className="mt-3 text-sm leading-relaxed text-slate-600">{item.detail}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Plan Overview</div>
+                  <h3 className="mt-2 text-lg font-black text-slate-950">料金体系の考え方</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                    個人利用はすぐ始められる導線、ビジネス利用は教材配信と運用画面まで含めた個別ご案内を前提にしています。
+                  </p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    {LOGIN_PLAN_PREVIEWS.map((plan) => (
+                      <div key={plan.plan} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{plan.audienceLabel}</div>
+                        <div className="mt-2 text-base font-black text-slate-950">{plan.label}</div>
+                        <div className="mt-1 text-sm font-bold text-medace-700">{plan.priceLabel}</div>
+                        <div className="mt-2 text-sm leading-relaxed text-slate-500">{plan.pricingNote}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -377,13 +463,13 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard user={user} onSelectBook={handleBookSelect} />;
+        return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setUser} />;
       case 'study':
         return selectedBookId ? (
           <StudyMode 
             user={user} 
             bookId={selectedBookId} 
-            onBack={() => setCurrentView('dashboard')}
+            onBack={() => setCurrentView(returnView)}
             onSessionComplete={handleSessionComplete}
           />
         ) : null;
@@ -392,17 +478,19 @@ const App: React.FC = () => {
           <QuizMode 
             user={user} 
             bookId={selectedBookId} 
-            onBack={() => setCurrentView('dashboard')} 
+            onBack={() => setCurrentView(returnView)} 
           />
         ) : null;
       case 'admin':
         return user.role === UserRole.ADMIN ? <AdminPanel /> : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
       case 'instructor':
         return user.role === UserRole.INSTRUCTOR
-          ? (isGroupAdmin(user) ? <BusinessAdminDashboard user={user} /> : <InstructorDashboard user={user} />)
+          ? (isGroupAdmin(user)
+            ? <BusinessAdminDashboard user={user} onSelectBook={handleBookSelect} />
+            : <InstructorDashboard user={user} onSelectBook={handleBookSelect} />)
           : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
       default:
-        return <Dashboard user={user} onSelectBook={handleBookSelect} />;
+        return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setUser} />;
     }
   };
 

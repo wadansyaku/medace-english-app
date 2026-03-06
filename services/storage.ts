@@ -28,6 +28,7 @@ import {
 } from '../types';
 import { getSubscriptionPolicy } from '../config/subscription';
 import { CloudflareStorageService } from './cloudflare';
+import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -189,6 +190,7 @@ const calculatePercentage = (learned: number, total: number): number => {
 };
 
 const WORKSHEET_STATUSES: Array<StudentWorksheetSnapshot['words'][number]['status']> = ['graduated', 'review', 'learning'];
+const FALLBACK_WORKSHEET_WORD_LIMIT = 40;
 const DEFAULT_LEARNING_PREFERENCE = (userUid: string): LearningPreference => ({
   userUid,
   targetExam: '',
@@ -207,11 +209,29 @@ const IDB_MOCK_ASSIGNMENTS = [
   { studentUid: 'student-biz-2', instructorUid: 'mock-instructor-001' },
 ];
 
+const normalizeOfficialBookText = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  return value
+    .replaceAll('Nanjyo English App のオリジナル単語データベース', 'オリジナル単語データベース')
+    .replaceAll('Nanjyo English App', 'オリジナル単語データベース')
+    .replaceAll('オリジナル単語データベース のオリジナル単語データベース', 'オリジナル単語データベース')
+    .replaceAll('NanjyoEnglishApp', 'original_wordbank')
+    .trim() || undefined;
+};
+
 const normalizeBookVisibilityPolicy = (book: BookMetadata): BookMetadata => {
-  if (book.catalogSource === BookCatalogSource.USER_GENERATED) return book;
-  return {
+  const sanitizedBook = {
     ...book,
-    accessScope: BookAccessScope.BUSINESS_ONLY,
+    description: normalizeOfficialBookText(book.description),
+    sourceContext: normalizeOfficialBookText(book.sourceContext),
+  };
+  if (sanitizedBook.catalogSource === BookCatalogSource.USER_GENERATED) return sanitizedBook;
+  if (sanitizedBook.accessScope) return sanitizedBook;
+  return {
+    ...sanitizedBook,
+    accessScope: sanitizedBook.catalogSource === BookCatalogSource.STEADY_STUDY_ORIGINAL
+      ? BookAccessScope.ALL_PLANS
+      : BookAccessScope.BUSINESS_ONLY,
   };
 };
 
@@ -320,12 +340,10 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   private async updateStreak(user: UserProfile): Promise<UserProfile> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayDateKey();
     let stats: UserStats = user.stats || { xp: 0, level: 1, currentStreak: 0, lastLoginDate: '' };
     if (stats.lastLoginDate !== today) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayStr = getRelativeDateKey(-1);
         if (stats.lastLoginDate === yesterdayStr) stats.currentStreak += 1;
         else if (stats.lastLoginDate !== today) stats.currentStreak = 1;
         stats.lastLoginDate = today;
@@ -334,7 +352,7 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile, leveledUp: boolean }> {
-    if (!user.stats) user.stats = { xp: 0, level: 1, currentStreak: 1, lastLoginDate: new Date().toISOString().split('T')[0] };
+    if (!user.stats) user.stats = { xp: 0, level: 1, currentStreak: 1, lastLoginDate: getTodayDateKey() };
     let { xp, level } = user.stats;
     xp += amount;
     const xpToNextLevel = level * 100;
@@ -718,9 +736,12 @@ class IndexedDBStorageService implements IStorageService {
     let words: StudentWorksheetSnapshot['words'] = [];
 
     if (books.length > 0) {
-      for (const [index, book] of books.slice(0, 3).entries()) {
+      const fallbackBooks = books.slice(0, Math.min(5, books.length));
+      const perBookLimit = Math.max(4, Math.ceil(FALLBACK_WORKSHEET_WORD_LIMIT / Math.max(fallbackBooks.length, 1)));
+
+      for (const [index, book] of fallbackBooks.entries()) {
         const bookWords = await this.getWordsByBook(book.id);
-        const sampledWords = bookWords.slice(0, 4).map((word, wordIndex) => ({
+        const sampledWords = bookWords.slice(0, perBookLimit).map((word, wordIndex) => ({
           wordId: word.id,
           bookId: book.id,
           bookTitle: book.title,
@@ -731,7 +752,8 @@ class IndexedDBStorageService implements IStorageService {
           attemptCount: 3 + wordIndex,
           correctCount: 2 + wordIndex,
         }));
-        words = [...words, ...sampledWords];
+        words = [...words, ...sampledWords].slice(0, FALLBACK_WORKSHEET_WORD_LIMIT);
+        if (words.length >= FALLBACK_WORKSHEET_WORD_LIMIT) break;
       }
     }
 
@@ -910,7 +932,7 @@ class IndexedDBStorageService implements IStorageService {
                   audienceLabel: plan.audienceLabel,
                   featureSummary: plan.featureSummary,
                   aiUsage: {
-                  monthKey: new Date().toISOString().slice(0, 7),
+                  monthKey: formatMonthKey(new Date()),
                   estimatedCostMilliYen: 240,
                   budgetMilliYen: plan.monthlyAiBudgetMilliYen,
                   remainingMilliYen: Math.max(0, plan.monthlyAiBudgetMilliYen - 240),
@@ -1044,7 +1066,7 @@ class IndexedDBStorageService implements IStorageService {
             const counts: Record<string, number> = {};
             all.forEach((r: any) => {
                 if(r.id.startsWith(uid + '_')) {
-                    const date = new Date(r.data.lastStudiedAt).toISOString().split('T')[0];
+                    const date = formatDateKey(r.data.lastStudiedAt);
                     counts[date] = (counts[date] || 0) + 1;
                 }
             });

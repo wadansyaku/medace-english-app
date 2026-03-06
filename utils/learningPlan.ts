@@ -7,6 +7,7 @@ import {
   LearningPreferenceIntensity,
   UserGrade,
 } from '../types';
+import { DAY_MS, formatDateKey, parseDateKey } from './date';
 
 interface BuildFallbackLearningPlanInput {
   uid: string;
@@ -34,11 +35,11 @@ const INTENSITY_MULTIPLIER: Record<LearningPreferenceIntensity, number> = {
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const toIsoDate = (date: Date): string => date.toISOString().split('T')[0];
+const toIsoDate = (date: Date): string => formatDateKey(date);
 
 const parseDate = (value?: string): Date | null => {
   if (!value) return null;
-  const parsed = new Date(`${value}T00:00:00`);
+  const parsed = parseDateKey(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -51,8 +52,8 @@ const tokenize = (...values: Array<string | undefined | null>): string[] => {
 
 const getDaysUntil = (targetDate: Date | null, now: Date): number | null => {
   if (!targetDate) return null;
-  const midnightNow = new Date(`${toIsoDate(now)}T00:00:00`);
-  return Math.ceil((targetDate.getTime() - midnightNow.getTime()) / (1000 * 60 * 60 * 24));
+  const normalizedNow = parseDateKey(toIsoDate(now));
+  return Math.ceil((targetDate.getTime() - normalizedNow.getTime()) / DAY_MS);
 };
 
 const getUrgencyMultiplier = (daysUntilExam: number | null): number => {
