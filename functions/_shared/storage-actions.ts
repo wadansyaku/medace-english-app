@@ -1,5 +1,5 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
-import { AccountOverview, ActivityLog, AdminAiActionSummary, AdminBookInsight, AdminDashboardSnapshot, AdminOrganizationInsight, AdminPlanBreakdownItem, AdminRiskBreakdownItem, AdminTrendPoint, AdminWordReportSummary, BookAccessScope, BookCatalogSource, BookMetadata, BookProgress, DashboardSnapshot, InstructorNotification, LeaderboardEntry, LearningHistory, LearningPlan, LearningPreference, LearningPreferenceIntensity, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationInstructorSummary, OrganizationRole, StudentRiskLevel, StudentSummary, StudentWorksheetSnapshot, SubscriptionPlan, UserProfile, UserRole, WordData } from '../../types';
+import { AccountOverview, ActivityLog, AdminAiActionSummary, AdminBookInsight, AdminDashboardSnapshot, AdminOrganizationInsight, AdminPlanBreakdownItem, AdminRiskBreakdownItem, AdminTrendPoint, AdminWordReportSummary, BookAccessScope, BookCatalogSource, BookMetadata, BookProgress, DashboardSnapshot, InstructorNotification, LeaderboardEntry, LearningHistory, LearningPlan, LearningPreference, LearningPreferenceIntensity, MasteryDistribution, MotivationScopeStats, MotivationSnapshot, OrganizationDashboardSnapshot, OrganizationInstructorSummary, OrganizationRole, StudentRiskLevel, StudentSummary, StudentWorksheetSnapshot, SubscriptionPlan, UserProfile, UserRole, WordData } from '../../types';
 import { formatDateKey, formatMonthKey, getTodayDateKey, shiftDateKey } from '../../utils/date';
 import { isDemoEmail } from '../../utils/demo';
 import { mapUserRowToProfile, requireOrganizationRole, requireRole } from './auth';
@@ -50,6 +50,7 @@ interface DbHistoryRow {
   ease_factor: number;
   correct_count: number;
   attempt_count: number;
+  total_response_time_ms: number;
 }
 
 interface DbLearningPreferenceRow {
@@ -97,6 +98,68 @@ const calculatePercentage = (learned: number, total: number): number => {
   if (pct === 0 && learned > 0) return 1;
   if (pct === 100 && learned < total) return 99;
   return pct;
+};
+
+interface MotivationAggregateTotals {
+  totalAnswers: number;
+  totalCorrect: number;
+  totalResponseTimeMs: number;
+}
+
+const toAccuracyRate = (totalCorrect: number, totalAnswers: number): number => (
+  totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0
+);
+
+const toAverageResponseTimeMs = (totalResponseTimeMs: number, totalAnswers: number): number | null => {
+  if (totalAnswers <= 0 || totalResponseTimeMs <= 0) return null;
+  return Math.round(totalResponseTimeMs / totalAnswers);
+};
+
+const createMotivationScope = (
+  scope: MotivationScopeStats['scope'],
+  label: string,
+  description: string,
+  totals: MotivationAggregateTotals,
+  registeredUsers: number,
+): MotivationScopeStats => ({
+  scope,
+  label,
+  description,
+  totalAnswers: totals.totalAnswers,
+  totalCorrect: totals.totalCorrect,
+  accuracyRate: toAccuracyRate(totals.totalCorrect, totals.totalAnswers),
+  totalStudyTimeMs: totals.totalResponseTimeMs,
+  averageResponseTimeMs: toAverageResponseTimeMs(totals.totalResponseTimeMs, totals.totalAnswers),
+  registeredUsers,
+});
+
+const createMotivationInsight = (scopes: MotivationScopeStats[]): MotivationSnapshot['insight'] => {
+  const personal = scopes.find((scope) => scope.scope === 'PERSONAL');
+  const comparison = scopes.find((scope) => scope.scope === 'GROUP') || scopes.find((scope) => scope.scope === 'GLOBAL');
+
+  if (!personal || personal.totalAnswers === 0) {
+    return {
+      title: '最初の5問でモチベーションボードが動きます',
+      body: '学習かテストを1セット進めると、総回答数・正解数・解答時間の集計がここから育ち始めます。',
+    };
+  }
+
+  if (comparison && comparison.totalAnswers > 0) {
+    const answerShare = Math.max(1, Math.round((personal.totalAnswers / comparison.totalAnswers) * 100));
+    const timingCopy = personal.averageResponseTimeMs
+      ? `平均解答時間は ${Math.round(personal.averageResponseTimeMs / 100) / 10} 秒です。`
+      : '平均解答時間はこの更新以降の回答から集計します。';
+
+    return {
+      title: `あなたの回答が${comparison.label}の ${answerShare}% を占めています`,
+      body: `正答率は ${personal.accuracyRate}% です。${timingCopy}`,
+    };
+  }
+
+  return {
+    title: `総回答数 ${personal.totalAnswers} 問まで積み上がりました`,
+    body: `総正解数は ${personal.totalCorrect} 問、累計学習時間は ${Math.round(personal.totalStudyTimeMs / 60000)} 分です。`,
+  };
 };
 
 const normalizeOfficialBookText = (value: string | null): string | undefined => {
@@ -623,7 +686,13 @@ const handleGetBookSession = async (env: AppEnv, user: DbUserRow, bookId: string
   return result.map(toWordData);
 };
 
-const handleSaveSrsHistory = async (env: AppEnv, user: DbUserRow, word: WordData, rating: number): Promise<void> => {
+const handleSaveSrsHistory = async (
+  env: AppEnv,
+  user: DbUserRow,
+  word: WordData,
+  rating: number,
+  responseTimeMs = 0,
+): Promise<void> => {
   await assertBookReadAccess(env, user, word.bookId);
   const existing = await readFirst<DbHistoryRow>(
     env,
@@ -636,6 +705,7 @@ const handleSaveSrsHistory = async (env: AppEnv, user: DbUserRow, word: WordData
   let easeFactor = existing?.ease_factor || 2.5;
   let attemptCount = (existing?.attempt_count || 0) + 1;
   let correctCount = (existing?.correct_count || 0) + (rating >= 2 ? 1 : 0);
+  let totalResponseTimeMs = (existing?.total_response_time_ms || 0) + Math.max(0, Math.round(responseTimeMs));
 
   if (rating === 0) {
     interval = 0;
@@ -657,8 +727,8 @@ const handleSaveSrsHistory = async (env: AppEnv, user: DbUserRow, word: WordData
   await env.DB.prepare(`
     INSERT INTO learning_histories (
       user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, word_id) DO UPDATE SET
       book_id = excluded.book_id,
       status = excluded.status,
@@ -667,7 +737,8 @@ const handleSaveSrsHistory = async (env: AppEnv, user: DbUserRow, word: WordData
       interval_days = excluded.interval_days,
       ease_factor = excluded.ease_factor,
       correct_count = excluded.correct_count,
-      attempt_count = excluded.attempt_count
+      attempt_count = excluded.attempt_count,
+      total_response_time_ms = excluded.total_response_time_ms
   `).bind(
     user.id,
     word.id,
@@ -678,11 +749,17 @@ const handleSaveSrsHistory = async (env: AppEnv, user: DbUserRow, word: WordData
     interval,
     easeFactor,
     correctCount,
-    attemptCount
+    attemptCount,
+    totalResponseTimeMs
   ).run();
 };
 
-const handleSaveHistory = async (env: AppEnv, user: DbUserRow, result: Partial<LearningHistory> & { wordId: string; bookId: string; }): Promise<void> => {
+const handleSaveHistory = async (
+  env: AppEnv,
+  user: DbUserRow,
+  result: Partial<LearningHistory> & { wordId: string; bookId: string; },
+  responseTimeMs = 0,
+): Promise<void> => {
   await assertBookReadAccess(env, user, result.bookId);
   const existing = await readFirst<DbHistoryRow>(
     env,
@@ -700,15 +777,17 @@ const handleSaveHistory = async (env: AppEnv, user: DbUserRow, result: Partial<L
     next_review_date: result.nextReviewDate || existing?.next_review_date || Date.now(),
     interval_days: result.interval || existing?.interval_days || 0,
     ease_factor: result.easeFactor || existing?.ease_factor || 2.5,
-    correct_count: result.correctCount || existing?.correct_count || 0,
-    attempt_count: result.attemptCount || existing?.attempt_count || 0,
+    correct_count: (existing?.correct_count || 0) + Number(result.correctCount || 0),
+    attempt_count: (existing?.attempt_count || 0) + Number(result.attemptCount || 0),
+    total_response_time_ms:
+      (existing?.total_response_time_ms || 0) + Math.max(0, Math.round(responseTimeMs)),
   };
 
   await env.DB.prepare(`
     INSERT INTO learning_histories (
       user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, word_id) DO UPDATE SET
       book_id = excluded.book_id,
       status = excluded.status,
@@ -717,7 +796,8 @@ const handleSaveHistory = async (env: AppEnv, user: DbUserRow, result: Partial<L
       interval_days = excluded.interval_days,
       ease_factor = excluded.ease_factor,
       correct_count = excluded.correct_count,
-      attempt_count = excluded.attempt_count
+      attempt_count = excluded.attempt_count,
+      total_response_time_ms = excluded.total_response_time_ms
   `).bind(
     payload.user_id,
     payload.word_id,
@@ -728,7 +808,8 @@ const handleSaveHistory = async (env: AppEnv, user: DbUserRow, result: Partial<L
     payload.interval_days,
     payload.ease_factor,
     payload.correct_count,
-    payload.attempt_count
+    payload.attempt_count,
+    payload.total_response_time_ms
   ).run();
 };
 
@@ -1861,6 +1942,113 @@ const handleGetActivityLogs = async (env: AppEnv, userId: string): Promise<Activ
     .sort((a, b) => a.date.localeCompare(b.date));
 };
 
+const readMotivationTotals = async (
+  env: AppEnv,
+  sql: string,
+  ...bindings: unknown[]
+): Promise<MotivationAggregateTotals> => {
+  const row = await readFirst<{
+    total_answers: number;
+    total_correct: number;
+    total_response_time_ms: number;
+  }>(env, sql, ...bindings);
+
+  return {
+    totalAnswers: Number(row?.total_answers || 0),
+    totalCorrect: Number(row?.total_correct || 0),
+    totalResponseTimeMs: Number(row?.total_response_time_ms || 0),
+  };
+};
+
+const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow): Promise<MotivationSnapshot> => {
+  const [personalTotals, globalTotals, globalRegisteredRow] = await Promise.all([
+    readMotivationTotals(
+      env,
+      `SELECT
+         COALESCE(SUM(attempt_count), 0) AS total_answers,
+         COALESCE(SUM(correct_count), 0) AS total_correct,
+         COALESCE(SUM(total_response_time_ms), 0) AS total_response_time_ms
+       FROM learning_histories
+       WHERE user_id = ?`,
+      user.id
+    ),
+    readMotivationTotals(
+      env,
+      `SELECT
+         COALESCE(SUM(h.attempt_count), 0) AS total_answers,
+         COALESCE(SUM(h.correct_count), 0) AS total_correct,
+         COALESCE(SUM(h.total_response_time_ms), 0) AS total_response_time_ms
+       FROM learning_histories h
+       JOIN users u ON u.id = h.user_id
+       WHERE u.role = ?`,
+      UserRole.STUDENT
+    ),
+    readFirst<{ count: number }>(
+      env,
+      'SELECT COUNT(*) AS count FROM users WHERE role = ?',
+      UserRole.STUDENT
+    ),
+  ]);
+
+  const scopes: MotivationScopeStats[] = [
+    createMotivationScope(
+      'PERSONAL',
+      'あなた',
+      'あなた自身の累計です。',
+      personalTotals,
+      1,
+    ),
+  ];
+
+  if (user.organization_name) {
+    const [groupTotals, groupRegisteredRow] = await Promise.all([
+      readMotivationTotals(
+        env,
+        `SELECT
+           COALESCE(SUM(h.attempt_count), 0) AS total_answers,
+           COALESCE(SUM(h.correct_count), 0) AS total_correct,
+           COALESCE(SUM(h.total_response_time_ms), 0) AS total_response_time_ms
+         FROM learning_histories h
+         JOIN users u ON u.id = h.user_id
+         WHERE u.role = ? AND u.organization_name = ?`,
+        UserRole.STUDENT,
+        user.organization_name
+      ),
+      readFirst<{ count: number }>(
+        env,
+        'SELECT COUNT(*) AS count FROM users WHERE role = ? AND organization_name = ?',
+        UserRole.STUDENT,
+        user.organization_name
+      ),
+    ]);
+
+    scopes.push(
+      createMotivationScope(
+        'GROUP',
+        'グループ内',
+        `${user.organization_name} の学習者全体です。`,
+        groupTotals,
+        Math.max(1, Number(groupRegisteredRow?.count || 0)),
+      ),
+    );
+  }
+
+  scopes.push(
+    createMotivationScope(
+      'GLOBAL',
+      'アプリ全体',
+      '現在の利用者全体の累計です。',
+      globalTotals,
+      Math.max(1, Number(globalRegisteredRow?.count || 0)),
+    ),
+  );
+
+  return {
+    scopes,
+    insight: createMotivationInsight(scopes),
+  };
+};
+
 const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise<DashboardSnapshot> => {
   const allBooks = await readVisibleBookRows(env, user);
 
@@ -1876,7 +2064,7 @@ const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise
   officialBooks.sort((a, b) => (a.isPriority === b.isPriority ? a.title.localeCompare(b.title) : a.isPriority ? -1 : 1));
   myBooks.sort((a, b) => b.id.localeCompare(a.id));
 
-  const [progressResults, dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, coachNotifications, accountOverview] = await Promise.all([
+  const [progressResults, dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview] = await Promise.all([
     Promise.all([...officialBooks, ...myBooks].map((book) => getBookProgress(env, user.id, book.id))),
     getVisibleDueCount(env, user),
     handleGetLearningPlan(env, user),
@@ -1884,6 +2072,7 @@ const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise
     handleGetLeaderboard(env, user.id),
     handleGetMasteryDistribution(env, user.id),
     handleGetActivityLogs(env, user.id),
+    handleGetMotivationSnapshot(env, user),
     handleGetCoachNotifications(env, user.id),
     handleGetAccountOverview(env, user),
   ]);
@@ -1903,6 +2092,7 @@ const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise
     leaderboard,
     masteryDist,
     activityLogs,
+    motivationSnapshot,
     coachNotifications,
     accountOverview,
   };
@@ -1974,11 +2164,22 @@ export const handleStorageAction = async (env: AppEnv, user: DbUserRow, body: St
     }
 
     case 'saveSRSHistory':
-      await handleSaveSrsHistory(env, user, payload.word as WordData, Number(payload.rating || 0));
+      await handleSaveSrsHistory(
+        env,
+        user,
+        payload.word as WordData,
+        Number(payload.rating || 0),
+        Number(payload.responseTimeMs || 0),
+      );
       return null;
 
     case 'saveHistory':
-      await handleSaveHistory(env, user, payload.result as Partial<LearningHistory> & { wordId: string; bookId: string; });
+      await handleSaveHistory(
+        env,
+        user,
+        payload.result as Partial<LearningHistory> & { wordId: string; bookId: string; },
+        Number(payload.responseTimeMs || 0),
+      );
       return null;
 
     case 'getBookProgress':

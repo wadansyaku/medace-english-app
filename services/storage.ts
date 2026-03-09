@@ -13,6 +13,8 @@ import {
   LearningPlan,
   LearningPreference,
   LearningPreferenceIntensity,
+  MotivationScopeStats,
+  MotivationSnapshot,
   MasteryDistribution,
   OrganizationDashboardSnapshot,
   OrganizationRole,
@@ -64,8 +66,8 @@ export interface IStorageService {
   getBookSession(uid: string, bookId: string, limit: number): Promise<WordData[]>;
   getDueCount(uid: string): Promise<number>;
   
-  saveSRSHistory(uid: string, word: WordData, rating: number): Promise<void>;
-  saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }): Promise<void>;
+  saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs?: number): Promise<void>;
+  saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }, responseTimeMs?: number): Promise<void>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
   
   getAllStudentsProgress(): Promise<StudentSummary[]>;
@@ -205,6 +207,86 @@ const DEFAULT_LEARNING_PREFERENCE = (userUid: string): LearningPreference => ({
   updatedAt: Date.now(),
 });
 
+interface MotivationAggregateTotals {
+  totalAnswers: number;
+  totalCorrect: number;
+  totalResponseTimeMs: number;
+}
+
+const toAccuracyRate = (totalCorrect: number, totalAnswers: number): number => (
+  totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0
+);
+
+const toAverageResponseTimeMs = (totalResponseTimeMs: number, totalAnswers: number): number | null => {
+  if (totalAnswers <= 0 || totalResponseTimeMs <= 0) return null;
+  return Math.round(totalResponseTimeMs / totalAnswers);
+};
+
+const createMotivationScope = (
+  scope: MotivationScopeStats['scope'],
+  label: string,
+  description: string,
+  totals: MotivationAggregateTotals,
+  registeredUsers: number,
+): MotivationScopeStats => ({
+  scope,
+  label,
+  description,
+  totalAnswers: totals.totalAnswers,
+  totalCorrect: totals.totalCorrect,
+  accuracyRate: toAccuracyRate(totals.totalCorrect, totals.totalAnswers),
+  totalStudyTimeMs: totals.totalResponseTimeMs,
+  averageResponseTimeMs: toAverageResponseTimeMs(totals.totalResponseTimeMs, totals.totalAnswers),
+  registeredUsers,
+});
+
+const buildMockMotivationTotals = (
+  personal: MotivationAggregateTotals,
+  registeredUsers: number,
+  averageAccuracy: number,
+  averageResponseTimeMs: number,
+): MotivationAggregateTotals => {
+  const peerCount = Math.max(registeredUsers - 1, 0);
+  const peerAnswers = peerCount * 96;
+  const peerCorrect = Math.round(peerAnswers * averageAccuracy);
+  const peerResponseTimeMs = peerAnswers * averageResponseTimeMs;
+
+  return {
+    totalAnswers: personal.totalAnswers + peerAnswers,
+    totalCorrect: personal.totalCorrect + peerCorrect,
+    totalResponseTimeMs: personal.totalResponseTimeMs + peerResponseTimeMs,
+  };
+};
+
+const createMotivationInsight = (scopes: MotivationScopeStats[]): MotivationSnapshot['insight'] => {
+  const personal = scopes.find((scope) => scope.scope === 'PERSONAL');
+  const comparison = scopes.find((scope) => scope.scope === 'GROUP') || scopes.find((scope) => scope.scope === 'GLOBAL');
+
+  if (!personal || personal.totalAnswers === 0) {
+    return {
+      title: '最初の5問でモチベーションボードが動きます',
+      body: '学習かテストを1セット進めると、総回答数・正解数・解答時間の集計がここから育ち始めます。',
+    };
+  }
+
+  if (comparison && comparison.totalAnswers > 0) {
+    const answerShare = Math.max(1, Math.round((personal.totalAnswers / comparison.totalAnswers) * 100));
+    const timingCopy = personal.averageResponseTimeMs
+      ? `平均解答時間は ${Math.round(personal.averageResponseTimeMs / 100) / 10} 秒です。`
+      : '平均解答時間はこの更新以降の回答から集計します。';
+
+    return {
+      title: `あなたの回答が${comparison.label}の ${answerShare}% を占めています`,
+      body: `正答率は ${personal.accuracyRate}% です。${timingCopy}`,
+    };
+  }
+
+  return {
+    title: `総回答数 ${personal.totalAnswers} 問まで積み上がりました`,
+    body: `総正解数は ${personal.totalCorrect} 問、累計学習時間は ${Math.round(personal.totalStudyTimeMs / 60000)} 分です。`,
+  };
+};
+
 const IDB_MOCK_ASSIGNMENTS = [
   { studentUid: 'student-biz-1', instructorUid: 'mock-instructor-001' },
   { studentUid: 'student-biz-2', instructorUid: 'mock-instructor-001' },
@@ -322,6 +404,87 @@ class IndexedDBStorageService implements IStorageService {
     const db = await this.dbPromise;
     const tx = db.transaction(storeName, mode);
     return tx.objectStore(storeName);
+  }
+
+  private async getHistoryTotals(uid: string): Promise<MotivationAggregateTotals> {
+    const historyStore = await this.getStore(STORES.HISTORY);
+    const totals: MotivationAggregateTotals = {
+      totalAnswers: 0,
+      totalCorrect: 0,
+      totalResponseTimeMs: 0,
+    };
+
+    await new Promise<void>((resolve) => {
+      const request = historyStore.openCursor();
+      request.onsuccess = (event) => {
+        const cursor = (event.target as IDBRequest).result;
+        if (!cursor) {
+          resolve();
+          return;
+        }
+
+        if (cursor.value.id.startsWith(`${uid}_`)) {
+          const history = cursor.value.data as Partial<LearningHistory>;
+          totals.totalAnswers += Number(history.attemptCount || 0);
+          totals.totalCorrect += Number(history.correctCount || 0);
+          totals.totalResponseTimeMs += Number(history.totalResponseTimeMs || 0);
+        }
+        cursor.continue();
+      };
+      request.onerror = () => resolve();
+    });
+
+    return totals;
+  }
+
+  private async getMotivationSnapshot(uid: string): Promise<MotivationSnapshot> {
+    const sessionUser = await this.getSession();
+    const personalTotals = await this.getHistoryTotals(uid);
+    const studentUsers = IDB_MOCK_USERS.filter((candidate) => candidate.role === UserRole.STUDENT);
+    const includeCurrentStudent = sessionUser?.role === UserRole.STUDENT
+      && !studentUsers.some((candidate) => candidate.uid === sessionUser.uid);
+    const globalRegisteredUsers = studentUsers.length + (includeCurrentStudent ? 1 : 0);
+
+    const scopes: MotivationScopeStats[] = [
+      createMotivationScope(
+        'PERSONAL',
+        'あなた',
+        'あなた自身の累計です。',
+        personalTotals,
+        1,
+      ),
+    ];
+
+    if (sessionUser?.organizationName) {
+      const groupRegisteredUsers = studentUsers.filter(
+        (candidate) => candidate.organizationName === sessionUser.organizationName,
+      ).length + (includeCurrentStudent ? 1 : 0);
+
+      scopes.push(
+        createMotivationScope(
+          'GROUP',
+          'グループ内',
+          `${sessionUser.organizationName} の学習者全体です。`,
+          buildMockMotivationTotals(personalTotals, Math.max(groupRegisteredUsers, 1), 0.81, 9800),
+          Math.max(groupRegisteredUsers, 1),
+        ),
+      );
+    }
+
+    scopes.push(
+      createMotivationScope(
+        'GLOBAL',
+        'アプリ全体',
+        '現在の利用者全体の累計です。',
+        buildMockMotivationTotals(personalTotals, Math.max(globalRegisteredUsers, 1), 0.78, 10800),
+        Math.max(globalRegisteredUsers, 1),
+      ),
+    );
+
+    return {
+      scopes,
+      insight: createMotivationInsight(scopes),
+    };
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
@@ -668,7 +831,7 @@ class IndexedDBStorageService implements IStorageService {
     });
   }
 
-  async saveSRSHistory(uid: string, word: WordData, rating: number): Promise<void> {
+  async saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs = 0): Promise<void> {
     const store = await this.getStore(STORES.HISTORY, 'readwrite');
     const id = `${uid}_${word.id}`;
     return new Promise((resolve) => {
@@ -679,6 +842,7 @@ class IndexedDBStorageService implements IStorageService {
             let ease = existing?.easeFactor || 2.5;
             let attemptCount = (existing?.attemptCount || 0) + 1;
             let correctCount = (existing?.correctCount || 0) + (rating >= 2 ? 1 : 0);
+            let totalResponseTimeMs = (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs));
 
             if (rating === 0) { interval = 0; ease = Math.max(1.3, ease - 0.2); }
             else {
@@ -688,15 +852,51 @@ class IndexedDBStorageService implements IStorageService {
                 if (interval > 365) interval = 365;
             }
             const nextReview = Date.now() + (interval * 86400000);
-            store.put({ id, data: { wordId: word.id, bookId: word.bookId, status: interval > 20 ? 'graduated' : 'learning', lastStudiedAt: Date.now(), nextReviewDate: nextReview, interval, easeFactor: ease, correctCount, attemptCount } });
+            store.put({
+              id,
+              data: {
+                wordId: word.id,
+                bookId: word.bookId,
+                status: interval > 20 ? 'graduated' : 'learning',
+                lastStudiedAt: Date.now(),
+                nextReviewDate: nextReview,
+                interval,
+                easeFactor: ease,
+                correctCount,
+                attemptCount,
+                totalResponseTimeMs,
+              },
+            });
             resolve();
         };
     });
   }
 
-  async saveHistory(uid: string, result: Partial<LearningHistory>): Promise<void> {
+  async saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }, responseTimeMs = 0): Promise<void> {
      const store = await this.getStore(STORES.HISTORY, 'readwrite');
-     store.put({ id: `${uid}_${result.wordId}`, data: { ...result, lastStudiedAt: Date.now() } });
+     const id = `${uid}_${result.wordId}`;
+     return new Promise((resolve) => {
+       const req = store.get(id);
+       req.onsuccess = () => {
+         const existing = req.result?.data as Partial<LearningHistory> | undefined;
+         const payload: LearningHistory = {
+           wordId: result.wordId || existing?.wordId || '',
+           bookId: result.bookId || existing?.bookId || '',
+           status: (result.status || existing?.status || 'learning') as LearningHistory['status'],
+           lastStudiedAt: Date.now(),
+           nextReviewDate: result.nextReviewDate || existing?.nextReviewDate || Date.now(),
+           interval: result.interval || existing?.interval || 0,
+           easeFactor: result.easeFactor || existing?.easeFactor || 2.5,
+           correctCount: (existing?.correctCount || 0) + Number(result.correctCount || 0),
+           attemptCount: (existing?.attemptCount || 0) + Number(result.attemptCount || 0),
+           totalResponseTimeMs:
+             (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs)),
+         };
+         store.put({ id, data: payload });
+         resolve();
+       };
+       req.onerror = () => resolve();
+     });
   }
 
   async getBookProgress(uid: string, bookId: string): Promise<BookProgress> {
@@ -930,13 +1130,14 @@ class IndexedDBStorageService implements IStorageService {
           progressMap[progress.bookId] = progress;
       });
 
-      const [dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs] = await Promise.all([
+      const [dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot] = await Promise.all([
           this.getDueCount(uid),
           this.getLearningPlan(uid),
           this.getLearningPreference(uid),
           this.getLeaderboard(uid),
           this.getMasteryDistribution(uid),
           this.getActivityLogs(uid),
+          this.getMotivationSnapshot(uid),
       ]);
 
       return {
@@ -949,6 +1150,7 @@ class IndexedDBStorageService implements IStorageService {
           leaderboard,
           masteryDist,
           activityLogs,
+          motivationSnapshot,
           coachNotifications: [
               {
                   id: 1,

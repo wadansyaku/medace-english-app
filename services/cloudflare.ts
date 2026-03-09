@@ -133,17 +133,17 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage<number>({ action: 'getDueCount' });
   }
 
-  async saveSRSHistory(uid: string, word: WordData, rating: number): Promise<void> {
-    await this.callStorage<void, { word: WordData; rating: number }>({
+  async saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs = 0): Promise<void> {
+    await this.callStorage<void, { word: WordData; rating: number; responseTimeMs: number }>({
       action: 'saveSRSHistory',
-      payload: { word, rating },
+      payload: { word, rating, responseTimeMs },
     });
   }
 
-  async saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string; bookId: string; }): Promise<void> {
-    await this.callStorage<void, { result: Partial<LearningHistory> & { wordId: string; bookId: string; } }>({
+  async saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string; bookId: string; }, responseTimeMs = 0): Promise<void> {
+    await this.callStorage<void, { result: Partial<LearningHistory> & { wordId: string; bookId: string; }; responseTimeMs: number }>({
       action: 'saveHistory',
-      payload: { result },
+      payload: { result, responseTimeMs },
     });
   }
 

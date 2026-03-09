@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { AccountOverview, BookCatalogSource, BookMetadata, BookProgress, UserProfile, UserGrade, EnglishLevel, LearningPlan, LearningPreference, LearningPreferenceIntensity, LEARNING_PREFERENCE_INTENSITY_LABELS, LeaderboardEntry, MasteryDistribution, ActivityLog, InstructorNotification, STATUS_LABELS, GRADE_LABELS, SUBSCRIPTION_PLAN_LABELS, SubscriptionPlan, UserStudyMode, USER_STUDY_MODE_LABELS } from '../types';
+import { AccountOverview, BookCatalogSource, BookMetadata, BookProgress, UserProfile, UserGrade, EnglishLevel, LearningPlan, LearningPreference, LearningPreferenceIntensity, LEARNING_PREFERENCE_INTENSITY_LABELS, LeaderboardEntry, MasteryDistribution, ActivityLog, InstructorNotification, MotivationSnapshot, STATUS_LABELS, GRADE_LABELS, SUBSCRIPTION_PLAN_LABELS, SubscriptionPlan, UserStudyMode, USER_STUDY_MODE_LABELS } from '../types';
 import { storage } from '../services/storage';
 import { extractVocabularyFromText, extractVocabularyFromMedia, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
 import { BRAND } from '../config/brand';
@@ -11,6 +11,7 @@ import StudyCompanion from './StudyCompanion';
 import PlanExperiencePanel from './PlanExperiencePanel';
 import AdSenseSlot from './AdSenseSlot';
 import ModalOverlay from './ModalOverlay';
+import MotivationBoard from './MotivationBoard';
 import { getDateKeyWeekdayLabel, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 import {
   DisplayDensity,
@@ -258,6 +259,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [masteryDist, setMasteryDist] = useState<MasteryDistribution | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [motivationSnapshot, setMotivationSnapshot] = useState<MotivationSnapshot | null>(null);
   const [coachNotifications, setCoachNotifications] = useState<InstructorNotification[]>([]);
   const [accountOverview, setAccountOverview] = useState<AccountOverview | null>(null);
   const [learningPreference, setLearningPreference] = useState<LearningPreference | null>(null);
@@ -368,6 +370,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         setLeaderboard(snapshot.leaderboard);
         setMasteryDist(snapshot.masteryDist);
         setActivityLogs(snapshot.activityLogs);
+        setMotivationSnapshot(snapshot.motivationSnapshot);
         setCoachNotifications(snapshot.coachNotifications);
         setAccountOverview(snapshot.accountOverview);
         setLearningPreference(snapshot.learningPreference);
@@ -1372,6 +1375,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           stabilizedWords={stabilizedWords}
           onStartQuest={() => onSelectBook('smart-session', 'study')}
         />
+      )}
+
+      {motivationSnapshot && (
+        <MotivationBoard snapshot={motivationSnapshot} />
       )}
 
       {coachNotifications.length > 1 && (

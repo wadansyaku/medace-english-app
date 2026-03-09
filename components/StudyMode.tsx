@@ -31,6 +31,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   
   // AI Cache (Prefetching)
   const contextCache = useRef<Map<string, GeneratedContext | null>>(new Map());
+  const cardStartedAtRef = useRef(Date.now());
   
   // Editing State
   const [isEditing, setIsEditing] = useState(false);
@@ -179,6 +180,12 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     ? '今夜か明日の最初に、この単語だけ先に見直すと流れを戻しやすいです。'
     : '苦手カードは出ていません。明日1回だけ軽く確認すれば十分です。';
 
+  useEffect(() => {
+    if (!loading && currentWord && !isFinished) {
+      cardStartedAtRef.current = Date.now();
+    }
+  }, [currentIndex, currentWord, isFinished, loading]);
+
   // Edit Handlers
   const startEditing = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -220,7 +227,12 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
 
   const handleRating = async (rating: number) => {
     if (!currentWord) return;
-    await storage.saveSRSHistory(user.uid, currentWord, rating);
+    await storage.saveSRSHistory(
+      user.uid,
+      currentWord,
+      rating,
+      Math.max(0, Date.now() - cardStartedAtRef.current),
+    );
     if (rating <= 1) {
       setReviewWords((prev) => prev.some((word) => word.id === currentWord.id) ? prev : [...prev, currentWord]);
     }

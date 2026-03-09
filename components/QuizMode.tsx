@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { UserProfile, WorksheetQuestionMode } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { UserProfile, WordData, WorksheetQuestionMode } from '../types';
 import { storage } from '../services/storage';
 import {
   GeneratedWorksheetQuestion,
@@ -16,7 +16,10 @@ interface QuizModeProps {
   onBack: () => void;
 }
 
-const QUESTION_COUNT = 5;
+type QuizSelectionMode = 'FULL_RANDOM' | 'RANGE_RANDOM';
+
+const DEFAULT_QUESTION_COUNT = 5;
+const QUESTION_COUNT_OPTIONS = [5, 10, 20] as const;
 
 const buildLoadingMessage = (mode: WorksheetQuestionMode): string => {
   if (mode === 'JA_TO_EN') return '日本語から英語の確認テストを準備中...';
@@ -24,8 +27,15 @@ const buildLoadingMessage = (mode: WorksheetQuestionMode): string => {
   return '英語から日本語の確認テストを準備中...';
 };
 
+const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
 const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   const [mode, setMode] = useState<WorksheetQuestionMode>('EN_TO_JA');
+  const [allWords, setAllWords] = useState<WordData[]>([]);
+  const [selectionMode, setSelectionMode] = useState<QuizSelectionMode>('FULL_RANDOM');
+  const [questionCount, setQuestionCount] = useState(DEFAULT_QUESTION_COUNT);
+  const [rangeStart, setRangeStart] = useState(1);
+  const [rangeEnd, setRangeEnd] = useState(1);
   const [questions, setQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
@@ -38,53 +48,106 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   const [loadingMessage, setLoadingMessage] = useState(buildLoadingMessage('EN_TO_JA'));
   const [missedQuestions, setMissedQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [attemptSeed, setAttemptSeed] = useState(0);
+  const questionStartedAtRef = useRef(Date.now());
 
-  useEffect(() => {
-    const initQuiz = async () => {
-      try {
-        setLoading(true);
-        setLoadingMessage(buildLoadingMessage(mode));
-        setCurrentQIndex(0);
-        setShowOptions(false);
-        setSelectedOption(null);
-        setAnswerInput('');
-        setInputResult(null);
-        setScore(0);
-        setCompleted(false);
-        setMissedQuestions([]);
+  const minWordNumber = useMemo(() => {
+    if (allWords.length === 0) return 1;
+    return Math.min(...allWords.map((word) => word.number));
+  }, [allWords]);
 
-        const allWords = await storage.getWordsByBook(bookId);
-        if (allWords.length === 0) {
-          setQuestions([]);
-          return;
-        }
+  const maxWordNumber = useMemo(() => {
+    if (allWords.length === 0) return 1;
+    return Math.max(...allWords.map((word) => word.number));
+  }, [allWords]);
 
-        const sourceWords = toWorksheetSourceWords(allWords);
-        const nextQuestions = generateWorksheetQuestions(
-          sourceWords,
-          mode,
-          Math.min(QUESTION_COUNT, sourceWords.length),
-        );
+  const normalizedRangeStart = Math.min(rangeStart, rangeEnd);
+  const normalizedRangeEnd = Math.max(rangeStart, rangeEnd);
 
-        setQuestions(nextQuestions);
-      } catch (error) {
-        console.error('Quiz Init Error', error);
-        setQuestions([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const filteredWords = useMemo(() => {
+    if (selectionMode === 'FULL_RANDOM') return allWords;
+    return allWords.filter((word) => word.number >= normalizedRangeStart && word.number <= normalizedRangeEnd);
+  }, [allWords, normalizedRangeEnd, normalizedRangeStart, selectionMode]);
 
-    void initQuiz();
-  }, [attemptSeed, bookId, mode]);
-
+  const actualQuestionCount = Math.min(questionCount, filteredWords.length);
   const currentQuestion = questions[currentQIndex];
   const currentModeCopy = WORKSHEET_MODE_COPY[mode];
   const isHintMode = currentQuestion?.mode === 'SPELLING_HINT';
-
   const reviewTargets = useMemo(() => missedQuestions.slice(0, 3), [missedQuestions]);
+  const rangeSummary = selectionMode === 'RANGE_RANDOM'
+    ? `No. ${normalizedRangeStart} - ${normalizedRangeEnd} からランダム ${actualQuestionCount} 問`
+    : `全範囲からランダム ${actualQuestionCount} 問`;
 
-  const completeQuestion = async (correct: boolean) => {
+  useEffect(() => {
+    setLoadingMessage(buildLoadingMessage(mode));
+  }, [mode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWords = async () => {
+      try {
+        setLoading(true);
+        setLoadingMessage(buildLoadingMessage(mode));
+        const nextWords = await storage.getWordsByBook(bookId);
+        if (cancelled) return;
+
+        setAllWords(nextWords);
+        const nextMin = nextWords.length > 0 ? Math.min(...nextWords.map((word) => word.number)) : 1;
+        const nextMax = nextWords.length > 0 ? Math.max(...nextWords.map((word) => word.number)) : 1;
+        setSelectionMode('FULL_RANDOM');
+        setQuestionCount(DEFAULT_QUESTION_COUNT);
+        setRangeStart(nextMin);
+        setRangeEnd(nextMax);
+      } catch (error) {
+        console.error('Quiz Load Error', error);
+        if (!cancelled) {
+          setAllWords([]);
+        }
+      }
+    };
+
+    void loadWords();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookId]);
+
+  useEffect(() => {
+    setCurrentQIndex(0);
+    setShowOptions(false);
+    setSelectedOption(null);
+    setAnswerInput('');
+    setInputResult(null);
+    setScore(0);
+    setCompleted(false);
+    setMissedQuestions([]);
+
+    if (allWords.length === 0) {
+      setQuestions([]);
+      setLoading(false);
+      return;
+    }
+
+    if (filteredWords.length === 0) {
+      setQuestions([]);
+      setLoading(false);
+      return;
+    }
+
+    const sourceWords = toWorksheetSourceWords(filteredWords);
+    const nextQuestions = generateWorksheetQuestions(sourceWords, mode, actualQuestionCount);
+    setQuestions(nextQuestions);
+    setLoading(false);
+  }, [actualQuestionCount, allWords.length, attemptSeed, filteredWords, mode]);
+
+  useEffect(() => {
+    if (!loading && currentQuestion && !completed) {
+      questionStartedAtRef.current = Date.now();
+    }
+  }, [completed, currentQuestion, loading]);
+
+  const completeQuestion = async (correct: boolean, responseTimeMs: number) => {
     const question = questions[currentQIndex];
     if (!question) return;
 
@@ -103,7 +166,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
       lastStudiedAt: Date.now(),
       correctCount: correct ? 1 : 0,
       attemptCount: 1,
-    });
+    }, responseTimeMs);
 
     window.setTimeout(() => {
       if (currentQIndex < questions.length - 1) {
@@ -121,7 +184,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   const handleOptionClick = async (option: string) => {
     if (selectedOption || !currentQuestion) return;
     setSelectedOption(option);
-    await completeQuestion(option === currentQuestion.answer);
+    await completeQuestion(option === currentQuestion.answer, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
 
   const handleHintSubmit = async (event: React.FormEvent) => {
@@ -134,11 +197,21 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
       currentQuestion.hintPrefix || '',
     );
     setInputResult(correct ? 'correct' : 'incorrect');
-    await completeQuestion(correct);
+    await completeQuestion(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
 
   const restartQuiz = () => {
     setAttemptSeed((prev) => prev + 1);
+  };
+
+  const handleRangeStartChange = (value: number) => {
+    if (Number.isNaN(value)) return;
+    setRangeStart(clamp(value, minWordNumber, maxWordNumber));
+  };
+
+  const handleRangeEndChange = (value: number) => {
+    if (Number.isNaN(value)) return;
+    setRangeEnd(clamp(value, minWordNumber, maxWordNumber));
   };
 
   if (loading) {
@@ -151,10 +224,73 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   }
 
   if (questions.length === 0) {
+    const emptyCopy = allWords.length === 0
+      ? '学習する単語がまだありません。'
+      : selectionMode === 'RANGE_RANDOM'
+        ? `No. ${normalizedRangeStart} - ${normalizedRangeEnd} には出題できる単語がありません。範囲を広げてください。`
+        : '出題条件に合う単語がありません。';
+
     return (
-      <div className="p-8 text-center">
-        <p className="text-slate-500">学習する単語がまだありません。</p>
-        <button onClick={onBack} className="mt-4 text-medace-600 underline">戻る</button>
+      <div className="mx-auto max-w-3xl space-y-5">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Random Range Mode</div>
+          <div className="mt-2 text-xl font-black text-slate-950">範囲指定ランダムを調整する</div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            出題条件を見直すと、同じ単語帳でも次に確認したい範囲だけに絞れます。
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {[
+              { key: 'FULL_RANDOM', label: '全範囲ランダム', description: '単語帳全体からランダム出題します。' },
+              { key: 'RANGE_RANDOM', label: '範囲指定ランダム', description: '番号範囲を決めて、その中からランダム出題します。' },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setSelectionMode(item.key as QuizSelectionMode)}
+                className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                  selectionMode === item.key
+                    ? 'border-medace-500 bg-medace-50'
+                    : 'border-slate-200 bg-slate-50 hover:border-medace-200 hover:bg-white'
+                }`}
+              >
+                <div className="text-sm font-bold text-slate-900">{item.label}</div>
+                <div className="mt-1 text-sm text-slate-500">{item.description}</div>
+              </button>
+            ))}
+          </div>
+
+          {selectionMode === 'RANGE_RANDOM' && (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">開始番号</label>
+                <input
+                  type="number"
+                  min={minWordNumber}
+                  max={maxWordNumber}
+                  value={rangeStart}
+                  onChange={(event) => handleRangeStartChange(Number(event.target.value))}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">終了番号</label>
+                <input
+                  type="number"
+                  min={minWordNumber}
+                  max={maxWordNumber}
+                  value={rangeEnd}
+                  onChange={(event) => handleRangeEndChange(Number(event.target.value))}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-3xl border border-dashed border-amber-200 bg-amber-50 px-5 py-5 text-center">
+          <p className="text-sm font-medium text-amber-800">{emptyCopy}</p>
+          <button onClick={onBack} className="mt-4 text-sm font-bold text-medace-600 underline">戻る</button>
+        </div>
       </div>
     );
   }
@@ -179,6 +315,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
           <p className="mt-2 text-sm text-slate-500">
             {currentModeCopy.label} で確認しました。点数より、次に直すところだけ見れば十分です。
           </p>
+          <div className="mt-3 text-sm font-bold text-slate-500">{rangeSummary}</div>
           <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
             正解 {score} / {questions.length}
             <span className="text-medace-400">{percentage}%</span>
@@ -256,7 +393,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
             onClick={restartQuiz}
             className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-medace-600 py-3 font-bold text-white transition-colors hover:bg-medace-700"
           >
-            <RotateCcw className="h-4 w-4" /> 同じ方向で再挑戦
+            <RotateCcw className="h-4 w-4" /> 同じ条件で再挑戦
           </button>
         </div>
       </div>
@@ -265,6 +402,94 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <div className="mb-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Random Range Mode</div>
+            <div className="mt-1 text-xl font-black text-slate-950">出題範囲を決めてランダムで確認する</div>
+            <div className="mt-2 text-sm leading-relaxed text-slate-500">
+              単語帳全体でも、指定した番号範囲だけでも、ランダムで問題を作れます。
+            </div>
+          </div>
+          <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
+            {rangeSummary}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {[
+            { key: 'FULL_RANDOM', label: '全範囲ランダム', description: '単語帳全体からランダムに出題します。' },
+            { key: 'RANGE_RANDOM', label: '範囲指定ランダム', description: '番号範囲を絞って、その中からランダムに出題します。' },
+          ].map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setSelectionMode(item.key as QuizSelectionMode)}
+              className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                selectionMode === item.key
+                  ? 'border-medace-500 bg-medace-50'
+                  : 'border-slate-200 bg-slate-50 hover:border-medace-200 hover:bg-white'
+              }`}
+            >
+              <div className="text-sm font-bold text-slate-900">{item.label}</div>
+              <div className="mt-1 text-sm text-slate-500">{item.description}</div>
+            </button>
+          ))}
+        </div>
+
+        {selectionMode === 'RANGE_RANDOM' && (
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">開始番号</label>
+              <input
+                type="number"
+                min={minWordNumber}
+                max={maxWordNumber}
+                value={rangeStart}
+                onChange={(event) => handleRangeStartChange(Number(event.target.value))}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">終了番号</label>
+              <input
+                type="number"
+                min={minWordNumber}
+                max={maxWordNumber}
+                value={rangeEnd}
+                onChange={(event) => handleRangeEndChange(Number(event.target.value))}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-bold text-slate-900 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+              />
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 md:min-w-[128px]">
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">候補数</div>
+              <div className="mt-2 text-2xl font-black text-slate-950">{filteredWords.length}</div>
+              <div className="text-xs text-slate-500">範囲内の単語</div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">問題数</div>
+          <div className="flex flex-wrap gap-2">
+            {QUESTION_COUNT_OPTIONS.map((count) => (
+              <button
+                key={count}
+                type="button"
+                onClick={() => setQuestionCount(count)}
+                className={`rounded-full border px-4 py-2 text-sm font-bold transition-colors ${
+                  questionCount === count
+                    ? 'border-medace-500 bg-medace-50 text-medace-700'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {count}問
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

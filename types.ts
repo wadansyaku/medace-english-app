@@ -170,6 +170,7 @@ export interface LearningHistory {
   easeFactor: number;
   correctCount: number;
   attemptCount: number;
+  totalResponseTimeMs: number;
 }
 
 export interface BookProgress {
@@ -256,6 +257,30 @@ export interface ActivityLog {
   intensity: 0 | 1 | 2 | 3 | 4;
 }
 
+export type MotivationScope = 'PERSONAL' | 'GROUP' | 'GLOBAL';
+
+export interface MotivationScopeStats {
+  scope: MotivationScope;
+  label: string;
+  description: string;
+  totalAnswers: number;
+  totalCorrect: number;
+  accuracyRate: number;
+  totalStudyTimeMs: number;
+  averageResponseTimeMs: number | null;
+  registeredUsers: number;
+}
+
+export interface MotivationInsight {
+  title: string;
+  body: string;
+}
+
+export interface MotivationSnapshot {
+  scopes: MotivationScopeStats[];
+  insight: MotivationInsight;
+}
+
 export interface InstructorNotification {
   id: number;
   studentUid: string;
@@ -298,6 +323,7 @@ export interface DashboardSnapshot {
   leaderboard: LeaderboardEntry[];
   masteryDist: MasteryDistribution;
   activityLogs: ActivityLog[];
+  motivationSnapshot: MotivationSnapshot;
   coachNotifications: InstructorNotification[];
   accountOverview: AccountOverview;
 }
