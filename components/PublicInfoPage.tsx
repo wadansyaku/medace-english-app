@@ -83,7 +83,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
             snapshot={motivationSnapshot}
             loading={motivationLoading}
             error={motivationError}
-            title="公開ホームで見える live Motivation Board"
+            title="公開ページで見える学習ライブ"
             description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
           />
 

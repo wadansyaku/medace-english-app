@@ -272,6 +272,13 @@ const App: React.FC = () => {
 
       return (
         <div className="mx-auto mt-6 max-w-6xl space-y-6 lg:mt-10">
+          <PublicMotivationPanel
+            snapshot={publicMotivationSnapshot}
+            loading={publicMotivationLoading}
+            error={publicMotivationError}
+            compact
+          />
+
           <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(246,109,11,0.12)]">
             <div className="grid lg:grid-cols-[1.04fr_0.96fr]">
               <div className="relative overflow-hidden bg-[linear-gradient(145deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] p-9 text-white md:p-11">
@@ -492,12 +499,6 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-
-          <PublicMotivationPanel
-            snapshot={publicMotivationSnapshot}
-            loading={publicMotivationLoading}
-            error={publicMotivationError}
-          />
         </div>
       );
     }

@@ -15,9 +15,9 @@ const completeDiagnostic = async (page: Page) => {
 test('public home shows the live motivation board before login', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByText('リアルタイム Motivation Board')).toBeVisible();
-  await expect(page.getByText(/直近15分の動き/)).toBeVisible();
-  await expect(page.getByText(/公開ホームから見える積み上がり/)).toBeVisible();
+  await expect(page.getByText('みんなの学習ライブ')).toBeVisible();
+  await expect(page.getByText(/直近15分/)).toBeVisible();
+  await expect(page.getByText(/いまの積み上がり/)).toBeVisible();
 });
 
 test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {

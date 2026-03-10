@@ -9,6 +9,7 @@ interface PublicMotivationPanelProps {
   error: string | null;
   title?: string;
   description?: string;
+  compact?: boolean;
 }
 
 const formatCount = (value: number): string => value.toLocaleString('ja-JP');
@@ -44,8 +45,9 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
   snapshot,
   loading,
   error,
-  title = 'リアルタイム Motivation Board',
+  title = 'みんなの学習ライブ',
   description = 'ログイン前でも、アプリ全体の積み上がりと直近の動きを公開ホームで確認できます。',
+  compact = false,
 }) => {
   const [now, setNow] = useState(Date.now());
 
@@ -81,12 +83,92 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
   const globalScope = snapshot?.snapshot.scopes[0];
   if (!snapshot || !globalScope) return null;
 
+  if (compact) {
+    return (
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
+        <div className="grid gap-5 p-6 lg:grid-cols-[1.05fr_0.95fr] lg:p-7">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="max-w-2xl">
+                <p className="text-sm font-bold uppercase tracking-[0.16em] text-medace-500">Live Snapshot</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{title}</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
+              </div>
+              <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold text-emerald-700">
+                {formatUpdatedAgo(snapshot.updatedAt, now)}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-3xl border border-emerald-100 bg-[linear-gradient(135deg,#effcf5_0%,#ffffff_100%)] px-4 py-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
+                  <Radio className="h-4 w-4" />
+                  直近15分
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(snapshot.activeLearners15m)}人</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">いま学習している人数</div>
+              </div>
+              <div className="rounded-3xl border border-sky-100 bg-[linear-gradient(135deg,#eff8ff_0%,#ffffff_100%)] px-4 py-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-sky-700">
+                  <Users className="h-4 w-4" />
+                  過去24時間
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(snapshot.activeLearners24h)}人</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">きょう学習した人数</div>
+              </div>
+              <div className="rounded-3xl border border-amber-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-amber-700">
+                  <Activity className="h-4 w-4" />
+                  更新語数
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(snapshot.wordsTouched24h)}語</div>
+                <div className="mt-1 text-xs leading-relaxed text-slate-500">過去24時間のログ更新</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <div className="rounded-[28px] bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] px-5 py-5 text-white">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-white/15 p-3 text-white">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white/80">いまの積み上がり</div>
+                  <div className="mt-1 text-xl font-black tracking-tight">{snapshot.snapshot.insight.title}</div>
+                  <div className="mt-2 text-sm leading-relaxed text-white/85">{snapshot.snapshot.insight.body}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  <Activity className="h-3.5 w-3.5" />
+                  総回答数
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(globalScope.totalAnswers)}</div>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  <Users className="h-3.5 w-3.5" />
+                  登録学習者
+                </div>
+                <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(globalScope.registeredUsers)}人</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
       <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#f5fbff_100%)] p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold uppercase tracking-[0.16em] text-medace-500">Live Board</p>
+            <p className="text-sm font-bold uppercase tracking-[0.16em] text-medace-500">Live Snapshot</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-[2rem]">{title}</h2>
             <p className="mt-3 text-base leading-relaxed text-slate-600">{description}</p>
           </div>
