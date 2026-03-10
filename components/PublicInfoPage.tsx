@@ -51,6 +51,14 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         <ArrowLeft className="h-4 w-4" /> ログイン画面に戻る
       </button>
 
+      <PublicMotivationPanel
+        snapshot={motivationSnapshot}
+        loading={motivationLoading}
+        error={motivationError}
+        title="公開ページで見える学習ライブ"
+        description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
+      />
+
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(246,109,11,0.12)]">
         <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#fff4e8_100%)] p-8 md:p-10">
           <div className="max-w-3xl">
@@ -79,14 +87,6 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         </div>
 
         <div className="space-y-8 p-6 md:p-8">
-          <PublicMotivationPanel
-            snapshot={motivationSnapshot}
-            loading={motivationLoading}
-            error={motivationError}
-            title="公開ページで見える学習ライブ"
-            description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
-          />
-
           <section>
             <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Plan Overview</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">料金体系の考え方</h2>
