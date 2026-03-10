@@ -17,6 +17,7 @@
 - Playwright smoke を local Pages Functions + D1 migration 前提で安定化し、GitHub Actions に browser smoke workflow を追加。
 - deploy workflow に `cf:doctor` を組み込み、GitHub / Cloudflare 設定差分を deploy 前に検知できるようにした。
 - API integration tests に、phrasebook の owner-only 可視性、duplicate row skip、cross-org assignment 拒否、worksheet access 権限制御を追加した。
+- ログイン前ホームと公開説明ページに live Motivation Board を追加し、`/api/public/motivation` からリアルタイム更新の公開 snapshot を取得できるようにした。
 
 ## In Progress
 - Cloudflare / GitHub 運用手順の継続整理。

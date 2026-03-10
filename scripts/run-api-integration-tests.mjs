@@ -222,6 +222,12 @@ const main = async () => {
     server = startServer(persistDir, port);
     await waitForServer(baseUrl, server.logs);
 
+    const publicMotivationResponse = await fetch(`${baseUrl}/api/public/motivation`);
+    assert(publicMotivationResponse.status === 200, 'public motivation endpoint should be available without login');
+    const publicMotivation = await publicMotivationResponse.json();
+    assert(publicMotivation.snapshot?.scopes?.[0]?.scope === 'GLOBAL', 'public motivation endpoint should expose a global scope');
+    assert(typeof publicMotivation.updatedAt === 'number', 'public motivation endpoint should include an updatedAt timestamp');
+
     const admin = new SessionClient(baseUrl, 'admin');
     const freeStudent = new SessionClient(baseUrl, 'free-student');
     const orgStudent = new SessionClient(baseUrl, 'org-student');

@@ -16,10 +16,12 @@ import {
   MasteryDistribution,
   MotivationScopeStats,
   MotivationSnapshot,
+  PublicMotivationSnapshot,
   StudentRiskLevel,
   SubscriptionPlan,
   UserRole,
 } from '../../types';
+import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { handleGetAllStudentsProgress, handleGetCoachNotifications } from './storage-organization-actions';
 import type { AppEnv, DbUserRow } from './types';
@@ -627,6 +629,62 @@ export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow):
     scopes,
     insight: createMotivationInsight(scopes),
   };
+};
+
+export const handleGetPublicMotivationSnapshot = async (env: AppEnv): Promise<PublicMotivationSnapshot> => {
+  const now = Date.now();
+  const [globalTotals, globalRegisteredRow, liveRow] = await Promise.all([
+    readMotivationTotals(
+      env,
+      `SELECT
+         COALESCE(SUM(h.attempt_count), 0) AS total_answers,
+         COALESCE(SUM(h.correct_count), 0) AS total_correct,
+         COALESCE(SUM(h.total_response_time_ms), 0) AS total_response_time_ms
+       FROM learning_histories h
+       JOIN users u ON u.id = h.user_id
+       WHERE u.role = ?`,
+      UserRole.STUDENT,
+    ),
+    readFirst<{ count: number }>(
+      env,
+      'SELECT COUNT(*) AS count FROM users WHERE role = ?',
+      UserRole.STUDENT,
+    ),
+    readFirst<{
+      active_learners_15m: number;
+      active_learners_24h: number;
+      words_touched_24h: number;
+    }>(
+      env,
+      `SELECT
+         COUNT(DISTINCT CASE WHEN h.last_studied_at >= ? THEN h.user_id ELSE NULL END) AS active_learners_15m,
+         COUNT(DISTINCT CASE WHEN h.last_studied_at >= ? THEN h.user_id ELSE NULL END) AS active_learners_24h,
+         COUNT(CASE WHEN h.last_studied_at >= ? THEN 1 ELSE NULL END) AS words_touched_24h
+       FROM learning_histories h
+       JOIN users u ON u.id = h.user_id
+       WHERE u.role = ?`,
+      now - 15 * 60 * 1000,
+      now - 24 * 60 * 60 * 1000,
+      now - 24 * 60 * 60 * 1000,
+      UserRole.STUDENT,
+    ),
+  ]);
+
+  const globalScope = createMotivationScope(
+    'GLOBAL',
+    'アプリ全体',
+    '現在の利用者全体の累計です。',
+    globalTotals,
+    Math.max(1, Number(globalRegisteredRow?.count || 0)),
+  );
+
+  return buildPublicMotivationSnapshot({
+    globalScope,
+    activeLearners15m: Number(liveRow?.active_learners_15m || 0),
+    activeLearners24h: Number(liveRow?.active_learners_24h || 0),
+    wordsTouched24h: Number(liveRow?.words_touched_24h || 0),
+    updatedAt: now,
+  });
 };
 
 export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise<DashboardSnapshot> => {

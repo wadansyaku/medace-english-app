@@ -295,6 +295,14 @@ export interface MotivationSnapshot {
   insight: MotivationInsight;
 }
 
+export interface PublicMotivationSnapshot {
+  snapshot: MotivationSnapshot;
+  activeLearners15m: number;
+  activeLearners24h: number;
+  wordsTouched24h: number;
+  updatedAt: number;
+}
+
 export interface InstructorNotification {
   id: number;
   studentUid: string;

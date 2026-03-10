@@ -3,6 +3,7 @@ import { EnglishLevel, OrganizationRole, UserGrade, UserRole, UserStudyMode } fr
 import { clearSession, createSession, createUser, ensureDemoUser, findUserByEmail, mapUserRowToProfile, requireUser, verifyPassword, hashPassword } from '../_shared/auth';
 import { handleAiAction } from '../_shared/ai-actions';
 import { handleError, HttpError, json, noContent, readJson } from '../_shared/http';
+import { handleGetPublicMotivationSnapshot } from '../_shared/storage-dashboard-actions';
 import { handleStorageAction } from '../_shared/storage-actions';
 import { AppEnv } from '../_shared/types';
 import { DEMO_SESSION_TTL_MS } from '../../utils/demo';
@@ -160,6 +161,10 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
     if (pathname === 'session' && request.method === 'DELETE') {
       const cookie = await clearSession(env, request);
       return noContent({ headers: { 'Set-Cookie': cookie } });
+    }
+
+    if (pathname === 'public/motivation' && request.method === 'GET') {
+      return createJsonResponse(await handleGetPublicMotivationSnapshot(env));
     }
 
     if (pathname === 'profile' && request.method === 'POST') {

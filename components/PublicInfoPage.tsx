@@ -1,10 +1,14 @@
 import React from 'react';
 import { ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
 import { getSubscriptionPolicy } from '../config/subscription';
-import { SubscriptionPlan } from '../types';
+import { type PublicMotivationSnapshot, SubscriptionPlan } from '../types';
+import PublicMotivationPanel from './PublicMotivationPanel';
 
 interface PublicInfoPageProps {
   onBack: () => void;
+  motivationSnapshot: PublicMotivationSnapshot | null;
+  motivationLoading: boolean;
+  motivationError: string | null;
 }
 
 const PLAN_PREVIEWS = [
@@ -31,7 +35,12 @@ const PLATFORM_HIGHLIGHTS = [
   },
 ];
 
-const PublicInfoPage: React.FC<PublicInfoPageProps> = ({ onBack }) => {
+const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
+  onBack,
+  motivationSnapshot,
+  motivationLoading,
+  motivationError,
+}) => {
   return (
     <div className="mx-auto mt-6 max-w-5xl space-y-6">
       <button
@@ -69,7 +78,15 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({ onBack }) => {
           </div>
         </div>
 
-        <div className="p-6 md:p-8">
+        <div className="space-y-8 p-6 md:p-8">
+          <PublicMotivationPanel
+            snapshot={motivationSnapshot}
+            loading={motivationLoading}
+            error={motivationError}
+            title="公開ホームで見える live Motivation Board"
+            description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
+          />
+
           <section>
             <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Plan Overview</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">料金体系の考え方</h2>
