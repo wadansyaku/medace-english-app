@@ -4,6 +4,7 @@ import { WordData, UserProfile, EnglishLevel } from '../types';
 import { storage } from '../services/storage';
 import { generateGeminiSentence, generateWordImage, GeneratedContext } from '../services/gemini';
 import { ArrowLeft, RotateCw, Sparkles, Volume2, Clock, Zap, AlertCircle, Image as ImageIcon, Loader2, Award, Lock, Languages, Edit2, Save, X, Flame, Flag } from 'lucide-react';
+import ModalOverlay from './ModalOverlay';
 
 interface StudyModeProps {
   user: UserProfile;
@@ -39,6 +40,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const [editDef, setEditDef] = useState('');
   const [reportReason, setReportReason] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
+  const [reportNotice, setReportNotice] = useState<string | null>(null);
   
   // Completion & Gamification States
   const [isFinished, setIsFinished] = useState(false);
@@ -203,8 +205,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const submitReport = async () => {
       if (!reportReason.trim()) return;
       await storage.reportWord(currentWord.id, reportReason);
-      alert("報告ありがとうございます。\n講師・管理者が確認し、必要に応じて修正します。");
       setShowReportModal(false);
+      setReportReason('');
+      setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
   };
 
   const cancelEditing = (e: React.MouseEvent) => {
@@ -367,8 +370,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       
       {/* Report Modal */}
       {showReportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-medace-900/35 p-4 backdrop-blur-sm" onClick={() => setShowReportModal(false)}>
-              <div className="w-full max-w-md rounded-2xl border border-medace-100 bg-white p-6" onClick={e => e.stopPropagation()}>
+          <ModalOverlay onClose={() => setShowReportModal(false)} panelClassName="max-w-md" align="center">
+              <div className="w-full rounded-2xl border border-medace-100 bg-white p-6">
                   <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                       <Flag className="w-5 h-5 text-red-500" /> 問題を報告
                   </h3>
@@ -386,7 +389,23 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                       <button onClick={submitReport} disabled={!reportReason.trim()} className="flex-1 py-2 bg-red-500 text-white rounded-lg font-bold disabled:opacity-50">報告する</button>
                   </div>
               </div>
-          </div>
+          </ModalOverlay>
+      )}
+
+      {reportNotice && (
+          <ModalOverlay onClose={() => setReportNotice(null)} panelClassName="max-w-md" align="center">
+              <div className="rounded-[28px] border border-medace-100 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Report Saved</div>
+                  <h3 className="mt-3 text-xl font-black text-slate-950">報告を受け付けました</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{reportNotice}</p>
+                  <button
+                    onClick={() => setReportNotice(null)}
+                    className="mt-6 w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+                  >
+                    閉じる
+                  </button>
+              </div>
+          </ModalOverlay>
       )}
 
       <div className="flex items-center justify-between mb-4 md:mb-6">

@@ -59,6 +59,13 @@ const getTriggerReason = (student: StudentSummary): string => {
   return '継続称賛フォロー';
 };
 
+const formatDateTime = (timestamp: number): string => new Date(timestamp).toLocaleString('ja-JP', {
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelectBook }) => {
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,9 +191,9 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
   const unassignedVisibleCount = students.filter((student) => !student.assignedInstructorUid).length;
 
   return (
-    <div className="space-y-8 animate-in fade-in pb-12">
+    <div data-testid="instructor-dashboard" className="space-y-8 animate-in fade-in pb-12">
       {selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm">
+        <div data-testid="notification-composer" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[28px] border border-slate-200 bg-white p-6 md:p-8 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -249,6 +256,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-500 mb-2">送信文面</label>
                 <textarea
+                  data-testid="notification-message-draft"
                   value={messageDraft}
                   onChange={(event) => setMessageDraft(event.target.value)}
                   className="min-h-36 w-full rounded-3xl border border-slate-300 bg-white px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
@@ -265,6 +273,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
               </button>
               <button
                 type="button"
+                data-testid="notification-send-submit"
                 onClick={handleSendNotification}
                 disabled={sending || !messageDraft.trim()}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
@@ -451,6 +460,11 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
                   <div className="mt-1 text-xs text-slate-400">
                     担当: {student.assignedInstructorName || '未割当'}
                   </div>
+                  {student.assignmentUpdatedAt && (
+                    <div className="mt-1 text-xs text-slate-400">
+                      割当更新: {formatDateTime(student.assignmentUpdatedAt)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${getPlanStyle(student.subscriptionPlan)}`}>
@@ -497,6 +511,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
                   {student.riskLevel !== StudentRiskLevel.SAFE ? (
                     <button
                       type="button"
+                      data-testid={`send-notification-${student.uid}`}
                       onClick={() => openComposer(student)}
                       className="inline-flex items-center gap-2 rounded-2xl bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700 hover:bg-red-100"
                     >

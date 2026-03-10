@@ -1,24 +1,31 @@
 
 import React, { useEffect, useState } from 'react';
-import { AccountOverview, BookCatalogSource, BookMetadata, BookProgress, UserProfile, UserGrade, EnglishLevel, LearningPlan, LearningPreference, LearningPreferenceIntensity, LEARNING_PREFERENCE_INTENSITY_LABELS, LeaderboardEntry, MasteryDistribution, ActivityLog, InstructorNotification, MotivationSnapshot, STATUS_LABELS, GRADE_LABELS, SUBSCRIPTION_PLAN_LABELS, SubscriptionPlan, UserStudyMode, USER_STUDY_MODE_LABELS } from '../types';
+import { BookCatalogSource, BookMetadata, type LearningPreference, UserProfile, UserGrade, EnglishLevel, LearningPreferenceIntensity, LEARNING_PREFERENCE_INTENSITY_LABELS, GRADE_LABELS, SubscriptionPlan, UserStudyMode } from '../types';
 import { storage } from '../services/storage';
 import { extractVocabularyFromText, extractVocabularyFromMedia, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
 import { BRAND } from '../config/brand';
 import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription';
-import { Play, BookOpen, Star, Loader2, Zap, BrainCircuit, Trophy, Plus, Sparkles, FileText, Image as ImageIcon, UploadCloud, Flame, Trash2, Settings, RefreshCw, User, Book, Calendar, Target, ArrowRight, Library, ChevronDown, ChevronUp, BarChart, Activity, Edit2, X, Check, Medal, Crown, MessageSquareText } from 'lucide-react';
+import { Loader2, BrainCircuit, Trash2, Medal, Crown, MessageSquareText } from 'lucide-react';
 import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
-import PlanExperiencePanel from './PlanExperiencePanel';
-import AdSenseSlot from './AdSenseSlot';
 import ModalOverlay from './ModalOverlay';
 import MotivationBoard from './MotivationBoard';
-import { getDateKeyWeekdayLabel, getRelativeDateKey, getTodayDateKey } from '../utils/date';
+import DashboardAccountSection from './dashboard/DashboardAccountSection';
+import DashboardHeroSection from './dashboard/DashboardHeroSection';
+import DashboardLibrarySection from './dashboard/DashboardLibrarySection';
+import DashboardPlanSection from './dashboard/DashboardPlanSection';
+import DashboardProgressSection from './dashboard/DashboardProgressSection';
+import DashboardSettingsModal from './dashboard/DashboardSettingsModal';
+import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
+import PlanEditorModal from './dashboard/PlanEditorModal';
+import { getTodayDateKey } from '../utils/date';
 import {
   DisplayDensity,
   DisplayFontSize,
   getStoredDisplayPreferences,
   saveDisplayPreferences,
 } from '../utils/displayPreferences';
+import { useDashboardData } from '../hooks/useDashboardData';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
@@ -26,217 +33,6 @@ interface DashboardProps {
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onUserUpdate: (user: UserProfile) => void;
 }
-
-interface BookCardProps {
-  book: BookMetadata;
-  isMine?: boolean;
-  progress: BookProgress;
-  onDelete: (e: React.MouseEvent, bookId: string, bookTitle: string) => void;
-  onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
-}
-
-interface QuickChoiceButtonProps {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-}
-
-const TARGET_EXAM_PRESETS = ['定期テスト', '英検5級', '英検4級', '英検3級', '英検準2級', '英検2級', '共通テスト'];
-const TARGET_SCORE_PRESETS = ['合格', '60点', '70点', '80点', '90点', '100点'];
-const WEEKLY_STUDY_DAY_OPTIONS = [2, 3, 4, 5, 6, 7];
-const DAILY_STUDY_MINUTE_OPTIONS = [10, 15, 20, 30, 45, 60];
-const WEAK_SKILL_PRESETS = ['単語の意味', 'スペリング', '熟語', '長文読解', 'リスニング', '英作文'];
-const DISPLAY_FONT_SIZE_OPTIONS: Array<{ value: DisplayFontSize; label: string; description: string; }> = [
-  { value: 'standard', label: '標準', description: '情報量を保ちながら、読みやすさを整えます。' },
-  { value: 'large', label: '大きめ', description: '本文と入力欄を一段大きく表示します。' },
-];
-const DISPLAY_DENSITY_OPTIONS: Array<{ value: DisplayDensity; label: string; description: string; }> = [
-  { value: 'standard', label: '標準', description: '画面内の情報量を保ちつつ、見渡しやすく表示します。' },
-  { value: 'comfortable', label: 'ゆったり', description: '行間とボタンの余白を広めにして表示します。' },
-];
-
-const QuickChoiceButton: React.FC<QuickChoiceButtonProps> = ({ active, label, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={`rounded-full border px-4 py-3 text-[0.95rem] font-bold transition-colors ${
-      active
-        ? 'border-medace-500 bg-medace-50 text-medace-700'
-        : 'border-slate-200 bg-white text-slate-500 hover:border-medace-200 hover:text-medace-700'
-    }`}
-  >
-    {label}
-  </button>
-);
-
-const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, onSelect }) => {
-  const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
-  return (
-      <div className="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden flex flex-col relative h-full">
-          <div className="p-6 flex-grow relative z-10">
-              <div className="flex justify-between items-start mb-4">
-                  <div className={`p-3 rounded-lg ${book.isPriority ? 'bg-orange-100 text-medace-600' : 'bg-slate-100 text-slate-500'}`}>
-                      <Book className="w-6 h-6" />
-                  </div>
-                  <div className="flex gap-2 items-center">
-                      {progress.percentage >= 100 ? (
-                              <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1 border border-green-200">
-                              <Trophy className="w-3 h-3 fill-current" /> 完了
-                              </span>
-                      ) : book.isPriority && (
-                          <span className="bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1 shadow-sm">
-                          <Star className="w-3 h-3 fill-current" /> 推奨
-                          </span>
-                      )}
-                      {isMine && (
-                           <button 
-                              onClick={(e) => onDelete(e, book.id, book.title)}
-                              className="bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 p-1.5 rounded-full transition-all z-20 shadow-sm cursor-pointer"
-                              title="削除する"
-                           >
-                               <Trash2 className="w-4 h-4" />
-                           </button>
-                      )}
-                  </div>
-              </div>
-              
-              <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-medace-600 transition-colors truncate" title={book.title}>{book.title}</h3>
-              <p className="text-sm text-slate-500 mb-5 line-clamp-2 h-10">
-                 {isMine 
-                    ? (book.sourceContext ? `AI分析: ${book.sourceContext}` : 'オリジナル単語帳') 
-                    : (book.description || (isLicensed ? 'ビジネス版向けの既存公式教材' : 'ビジネス版向けの公式教材'))}
-              </p>
-
-              <div className="space-y-2">
-                  <div className="flex justify-between text-sm font-bold text-slate-700">
-                      <span>進捗率</span>
-                      <span>{progress.percentage}%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border border-slate-100 relative">
-                      <div 
-                      className={`h-full rounded-full transition-all duration-1000 ease-out ${progress.percentage === 100 ? 'bg-green-500' : 'bg-medace-500'}`}
-                      style={{ width: `${progress.percentage}%` }}
-                      ></div>
-                  </div>
-                  <p className="text-xs text-slate-400 text-right font-mono">
-                      {progress.learnedCount} <span className="text-slate-300">/</span> {progress.totalCount} 単語
-                  </p>
-              </div>
-          </div>
-
-          <div className="bg-slate-50 p-4 flex gap-3 border-t border-slate-100 relative z-10 mt-auto">
-              <button 
-              onClick={() => onSelect(book.id, 'study')}
-              className="flex-1 flex items-center justify-center gap-2 bg-white border border-slate-200 hover:border-medace-500 hover:text-medace-600 text-slate-700 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm"
-              >
-              <BookOpen className="w-4 h-4" /> 学習
-              </button>
-              <button 
-              onClick={() => onSelect(book.id, 'quiz')}
-              className="flex-1 flex items-center justify-center gap-2 bg-slate-200 hover:bg-medace-600 hover:text-white text-slate-600 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm"
-              >
-              <Play className="w-4 h-4 fill-current" /> テスト
-              </button>
-          </div>
-      </div>
-  );
-};
-
-const ActivityBarChart: React.FC<{ logs: ActivityLog[], dailyGoal?: number }> = ({ logs, dailyGoal = 20 }) => {
-    const DAYS_TO_SHOW = 7; 
-    
-    const chartData = [];
-    const todayKey = getTodayDateKey();
-
-    let maxCount = 0;
-
-    for (let i = DAYS_TO_SHOW - 1; i >= 0; i--) {
-        const dateStr = getRelativeDateKey(-i);
-        const log = logs.find(l => l.date === dateStr);
-        const count = log ? log.count : 0;
-        if (count > maxCount) maxCount = count;
-        
-        chartData.push({
-            date: dateStr,
-            dayLabel: getDateKeyWeekdayLabel(dateStr),
-            count: count,
-            isToday: dateStr === todayKey,
-            isGoalMet: count >= dailyGoal
-        });
-    }
-
-    // Scale maxCount to accommodate goal line if needed
-    maxCount = Math.max(maxCount, dailyGoal * 1.2, 10);
-
-    // Calculate goal line position (%)
-    const goalPercent = Math.min(100, Math.round((dailyGoal / maxCount) * 100));
-
-    return (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm relative">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <BarChart className="w-5 h-5 text-medace-500" /> 週間学習記録
-                </h3>
-                <div className="flex items-center gap-3">
-                    {dailyGoal > 0 && (
-                        <div className="flex items-center gap-1 text-xs font-bold text-slate-400">
-                            <div className="w-3 h-0 border-t-2 border-dashed border-slate-300"></div>
-                            目標: {dailyGoal}語
-                        </div>
-                    )}
-                    <div className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
-                        7日間合計: {logs.reduce((acc, l) => acc + l.count, 0)} 語
-                    </div>
-                </div>
-            </div>
-            
-            <div className="w-full h-40 relative">
-                {/* Goal Line */}
-                {dailyGoal > 0 && (
-                    <div 
-                        className="absolute w-full border-t-2 border-dashed border-slate-300 z-0 opacity-50 transition-all duration-500"
-                        style={{ bottom: `${goalPercent}%` }}
-                    ></div>
-                )}
-
-                <div className="absolute inset-0 flex items-end justify-between gap-2 md:gap-4 z-10">
-                    {chartData.map((data, idx) => {
-                        const heightPercent = Math.round((data.count / maxCount) * 100);
-                        return (
-                            <div key={data.date} className="flex flex-col items-center flex-1 group cursor-pointer relative h-full justify-end">
-                                {/* Tooltip */}
-                                <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded transition-opacity whitespace-nowrap z-20 pointer-events-none shadow-lg">
-                                    {data.count} 単語
-                                </div>
-                                
-                                {/* Bar */}
-                                <div className="w-full bg-slate-50 rounded-t-md relative flex items-end overflow-hidden transition-all duration-300 hover:bg-slate-100" style={{ height: '100%' }}>
-                                    <div 
-                                        className={`w-full rounded-t-md transition-all duration-1000 ease-out absolute bottom-0 ${
-                                            data.count === 0 ? 'bg-transparent' :
-                                            data.isGoalMet ? 'bg-gradient-to-t from-medace-500 to-medace-400' : 
-                                            data.isToday ? 'bg-slate-400' : 'bg-slate-300 group-hover:bg-slate-400'
-                                        }`}
-                                        style={{ height: `${heightPercent}%` }}
-                                    >
-                                        {data.isGoalMet && (
-                                            <div className="w-full h-full opacity-20 bg-white animate-pulse"></div>
-                                        )}
-                                    </div>
-                                </div>
-                                
-                                {/* Label */}
-                                <div className={`mt-2 text-xs font-bold ${data.isToday ? 'text-medace-600' : 'text-slate-400'}`}>
-                                    {data.dayLabel}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>
-    );
-};
 
 // Helper for League Calculation
 const getLeague = (level: number) => {
@@ -247,22 +43,15 @@ const getLeague = (level: number) => {
 
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate }) => {
-  const [books, setBooks] = useState<BookMetadata[]>([]);
-  const [myBooks, setMyBooks] = useState<BookMetadata[]>([]);
-  const [progressMap, setProgressMap] = useState<Record<string, BookProgress>>({});
-  const [loading, setLoading] = useState(true);
-  const [dueCount, setDueCount] = useState(0);
-  const [learningPlan, setLearningPlan] = useState<LearningPlan | null>(null);
+  const {
+    snapshot,
+    loading,
+    refresh: refreshDashboard,
+    updateLearningPlan,
+    updateLearningPreference,
+    removeMyBook,
+  } = useDashboardData(user.uid);
   const [generatingPlan, setGeneratingPlan] = useState(false);
-  
-  // Analytics & Leaderboard
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [masteryDist, setMasteryDist] = useState<MasteryDistribution | null>(null);
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [motivationSnapshot, setMotivationSnapshot] = useState<MotivationSnapshot | null>(null);
-  const [coachNotifications, setCoachNotifications] = useState<InstructorNotification[]>([]);
-  const [accountOverview, setAccountOverview] = useState<AccountOverview | null>(null);
-  const [learningPreference, setLearningPreference] = useState<LearningPreference | null>(null);
 
   // Toggle State for Library
   const [showLibrary, setShowLibrary] = useState(false);
@@ -274,6 +63,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'error'; message: string; } | null>(null);
+  const [pendingDeleteBook, setPendingDeleteBook] = useState<{ id: string; title: string } | null>(null);
   
   // Plan Edit Modal
   const [showPlanEditModal, setShowPlanEditModal] = useState(false);
@@ -303,11 +93,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [editDisplayFontSize, setEditDisplayFontSize] = useState<DisplayFontSize>('standard');
   const [editDisplayDensity, setEditDisplayDensity] = useState<DisplayDensity>('standard');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-
-  useEffect(() => {
-    if (!user || !user.uid) return;
-    loadDashboardData();
-  }, [user]);
+  const books = snapshot?.officialBooks ?? [];
+  const myBooks = snapshot?.myBooks ?? [];
+  const progressMap = snapshot?.progressMap ?? {};
+  const dueCount = snapshot?.dueCount ?? 0;
+  const learningPlan = snapshot?.learningPlan ?? null;
+  const leaderboard = snapshot?.leaderboard ?? [];
+  const masteryDist = snapshot?.masteryDist ?? null;
+  const activityLogs = snapshot?.activityLogs ?? [];
+  const motivationSnapshot = snapshot?.motivationSnapshot ?? null;
+  const coachNotifications = snapshot?.coachNotifications ?? [];
+  const accountOverview = snapshot?.accountOverview ?? null;
+  const learningPreference = snapshot?.learningPreference ?? null;
 
   // Initialize edit state when modal opens or plan loads
   useEffect(() => {
@@ -349,7 +146,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                 onComplete={(updated) => {
                     onUserUpdate(updated);
                     setShowOnboarding(false);
-                    loadDashboardData();
+                    refreshDashboard();
                 }} 
                 onCancel={() => {
                     setShowOnboarding(false);
@@ -357,29 +154,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                 }}
              />;
   }
-
-  const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        const snapshot = await storage.getDashboardSnapshot(user.uid);
-        setDueCount(snapshot.dueCount);
-        setBooks(snapshot.officialBooks);
-        setMyBooks(snapshot.myBooks);
-        setProgressMap(snapshot.progressMap);
-        setLearningPlan(snapshot.learningPlan);
-        setLeaderboard(snapshot.leaderboard);
-        setMasteryDist(snapshot.masteryDist);
-        setActivityLogs(snapshot.activityLogs);
-        setMotivationSnapshot(snapshot.motivationSnapshot);
-        setCoachNotifications(snapshot.coachNotifications);
-        setAccountOverview(snapshot.accountOverview);
-        setLearningPreference(snapshot.learningPreference);
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
-      } finally {
-        setLoading(false);
-      }
-  };
 
   const handleGeneratePlan = async () => {
       if (!hasStudyBooks) return;
@@ -397,12 +171,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           if (plan) {
               plan.uid = user.uid;
               await storage.saveLearningPlan(plan);
-              setLearningPlan(plan);
+              updateLearningPlan(plan);
           } else {
-              alert("プラン作成に失敗しました");
+              setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
           }
       } catch (e) {
-          alert("プラン作成に失敗しました");
+          setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
       } finally {
           setGeneratingPlan(false);
       }
@@ -413,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       try {
           const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
           await storage.saveLearningPlan(updated);
-          setLearningPlan(updated);
+          updateLearningPlan(updated);
           setShowPlanEditModal(false);
           setPageNotice({ tone: 'success', message: '学習プランを更新しました。' });
       } catch (error) {
@@ -458,10 +232,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     setErrorMsg(null);
 
     try {
-        let result = { words: [], contextSummary: '' };
+        let result:
+          | Awaited<ReturnType<typeof extractVocabularyFromText>>
+          | Awaited<ReturnType<typeof extractVocabularyFromMedia>>;
 
         if (createMode === 'TEXT') {
-            // @ts-ignore
             result = await extractVocabularyFromText(rawText);
         } else if (createMode === 'FILE' && uploadFile) {
             const mimeType = uploadFile.type;
@@ -469,33 +244,43 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
                 throw new Error("対応していないファイル形式です。");
             }
             const base64 = await fileToBase64(uploadFile);
-            // @ts-ignore
             result = await extractVocabularyFromMedia(base64, mimeType);
+        } else {
+            throw new Error("教材ソースを指定してください。");
         }
 
         if (!result || result.words.length === 0) {
             throw new Error("単語を抽出できませんでした。");
         }
 
-        const rows = result.words.map((item: any, index: number) => ({
-            BookName: newBookTitle,
-            Number: index + 1,
-            Word: item.word,
-            Meaning: item.definition
-        }));
-
-        await storage.batchImportWords(newBookTitle, rows, () => {}, user.uid, result.contextSummary);
+        const importResult = await storage.batchImportWords({
+          defaultBookName: newBookTitle,
+          source: {
+            kind: 'rows',
+            rows: result.words.map((item, index) => ({
+              bookName: newBookTitle,
+              number: index + 1,
+              word: item.word,
+              definition: item.definition,
+            })),
+          },
+          createdByUid: user.uid,
+          contextSummary: result.contextSummary,
+        });
         
         setRawText('');
         setNewBookTitle('');
         setUploadFile(null);
         setShowCreateModal(false);
-        alert(`単語帳を作成しました！\nAI分析コンテキスト: "${result.contextSummary}"`);
-        await loadDashboardData(); 
+        setPageNotice({
+          tone: 'success',
+          message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。`,
+        });
+        await refreshDashboard(); 
 
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error(e);
-        const msg = e.message || "作成に失敗しました。";
+        const msg = e instanceof Error ? e.message : "作成に失敗しました。";
         if (isAiUnavailableError(e)) {
           setErrorMsg("AI教材化はまだ利用できません。Gemini 設定後に再試行してください。");
         } else {
@@ -509,16 +294,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const handleDeleteBook = async (e: React.MouseEvent, bookId: string, bookTitle: string) => {
       e.stopPropagation();
       e.preventDefault();
-      
-      if (window.confirm(`【確認】\n単語帳「${bookTitle}」を削除しますか？`)) {
-          try {
-              setMyBooks(prev => prev.filter(b => b.id !== bookId));
-              await storage.deleteBook(bookId);
-              await loadDashboardData();
-          } catch (err) {
-              alert("削除に失敗しました。");
-              await loadDashboardData();
-          }
+      setPendingDeleteBook({ id: bookId, title: bookTitle });
+  };
+
+  const confirmDeleteBook = async () => {
+      if (!pendingDeleteBook) return;
+      try {
+          removeMyBook(pendingDeleteBook.id);
+          await storage.deleteBook(pendingDeleteBook.id);
+          setPageNotice({ tone: 'success', message: `単語帳「${pendingDeleteBook.title}」を削除しました。` });
+      } catch (err) {
+          setPageNotice({ tone: 'error', message: '削除に失敗しました。' });
+      } finally {
+          setPendingDeleteBook(null);
+          await refreshDashboard();
       }
   };
 
@@ -551,10 +340,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             fontSize: editDisplayFontSize,
             density: editDisplayDensity,
           });
-          setLearningPreference(nextPreference);
+          updateLearningPreference(nextPreference);
           onUserUpdate(nextUser);
           setShowSettingsModal(false);
-          await loadDashboardData();
+          await refreshDashboard();
           setPageNotice({ tone: 'success', message: 'プロフィールを更新しました。' });
       } catch (e) {
           setPageNotice({ tone: 'error', message: 'プロフィールの更新に失敗しました。' });
@@ -658,7 +447,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   }
   
   return (
-    <div className="space-y-6 md:space-y-10 animate-in fade-in duration-500 relative pb-20">
+    <div data-testid="student-dashboard" className="space-y-6 md:space-y-10 animate-in fade-in duration-500 relative pb-20">
         {pageNotice && (
           <div className={`sticky top-3 z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
             pageNotice.tone === 'success'
@@ -670,572 +459,129 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         )}
         
         {/* MODALS */}
-        
-        {/* Plan Edit Modal */}
-        {showPlanEditModal && learningPlan && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
-                    <button onClick={() => setShowPlanEditModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">✕</button>
-                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <Edit2 className="w-5 h-5" /> 学習プランの編集
-                    </h3>
-                    <div className="space-y-6">
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">1日の目標単語数</label>
-                            <input 
-                                type="number" 
-                                value={editDailyGoal} 
-                                onChange={e => setEditDailyGoal(Number(e.target.value))} 
-                                className="w-full border border-slate-300 p-3 rounded-lg bg-white text-slate-800 font-bold text-xl focus:ring-2 focus:ring-medace-500 outline-none" 
-                                min="5" max="100"
-                            />
-                            <p className="text-xs text-slate-400 mt-1">無理のない範囲で設定しましょう (推奨: 10-30単語)</p>
-                        </div>
 
-                        <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2">学習対象のコースを選択</label>
-                            <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                                {planningBooks.map(b => (
-                                    <div key={b.id} onClick={() => togglePlanBook(b.id)} className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 ${selectedPlanBooks.includes(b.id) ? 'bg-medace-50' : ''}`}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${selectedPlanBooks.includes(b.id) ? 'bg-medace-500 border-medace-500 text-white' : 'border-slate-300 bg-white'}`}>
-                                            {selectedPlanBooks.includes(b.id) && <Check className="w-3 h-3" />}
-                                        </div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-800">{b.title}</div>
-                                            {b.isPriority && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">推奨</span>}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            <p className="text-xs text-slate-400 mt-1">選択したコースから日々の問題が出題されます</p>
-                        </div>
-
-                        <button onClick={handleUpdatePlan} className="w-full py-3 bg-medace-600 text-white rounded-xl font-bold shadow-lg hover:bg-medace-700 transition-all">
-                            設定を更新する
-                        </button>
-                    </div>
-                </div>
+        {pendingDeleteBook && (
+          <ModalOverlay onClose={() => setPendingDeleteBook(null)} align="center" panelClassName="max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              <div>
+                <div className="text-lg font-black text-slate-950">単語帳を削除する</div>
+                <div className="mt-1 text-sm text-slate-500">「{pendingDeleteBook.title}」を削除します。</div>
+              </div>
             </div>
-        )}
-
-        {/* Settings Modal */}
-        {showSettingsModal && (
-            <ModalOverlay
-              onClose={() => setShowSettingsModal(false)}
-              panelClassName="max-w-5xl rounded-[32px] border border-slate-200 bg-white p-7 shadow-2xl sm:p-8"
-            >
-              <button onClick={() => setShowSettingsModal(false)} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
-                <X className="h-5 w-5" />
+            <div className="mt-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              学習履歴との関連データも一緒に削除されます。この操作は取り消せません。
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDeleteBook(null)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+              >
+                キャンセル
               </button>
-              <div className="flex flex-wrap items-start gap-4 border-b border-slate-100 pb-5 pr-12">
-                <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
-                  <User className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-500">Profile Settings</p>
-                  <h3 className="mt-2 text-[1.9rem] font-black tracking-tight text-slate-950">設定・プロフィール</h3>
-                  <p className="mt-2 max-w-2xl text-[0.98rem] leading-relaxed text-slate-500">
-                    よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-                <section className="space-y-5">
-                  <div className="ui-panel-subtle">
-                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
-                      <User className="h-4 w-4 text-medace-600" />
-                      基本プロフィール
-                    </div>
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <label className="ui-form-label">表示名</label>
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(event) => setEditName(event.target.value)}
-                          className="ui-input font-bold"
-                          placeholder="表示名を入力"
-                        />
-                      </div>
-                      <div>
-                        <label className="ui-form-label">学年・属性</label>
-                        <select
-                          value={editGrade}
-                          onChange={(event) => setEditGrade(event.target.value as UserGrade)}
-                          className="ui-input font-bold"
-                        >
-                          {Object.values(UserGrade).map((grade) => (
-                            <option key={grade} value={grade}>{GRADE_LABELS[grade]}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="ui-form-label">表示モード</label>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[UserStudyMode.FOCUS, UserStudyMode.GAME].map((mode) => (
-                            <button
-                              key={mode}
-                              type="button"
-                              onClick={() => setEditStudyMode(mode)}
-                              className={`ui-option-card ${
-                                editStudyMode === mode
-                                  ? 'ui-option-card-active'
-                                  : 'ui-option-card-inactive'
-                              }`}
-                            >
-                              <div className="text-base font-bold">{USER_STUDY_MODE_LABELS[mode]}</div>
-                              <div className="mt-2 text-sm leading-relaxed text-slate-500">
-                                {mode === UserStudyMode.FOCUS
-                                  ? '今日やることを優先して、落ち着いて学習します。'
-                                  : '相棒・ランキングも出して、達成感を強めます。'}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ui-panel">
-                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
-                      <Settings className="h-4 w-4 text-medace-600" />
-                      表示設定
-                    </div>
-                    <p className="ui-field-note">
-                      文字の大きさと余白を調整できます。ホーム画面から学習画面まで同じ表示で反映されます。
-                    </p>
-                    <div className="mt-4 space-y-5">
-                      <div>
-                        <label className="ui-form-label">文字サイズ</label>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {DISPLAY_FONT_SIZE_OPTIONS.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setEditDisplayFontSize(option.value)}
-                              className={`ui-option-card ${
-                                editDisplayFontSize === option.value ? 'ui-option-card-active' : 'ui-option-card-inactive'
-                              }`}
-                            >
-                              <div className="text-base font-bold">{option.label}</div>
-                              <div className="mt-2 text-sm leading-relaxed text-slate-500">{option.description}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="ui-form-label">画面の余白</label>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {DISPLAY_DENSITY_OPTIONS.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => setEditDisplayDensity(option.value)}
-                              className={`ui-option-card ${
-                                editDisplayDensity === option.value ? 'ui-option-card-active' : 'ui-option-card-inactive'
-                              }`}
-                            >
-                              <div className="text-base font-bold">{option.label}</div>
-                              <div className="mt-2 text-sm leading-relaxed text-slate-500">{option.description}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="ui-panel">
-                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
-                      <Target className="h-4 w-4 text-medace-600" />
-                      現在の学習状態
-                    </div>
-                    <div className="mt-4 space-y-4">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                        <div className="text-sm font-bold text-slate-500">現在のレベル</div>
-                        <div className="mt-2 flex items-center justify-between gap-3">
-                          <span className="text-lg font-black text-medace-700">{user.englishLevel || '未診断'}</span>
-                          <button
-                            onClick={() => {
-                              setShowSettingsModal(false);
-                              setShowOnboarding(true);
-                            }}
-                            className="inline-flex items-center gap-1 rounded-full border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-700 hover:bg-medace-50"
-                          >
-                            <RefreshCw className="h-3.5 w-3.5" />
-                            レベル診断を再受講
-                          </button>
-                        </div>
-                      </div>
-                      {accountOverview && (
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                          <div className="text-sm font-bold text-slate-500">現在のプラン</div>
-                          <div className="mt-2 text-[1.02rem] font-bold text-slate-900">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</div>
-                          <div className="mt-1 text-sm text-slate-500">{accountOverview.audienceLabel} / {accountOverview.priceLabel}</div>
-                          <div className="mt-2 text-[0.98rem] leading-relaxed text-slate-500">{accountOverview.pricingNote}</div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-
-                <section className="space-y-5">
-                  <div className="ui-panel-subtle">
-                    <div className="flex items-center gap-2 text-base font-bold text-slate-900">
-                      <Sparkles className="h-4 w-4 text-medace-600" />
-                      学習の個別設定
-                    </div>
-                    <p className="mt-2 text-[0.98rem] leading-relaxed text-slate-500">
-                      クイック選択で埋めてから、必要なところだけ自由入力できます。講師への共有メモにも使えます。
-                    </p>
-
-                    <div className="mt-5 space-y-5">
-                      <div>
-                        <label className="ui-form-label">目標試験・確認対象</label>
-                        <div className="flex flex-wrap gap-2">
-                          {TARGET_EXAM_PRESETS.map((preset) => (
-                            <QuickChoiceButton
-                              key={preset}
-                              active={editTargetExam === preset}
-                              label={preset}
-                              onClick={() => setEditTargetExam(preset)}
-                            />
-                          ))}
-                        </div>
-                        <input
-                          type="text"
-                          value={editTargetExam}
-                          onChange={(event) => setEditTargetExam(event.target.value)}
-                          placeholder="例: 英検2級 / 定期テスト / 共通テスト"
-                          className="ui-input mt-3"
-                        />
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-[0.92fr_1.08fr]">
-                        <div>
-                          <label className="ui-form-label">目標の目安</label>
-                          <div className="flex flex-wrap gap-2">
-                            {TARGET_SCORE_PRESETS.map((preset) => (
-                              <QuickChoiceButton
-                                key={preset}
-                                active={editTargetScore === preset}
-                                label={preset}
-                                onClick={() => setEditTargetScore(preset)}
-                              />
-                            ))}
-                          </div>
-                          <input
-                            type="text"
-                            value={editTargetScore}
-                            onChange={(event) => setEditTargetScore(event.target.value)}
-                            placeholder="例: 合格 / 80点 / 偏差値60"
-                            className="ui-input mt-3"
-                          />
-                        </div>
-                        <div>
-                          <label className="ui-form-label">試験日</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="date"
-                              value={editExamDate}
-                              onChange={(event) => setEditExamDate(event.target.value)}
-                              className="ui-input"
-                            />
-                            {editExamDate && (
-                              <button
-                                type="button"
-                                onClick={() => setEditExamDate('')}
-                                className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50"
-                              >
-                                クリア
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="ui-form-label">週の学習日数</label>
-                        <div className="flex flex-wrap gap-2">
-                          {WEEKLY_STUDY_DAY_OPTIONS.map((days) => (
-                            <QuickChoiceButton
-                              key={days}
-                              active={editWeeklyStudyDays === days}
-                              label={`${days}日`}
-                              onClick={() => setEditWeeklyStudyDays(days)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="ui-form-label">1日の学習時間</label>
-                        <div className="flex flex-wrap gap-2">
-                          {DAILY_STUDY_MINUTE_OPTIONS.map((minutes) => (
-                            <QuickChoiceButton
-                              key={minutes}
-                              active={editDailyStudyMinutes === minutes}
-                              label={`${minutes}分`}
-                              onClick={() => setEditDailyStudyMinutes(minutes)}
-                            />
-                          ))}
-                        </div>
-                        <div className="mt-3 grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                          <input
-                            type="range"
-                            min={5}
-                            max={120}
-                            step={5}
-                            value={editDailyStudyMinutes}
-                            onChange={(event) => setEditDailyStudyMinutes(Number(event.target.value))}
-                            className="w-full accent-[#f66d0b]"
-                          />
-                          <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="ui-form-label">苦手分野</label>
-                        <div className="flex flex-wrap gap-2">
-                          {WEAK_SKILL_PRESETS.map((preset) => (
-                            <QuickChoiceButton
-                              key={preset}
-                              active={editWeakSkillFocus === preset}
-                              label={preset}
-                              onClick={() => setEditWeakSkillFocus(preset)}
-                            />
-                          ))}
-                        </div>
-                        <input
-                          type="text"
-                          value={editWeakSkillFocus}
-                          onChange={(event) => setEditWeakSkillFocus(event.target.value)}
-                          placeholder="例: 長文読解 / 熟語 / 医療語彙"
-                          className="ui-input mt-3"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="ui-form-label">学習の濃さ</label>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          {Object.values(LearningPreferenceIntensity).map((intensity) => (
-                            <button
-                              key={intensity}
-                              type="button"
-                              onClick={() => setEditIntensity(intensity)}
-                              className={`ui-option-card ${
-                                editIntensity === intensity
-                                  ? 'ui-option-card-active'
-                                  : 'ui-option-card-inactive'
-                              }`}
-                            >
-                              <div className="text-base font-bold">{LEARNING_PREFERENCE_INTENSITY_LABELS[intensity]}</div>
-                              <div className="mt-2 text-sm leading-relaxed text-slate-500">
-                                {intensity === LearningPreferenceIntensity.BALANCED
-                                  ? '無理なく続けやすい標準ペース'
-                                  : intensity === LearningPreferenceIntensity.REVIEW_HEAVY
-                                    ? '復習を多めに入れて定着重視'
-                                    : '短期間で多めに進めたい'}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="ui-form-label">講師に伝えたいこと</label>
-                        <textarea
-                          value={editMotivationNote}
-                          onChange={(event) => setEditMotivationNote(event.target.value)}
-                          placeholder="例: 通学中に15分だけ復習したい / テスト前は熟語を優先したい"
-                          className="ui-input h-32 resize-none font-medium"
-                        />
-                        <p className="ui-field-note">
-                          ここで設定した条件をもとに、学習プランと今日の導線を調整します。講師フォローがある場合は共有の前提にもなります。
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </div>
-
-              <div className="sticky bottom-0 mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 bg-white/95 pt-4 backdrop-blur sm:flex-row sm:justify-end">
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  type="button"
-                  className="rounded-2xl border border-slate-200 px-6 py-3 text-base font-bold text-slate-600 transition-colors hover:bg-slate-50"
-                >
-                  閉じる
-                </button>
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={isSavingProfile}
-                  className="rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                >
-                  {isSavingProfile ? '保存中...' : '変更を保存'}
-                </button>
-              </div>
-            </ModalOverlay>
+              <button
+                type="button"
+                onClick={confirmDeleteBook}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white"
+              >
+                <Trash2 className="h-4 w-4" />
+                削除する
+              </button>
+            </div>
+          </ModalOverlay>
         )}
+        
+        <PlanEditorModal
+          open={showPlanEditModal && Boolean(learningPlan)}
+          planningBooks={planningBooks}
+          selectedBookIds={selectedPlanBooks}
+          dailyGoal={editDailyGoal}
+          onClose={() => setShowPlanEditModal(false)}
+          onChangeDailyGoal={setEditDailyGoal}
+          onToggleBook={togglePlanBook}
+          onSave={handleUpdatePlan}
+        />
 
-        {/* Create Modal */}
-        {showCreateModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-medace-900/35 backdrop-blur-sm animate-in fade-in">
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 relative max-h-[90vh] overflow-y-auto">
-                    <button onClick={() => setShowCreateModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold">✕</button>
-                    <div className="text-center mb-6">
-                        <div className="w-12 h-12 bg-medace-100 text-medace-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <Sparkles className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
-                        <p className="text-sm text-slate-500">AIが文脈を解析し、あなただけの教材を生成します</p>
-                    </div>
-                    {errorMsg && (
-                        <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-start gap-2"><span className="mt-0.5">⚠️</span> {errorMsg}</div>
-                    )}
-                    <div className="space-y-4">
-                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">タイトル</label>
-                            <input type="text" className="w-full border border-slate-300 rounded-lg p-2 font-bold text-slate-700 focus:ring-2 focus:ring-medace-500 outline-none" placeholder="例: 好きな洋楽の歌詞" value={newBookTitle} onChange={(e) => setNewBookTitle(e.target.value)} />
-                         </div>
-                         <div className="flex p-1 bg-slate-100 rounded-lg">
-                             <button onClick={() => setCreateMode('TEXT')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${createMode === 'TEXT' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                 <div className="flex items-center justify-center gap-2"><FileText className="w-4 h-4" /> テキスト入力</div>
-                             </button>
-                             <button onClick={() => setCreateMode('FILE')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${createMode === 'FILE' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                 <div className="flex items-center justify-center gap-2"><ImageIcon className="w-4 h-4" /> 画像/PDF</div>
-                             </button>
-                         </div>
-                         {createMode === 'TEXT' ? (
-                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">ソーステキスト</label>
-                                <textarea className="w-full h-32 border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-medace-500 outline-none resize-none text-slate-700" placeholder="ここに英文を貼り付けてください..." value={rawText} onChange={(e) => setRawText(e.target.value)} />
-                             </div>
-                         ) : (
-                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">ファイルをアップロード</label>
-                                <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-medace-500 transition-colors bg-slate-50">
-                                    <input type="file" id="file-upload" accept=".pdf,image/*" className="hidden" onChange={handleFileChange} />
-                                    <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                                        <UploadCloud className="w-8 h-8 text-slate-400" />
-                                        <span className="text-sm font-bold text-slate-600">{uploadFile ? uploadFile.name : "クリックしてPDFまたは写真を選択"}</span>
-                                    </label>
-                                </div>
-                             </div>
-                         )}
-                         {!canUseSelectedCreateMode && (
-                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
-                                 {createMode === 'TEXT'
-                                     ? `${currentPlanPolicy.label} ではテキストからのAI教材化は使えません。`
-                                     : `${currentPlanPolicy.label} では画像/PDFからのAI教材化は使えません。`}
-                             </div>
-                         )}
-                         <button onClick={handleCreatePhrasebook} disabled={creating || !newBookTitle || !canUseSelectedCreateMode} className="w-full py-3 bg-medace-600 text-white rounded-xl font-bold hover:bg-medace-700 transition-colors flex items-center justify-center gap-2 shadow-lg disabled:bg-slate-300 disabled:cursor-not-allowed">
-                            {creating ? <Loader2 className="animate-spin w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
-                            {creating ? "AIが文脈を分析中..." : "作成する"}
-                         </button>
-                    </div>
-                </div>
-            </div>
-        )}
+        <DashboardSettingsModal
+          open={showSettingsModal}
+          accountOverview={accountOverview}
+          currentEnglishLevel={user.englishLevel}
+          editName={editName}
+          editGrade={editGrade}
+          editStudyMode={editStudyMode}
+          editTargetExam={editTargetExam}
+          editTargetScore={editTargetScore}
+          editExamDate={editExamDate}
+          editWeeklyStudyDays={editWeeklyStudyDays}
+          editDailyStudyMinutes={editDailyStudyMinutes}
+          editWeakSkillFocus={editWeakSkillFocus}
+          editMotivationNote={editMotivationNote}
+          editIntensity={editIntensity}
+          editDisplayFontSize={editDisplayFontSize}
+          editDisplayDensity={editDisplayDensity}
+          isSavingProfile={isSavingProfile}
+          onClose={() => setShowSettingsModal(false)}
+          onRetakeLevel={() => {
+            setShowSettingsModal(false);
+            setShowOnboarding(true);
+          }}
+          onSave={handleSaveProfile}
+          onEditName={setEditName}
+          onEditGrade={setEditGrade}
+          onEditStudyMode={setEditStudyMode}
+          onEditTargetExam={setEditTargetExam}
+          onEditTargetScore={setEditTargetScore}
+          onEditExamDate={setEditExamDate}
+          onEditWeeklyStudyDays={setEditWeeklyStudyDays}
+          onEditDailyStudyMinutes={setEditDailyStudyMinutes}
+          onEditWeakSkillFocus={setEditWeakSkillFocus}
+          onEditMotivationNote={setEditMotivationNote}
+          onEditIntensity={setEditIntensity}
+          onEditDisplayFontSize={setEditDisplayFontSize}
+          onEditDisplayDensity={setEditDisplayDensity}
+        />
 
-      <section className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(135deg,#2F1609_0%,#66321A_42%,#F66D0B_100%)] p-7 md:p-8 text-white shadow-[0_24px_60px_rgba(228,94,4,0.18)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,191,82,0.34),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(252,215,151,0.24),_transparent_22%)]"></div>
-        <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/70">
-                {BRAND.productLabel}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold text-white/88">
-                {GRADE_LABELS[user.grade || UserGrade.ADULT]} / {user.englishLevel || '未診断'}
-              </span>
-              {isGameMode && (
-                <span className={`rounded-full border px-3 py-1 text-xs font-bold ${userLeague.color}`}>
-                  {userLeague.name}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/80 transition-colors hover:bg-white/10"
-            >
-              <Settings className="w-4 h-4" /> 設定・プロフィール
-            </button>
-          </div>
+        <PhrasebookCreateModal
+          open={showCreateModal}
+          createMode={createMode}
+          rawText={rawText}
+          uploadFile={uploadFile}
+          newBookTitle={newBookTitle}
+          creating={creating}
+          errorMsg={errorMsg}
+          canUseSelectedCreateMode={canUseSelectedCreateMode}
+          currentPlanLabel={currentPlanPolicy.label}
+          onClose={() => setShowCreateModal(false)}
+          onChangeMode={setCreateMode}
+          onChangeRawText={setRawText}
+          onChangeTitle={setNewBookTitle}
+          onFileChange={handleFileChange}
+          onCreate={handleCreatePhrasebook}
+        />
 
-          <div className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-medace-200">Today Focus</p>
-              <h2 className="mt-3 text-3xl md:text-4xl font-black tracking-tight leading-tight">今日やることは 1 つだけ</h2>
-              <p className="mt-4 text-2xl font-black tracking-tight text-white">{heroTitle}</p>
-              <p className="mt-4 max-w-2xl text-sm md:text-base leading-relaxed text-white/74">{heroCopy}</p>
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
-                <div className="mt-2 text-sm leading-relaxed text-white/80">{preferenceSummary}</div>
-              </div>
-
-              <div className="mt-7 flex flex-wrap gap-3">
-                <button
-                  onClick={() => onSelectBook('smart-session', 'study')}
-                  disabled={!hasStudyBooks}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-medace-900/40"
-                >
-                  <Play className="w-4 h-4 fill-current" /> {questButtonLabel}
-                </button>
-                {learningPlan ? (
-                  <button
-                    onClick={() => setShowPlanEditModal(true)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10"
-                  >
-                    <Edit2 className="w-4 h-4" /> 今日のプランを見る
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleGeneratePlan}
-                    disabled={generatingPlan || !hasStudyBooks}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50"
-                  >
-                    {generatingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    最初のプランを作る
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-white/10 bg-white/8 p-5 backdrop-blur-sm">
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">今日の目安</div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">残り</div>
-                  <div className="mt-2 text-3xl font-black">{remainingWords}</div>
-                  <div className="mt-1 text-sm text-white/68">語</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">復習待ち</div>
-                  <div className="mt-2 text-3xl font-black">{dueCount}</div>
-                  <div className="mt-1 text-sm text-white/68">語</div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">目安時間</div>
-                  <div className="mt-2 text-3xl font-black">{estimatedMinutes}</div>
-                  <div className="mt-1 text-sm text-white/68">分</div>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-white/60">
-                  <span>今日の進み具合</span>
-                  <span>{todayCount} / {todayWordGoal} 語</span>
-                </div>
-                <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/15">
-                  <div className="h-full rounded-full bg-gradient-to-r from-[#FCD797] to-white" style={{ width: `${todayProgressPercent}%` }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <DashboardHeroSection
+        grade={user.grade || UserGrade.ADULT}
+        englishLevel={user.englishLevel}
+        heroTitle={heroTitle}
+        heroCopy={heroCopy}
+        preferenceSummary={preferenceSummary}
+        hasStudyBooks={hasStudyBooks}
+        questButtonLabel={questButtonLabel}
+        learningPlan={learningPlan}
+        generatingPlan={generatingPlan}
+        remainingWords={remainingWords}
+        dueCount={dueCount}
+        estimatedMinutes={estimatedMinutes}
+        todayCount={todayCount}
+        todayWordGoal={todayWordGoal}
+        todayProgressPercent={todayProgressPercent}
+        gameLeagueBadge={isGameMode ? userLeague : undefined}
+        onOpenSettings={() => setShowSettingsModal(true)}
+        onStartQuest={() => onSelectBook('smart-session', 'study')}
+        onOpenPlan={() => setShowPlanEditModal(true)}
+        onGeneratePlan={handleGeneratePlan}
+      />
 
       {latestCoachNotification && (
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
@@ -1293,76 +639,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </section>
       )}
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">学習プラン</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
-              {learningPlan ? '今日の学習プラン' : 'まだプラン未作成'}
-            </h3>
-          </div>
-          {learningPlan && (
-            <button onClick={() => setShowPlanEditModal(true)} className="rounded-full bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500 hover:text-medace-600">
-              編集
-            </button>
-          )}
-        </div>
-
-        {learningPlan ? (
-          <>
-            <p className="mt-4 text-base font-bold text-medace-600">"{learningPlan.goalDescription}"</p>
-            {learningPreference && (
-              <div className="mt-4 rounded-2xl border border-medace-100 bg-medace-50/70 px-4 py-4 text-sm text-medace-900">
-                <div className="font-bold">プラン生成に使う条件</div>
-                <div className="mt-1 leading-relaxed">{preferenceSummary}</div>
-              </div>
-            )}
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">1日の目標</div>
-                <div className="mt-2 text-2xl font-black text-slate-950">{learningPlan.dailyWordGoal}</div>
-                <div className="text-sm text-slate-500">語 / 日</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">目標日</div>
-                <div className="mt-2 text-lg font-black text-slate-950">{learningPlan.targetDate}</div>
-                <div className="text-sm text-slate-500">完了予定</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">対象教材</div>
-                <div className="mt-2 text-2xl font-black text-slate-950">{plannedBooks.length}</div>
-                <div className="text-sm text-slate-500">優先教材</div>
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              {plannedBooks.slice(0, 4).map((book) => (
-                <span key={book.id} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600">
-                  {book.title}
-                </span>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="mt-5 rounded-3xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] px-5 py-5 text-white">
-            <p className="text-sm leading-relaxed text-white/75">
-              診断結果に加えて、目標試験・試験日・学習時間・苦手分野をもとに、毎日の単語数とコースを自動で提案します。
-            </p>
-            {!canGenerateAiPlan && (
-              <p className="mt-3 text-xs leading-relaxed text-white/70">
-                現在のプランでは、AIを使わずに教材と学習時間から標準プランを作成します。
-              </p>
-            )}
-            <button
-              onClick={handleGeneratePlan}
-              disabled={generatingPlan || !hasStudyBooks}
-              className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-medace-900 hover:bg-medace-50 disabled:opacity-50"
-            >
-              {generatingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              プランを生成
-            </button>
-          </div>
-        )}
-      </section>
+      <DashboardPlanSection
+        learningPlan={learningPlan}
+        learningPreference={learningPreference}
+        preferenceSummary={preferenceSummary}
+        plannedBooks={plannedBooks}
+        canGenerateAiPlan={canGenerateAiPlan}
+        generatingPlan={generatingPlan}
+        hasStudyBooks={hasStudyBooks}
+        onEditPlan={() => setShowPlanEditModal(true)}
+        onGeneratePlan={handleGeneratePlan}
+      />
 
       {isGameMode && hasStudyBooks && (
         <StudyCompanion
@@ -1410,301 +697,48 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       )}
 
       {canShowAccountDetails && (
-        <div className="space-y-4">
-          <button
-            onClick={() => setShowAccountDetails((prev) => !prev)}
-            className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:bg-slate-50"
-          >
-            <div>
-              <div className="text-sm font-bold text-slate-900">プラン・学習環境の詳細</div>
-              <div className="mt-1 text-sm text-slate-500">課金情報やAI利用枠は必要なときだけ開けます。</div>
-            </div>
-            {showAccountDetails ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
-          </button>
-
-          {showAccountDetails && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
-              {accountOverview && (
-                <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">ご利用プラン</p>
-                  <div className="mt-2 flex items-center justify-between gap-4">
-                    <h3 className="text-xl font-black tracking-tight text-slate-950">{SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]}</h3>
-                <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-bold text-slate-500">
-                  {accountOverview.audienceLabel} / {accountOverview.priceLabel}
-                </span>
-              </div>
-              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                {accountOverview.pricingNote}
-              </div>
-              <div className="mt-5">
-                    <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                      <span>AIサポート利用状況</span>
-                      <span>{aiBudgetPercent}%</span>
-                    </div>
-                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-gradient-to-r from-medace-300 to-medace-500" style={{ width: `${aiBudgetPercent}%` }}></div>
-                    </div>
-                  </div>
-                  <div className="mt-4 rounded-2xl bg-medace-50 px-4 py-3 text-sm text-medace-900">
-                    <div className="font-bold">{aiUsageLabel}</div>
-                    <div className="mt-1 text-medace-900/70">{aiUsageCopy}</div>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {accountOverview.featureSummary.map((item) => (
-                      <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {accountOverview && (
-                <PlanExperiencePanel
-                  user={user}
-                  accountOverview={accountOverview}
-                  plannedBookCount={plannedBooks.length}
-                  coachNotificationCount={coachNotifications.length}
-                />
-              )}
-
-              {showAdSlots && (
-                <AdSenseSlot
-                  slot={import.meta.env.VITE_ADSENSE_SLOT_DASHBOARD_SECONDARY}
-                  label="Sponsored"
-                  minHeightClassName="min-h-[180px]"
-                />
-              )}
-            </div>
-          )}
-        </div>
+        <DashboardAccountSection
+          open={showAccountDetails}
+          user={user}
+          accountOverview={accountOverview}
+          aiBudgetPercent={aiBudgetPercent}
+          aiUsageLabel={aiUsageLabel}
+          aiUsageCopy={aiUsageCopy}
+          plannedBookCount={plannedBooks.length}
+          coachNotificationCount={coachNotifications.length}
+          showAdSlots={showAdSlots}
+          onToggle={() => setShowAccountDetails((previous) => !previous)}
+        />
       )}
 
-      <div className="space-y-4">
-        <button
-          onClick={() => setShowProgressDetails((prev) => !prev)}
-          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:bg-slate-50"
-        >
-          <div>
-            <div className="text-sm font-bold text-slate-900">くわしい学習記録</div>
-            <div className="mt-1 text-sm text-slate-500">週間記録やランキングは必要なときだけ確認できます。</div>
-          </div>
-          {showProgressDetails ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
-        </button>
+      <DashboardProgressSection
+        open={showProgressDetails}
+        activityLogs={activityLogs}
+        dailyGoal={learningPlan?.dailyWordGoal}
+        masteryDist={masteryDist}
+        isGameMode={isGameMode}
+        leaderboard={leaderboard}
+        todayCount={todayCount}
+        todayWordGoal={todayWordGoal}
+        todayProgressPercent={todayProgressPercent}
+        weekTotal={weekTotal}
+        weeklyGoal={weeklyGoal}
+        weeklyRemaining={weeklyRemaining}
+        currentStreak={user.stats?.currentStreak || 0}
+        onToggle={() => setShowProgressDetails((previous) => !previous)}
+      />
 
-        {showProgressDetails && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
-            <ActivityBarChart logs={activityLogs} dailyGoal={learningPlan?.dailyWordGoal} />
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              <div className="col-span-1 rounded-xl border border-slate-200 bg-white p-6 shadow-sm md:col-span-2">
-                <h3 className="mb-6 flex items-center gap-2 text-lg font-bold text-slate-800">
-                  <Activity className="w-5 h-5 text-medace-500" /> 学習ステータス
-                </h3>
-                {masteryDist ? (
-                  <div className="flex flex-col items-center justify-around gap-6 sm:flex-row">
-                    <div className="relative h-40 w-40 flex-shrink-0">
-                      <div
-                        className="h-full w-full rounded-full"
-                        style={{
-                          background: `conic-gradient(
-                            #22c55e 0% ${Math.round((masteryDist.graduated / (masteryDist.total || 1)) * 100)}%,
-                            #3b82f6 0% ${Math.round(((masteryDist.graduated + masteryDist.review) / (masteryDist.total || 1)) * 100)}%,
-                            #f97316 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
-                            #f1f5f9 0% 100%
-                          )`,
-                        }}
-                      ></div>
-                      <div className="absolute inset-4 flex flex-col items-center justify-center rounded-full bg-white">
-                        <span className="text-3xl font-bold text-slate-800">{masteryDist.total}</span>
-                        <span className="text-xs font-bold uppercase text-slate-400">合計単語</span>
-                      </div>
-                    </div>
-                    <div className="grid w-full grid-cols-2 gap-4">
-                      <div className="rounded-lg border border-green-100 bg-green-50 p-3">
-                        <div className="text-xs font-bold uppercase text-green-600">{STATUS_LABELS['graduated']}</div>
-                        <div className="text-xl font-bold text-slate-800">{masteryDist.graduated}</div>
-                      </div>
-                      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                        <div className="text-xs font-bold uppercase text-blue-600">{STATUS_LABELS['review']}</div>
-                        <div className="text-xl font-bold text-slate-800">{masteryDist.review}</div>
-                      </div>
-                      <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
-                        <div className="text-xs font-bold uppercase text-orange-600">{STATUS_LABELS['learning']}</div>
-                        <div className="text-xl font-bold text-slate-800">{masteryDist.learning}</div>
-                      </div>
-                      <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-                        <div className="text-xs font-bold uppercase text-slate-500">{STATUS_LABELS['new']}</div>
-                        <div className="text-xl font-bold text-slate-800">{masteryDist.total - (masteryDist.graduated + masteryDist.review + masteryDist.learning)}</div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex h-40 items-center justify-center text-slate-400">データなし</div>
-                )}
-              </div>
-
-              {isGameMode ? (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800">
-                    <BarChart className="w-5 h-5 text-medace-500" /> XPランキング
-                  </h3>
-                  <div className="space-y-3">
-                    {leaderboard.map((entry, idx) => {
-                      const league = getLeague(entry.level);
-                      return (
-                        <div
-                          key={entry.uid}
-                          className={`flex items-center justify-between rounded-lg border p-3 transition-all hover:scale-[1.02] ${entry.isCurrentUser ? 'border-medace-200 bg-medace-50 shadow-sm' : 'border-slate-100 bg-white'}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${idx === 0 ? 'bg-yellow-100 text-yellow-700' : idx === 1 ? 'bg-slate-100 text-slate-700' : idx === 2 ? 'bg-orange-50 text-orange-700' : 'text-slate-400'}`}>
-                              {entry.rank}
-                            </div>
-                            <div>
-                              <div className={`flex items-center gap-2 text-sm font-bold ${entry.isCurrentUser ? 'text-medace-700' : 'text-slate-700'}`}>
-                                {entry.displayName} {entry.isCurrentUser && <span className="rounded bg-medace-200 px-1.5 text-[10px] text-medace-800">あなた</span>}
-                              </div>
-                              <div className="mt-0.5 flex items-center gap-1.5">
-                                <div className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${league.color}`}>
-                                  {league.icon} {league.name}
-                                </div>
-                                <div className="text-[10px] text-slate-400">Lv.{entry.level}</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-sm font-bold text-slate-600">
-                            {entry.xp} <span className="text-xs text-slate-400">XP</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {leaderboard.length === 0 && <p className="text-center text-xs text-slate-400">ランキングデータなし</p>}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-slate-800">
-                    <Target className="w-5 h-5 text-medace-500" /> 今週のペース
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今日</div>
-                      <div className="mt-2 text-2xl font-black text-slate-950">{todayCount}<span className="ml-1 text-sm text-slate-400">/ {todayWordGoal} 語</span></div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
-                        <div className="h-full rounded-full bg-gradient-to-r from-medace-400 to-medace-600" style={{ width: `${todayProgressPercent}%` }}></div>
-                      </div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今週</div>
-                      <div className="mt-2 text-2xl font-black text-slate-950">{weekTotal}<span className="ml-1 text-sm text-slate-400">/ {weeklyGoal} 語</span></div>
-                      <div className="mt-2 text-sm text-slate-500">{weeklyRemaining === 0 ? '今週の目標ペースに到達しています。' : `あと ${weeklyRemaining} 語で今週の目標です。`}</div>
-                    </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">連続記録</div>
-                      <div className="mt-2 text-2xl font-black text-slate-950">{user.stats?.currentStreak || 0}<span className="ml-1 text-sm text-slate-400">日</span></div>
-                      <div className="mt-2 text-sm text-slate-500">他人比較ではなく、自分のペースで積み上げる表示です。</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* SECTION: My Phrasebooks */}
-      <div className="min-h-[200px]">
-        <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-slate-800 border-l-4 border-purple-500 pl-3">My単語帳</h3>
-            <button 
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-1 text-sm font-bold text-medace-600 hover:bg-medace-50 px-3 py-1.5 rounded-lg transition-colors"
-            >
-                <Plus className="w-4 h-4" /> 新規作成
-            </button>
-        </div>
-        {myBooks.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {myBooks.map((book) => (
-                  <BookCard 
-                    key={book.id} 
-                    book={book} 
-                    isMine={true} 
-                    progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                    onDelete={handleDeleteBook}
-                    onSelect={onSelectBook}
-                  />
-                ))}
-            </div>
-        ) : (
-            <div className="bg-slate-100 rounded-xl p-8 text-center border-2 border-dashed border-slate-200">
-                <p className="text-slate-500 font-bold mb-2">まだMy単語帳がありません</p>
-                <p className="text-slate-400 text-sm mb-4">教科書の写真やPDFから、あなただけの教材を作成しましょう！</p>
-                <button onClick={() => setShowCreateModal(true)} className="text-medace-600 font-bold underline hover:text-medace-700">
-                    今すぐ作成する
-                </button>
-            </div>
-        )}
-      </div>
-
-      {/* SECTION: Current Curriculum (Official) */}
-      <div>
-        <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-slate-800 border-l-4 border-medace-500 pl-3">推奨コース</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {recommendedOfficialBooks.map(book => (
-                <BookCard 
-                    key={book.id} 
-                    book={book} 
-                    progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                    onDelete={handleDeleteBook}
-                    onSelect={onSelectBook}
-                />
-            ))}
-            {books.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3">
-                    現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
-                </div>
-            )}
-            {(books.length > 0 && recommendedOfficialBooks.length === 0) && <p className="text-slate-400 text-sm">推奨コースはありません</p>}
-        </div>
-
-        {/* SECTION: Library (Collapsed) */}
-        <div className="border-t border-slate-200 pt-6">
-            <button 
-                onClick={() => setShowLibrary(!showLibrary)}
-                className="flex items-center justify-between w-full p-4 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors group"
-            >
-                <div className="flex items-center gap-3">
-                    <Library className="w-5 h-5 text-slate-400 group-hover:text-medace-500" />
-                    <span className="font-bold text-slate-600 group-hover:text-slate-800">すべての公式コースを見る</span>
-                </div>
-                {showLibrary ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-            </button>
-
-            {showLibrary && (
-                books.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6 animate-in slide-in-from-top-4">
-                        {books.map((book) => (
-                        <BookCard 
-                            key={book.id} 
-                            book={book} 
-                            progress={progressMap[book.id] || { bookId: book.id, percentage: 0, learnedCount: 0, totalCount: book.wordCount }}
-                            onDelete={handleDeleteBook}
-                            onSelect={onSelectBook}
-                        />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 animate-in slide-in-from-top-4">
-                        公式コースはビジネス本導入プラン向けに限定されています。個人利用では My単語帳 を使って学習を進めてください。
-                    </div>
-                )
-            )}
-        </div>
-      </div>
+      <DashboardLibrarySection
+        books={books}
+        myBooks={myBooks}
+        recommendedOfficialBooks={recommendedOfficialBooks}
+        progressMap={progressMap}
+        showLibrary={showLibrary}
+        onToggleLibrary={() => setShowLibrary((previous) => !previous)}
+        onOpenCreateModal={() => setShowCreateModal(true)}
+        onDelete={handleDeleteBook}
+        onSelect={onSelectBook}
+      />
     </div>
   );
 };

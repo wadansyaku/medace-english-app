@@ -206,9 +206,23 @@ export interface StudentSummary {
   lastNotificationMessage?: string;
   assignedInstructorUid?: string;
   assignedInstructorName?: string;
+  assignmentUpdatedAt?: number;
   hasLearningPlan?: boolean;
   riskReasons?: string[];
   recommendedAction?: string;
+}
+
+export interface AssignmentEvent {
+  id: number;
+  studentUid: string;
+  studentName: string;
+  previousInstructorUid?: string;
+  previousInstructorName?: string;
+  nextInstructorUid?: string;
+  nextInstructorName?: string;
+  changedByUid: string;
+  changedByName: string;
+  createdAt: number;
 }
 
 export interface LearningPreference {
@@ -418,11 +432,14 @@ export interface OrganizationDashboardSnapshot {
   atRiskStudents: number;
   learningPlanCount: number;
   notifications7d: number;
+  reactivatedStudents7d: number;
+  reactivationRate7d: number;
   assignmentCoverageRate: number;
   unassignedStudents: number;
   instructors: OrganizationInstructorSummary[];
   atRiskStudentList: StudentSummary[];
   studentAssignments: StudentSummary[];
+  assignmentEvents: AssignmentEvent[];
 }
 
 export type WorksheetQuestionMode = 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';

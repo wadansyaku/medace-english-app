@@ -105,7 +105,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
 
   if (step === 'PROFILE') {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.18),_transparent_34%),linear-gradient(180deg,#fffaf5_0%,#fff 48%,#fff3e2_100%)] py-10 px-4">
+      <div data-testid="onboarding-profile" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.18),_transparent_34%),linear-gradient(180deg,#fffaf5_0%,#fff 48%,#fff3e2_100%)] py-10 px-4">
         <div className="max-w-6xl mx-auto grid xl:grid-cols-[0.96fr_1.04fr] gap-6">
           <div className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(145deg,#2F1609_0%,#66321A_42%,#F66D0B_100%)] p-8 text-white shadow-[0_28px_80px_rgba(228,94,4,0.24)] md:p-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.22),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,191,82,0.16),_transparent_24%)]"></div>
@@ -256,7 +256,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
 
   if (step === 'RESULT' && result && finalLevel) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.16),_transparent_32%),linear-gradient(180deg,#fffaf4_0%,#fff 42%,#fff3e2_100%)] px-4 py-10">
+      <div data-testid="onboarding-result" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.16),_transparent_32%),linear-gradient(180deg,#fffaf4_0%,#fff 42%,#fff3e2_100%)] px-4 py-10">
         <div className="max-w-6xl mx-auto space-y-6">
         <div className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-xl">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -422,7 +422,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.15),_transparent_28%),linear-gradient(180deg,#fff 0%,#fff6ea 100%)] px-4 py-8">
+    <div data-testid="onboarding-test" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.15),_transparent_28%),linear-gradient(180deg,#fff 0%,#fff6ea 100%)] px-4 py-8">
       <div className="max-w-5xl mx-auto">
         <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-xl">
           <div className="grid lg:grid-cols-[0.33fr_0.67fr]">
@@ -515,6 +515,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                     <button
                       key={option}
                       type="button"
+                      data-testid="diagnostic-option"
                       onClick={() => handleSelectAnswer(option)}
                       className={`rounded-3xl border px-5 py-4 text-left transition-all ${isSelected ? 'border-medace-900 bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] text-white shadow-[0_18px_40px_rgba(228,94,4,0.18)]' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
                     >

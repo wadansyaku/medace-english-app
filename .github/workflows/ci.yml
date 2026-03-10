@@ -30,5 +30,22 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
+
+      - name: API integration tests
+        run: npm run test:api
+
+      - name: Verify GitHub and Cloudflare configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Skipping cf:doctor because Cloudflare credentials are unavailable in this workflow context."
+            exit 0
+          fi
+          npm run cf:doctor

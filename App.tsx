@@ -1,6 +1,7 @@
 
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Layout from './components/Layout';
+import ModalOverlay from './components/ModalOverlay';
 import { OrganizationRole, UserRole, UserProfile } from './types';
 import { storage } from './services/storage';
 import { AUTH_COPY, BRAND } from './config/brand';
@@ -24,30 +25,35 @@ const BUSINESS_DEMO_OPTIONS: Array<{
   role: UserRole;
   organizationRole?: OrganizationRole;
   compact?: boolean;
+  testId: string;
 }> = [
   {
     title: 'ビジネス版 生徒体験',
     description: '既存の公式単語帳を開き、学習とテスト導線をそのまま確認できます。',
     role: UserRole.STUDENT,
     organizationRole: OrganizationRole.STUDENT,
+    testId: 'demo-login-business-student',
   },
   {
     title: '先生',
     description: '講師フォロー導線に加えて、既存単語帳の中身とテスト導線まで確認できます。',
     role: UserRole.INSTRUCTOR,
     organizationRole: OrganizationRole.INSTRUCTOR,
+    testId: 'demo-login-instructor',
   },
   {
     title: '学校管理者',
     description: '組織ダッシュボード、担当割当、既存単語帳へのアクセスをまとめて確認できます。',
     role: UserRole.INSTRUCTOR,
     organizationRole: OrganizationRole.GROUP_ADMIN,
+    testId: 'demo-login-group-admin',
   },
   {
     title: 'サービス管理者',
     description: '教材カタログ全体とサービス運用画面を確認できます。',
     role: UserRole.ADMIN,
     compact: true,
+    testId: 'demo-login-admin',
   },
 ];
 
@@ -67,6 +73,12 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showAlternateAccess, setShowAlternateAccess] = useState(false);
   const [showPublicInfo, setShowPublicInfo] = useState(false);
+  const [showAdminDemoPrompt, setShowAdminDemoPrompt] = useState(false);
+  const [adminDemoPassword, setAdminDemoPassword] = useState('');
+  const [pendingAdminDemoRole, setPendingAdminDemoRole] = useState<{
+    role: UserRole;
+    organizationRole?: OrganizationRole;
+  } | null>(null);
 
   // --- Restore Session (Async) ---
   useEffect(() => {
@@ -90,14 +102,11 @@ const App: React.FC = () => {
     applyDisplayPreferences(getStoredDisplayPreferences(user?.uid));
   }, [user?.uid]);
 
-  const handleDemoLogin = async (role: UserRole, organizationRole?: OrganizationRole) => {
-    let demoPassword: string | undefined;
-    if (role === UserRole.ADMIN) {
-      const passwordInput = window.prompt("管理用パスワード:");
-      if (!passwordInput) return;
-      demoPassword = passwordInput;
-    }
-
+  const performDemoLogin = async (
+    role: UserRole,
+    organizationRole?: OrganizationRole,
+    demoPassword?: string,
+  ) => {
     setAuthError(null);
     setAuthLoading(true);
     setSelectedBookId(null);
@@ -116,6 +125,35 @@ const App: React.FC = () => {
     } finally {
       setAuthLoading(false);
     }
+  };
+
+  const handleDemoLogin = async (role: UserRole, organizationRole?: OrganizationRole) => {
+    if (role === UserRole.ADMIN) {
+      setPendingAdminDemoRole({ role, organizationRole });
+      setAdminDemoPassword('');
+      setAuthError(null);
+      setShowAdminDemoPrompt(true);
+      return;
+    }
+
+    await performDemoLogin(role, organizationRole);
+  };
+
+  const handleAdminDemoSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!pendingAdminDemoRole || !adminDemoPassword.trim()) {
+      setAuthError('管理用パスワードを入力してください。');
+      return;
+    }
+
+    setShowAdminDemoPrompt(false);
+    await performDemoLogin(
+      pendingAdminDemoRole.role,
+      pendingAdminDemoRole.organizationRole,
+      adminDemoPassword.trim(),
+    );
+    setAdminDemoPassword('');
+    setPendingAdminDemoRole(null);
   };
 
   const handleResetDemo = async () => {
@@ -186,6 +224,9 @@ const App: React.FC = () => {
     setAuthError(null);
     setShowAlternateAccess(false);
     setShowPublicInfo(false);
+    setShowAdminDemoPrompt(false);
+    setAdminDemoPassword('');
+    setPendingAdminDemoRole(null);
   };
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
@@ -262,6 +303,7 @@ const App: React.FC = () => {
                   </p>
                   <button
                     onClick={() => handleDemoLogin(UserRole.STUDENT)}
+                    data-testid="demo-login-student"
                     className="mt-4 w-full rounded-2xl bg-white py-4 text-base font-bold text-medace-700 shadow-sm transition-colors hover:bg-orange-50"
                   >
                     生徒としてすぐ試す
@@ -284,6 +326,7 @@ const App: React.FC = () => {
                           <button
                             key={option.title}
                             onClick={() => handleDemoLogin(option.role, option.organizationRole)}
+                            data-testid={option.testId}
                             className={`rounded-2xl border border-white/20 bg-white/10 px-4 py-4 text-left text-white transition-colors hover:bg-white/15 ${
                               option.compact ? 'md:col-span-2' : ''
                             }`}
@@ -484,24 +527,83 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout 
-      user={user} 
-      onLogout={handleLogout}
-      onResetDemo={isDemoEmail(user?.email) ? handleResetDemo : undefined}
-      currentView={currentView}
-      onChangeView={setCurrentView}
-    >
-      <Suspense
-        fallback={
-          <div className="flex min-h-[50vh] flex-col items-center justify-center text-slate-500">
-            <Loader2 className="h-10 w-10 animate-spin text-medace-500" />
-            <p className="mt-3 text-sm font-medium">画面を準備中...</p>
-          </div>
-        }
+    <>
+      <Layout 
+        user={user} 
+        onLogout={handleLogout}
+        onResetDemo={isDemoEmail(user?.email) ? handleResetDemo : undefined}
+        currentView={currentView}
+        onChangeView={setCurrentView}
       >
-        {renderContent()}
-      </Suspense>
-    </Layout>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] flex-col items-center justify-center text-slate-500">
+              <Loader2 className="h-10 w-10 animate-spin text-medace-500" />
+              <p className="mt-3 text-sm font-medium">画面を準備中...</p>
+            </div>
+          }
+        >
+          {renderContent()}
+        </Suspense>
+      </Layout>
+
+      {showAdminDemoPrompt && (
+        <ModalOverlay
+          onClose={() => {
+            setShowAdminDemoPrompt(false);
+            setAdminDemoPassword('');
+            setPendingAdminDemoRole(null);
+          }}
+          panelClassName="max-w-md"
+          align="center"
+        >
+          <form
+            onSubmit={handleAdminDemoSubmit}
+            className="rounded-[28px] border border-medace-100 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.18)]"
+          >
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Admin Demo</div>
+            <h2 className="mt-3 text-2xl font-black text-slate-950">管理者デモを開く</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              サービス管理者デモには管理用パスワードが必要です。ローカルでは `admin` が既定値です。
+            </p>
+            <label className="mt-5 block">
+              <span className="ui-form-label mb-2 block">管理用パスワード</span>
+              <input
+                type="password"
+                value={adminDemoPassword}
+                onChange={(event) => setAdminDemoPassword(event.target.value)}
+                className="ui-input"
+                autoFocus
+              />
+            </label>
+            {authError && (
+              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {authError}
+              </div>
+            )}
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAdminDemoPrompt(false);
+                  setAdminDemoPassword('');
+                  setPendingAdminDemoRole(null);
+                }}
+                className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="submit"
+                className="flex-1 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+              >
+                デモを開く
+              </button>
+            </div>
+          </form>
+        </ModalOverlay>
+      )}
+    </>
   );
 };
 

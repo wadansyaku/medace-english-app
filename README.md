@@ -45,10 +45,24 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 ```bash
 npm install
 npm run typecheck
+npm run test:unit
 npm run build
+npm run test:api
+npm run test:smoke
+npm run cf:doctor
+npm run cf:preview
 ```
 
+- 推奨ローカル実行: `npm run cf:preview`
+  - `vite build` 後に `wrangler pages dev dist` を起動し、Pages Functions と D1 を含めて確認します。
+- `npm run preview` は静的アセット確認専用です。
+  - `/api/session` などの Functions は起動しないため、認証や教材 API の検証には使えません。
+- `npm run test:smoke` は Playwright で `wrangler pages dev dist` を自前起動し、D1 migration 適用後の demo login / onboarding / 組織運用導線まで確認します。
+- `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
+
 ## Cloudflare ローカル確認
+
+`Steady Study` はブラウザ URL ルーティングではなく、アプリ内の view state で画面を切り替えます。そのため Pages 向けの SPA fallback rewrite は不要で、ローカル確認も `wrangler pages dev dist` を基準にします。
 
 1. D1 マイグレーションを適用
 
@@ -80,6 +94,8 @@ npx wrangler d1 execute medace-db --local --file=./tmp/d1-seed.sql
 npm run build
 npx wrangler pages dev dist
 ```
+
+静的レンダリングだけを確認したい場合だけ、別ターミナルで `npm run preview` を使ってください。API は返らないので、セッション復元や `/api/storage` の確認には向きません。
 
 ## Cloudflare 本番
 
@@ -155,13 +171,23 @@ VITE_ADSENSE_SLOT_DASHBOARD_SECONDARY=1234567890
 ### デプロイ
 
 ```bash
+npm run typecheck
+npm run test:unit
+npm run test:api
+npm run cf:doctor
 npm run build
 npx wrangler pages deploy dist --project-name medace-english-app
 ```
+
+GitHub Actions では次の流れで確認してから Cloudflare へ流します。
+
+- `browser-smoke.yml`: PR 向け。Playwright smoke を実行
+- `deploy-pages-preview.yml`: preview deploy 前に `typecheck` / `test:unit` / `test:api` / `cf:doctor`
+- `deploy-pages.yml`: production deploy 前に `typecheck` / `test:unit` / `test:api` / `cf:doctor`、その後に remote D1 migration と Pages deploy
 
 ## 補足
 
 - 初回診断は静的12問で運用し、AI診断を主導線には置かない
 - 講師通知は `instructor_notifications` に保存され、生徒ダッシュボードへ表示
-- 学習条件は `learning_preferences`、担当割当は `student_instructor_assignments` で管理
+- 学習条件は `learning_preferences`、担当割当は `student_instructor_assignments`、割当履歴は `student_instructor_assignment_events` で管理
 - 公式教材の公開範囲は `catalog_source` / `access_scope` で制御

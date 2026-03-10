@@ -28,10 +28,17 @@ import {
   UserStats,
   WordData,
 } from '../types';
+import {
+  CatalogImportIssue,
+  CatalogImportRequest,
+  CatalogImportRow,
+  CatalogImportResult,
+} from '../contracts/storage';
 import { getSubscriptionPolicy } from '../config/subscription';
 import { CloudflareStorageService } from './cloudflare';
 import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 import { buildDemoEmail, getDemoDisplayName, isDemoEmail } from '../utils/demo';
+import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -42,17 +49,7 @@ export interface IStorageService {
   getSession(): Promise<UserProfile | null>;
   addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile, leveledUp: boolean }>;
   
-  batchImportWords(
-    defaultBookName: string,
-    csvRows: any[],
-    onProgress: (progress: number) => void,
-    createdByUid?: string,
-    contextSummary?: string,
-    options?: {
-      catalogSource?: BookCatalogSource;
-      accessScope?: BookAccessScope;
-    }
-  ): Promise<void>;
+  batchImportWords(request: CatalogImportRequest, onProgress?: (progress: number) => void): Promise<CatalogImportResult>;
   getBooks(): Promise<BookMetadata[]>;
   deleteBook(bookId: string): Promise<void>; 
   
@@ -178,6 +175,90 @@ const createBookId = (bookName: string, createdByUid?: string, uniqueSalt?: stri
   const suffixBase = `${createdByUid || 'official'}:${bookName}:${uniqueSalt || ''}`;
   const suffix = hashString(suffixBase);
   return `${ownerSegment}${slug}-${suffix}`;
+};
+
+const parseCsvLine = (line: string): string[] => {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+
+    if (char === '"' && inQuotes && nextChar === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      cells.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current);
+  return cells;
+};
+
+const normalizeCatalogImportRows = (
+  request: CatalogImportRequest,
+): { rows: CatalogImportRow[]; warnings: CatalogImportIssue[] } => {
+  if (request.source.kind === 'rows') {
+    return {
+      rows: request.source.rows,
+      warnings: [],
+    };
+  }
+
+  const csvText = request.source.csvText.replace(/^\uFEFF/, '');
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+
+  if (lines.length === 0) {
+    return {
+      rows: [],
+      warnings: [{ code: 'EMPTY_PAYLOAD', message: 'CSV に有効な行がありません。' }],
+    };
+  }
+
+  const headers = parseCsvLine(lines[0]).map((cell) => cell.trim());
+  const headerLookup = new Map(headers.map((header, index) => [header.toLowerCase(), index]));
+  const bookIndex = headerLookup.get('bookname') ?? headerLookup.get('book_name') ?? 0;
+  const numberIndex = headerLookup.get('number') ?? 1;
+  const wordIndex = headerLookup.get('word') ?? 2;
+  const definitionIndex = headerLookup.get('meaning') ?? headerLookup.get('definition') ?? 3;
+
+  if (wordIndex === undefined || definitionIndex === undefined) {
+    return {
+      rows: [],
+      warnings: [{
+        code: 'MISSING_REQUIRED_COLUMNS',
+        message: 'CSV は Word / Meaning 列を含む必要があります。',
+      }],
+    };
+  }
+
+  return {
+    rows: lines.slice(1).map((line) => {
+      const cells = parseCsvLine(line);
+      return {
+        bookName: cells[bookIndex] || request.defaultBookName,
+        number: cells[numberIndex] || '',
+        word: cells[wordIndex] || '',
+        definition: cells[definitionIndex] || '',
+      };
+    }),
+    warnings: [],
+  };
 };
 
 // Helper for Progress Calculation
@@ -318,48 +399,6 @@ const createEphemeralDemoUser = (role: UserRole, organizationRole?: Organization
     lastLoginDate: getTodayDateKey(),
   },
 });
-
-const normalizeOfficialBookText = (value: string | undefined): string | undefined => {
-  if (!value) return undefined;
-  const normalized = value
-    .replaceAll('Nanjyo English App のオリジナル単語データベース', 'オリジナル単語データベース')
-    .replaceAll('Nanjyo English App', 'オリジナル単語データベース')
-    .replaceAll('オリジナル単語データベース のオリジナル単語データベース', 'オリジナル単語データベース')
-    .replaceAll('NanjyoEnglishApp', 'original_wordbank')
-    .trim();
-
-  if (!normalized) return undefined;
-  if (/Licensed Partner Catalog/i.test(normalized)) return undefined;
-  if (/Imported Catalog/i.test(normalized)) return undefined;
-  if (/MASTER_DATABASE_REFINED\.csv/i.test(normalized)) return undefined;
-  if (/\.csv\b/i.test(normalized) && /投入/.test(normalized)) return undefined;
-  if (/として\s+.+\.csv\s+から投入/.test(normalized)) return undefined;
-
-  return normalized;
-};
-
-const normalizeBookVisibilityPolicy = (book: BookMetadata): BookMetadata => {
-  const sanitizedBook = {
-    ...book,
-    description: normalizeOfficialBookText(book.description),
-    sourceContext: normalizeOfficialBookText(book.sourceContext),
-  };
-  if (sanitizedBook.catalogSource === BookCatalogSource.USER_GENERATED) return sanitizedBook;
-  if (sanitizedBook.accessScope) return sanitizedBook;
-  return {
-    ...sanitizedBook,
-    accessScope: sanitizedBook.catalogSource === BookCatalogSource.STEADY_STUDY_ORIGINAL
-      ? BookAccessScope.ALL_PLANS
-      : BookAccessScope.BUSINESS_ONLY,
-  };
-};
-
-const canAccessOfficialBook = (plan: SubscriptionPlan | undefined, book: BookMetadata): boolean => {
-  const normalizedBook = normalizeBookVisibilityPolicy(book);
-  if (normalizedBook.catalogSource === BookCatalogSource.USER_GENERATED) return false;
-  if ((normalizedBook.accessScope || BookAccessScope.ALL_PLANS) === BookAccessScope.ALL_PLANS) return true;
-  return plan === SubscriptionPlan.TOB_PAID;
-};
 
 const isBookOwnedByUser = (book: BookMetadata, userUid: string | undefined): boolean => {
   if (!userUid) return false;
@@ -563,71 +602,111 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async batchImportWords(
-    defaultBookName: string,
-    csvRows: any[],
-    onProgress: (progress: number) => void,
-    createdByUid?: string,
-    contextSummary?: string,
-    options?: {
-      catalogSource?: BookCatalogSource;
-      accessScope?: BookAccessScope;
-    }
-  ): Promise<void> {
+    request: CatalogImportRequest,
+    onProgress?: (progress: number) => void,
+  ): Promise<CatalogImportResult> {
     const db = await this.dbPromise;
     const bookGroups = new Map<string, { meta: BookMetadata, words: WordData[] }>();
-    const total = csvRows.length;
+    const { rows, warnings } = normalizeCatalogImportRows(request);
+    const total = rows.length;
+    const issues = [...warnings];
+    let skippedRowCount = 0;
+
+    onProgress?.(5);
 
     for (let i = 0; i < total; i++) {
-      const row = csvRows[i];
-      let bookName = row['BookName'] || row['book_name'] || row['_col0'] || defaultBookName;
-      if (!bookName || typeof bookName !== 'string') bookName = defaultBookName;
-      const groupKey = `${createdByUid || 'official'}:${bookName}`;
+      const row = rows[i];
+      const bookName = (row.bookName || request.defaultBookName || 'Imported').trim();
+      const groupKey = `${request.createdByUid || 'official'}:${bookName}`;
+      const word = row.word.trim();
+      const definition = row.definition.trim();
+      const parsedNumber = Number.parseInt(String(row.number || i + 1), 10);
+      const number = Number.isFinite(parsedNumber) && parsedNumber > 0 ? parsedNumber : i + 1;
 
-      const number = parseInt(row['Number'] || row['_col1'] || '0');
-      const word = row['Word'] || row['_col2'] || '';
-      const def = row['Meaning'] || row['_col3'] || '';
+      if (!word) {
+        skippedRowCount += 1;
+        issues.push({ code: 'EMPTY_WORD', message: '単語が空の行をスキップしました。', rowNumber: i + 2 });
+        continue;
+      }
+      if (!definition) {
+        skippedRowCount += 1;
+        issues.push({ code: 'EMPTY_DEFINITION', message: '訳が空の行をスキップしました。', rowNumber: i + 2 });
+        continue;
+      }
 
-      if (word && def) {
-        if (!bookGroups.has(groupKey)) {
-            const bookId = createBookId(bookName, createdByUid, createdByUid ? String(Date.now()) : undefined);
-            const desc = createdByUid 
-                ? JSON.stringify({ createdBy: createdByUid, type: 'USER_GENERATED' }) 
-                : 'Imported';
-            
-            bookGroups.set(groupKey, {
-                meta: { 
-                    id: bookId, 
-                    title: bookName, 
-                    wordCount: 0, 
-                    isPriority: !createdByUid && bookName.includes("DUO"), 
-                    description: desc,
-                    sourceContext: contextSummary,
-                    catalogSource: createdByUid
-                      ? BookCatalogSource.USER_GENERATED
-                      : (options?.catalogSource || BookCatalogSource.LICENSED_PARTNER),
-                    accessScope: createdByUid
-                      ? BookAccessScope.ALL_PLANS
-                      : (options?.accessScope || BookAccessScope.BUSINESS_ONLY),
-                },
-                words: []
-            });
-        }
-        const bookId = bookGroups.get(groupKey)!.meta.id;
-        bookGroups.get(groupKey)!.words.push({
-          id: `${bookId}_${number}_${i}`, bookId, number, word, definition: def, searchKey: word.toLowerCase()
+      if (!bookGroups.has(groupKey)) {
+        const bookId = createBookId(bookName, request.createdByUid, request.createdByUid ? String(Date.now()) : undefined);
+        const description = request.createdByUid
+          ? JSON.stringify({ createdBy: request.createdByUid, type: 'USER_GENERATED' })
+          : 'Imported';
+
+        bookGroups.set(groupKey, {
+          meta: {
+            id: bookId,
+            title: bookName,
+            wordCount: 0,
+            isPriority: !request.createdByUid && bookName.includes('DUO'),
+            description,
+            sourceContext: request.contextSummary,
+            catalogSource: request.createdByUid
+              ? BookCatalogSource.USER_GENERATED
+              : (request.options?.catalogSource || BookCatalogSource.LICENSED_PARTNER),
+            accessScope: request.createdByUid
+              ? BookAccessScope.ALL_PLANS
+              : (request.options?.accessScope || BookAccessScope.BUSINESS_ONLY),
+          },
+          words: [],
         });
       }
-      if (i % 1000 === 0) { onProgress((i / total) * 50); await new Promise(r => setTimeout(r, 0)); }
+
+      const bookGroup = bookGroups.get(groupKey);
+      if (!bookGroup) continue;
+
+      const duplicate = bookGroup.words.some((candidate) => candidate.word === word && candidate.definition === definition);
+      if (duplicate) {
+        skippedRowCount += 1;
+        issues.push({ code: 'DUPLICATE_ROW', message: '重複行をスキップしました。', rowNumber: i + 2 });
+        continue;
+      }
+
+      bookGroup.words.push({
+        id: `${bookGroup.meta.id}_${number}_${i}`,
+        bookId: bookGroup.meta.id,
+        number,
+        word,
+        definition,
+        searchKey: word.toLowerCase(),
+      });
+
+      if (i % 250 === 0) {
+        onProgress?.(Math.round((i / Math.max(total, 1)) * 90));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
 
     const tx = db.transaction([STORES.BOOKS, STORES.WORDS], 'readwrite');
-    for (const [bookId, data] of bookGroups) {
+    const importedBookIds: string[] = [];
+    let importedWordCount = 0;
+
+    for (const [, data] of bookGroups) {
       data.meta.wordCount = data.words.length;
+      importedBookIds.push(data.meta.id);
+      importedWordCount += data.words.length;
       tx.objectStore(STORES.BOOKS).put(data.meta);
-      data.words.forEach(w => tx.objectStore(STORES.WORDS).put(w));
+      data.words.forEach((word) => tx.objectStore(STORES.WORDS).put(word));
     }
+
     return new Promise((resolve) => {
-        tx.oncomplete = () => { onProgress(100); resolve(); };
+      tx.oncomplete = () => {
+        onProgress?.(100);
+        resolve({
+          importedBookIds,
+          importedBookCount: importedBookIds.length,
+          importedWordCount,
+          skippedRowCount,
+          warnings: issues,
+        });
+      };
     });
   }
 
@@ -1257,11 +1336,27 @@ class IndexedDBStorageService implements IStorageService {
         atRiskStudents: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE).length,
         learningPlanCount: Math.max(1, students.length - 1),
         notifications7d: 8,
+        reactivatedStudents7d: Math.max(0, students.length - 2),
+        reactivationRate7d: students.length > 0 ? Math.round((Math.max(0, students.length - 2) / students.length) * 100) : 0,
         assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
         unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
         instructors,
         atRiskStudentList: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE),
         studentAssignments: students,
+        assignmentEvents: [
+          {
+            id: 1,
+            studentUid: students[0]?.uid || 'student-biz-1',
+            studentName: students[0]?.name || '黒田 颯太',
+            previousInstructorUid: undefined,
+            previousInstructorName: undefined,
+            nextInstructorUid: instructors[0]?.uid,
+            nextInstructorName: instructors[0]?.displayName,
+            changedByUid: sessionUser?.uid || 'mock-group-admin-001',
+            changedByName: sessionUser?.displayName || '朝比奈 由奈',
+            createdAt: Date.now() - 2 * 3600_000,
+          },
+        ],
       };
   }
 

@@ -30,6 +30,15 @@ const formatDays = (timestamp: number): string => {
   return `${days}日前`;
 };
 
+const formatDateTime = (timestamp: number): string => {
+  return new Date(timestamp).toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const MetricCard: React.FC<{ label: string; value: string; detail: string; }> = ({ label, value, detail }) => (
   <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
     <div className="text-sm font-bold text-slate-500">{label}</div>
@@ -110,7 +119,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
   };
 
   return (
-    <div className="space-y-8 pb-12">
+    <div data-testid="business-admin-dashboard" className="space-y-8 pb-12">
       {notice && (
         <div className={`rounded-[24px] border px-5 py-4 text-sm font-medium ${
           notice.tone === 'success'
@@ -161,11 +170,13 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-8">
         <MetricCard label="メンバー" value={`${snapshot.totalMembers}`} detail={`${snapshot.totalStudents}名の生徒 / ${snapshot.totalInstructors}名の講師`} />
         <MetricCard label="7日稼働" value={`${snapshot.activeStudents7d}`} detail="1週間以内に学習履歴がある生徒" />
         <MetricCard label="要フォロー" value={`${snapshot.atRiskStudents}`} detail="学習が止まりかけている生徒" />
         <MetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail="学習プランが設定済みの割合" />
+        <MetricCard label="通知後再開" value={`${snapshot.reactivatedStudents7d}`} detail="72時間以内に学習再開した生徒" />
+        <MetricCard label="再開率" value={`${snapshot.reactivationRate7d}%`} detail="直近7日通知からの再開率" />
         <MetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail="講師が明示的に割り当て済みの割合" />
         <MetricCard label="未割当生徒" value={`${snapshot.unassignedStudents}`} detail="担当講師がまだ決まっていない生徒" />
       </div>
@@ -291,12 +302,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">現担当</div>
                   <div className="mt-2 text-sm font-black text-slate-950">{student.assignedInstructorName || '未割当'}</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {student.assignmentUpdatedAt ? `更新: ${formatDateTime(student.assignmentUpdatedAt)}` : '更新履歴なし'}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4">
                 <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師を割り当てる</label>
                 <select
+                  data-testid={`assignment-select-${student.uid}`}
                   value={student.assignedInstructorUid || ''}
                   onChange={(event) => handleAssignmentChange(student.uid, event.target.value)}
                   disabled={assignmentSavingUid === student.uid}
@@ -332,6 +347,38 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      <section data-testid="assignment-history-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-3">
+          <BellRing className="h-5 w-5 text-medace-600" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment History</p>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当変更の履歴</h3>
+          </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          {snapshot.assignmentEvents.length > 0 ? snapshot.assignmentEvents.map((event) => (
+            <div key={event.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-slate-950">{event.studentName}</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {event.previousInstructorName || '未割当'} → {event.nextInstructorName || '未割当'}
+                  </div>
+                </div>
+                <div className="text-right text-xs text-slate-500">
+                  <div>{formatDateTime(event.createdAt)}</div>
+                  <div className="mt-1">変更者: {event.changedByName}</div>
+                </div>
+              </div>
+            </div>
+          )) : (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
+              まだ担当変更の履歴はありません。
+            </div>
+          )}
         </div>
       </section>
 

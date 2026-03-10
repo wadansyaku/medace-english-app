@@ -12,12 +12,26 @@ const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
 };
 
+const isJsonResponse = (response: Response): boolean => {
+  const contentType = response.headers.get('content-type') || '';
+  return contentType.includes('application/json');
+};
+
 const parseError = async (response: Response): Promise<never> => {
   let message = `Request failed with status ${response.status}`;
 
   try {
-    const payload = await response.json() as { error?: string; message?: string };
-    message = payload.message || payload.error || message;
+    if (isJsonResponse(response)) {
+      const payload = await response.json() as { error?: string; message?: string };
+      message = payload.message || payload.error || message;
+    } else {
+      const text = await response.text();
+      if (text) {
+        message = text.trim().startsWith('<!DOCTYPE')
+          ? 'API が HTML を返しました。`wrangler pages dev dist` を使って Functions 付きで起動してください。'
+          : text;
+      }
+    }
   } catch {
     const text = await response.text();
     if (text) message = text;
@@ -42,6 +56,16 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
   if (response.status === 204) {
     return undefined as T;
+  }
+
+  if (!isJsonResponse(response)) {
+    const text = await response.text();
+    throw new ApiError(
+      text.trim().startsWith('<!DOCTYPE')
+        ? 'API が HTML を返しました。`vite preview` ではなく `wrangler pages dev dist` を利用してください。'
+        : 'API が JSON 以外のレスポンスを返しました。',
+      response.status,
+    );
   }
 
   return response.json() as Promise<T>;

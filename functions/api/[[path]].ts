@@ -1,3 +1,4 @@
+import { AuthRequest, DemoLoginRequest, EmailAuthRequest, StorageAction, StorageActionRequest } from '../../contracts/storage';
 import { EnglishLevel, OrganizationRole, UserGrade, UserRole, UserStudyMode } from '../../types';
 import { clearSession, createSession, createUser, ensureDemoUser, findUserByEmail, mapUserRowToProfile, requireUser, verifyPassword, hashPassword } from '../_shared/auth';
 import { handleAiAction } from '../_shared/ai-actions';
@@ -5,17 +6,6 @@ import { handleError, HttpError, json, noContent, readJson } from '../_shared/ht
 import { handleStorageAction } from '../_shared/storage-actions';
 import { AppEnv } from '../_shared/types';
 import { DEMO_SESSION_TTL_MS } from '../../utils/demo';
-
-interface AuthBody {
-  action: 'demo-login' | 'email-auth';
-  role?: UserRole;
-  organizationRole?: OrganizationRole;
-  email?: string;
-  password?: string;
-  isSignUp?: boolean;
-  demoPassword?: string;
-  displayName?: string;
-}
 
 interface ProfileBody {
   user?: {
@@ -40,7 +30,7 @@ const isEnumValue = <TEnum extends Record<string, string>>(
   return typeof value === 'string' && Object.values(enumObject).includes(value as TEnum[keyof TEnum]);
 };
 
-const handleDemoLogin = async (env: AppEnv, request: Request, body: AuthBody): Promise<Response> => {
+const handleDemoLogin = async (env: AppEnv, request: Request, body: DemoLoginRequest): Promise<Response> => {
   const role = body.role || UserRole.STUDENT;
   if (role === UserRole.ADMIN) {
     const hostname = new URL(request.url).hostname;
@@ -60,7 +50,7 @@ const handleDemoLogin = async (env: AppEnv, request: Request, body: AuthBody): P
   });
 };
 
-const handleEmailAuth = async (env: AppEnv, request: Request, body: AuthBody): Promise<Response> => {
+const handleEmailAuth = async (env: AppEnv, request: Request, body: EmailAuthRequest): Promise<Response> => {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const requestedRole = body.role || UserRole.STUDENT;
@@ -156,7 +146,7 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
     const pathname = url.pathname.replace(/^\/api\/?/, '');
 
     if (pathname === 'auth' && request.method === 'POST') {
-      const body = await readJson<AuthBody>(request);
+      const body = await readJson<AuthRequest>(request);
       if (body.action === 'demo-login') return await handleDemoLogin(env, request, body);
       if (body.action === 'email-auth') return await handleEmailAuth(env, request, body);
       throw new HttpError(404, '未知の認証操作です。');
@@ -178,7 +168,7 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
 
     if (pathname === 'storage' && request.method === 'POST') {
       const user = await requireUser(env, request);
-      const body = await readJson<{ action: string; payload?: any }>(request);
+      const body = await readJson<StorageActionRequest<StorageAction>>(request);
       const result = await handleStorageAction(env, user, body);
       return createJsonResponse(result);
     }
