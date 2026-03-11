@@ -5,6 +5,7 @@ import { getSubscriptionPolicy } from '../config/subscription';
 import { AlertCircle, BellRing, Building2, Loader2, ShieldCheck, Users } from 'lucide-react';
 import OfficialCatalogAccessPanel from './OfficialCatalogAccessPanel';
 import WorksheetPrintLauncher from './WorksheetPrintLauncher';
+import WritingOpsPanel from './WritingOpsPanel';
 
 interface BusinessAdminDashboardProps {
   user: UserProfile;
@@ -396,6 +397,8 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
           />
         </div>
       </section>
+
+      <WritingOpsPanel user={user} />
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3">

@@ -6,6 +6,7 @@ import { AlertCircle, Bell, CheckCircle2, ChevronDown, ChevronUp, Loader2, Messa
 
 const OfficialCatalogAccessPanel = lazy(() => import('./OfficialCatalogAccessPanel'));
 const WorksheetPrintLauncher = lazy(() => import('./WorksheetPrintLauncher'));
+const WritingOpsPanel = lazy(() => import('./WritingOpsPanel'));
 
 interface InstructorDashboardProps {
   user: UserProfile;
@@ -427,6 +428,17 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({ user, onSelec
           </div>
         </div>
       </div>
+
+      <Suspense
+        fallback={
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-500 shadow-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-medace-500" />
+            自由英作文運用を準備中...
+          </div>
+        }
+      >
+        <WritingOpsPanel user={user} />
+      </Suspense>
 
       <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
         <div className="grid grid-cols-[0.72fr_1.1fr_0.72fr_0.86fr_1.08fr_1fr_0.84fr] gap-4 border-b border-slate-200 bg-slate-50 px-6 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">

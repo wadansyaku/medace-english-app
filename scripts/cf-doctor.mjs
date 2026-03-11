@@ -8,7 +8,7 @@ const includeDeferred = process.argv.includes('--include-deferred');
 const REQUIRED_GITHUB_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE'];
 const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD'];
-const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY'];
+const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -78,11 +78,18 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const r2Buckets = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
+  const pairs = [];
+  if (bucket.bucket_name) pairs.push({ env: 'production', name: bucket.bucket_name });
+  if (bucket.preview_bucket_name) pairs.push({ env: 'preview', name: bucket.preview_bucket_name });
+  return pairs;
+});
 const repoSlug = getRepoSlug();
 
 pushRecord('info', 'Workspace', cwd);
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
+pushRecord('info', 'R2 buckets', r2Buckets.length > 0 ? r2Buckets.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 
 const ghAuth = run('gh', ['auth', 'status']);
@@ -148,6 +155,23 @@ if (cloudflareReady) {
         `D1 database ${d1Database}`,
         d1List.stdout.includes(d1Database) ? 'present' : 'missing'
       );
+    }
+  }
+
+  if (r2Buckets.length > 0) {
+    const r2List = run('npx', ['wrangler', 'r2', 'bucket', 'list']);
+    if (recordCommand('Cloudflare R2 inventory', r2List, 'retrieved')) {
+      r2Buckets.forEach((bucket) => {
+        pushRecord(
+          r2List.stdout.includes(bucket.name) ? 'ok' : 'error',
+          `R2 bucket ${bucket.name}`,
+          r2List.stdout.includes(bucket.name) ? `${bucket.env} bucket present` : `${bucket.env} bucket missing`,
+        );
+      });
+    } else {
+      r2Buckets.forEach((bucket) => {
+        pushRecord('error', `R2 bucket ${bucket.name}`, 'inventory unavailable; enable R2 in the Cloudflare account dashboard first');
+      });
     }
   }
 

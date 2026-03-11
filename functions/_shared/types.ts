@@ -1,6 +1,14 @@
 export interface AppEnv {
   DB: any;
+  WRITING_ASSETS?: any;
   GEMINI_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_OCR_MODEL?: string;
+  OPENAI_EVAL_MODEL?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_OCR_MODEL?: string;
+  CLOUDFLARE_EVAL_MODEL?: string;
   ADMIN_DEMO_PASSWORD?: string;
 }
 

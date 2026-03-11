@@ -111,6 +111,21 @@ class SessionClient {
       body: JSON.stringify(payload === undefined ? { action } : { action, payload }),
     });
   }
+
+  async get(pathname) {
+    const result = await this.request(pathname, { method: 'GET' });
+    assert(result.status >= 200 && result.status < 300, `[${this.name}] GET ${pathname} failed: ${JSON.stringify(result.data)}`);
+    return result.data;
+  }
+
+  async post(pathname, body) {
+    const result = await this.request(pathname, {
+      method: 'POST',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    assert(result.status >= 200 && result.status < 300, `[${this.name}] POST ${pathname} failed: ${JSON.stringify(result.data)}`);
+    return result.data;
+  }
 }
 
 const waitForServer = async (baseUrl, serverLogs) => {
@@ -346,6 +361,115 @@ const main = async () => {
     assert(orgSnapshot.notifications7d >= 1, 'organization snapshot should count recent notifications');
     assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
     assert(orgSnapshot.reactivationRate7d >= 1, 'organization snapshot should report a non-zero reactivation rate');
+
+    const writingTemplates = await groupAdmin.get('/api/writing/templates');
+    assert(writingTemplates.templates.length >= 2, 'writing templates should be available');
+
+    const generatedAssignment = await groupAdmin.post('/api/writing/assignments/generate', {
+      studentUid: orgStudentUser.uid,
+      templateId: writingTemplates.templates[0].id,
+      topicHint: 'school tablet use',
+      notes: 'integration test assignment',
+    });
+    assert(generatedAssignment.status === 'DRAFT', 'generated writing assignment should start as DRAFT');
+
+    const issuedAssignment = await groupAdmin.post('/api/writing/assignments/issue', {
+      assignmentId: generatedAssignment.id,
+    });
+    assert(issuedAssignment.status === 'ISSUED', 'writing assignment should move to ISSUED');
+
+    const studentAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
+    const assignedWriting = studentAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
+    assert(assignedWriting, 'student should receive the issued writing assignment');
+
+    const firstUpload = await orgStudent.post('/api/writing/upload-url', {
+      assignmentId: issuedAssignment.id,
+      fileName: 'attempt-1.png',
+      mimeType: 'image/png',
+      byteSize: 16,
+      assetOrder: 1,
+      attemptNo: 1,
+    });
+    const firstUploadResponse = await fetch(`${baseUrl}${firstUpload.uploadUrl}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: Buffer.from('fake-image-binary'),
+    });
+    assert(firstUploadResponse.status === 204, 'first writing upload should succeed');
+
+    const firstFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
+      assignmentId: issuedAssignment.id,
+      source: 'STUDENT_MOBILE',
+      assetIds: [firstUpload.assetId],
+      attemptNo: 1,
+    });
+    assert(firstFinalize.submission.evaluations.length === 3, 'writing submission should persist evaluations from 3 providers');
+    assert(firstFinalize.submission.ocrProvider === 'OPENAI', 'writing OCR should rerun with OPENAI when fallback confidence is low');
+
+    const forbiddenStudentDetail = await orgStudent.request(`/api/writing/submissions/${firstFinalize.submission.id}`, { method: 'GET' });
+    assert(forbiddenStudentDetail.status === 403, 'student should not see feedback before teacher approval');
+
+    const reviewQueue = await groupAdmin.get('/api/writing/review-queue?scope=QUEUE');
+    const queueItem = reviewQueue.items.find((item) => item.assignmentId === issuedAssignment.id);
+    assert(queueItem, 'writing submission should appear in the teacher review queue');
+
+    const queueDetail = await groupAdmin.get(`/api/writing/submissions/${queueItem.submissionId}`);
+    assert(queueDetail.submission.evaluations.length === 3, 'teacher detail should expose all provider evaluations');
+
+    const revisionDecision = await groupAdmin.post(`/api/writing/submissions/${queueItem.submissionId}/request-revision`, {
+      selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,
+      publicComment: '理由のつながりを整えて、もう一度書き直しましょう。',
+      privateMemo: 'integration test revision',
+    });
+    assert(revisionDecision.assignment.status === 'REVISION_REQUESTED', 'first review should be able to request a revision');
+
+    const revisedAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
+    const revisedAssignment = revisedAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
+    assert(revisedAssignment?.status === 'REVISION_REQUESTED', 'student should see revision requested status after teacher review');
+
+    const secondUpload = await orgStudent.post('/api/writing/upload-url', {
+      assignmentId: issuedAssignment.id,
+      fileName: 'attempt-2.png',
+      mimeType: 'image/png',
+      byteSize: 24,
+      assetOrder: 1,
+      attemptNo: 2,
+    });
+    const secondUploadResponse = await fetch(`${baseUrl}${secondUpload.uploadUrl}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: Buffer.from('fake-image-binary-2'),
+    });
+    assert(secondUploadResponse.status === 204, 'second writing upload should succeed');
+
+    const secondFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
+      assignmentId: issuedAssignment.id,
+      source: 'STUDENT_MOBILE',
+      assetIds: [secondUpload.assetId],
+      attemptNo: 2,
+      manualTranscript: 'I agree that students should use tablets in class because they can review lessons quickly and share ideas more easily. For example, they can check notes at home and ask better questions in class. However, teachers should give clear rules so students do not lose focus.',
+    });
+    assert(secondFinalize.submission.transcriptConfidence >= 0.9, 'manual transcript should produce high OCR confidence on the second attempt');
+
+    const secondQueue = await groupAdmin.get('/api/writing/review-queue?scope=QUEUE');
+    const secondQueueItem = secondQueue.items.find((item) => item.assignmentId === issuedAssignment.id);
+    assert(secondQueueItem?.attemptNo === 2, 'second attempt should re-enter the teacher review queue');
+
+    const secondDetail = await groupAdmin.get(`/api/writing/submissions/${secondQueueItem.submissionId}`);
+    const finalReturn = await groupAdmin.post(`/api/writing/submissions/${secondQueueItem.submissionId}/approve-return`, {
+      selectedEvaluationId: secondDetail.submission.selectedEvaluationId || secondDetail.submission.evaluations[0].id,
+      publicComment: '構成が安定しました。次回は語彙の幅も意識しましょう。',
+      privateMemo: 'integration test final return',
+    });
+    assert(finalReturn.assignment.status === 'COMPLETED', 'second approved return should complete the assignment');
+
+    const finalAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
+    const completedAssignment = finalAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
+    assert(completedAssignment?.status === 'COMPLETED', 'student should see the writing assignment as completed');
+    assert(completedAssignment?.latestSubmissionId, 'student should receive visible submission detail after teacher approval');
+
+    const printableFeedback = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}/printable-feedback`);
+    assert(printableFeedback.html.includes('自由英作文返却'), 'printable feedback should contain the feedback HTML');
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');
     assert(groupAdminReset.status === 403, 'group admin should not be allowed to reset all data');

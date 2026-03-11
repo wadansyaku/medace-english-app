@@ -50,6 +50,7 @@ npm run build
 npm run test:api
 npm run test:smoke
 npm run cf:doctor
+npm run cf:sync
 npm run cf:preview
 ```
 
@@ -59,6 +60,7 @@ npm run cf:preview
   - `/api/session` などの Functions は起動しないため、認証や教材 API の検証には使えません。
 - `npm run test:smoke` は Playwright で `wrangler pages dev dist` を自前起動し、D1 migration 適用後の demo login / onboarding / 組織運用導線まで確認します。
 - `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
+- `npm run cf:sync` は `wrangler.jsonc` を基準に GitHub variables、Cloudflare Pages secrets、R2 バケットを同期します。R2 がアカウントで未有効化の場合はここで停止します。
 
 ## Cloudflare ローカル確認
 
@@ -135,12 +137,32 @@ echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD -
 echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app
 ```
 
+自由英作文の外部 AI を本番接続する場合は、必要な provider だけ追加してください。
+
+```bash
+echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --project-name medace-english-app
+echo 'your-cloudflare-account-id' | npx wrangler pages secret put CLOUDFLARE_ACCOUNT_ID --project-name medace-english-app
+echo 'your-cloudflare-api-token' | npx wrangler pages secret put CLOUDFLARE_API_TOKEN --project-name medace-english-app
+```
+
 preview 環境も使う場合は、同じ secret を `--env preview` 付きで追加してください。
 
 ```bash
 echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app --env preview
 echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app --env preview
+echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --project-name medace-english-app --env preview
+echo 'your-cloudflare-account-id' | npx wrangler pages secret put CLOUDFLARE_ACCOUNT_ID --project-name medace-english-app --env preview
+echo 'your-cloudflare-api-token' | npx wrangler pages secret put CLOUDFLARE_API_TOKEN --project-name medace-english-app --env preview
 ```
+
+### R2 Buckets
+
+自由英作文の答案原本は R2 を使います。Cloudflare アカウントで R2 を有効化したうえで、次のバケットを用意してください。
+
+- production: `medace-writing-assets`
+- preview: `medace-writing-assets-preview`
+
+CLI で同期する場合は `npm run cf:sync` を使います。R2 がまだ未有効化のアカウントでは Cloudflare API が `code: 10042` を返すため、その場合は先に Dashboard で R2 を有効化してください。
 
 ### GitHub Variables / Secrets
 
@@ -156,6 +178,8 @@ GitHub Actions 側では次を使います。
 Variables 未設定時は workflow 側で `medace-english-app` / `medace-db` を既定値として使います。
 
 ローカルから接続状態を確認する場合は `npm run cf:doctor` を使ってください。`GEMINI_API_KEY` は未設定でも warning 扱いで、GitHub / Cloudflare の接続と Pages / D1 の疎通を先に確認できます。なお、学習プラン生成は key 未設定時でも標準ロジックで継続でき、AI教材化だけが停止します。
+
+設定の反映を自動化したい場合は `npm run cf:sync` を使ってから `npm run cf:doctor` で検証してください。
 
 ### Frontend Environment Variables
 

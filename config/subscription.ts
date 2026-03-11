@@ -10,7 +10,10 @@ export type MeteredAiAction =
   | 'extractVocabularyFromText'
   | 'extractVocabularyFromMedia'
   | 'generateLearningPlan'
-  | 'generateInstructorFollowUp';
+  | 'generateInstructorFollowUp'
+  | 'generateWritingPrompt'
+  | 'ocrWritingSubmission'
+  | 'evaluateWritingSubmission';
 
 export interface SubscriptionPolicy {
   plan: SubscriptionPlan;
@@ -107,6 +110,9 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'extractVocabularyFromMedia',
       'generateLearningPlan',
       'generateInstructorFollowUp',
+      'generateWritingPrompt',
+      'ocrWritingSubmission',
+      'evaluateWritingSubmission',
     ],
     featureSummary: [
       '講師フォロー通知と正式教材カタログをどちらも使えます',
@@ -166,6 +172,21 @@ export const AI_ACTION_ESTIMATES: Record<MeteredAiAction, AiActionEstimate> = {
     label: '講師フォロー通知',
     estimatedCostMilliYen: 260,
     model: 'gemini-2.5-flash',
+  },
+  generateWritingPrompt: {
+    label: '自由英作文問題生成',
+    estimatedCostMilliYen: 420,
+    model: 'writing-provider-router',
+  },
+  ocrWritingSubmission: {
+    label: '自由英作文OCR',
+    estimatedCostMilliYen: 650,
+    model: 'writing-provider-router',
+  },
+  evaluateWritingSubmission: {
+    label: '自由英作文添削',
+    estimatedCostMilliYen: 980,
+    model: 'writing-provider-router',
   },
 };
 

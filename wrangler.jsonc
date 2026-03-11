@@ -14,5 +14,12 @@
       "database_id": "1b1c8b71-764c-4593-8a20-32a75b77ab11",
       "migrations_dir": "migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "WRITING_ASSETS",
+      "bucket_name": "medace-writing-assets",
+      "preview_bucket_name": "medace-writing-assets-preview"
+    }
   ]
 }

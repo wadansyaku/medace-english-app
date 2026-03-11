@@ -6,6 +6,7 @@ import { handleError, HttpError, json, noContent, readJson } from '../_shared/ht
 import { handleGetPublicMotivationSnapshot } from '../_shared/storage-dashboard-actions';
 import { handleStorageAction } from '../_shared/storage-actions';
 import { AppEnv } from '../_shared/types';
+import { handleWritingAssetUpload, handleWritingRequest } from '../_shared/writing-actions';
 import { DEMO_SESSION_TTL_MS } from '../../utils/demo';
 
 interface ProfileBody {
@@ -169,6 +170,17 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
 
     if (pathname === 'profile' && request.method === 'POST') {
       return await handleProfileUpdate(env, request);
+    }
+
+    if (pathname.startsWith('writing/upload/') && request.method === 'PUT') {
+      const uploadToken = pathname.replace(/^writing\/upload\//, '');
+      return await handleWritingAssetUpload(env, uploadToken, request);
+    }
+
+    if (pathname.startsWith('writing')) {
+      const user = await requireUser(env, request);
+      const writingPath = pathname.replace(/^writing/, '');
+      return await handleWritingRequest(env, user, request, writingPath);
     }
 
     if (pathname === 'storage' && request.method === 'POST') {

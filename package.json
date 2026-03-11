@@ -15,6 +15,7 @@
     "cf:preview": "vite build && wrangler pages dev dist",
     "cf:doctor": "node scripts/cf-doctor.mjs",
     "cf:doctor:strict": "node scripts/cf-doctor.mjs --include-deferred",
+    "cf:sync": "node scripts/cf-sync.mjs",
     "db:migrate:local": "wrangler d1 migrations apply medace-db --local",
     "db:migrate:verify": "bash -lc 'tmpdir=$(mktemp -d); cleanup() { rm -rf \"$tmpdir\"; }; trap cleanup EXIT; wrangler d1 migrations apply medace-db --local --persist-to \"$tmpdir\"'",
     "db:migrate:remote": "wrangler d1 migrations apply medace-db --remote",

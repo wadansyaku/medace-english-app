@@ -188,6 +188,11 @@ export const handleGetBookProgress = async (env: AppEnv, user: DbUserRow, bookId
 export const handleResetAllData = async (env: AppEnv): Promise<void> => {
   const statements = [
     env.DB.prepare('DELETE FROM sessions'),
+    env.DB.prepare('DELETE FROM writing_teacher_reviews'),
+    env.DB.prepare('DELETE FROM writing_ai_evaluations'),
+    env.DB.prepare('DELETE FROM writing_submission_assets'),
+    env.DB.prepare('DELETE FROM writing_submissions'),
+    env.DB.prepare('DELETE FROM writing_assignments'),
     env.DB.prepare('DELETE FROM ai_usage_events'),
     env.DB.prepare('DELETE FROM instructor_notifications'),
     env.DB.prepare('DELETE FROM student_instructor_assignment_events'),

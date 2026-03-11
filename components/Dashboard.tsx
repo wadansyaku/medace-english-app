@@ -18,6 +18,7 @@ import DashboardProgressSection from './dashboard/DashboardProgressSection';
 import DashboardSettingsModal from './dashboard/DashboardSettingsModal';
 import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
 import PlanEditorModal from './dashboard/PlanEditorModal';
+import WritingStudentSection from './WritingStudentSection';
 import { getTodayDateKey } from '../utils/date';
 import {
   DisplayDensity,
@@ -694,6 +695,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             ))}
           </div>
         </section>
+      )}
+
+      {currentPlan === SubscriptionPlan.TOB_PAID && user.organizationName && (
+        <WritingStudentSection user={user} />
       )}
 
       {canShowAccountDetails && (
