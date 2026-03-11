@@ -69,7 +69,7 @@ const ActivityBarChart: React.FC<{ logs: ActivityLog[]; dailyGoal?: number }> = 
                       entry.count === 0
                         ? 'bg-transparent'
                         : entry.isGoalMet
-                          ? 'bg-gradient-to-t from-medace-500 to-medace-400'
+                          ? 'bg-medace-500'
                           : entry.isToday
                             ? 'bg-slate-400'
                             : 'bg-slate-300 group-hover:bg-slate-400'
@@ -277,7 +277,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-medace-400 to-medace-600"
+                      className="h-full rounded-full bg-medace-500"
                       style={{ width: `${todayProgressPercent}%` }}
                     ></div>
                   </div>

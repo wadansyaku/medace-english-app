@@ -26,7 +26,7 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
                 <Trophy className="h-3 w-3 fill-current" /> 完了
               </span>
             ) : book.isPriority ? (
-              <span className="flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2 py-1 text-xs font-bold text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-medace-500 px-2 py-1 text-xs font-bold text-white shadow-sm">
                 <Star className="h-3 w-3 fill-current" /> 推奨
               </span>
             ) : null}

@@ -33,7 +33,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
   if (isFreePlan) {
     return (
       <section className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-        <div className="rounded-[32px] border border-medace-100 bg-[linear-gradient(135deg,#fff7ea_0%,#ffffff_100%)] p-6 md:p-7 shadow-sm">
+        <div className="rounded-[32px] border border-medace-100 bg-medace-50 p-6 md:p-7 shadow-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-medace-900 px-3 py-1 text-xs font-bold text-white">
               {SUBSCRIPTION_PLAN_LABELS[plan]}
@@ -91,7 +91,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
     ];
 
     return (
-      <section className="rounded-[32px] border border-medace-100 bg-[linear-gradient(135deg,#fffdfa_0%,#fff4e6_45%,#ffffff_100%)] p-6 md:p-7 shadow-sm">
+      <section className="rounded-[32px] border border-medace-100 bg-[#fffaf5] p-6 md:p-7 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-medace-900 px-3 py-1 text-xs font-bold text-white">

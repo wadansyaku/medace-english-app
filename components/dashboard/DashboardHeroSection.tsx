@@ -48,8 +48,8 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   onOpenPlan,
   onGeneratePlan,
 }) => (
-  <section className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(135deg,#2F1609_0%,#66321A_42%,#F66D0B_100%)] p-7 text-white shadow-[0_24px_60px_rgba(228,94,4,0.18)] md:p-8">
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,191,82,0.34),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(252,215,151,0.24),_transparent_22%)]"></div>
+  <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-7 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)] md:p-8">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_26%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_24%)]"></div>
     <div className="relative">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +138,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               <span>{todayCount} / {todayWordGoal} 語</span>
             </div>
             <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/15">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#FCD797] to-white" style={{ width: `${todayProgressPercent}%` }}></div>
+              <div className="h-full rounded-full bg-white/90" style={{ width: `${todayProgressPercent}%` }}></div>
             </div>
           </div>
         </div>

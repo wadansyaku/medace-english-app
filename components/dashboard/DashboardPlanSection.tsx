@@ -75,7 +75,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         </div>
       </>
     ) : (
-      <div className="mt-5 rounded-3xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] px-5 py-5 text-white">
+      <div className="mt-5 rounded-3xl bg-medace-500 px-5 py-5 text-white">
         <p className="text-sm leading-relaxed text-white/75">
           診断結果に加えて、目標試験・試験日・学習時間・苦手分野をもとに、毎日の単語数とコースを自動で提案します。
         </p>

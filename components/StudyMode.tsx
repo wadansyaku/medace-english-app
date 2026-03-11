@@ -310,7 +310,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         <div className="absolute inset-0 bg-gradient-to-b from-yellow-50 via-white to-white"></div>
         <div className="relative z-10">
             <div className="flex flex-col items-center text-center">
-                {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 px-4 py-2 text-sm font-black text-white shadow-lg">LEVEL UP!</span></div>}
+                {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-medace-500 px-4 py-2 text-sm font-black text-white shadow-lg">LEVEL UP!</span></div>}
                 <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 shadow-inner">
                     <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
                 </div>
@@ -440,7 +440,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           </div>
 
           {/* Back */}
-          <div className="card-back absolute flex h-full w-full flex-col overflow-hidden rounded-3xl bg-[linear-gradient(145deg,#2F1609_0%,#66321A_45%,#F66D0B_100%)] shadow-xl backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
+          <div className="card-back absolute flex h-full w-full flex-col overflow-hidden rounded-3xl bg-medace-500 shadow-xl backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
             <div className="p-4 md:p-8 flex flex-col h-full overflow-y-auto scrollbar-hide relative">
                 
                 <div className="flex justify-between w-full mb-2 md:mb-4 relative z-10">
@@ -568,7 +568,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         </div>
       ) : (
         <div className="flex justify-center pb-6 md:pb-0">
-             <button onClick={() => { if(!isEditing) setIsFlipped(true); }} disabled={isEditing} className={`flex items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-105 ${isEditing ? 'cursor-not-allowed bg-medace-200' : 'bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] text-white'}`}>
+             <button onClick={() => { if(!isEditing) setIsFlipped(true); }} disabled={isEditing} className={`flex items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-105 ${isEditing ? 'cursor-not-allowed bg-medace-200' : 'bg-medace-600 text-white hover:bg-medace-700'}`}>
                 <RotateCw className="w-5 h-5" /> 答えを確認
             </button>
         </div>

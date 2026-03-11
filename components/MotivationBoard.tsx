@@ -13,7 +13,7 @@ const SCOPE_STYLES: Record<MotivationScopeStats['scope'], {
 }> = {
   PERSONAL: {
     badgeClassName: 'border-medace-200 bg-medace-50 text-medace-700',
-    cardClassName: 'border-medace-100 bg-[linear-gradient(180deg,#fff7ef_0%,#ffffff_100%)]',
+    cardClassName: 'border-medace-100 bg-[#fff8f1]',
     accentClassName: 'text-medace-700',
   },
   GROUP: {
@@ -63,7 +63,7 @@ const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot }) => {
         </div>
       </div>
 
-      <div className="mt-5 rounded-[28px] bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] px-5 py-5 text-white">
+      <div className="mt-5 rounded-[28px] bg-medace-500 px-5 py-5 text-white">
         <div className="flex items-start gap-3">
           <div className="rounded-2xl bg-white/15 p-3 text-white">
             <Sparkles className="h-5 w-5" />

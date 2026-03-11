@@ -59,8 +59,8 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
       />
 
-      <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(246,109,11,0.12)]">
-        <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#fff4e8_100%)] p-8 md:p-10">
+      <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
+        <div className="border-b border-slate-100 bg-medace-50 p-8 md:p-10">
           <div className="max-w-3xl">
             <p className="text-sm font-bold tracking-[0.12em] text-medace-500">Public Guide</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">

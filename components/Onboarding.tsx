@@ -105,10 +105,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
 
   if (step === 'PROFILE') {
     return (
-      <div data-testid="onboarding-profile" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.18),_transparent_34%),linear-gradient(180deg,#fffaf5_0%,#fff 48%,#fff3e2_100%)] py-10 px-4">
+      <div data-testid="onboarding-profile" className="min-h-screen bg-[#fff8f1] py-10 px-4">
         <div className="max-w-6xl mx-auto grid xl:grid-cols-[0.96fr_1.04fr] gap-6">
-          <div className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(145deg,#2F1609_0%,#66321A_42%,#F66D0B_100%)] p-8 text-white shadow-[0_28px_80px_rgba(228,94,4,0.24)] md:p-10">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.22),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,191,82,0.16),_transparent_24%)]"></div>
+          <div className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_28px_80px_rgba(255,130,22,0.22)] md:p-10">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.24),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.12),_transparent_24%)]"></div>
             <div className="relative">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase text-white/70">
                 <Radar className="w-4 h-4" /> Placement Design
@@ -209,7 +209,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                     key={option.id}
                     type="button"
                     onClick={() => setSelfAssessment(option.id)}
-                    className={`rounded-3xl border px-5 py-4 text-left transition-all ${selfAssessment === option.id ? 'border-medace-900 bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] text-white shadow-[0_18px_40px_rgba(228,94,4,0.18)]' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                    className={`rounded-3xl border px-5 py-4 text-left transition-all ${selfAssessment === option.id ? 'border-medace-600 bg-medace-500 text-white shadow-[0_18px_40px_rgba(255,130,22,0.18)]' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>
@@ -244,7 +244,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
               type="button"
               onClick={handleStart}
               disabled={!selfAssessment}
-              className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] py-4 text-base font-bold text-white shadow-lg transition-transform hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
+              className="mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 py-4 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-700 disabled:opacity-50"
             >
               診断を始める <ChevronRight className="w-5 h-5" />
             </button>
@@ -256,7 +256,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
 
   if (step === 'RESULT' && result && finalLevel) {
     return (
-      <div data-testid="onboarding-result" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.16),_transparent_32%),linear-gradient(180deg,#fffaf4_0%,#fff 42%,#fff3e2_100%)] px-4 py-10">
+      <div data-testid="onboarding-result" className="min-h-screen bg-[#fff8f1] px-4 py-10">
         <div className="max-w-6xl mx-auto space-y-6">
         <div className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-xl">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -393,7 +393,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                 </div>
               </div>
 
-              <div className="rounded-[32px] border border-medace-700 bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] p-6 text-white shadow-xl md:p-8">
+              <div className="rounded-[32px] border border-medace-600 bg-medace-500 p-6 text-white shadow-xl md:p-8">
                 <p className="text-xs font-bold tracking-[0.18em] uppercase text-white/55">おすすめペース</p>
                 <div className="mt-3 text-4xl font-black tracking-tight">{result.recommendedDailyGoal}<span className="text-lg text-white/60 ml-1">語 / 日</span></div>
                 <p className="mt-3 text-sm text-white/75 leading-relaxed">
@@ -422,11 +422,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
   }
 
   return (
-    <div data-testid="onboarding-test" className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(246,109,11,0.15),_transparent_28%),linear-gradient(180deg,#fff 0%,#fff6ea 100%)] px-4 py-8">
+    <div data-testid="onboarding-test" className="min-h-screen bg-[#fff8f1] px-4 py-8">
       <div className="max-w-5xl mx-auto">
         <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-xl">
           <div className="grid lg:grid-cols-[0.33fr_0.67fr]">
-            <aside className="bg-[linear-gradient(160deg,#2F1609_0%,#66321A_45%,#F66D0B_100%)] p-6 text-white md:p-8">
+            <aside className="bg-medace-500 p-6 text-white md:p-8">
               <p className="text-xs font-bold tracking-[0.18em] uppercase text-white/55">診断の流れ</p>
               <h2 className="mt-3 text-2xl font-black tracking-tight">英語の現在地を確認中</h2>
               <p className="mt-3 text-sm text-white/72 leading-relaxed">
@@ -452,7 +452,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                   <span>{progressPercent}%</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-medace-300 to-medace-500 transition-all duration-300" style={{ width: `${progressPercent}%` }}></div>
+                  <div className="h-full rounded-full bg-medace-300 transition-all duration-300" style={{ width: `${progressPercent}%` }}></div>
                 </div>
               </div>
 
@@ -517,7 +517,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                       type="button"
                       data-testid="diagnostic-option"
                       onClick={() => handleSelectAnswer(option)}
-                      className={`rounded-3xl border px-5 py-4 text-left transition-all ${isSelected ? 'border-medace-900 bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] text-white shadow-[0_18px_40px_rgba(228,94,4,0.18)]' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
+                      className={`rounded-3xl border px-5 py-4 text-left transition-all ${isSelected ? 'border-medace-600 bg-medace-500 text-white shadow-[0_18px_40px_rgba(255,130,22,0.18)]' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}
                     >
                       <div className="flex items-start gap-4">
                         <div className={`w-8 h-8 rounded-full border flex items-center justify-center text-sm font-black shrink-0 ${isSelected ? 'border-white/20 bg-white/10 text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
@@ -545,7 +545,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
                   type="button"
                   onClick={handleNext}
                   disabled={!currentAnswer}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] px-5 py-3 text-sm font-bold text-white transition-transform hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700 disabled:opacity-50"
                 >
                   {currentQuestionIndex === DIAGNOSTIC_QUESTIONS.length - 1 ? '判定を見る' : '次へ'}
                   <ChevronRight className="w-4 h-4" />

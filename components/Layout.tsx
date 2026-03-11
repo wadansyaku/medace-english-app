@@ -31,7 +31,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
       {/* Header */}
       <header className="bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)]">
         {isDemoUser && (
-          <div className="border-b border-amber-200/80 bg-[linear-gradient(90deg,#fff8e8_0%,#fff1d1_100%)]">
+          <div className="border-b border-amber-200/80 bg-[#fff4df]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limited Demo Access</p>
@@ -53,7 +53,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
         )}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[80px] flex items-center justify-between py-2">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
-            <div className="bg-[linear-gradient(135deg,#FCD797_0%,#FFBF52_36%,#F66D0B_100%)] p-3 rounded-2xl shadow-lg shadow-medace-200/70">
+            <div className="rounded-2xl bg-medace-300 p-3 shadow-lg shadow-medace-200/70">
               <BookOpen className="text-medace-900 w-6 h-6" />
             </div>
             <div className="hidden sm:block">
@@ -91,7 +91,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
                               </div>
                               <div className="h-1.5 bg-medace-100 rounded-full overflow-hidden">
                                   <div 
-                                      className="h-full bg-gradient-to-r from-medace-400 to-medace-600 rounded-full transition-all duration-1000 ease-out"
+                                      className="h-full rounded-full bg-medace-500 transition-all duration-1000 ease-out"
                                       style={{ width: `${progressPercent}%` }}
                                   ></div>
                               </div>

@@ -38,7 +38,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     title: 'ねむりのルーモ',
     subtitle: 'まだ小さな灯り。最初の学習で目を覚まします。',
     unlockScore: 0,
-    auraClass: 'from-orange-100 via-amber-50 to-white',
+    auraClass: 'bg-[#fff8f1]',
     sparkClass: 'bg-orange-200/70',
     reward: 'ルーモのはじめてバッジ',
   },
@@ -46,7 +46,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     title: 'ひだまりルーモ',
     subtitle: '単語に触れるほど表情が明るくなる、学習スペースの相棒。',
     unlockScore: 120,
-    auraClass: 'from-orange-200 via-amber-100 to-white',
+    auraClass: 'bg-[#fff4e8]',
     sparkClass: 'bg-medace-200/80',
     reward: 'ひだまりフレーム',
   },
@@ -54,7 +54,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     title: 'ことばルーモ',
     subtitle: '復習を整えると、ノートの羽が大きく育ちます。',
     unlockScore: 320,
-    auraClass: 'from-orange-300 via-amber-100 to-white',
+    auraClass: 'bg-[#ffeedb]',
     sparkClass: 'bg-medace-300/80',
     reward: 'ことばノートスキン',
   },
@@ -62,7 +62,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     title: 'グロウルーモ',
     subtitle: '連続学習が続くと、教室を照らす案内役へ進化します。',
     unlockScore: 680,
-    auraClass: 'from-medace-300 via-orange-100 to-white',
+    auraClass: 'bg-[#ffe5ca]',
     sparkClass: 'bg-orange-300/80',
     reward: 'グロウ演出エフェクト',
   },
@@ -70,7 +70,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     title: 'スタールーモ',
     subtitle: '安定して学び続ける人だけが連れて歩ける完成形です。',
     unlockScore: 1200,
-    auraClass: 'from-medace-400 via-orange-200 to-white',
+    auraClass: 'bg-[#ffd9b2]',
     sparkClass: 'bg-amber-300/85',
     reward: 'スタータイトル',
   },
@@ -122,13 +122,8 @@ const CompanionIllustration: React.FC<{ stageIndex: number; mood: 'happy' | 'cal
       <div className={`absolute left-7 top-8 h-5 w-5 rounded-full blur-sm ${sparkClass} animate-pulse`} />
       <div className={`absolute right-12 top-14 h-3 w-3 rounded-full blur-sm ${sparkClass} animate-pulse`} />
       <div className={`absolute right-6 top-28 h-4 w-4 rounded-full blur-sm ${sparkClass} animate-pulse`} />
-      <svg viewBox="0 0 280 240" className="w-full drop-shadow-[0_22px_45px_rgba(228,94,4,0.22)]">
+      <svg viewBox="0 0 280 240" className="w-full drop-shadow-[0_22px_45px_rgba(255,130,22,0.22)]">
         <defs>
-          <linearGradient id="lumoBody" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFF6E2" />
-            <stop offset="46%" stopColor="#FFBF52" />
-            <stop offset="100%" stopColor="#F66D0B" />
-          </linearGradient>
           <linearGradient id="lumoWing" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
             <stop offset="100%" stopColor="#FFDCA3" />
@@ -143,7 +138,7 @@ const CompanionIllustration: React.FC<{ stageIndex: number; mood: 'happy' | 'cal
           <path d="M198 123 C225 114 232 155 201 160 C191 151 189 134 198 123 Z" fill="url(#lumoWing)" opacity="0.95" />
         )}
 
-        <path d="M140 46 C168 46 196 66 205 94 C217 132 203 183 140 192 C77 183 63 132 75 94 C84 66 112 46 140 46 Z" fill="url(#lumoBody)" />
+        <path d="M140 46 C168 46 196 66 205 94 C217 132 203 183 140 192 C77 183 63 132 75 94 C84 66 112 46 140 46 Z" fill="#ffb874" />
         <path d="M140 55 C160 54 180 67 187 88 C173 78 157 72 140 72 C123 72 107 78 93 88 C100 67 120 54 140 55 Z" fill="rgba(255,255,255,0.55)" />
         {stageIndex >= 3 && (
           <path d="M95 176 C120 189 160 189 185 176" fill="none" stroke="#FFF4DA" strokeWidth="8" strokeLinecap="round" />
@@ -258,7 +253,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
   return (
     <section className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_24px_60px_rgba(228,94,4,0.12)]">
       <div className="grid gap-0 xl:grid-cols-[0.95fr_1.05fr]">
-        <div className={`relative overflow-hidden bg-gradient-to-br ${currentStage.auraClass} px-6 py-7 md:px-7 md:py-8`}>
+        <div className={`relative overflow-hidden ${currentStage.auraClass} px-6 py-7 md:px-7 md:py-8`}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.72),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(246,109,11,0.14),_transparent_30%)]" />
           <div className="relative">
             <div className="flex flex-wrap items-center gap-2">
@@ -294,7 +289,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
                 </div>
               </div>
               <div className="mt-4 h-3 overflow-hidden rounded-full bg-white">
-                <div className="h-full rounded-full bg-[linear-gradient(90deg,#F66D0B_0%,#FFBF52_100%)] transition-all duration-700" style={{ width: `${stageProgress}%` }} />
+                <div className="h-full rounded-full bg-medace-500 transition-all duration-700" style={{ width: `${stageProgress}%` }} />
               </div>
               <p className="mt-3 text-sm leading-relaxed text-medace-900/72">{mood.copy}</p>
             </div>
@@ -309,7 +304,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
               </div>
             <button
               onClick={onStartQuest}
-              className="inline-flex items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] px-4 py-3 text-sm font-bold text-white shadow-sm transition-transform hover:scale-[1.02]"
+              className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-700"
             >
               <Zap className="h-4 w-4" /> クエストへ進む
             </button>
@@ -338,7 +333,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
                       <span>{mission.progress} / {mission.target}</span>
                     </div>
                     <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/80">
-                      <div className="h-full rounded-full bg-[linear-gradient(90deg,#F66D0B_0%,#FFBF52_100%)] transition-all duration-700" style={{ width: `${progressPercent}%` }} />
+                      <div className="h-full rounded-full bg-medace-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
                     </div>
                   </div>
                 );
@@ -377,7 +372,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
                         key={index}
                         className={`flex aspect-square items-center justify-center rounded-2xl border text-xs font-black ${
                           isActive
-                            ? 'border-medace-200 bg-[linear-gradient(135deg,#F66D0B_0%,#FFBF52_100%)] text-white shadow-sm'
+                            ? 'border-medace-200 bg-medace-500 text-white shadow-sm'
                             : 'border-slate-200 bg-slate-50 text-slate-300'
                         }`}
                       >

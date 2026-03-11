@@ -129,7 +129,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
             <button
               onClick={onAiImport}
               disabled={uploading || !rawText || !contentTitle}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white shadow-lg transition-all ${uploading || !rawText ? 'cursor-not-allowed bg-medace-200' : 'bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] hover:scale-[1.01]'}`}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white shadow-lg transition-all ${uploading || !rawText ? 'cursor-not-allowed bg-medace-200' : 'bg-medace-600 hover:bg-medace-700'}`}
             >
               {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {uploading ? '生成中...' : '教材を生成する'}
@@ -167,7 +167,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
             <button
               onClick={onCsvUpload}
               disabled={uploading}
-              className={`w-full rounded-xl py-3 font-bold text-white transition-colors ${uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] hover:opacity-95'}`}
+              className={`w-full rounded-xl py-3 font-bold text-white transition-colors ${uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-medace-600 hover:bg-medace-700'}`}
             >
               {uploading ? '処理中...' : 'CSVを取り込む'}
             </button>

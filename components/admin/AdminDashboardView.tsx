@@ -96,8 +96,8 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
   return (
     <>
-      <div className="relative overflow-hidden rounded-[32px] bg-[linear-gradient(135deg,#2F1609_0%,#66321A_44%,#F66D0B_100%)] p-7 text-white shadow-[0_24px_70px_rgba(228,94,4,0.18)] md:p-8">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,191,82,0.28),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(252,215,151,0.18),_transparent_22%)]"></div>
+      <div className="relative overflow-hidden rounded-[32px] bg-medace-500 p-7 text-white shadow-[0_24px_70px_rgba(255,130,22,0.22)] md:p-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.24),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]"></div>
         <div className="relative">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/70">

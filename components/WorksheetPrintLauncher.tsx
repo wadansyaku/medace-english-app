@@ -143,8 +143,8 @@ const buildPrintableWorksheetHtml = (
           --ink: #1f2937;
           --muted: #6b7280;
           --line: #d1d5db;
-          --accent: #f66d0b;
-          --soft: #fff7ed;
+          --accent: #ff8216;
+          --soft: #fff8f1;
         }
         * {
           box-sizing: border-box;
@@ -164,7 +164,7 @@ const buildPrintableWorksheetHtml = (
           border: 1.3px solid var(--accent);
           border-radius: 4mm;
           padding: 2.35mm 2.8mm;
-          background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+          background: #fff8f1;
         }
         .header-top {
           display: flex;
@@ -700,7 +700,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#fff9f2_0%,#ffffff_100%)] p-5">
+              <div className="rounded-[28px] border border-slate-200 bg-[#fff8f1] p-5">
                 {(studentsLoading || snapshotLoading) ? (
                   <div className="flex min-h-[420px] flex-col items-center justify-center text-slate-500">
                     <Loader2 className="h-8 w-8 animate-spin text-medace-500" />

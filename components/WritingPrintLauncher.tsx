@@ -25,13 +25,13 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
           --ink: #0f172a;
           --muted: #475569;
           --line: #dbe4ef;
-          --accent: #f66d0b;
-          --soft: #fff7ed;
+          --accent: #ff8216;
+          --soft: #fff8f1;
         }
         * { box-sizing: border-box; }
         body { margin: 0; font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: var(--ink); background: white; }
         .page { width: 210mm; min-height: 297mm; padding: 7mm; }
-        .hero { border: 1px solid #fed7aa; border-radius: 18px; padding: 16px; background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%); }
+        .hero { border: 1px solid #fed7aa; border-radius: 18px; padding: 16px; background: #fff8f1; }
         .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
         .title { margin: 8px 0 0; font-size: 25px; font-weight: 900; line-height: 1.2; }
         .meta-grid { display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.92fr; gap: 10px; margin-top: 14px; }

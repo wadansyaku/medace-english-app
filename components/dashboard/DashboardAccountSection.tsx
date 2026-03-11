@@ -65,7 +65,7 @@ const DashboardAccountSection: React.FC<DashboardAccountSectionProps> = ({
               </div>
               <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-medace-300 to-medace-500"
+                  className="h-full rounded-full bg-medace-500"
                   style={{ width: `${aiBudgetPercent}%` }}
                 ></div>
               </div>

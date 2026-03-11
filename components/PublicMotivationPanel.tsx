@@ -100,7 +100,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-3xl border border-emerald-100 bg-[linear-gradient(135deg,#effcf5_0%,#ffffff_100%)] px-4 py-4">
+              <div className="rounded-3xl border border-emerald-100 bg-emerald-50 px-4 py-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
                   <Radio className="h-4 w-4" />
                   直近15分
@@ -108,7 +108,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
                 <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(snapshot.activeLearners15m)}人</div>
                 <div className="mt-1 text-xs leading-relaxed text-slate-500">いま学習している人数</div>
               </div>
-              <div className="rounded-3xl border border-sky-100 bg-[linear-gradient(135deg,#eff8ff_0%,#ffffff_100%)] px-4 py-4">
+              <div className="rounded-3xl border border-sky-100 bg-sky-50 px-4 py-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-sky-700">
                   <Users className="h-4 w-4" />
                   過去24時間
@@ -116,7 +116,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
                 <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(snapshot.activeLearners24h)}人</div>
                 <div className="mt-1 text-xs leading-relaxed text-slate-500">きょう学習した人数</div>
               </div>
-              <div className="rounded-3xl border border-amber-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-4 py-4">
+              <div className="rounded-3xl border border-amber-100 bg-amber-50 px-4 py-4">
                 <div className="flex items-center gap-2 text-sm font-bold text-amber-700">
                   <Activity className="h-4 w-4" />
                   更新語数
@@ -128,7 +128,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
           </div>
 
           <div className="grid gap-3">
-            <div className="rounded-[28px] bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] px-5 py-5 text-white">
+            <div className="rounded-[28px] bg-medace-500 px-5 py-5 text-white">
               <div className="flex items-start gap-3">
                 <div className="rounded-2xl bg-white/15 p-3 text-white">
                   <Sparkles className="h-5 w-5" />
@@ -165,7 +165,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
 
   return (
     <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-      <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#fffaf3_0%,#ffffff_58%,#f5fbff_100%)] p-6 md:p-8">
+      <div className="border-b border-slate-100 bg-medace-50 p-6 md:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-sm font-bold uppercase tracking-[0.16em] text-medace-500">Live Snapshot</p>
@@ -178,7 +178,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
         </div>
 
         <div className="mt-6 grid gap-3 md:grid-cols-3">
-          <div className="rounded-3xl border border-emerald-100 bg-[linear-gradient(135deg,#effcf5_0%,#ffffff_100%)] px-5 py-5">
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 px-5 py-5">
             <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
               <Radio className="h-4 w-4" />
               直近15分の動き
@@ -186,7 +186,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
             <div className="mt-3 text-3xl font-black text-slate-950">{formatCount(snapshot.activeLearners15m)}人</div>
             <div className="mt-2 text-sm leading-relaxed text-slate-500">いま学習が動いている人数です。</div>
           </div>
-          <div className="rounded-3xl border border-sky-100 bg-[linear-gradient(135deg,#eff8ff_0%,#ffffff_100%)] px-5 py-5">
+          <div className="rounded-3xl border border-sky-100 bg-sky-50 px-5 py-5">
             <div className="flex items-center gap-2 text-sm font-bold text-sky-700">
               <Users className="h-4 w-4" />
               過去24時間
@@ -194,7 +194,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
             <div className="mt-3 text-3xl font-black text-slate-950">{formatCount(snapshot.activeLearners24h)}人</div>
             <div className="mt-2 text-sm leading-relaxed text-slate-500">1日の中で学習した人数です。</div>
           </div>
-          <div className="rounded-3xl border border-amber-100 bg-[linear-gradient(135deg,#fff7ed_0%,#ffffff_100%)] px-5 py-5">
+          <div className="rounded-3xl border border-amber-100 bg-amber-50 px-5 py-5">
             <div className="flex items-center gap-2 text-sm font-bold text-amber-700">
               <Activity className="h-4 w-4" />
               過去24時間の更新語数
@@ -206,7 +206,7 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
       </div>
 
       <div className="grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
-        <div className="rounded-[28px] bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] px-5 py-5 text-white">
+        <div className="rounded-[28px] bg-medace-500 px-5 py-5 text-white">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl bg-white/15 p-3 text-white">
               <Sparkles className="h-5 w-5" />

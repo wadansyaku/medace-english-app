@@ -279,10 +279,10 @@ const App: React.FC = () => {
             compact
           />
 
-          <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(246,109,11,0.12)]">
+          <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
             <div className="grid lg:grid-cols-[1.04fr_0.96fr]">
-              <div className="relative overflow-hidden bg-[linear-gradient(145deg,#66321A_0%,#F66D0B_58%,#FFBF52_100%)] p-9 text-white md:p-11">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.3),_transparent_34%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.18),_transparent_28%)]"></div>
+              <div className="relative overflow-hidden bg-medace-500 p-9 text-white md:p-11">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.3),_transparent_34%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.16),_transparent_28%)]"></div>
                 <div className="relative space-y-9">
                   <div>
                     <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-white/15 shadow-lg backdrop-blur-sm">
@@ -364,7 +364,7 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-[linear-gradient(180deg,#fffdf9_0%,#ffffff_100%)] p-7 md:p-9 lg:p-11">
+              <div className="bg-[#fffdf9] p-7 md:p-9 lg:p-11">
                 <div className="mb-6 grid grid-cols-2 gap-1 rounded-2xl border border-medace-100 bg-medace-50 p-1.5">
                   <button
                     type="button"
@@ -466,7 +466,7 @@ const App: React.FC = () => {
 
                   <button
                     type="submit"
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#66321A_0%,#F66D0B_100%)] py-4 text-base font-bold text-white shadow-md transition-transform hover:scale-[1.01]"
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 py-4 text-base font-bold text-white shadow-md transition-colors hover:bg-medace-700"
                   >
                     {authMode === 'LOGIN' ? (
                       <><LogIn className="h-4 w-4" /> ログイン</>
