@@ -3,9 +3,11 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import Layout from './components/Layout';
 import ModalOverlay from './components/ModalOverlay';
 import { OrganizationRole, UserRole, UserProfile } from './types';
+import { BusinessAdminWorkspaceView, InstructorWorkspaceView } from './types';
 import { storage } from './services/storage';
 import { AUTH_COPY, BRAND } from './config/brand';
 import { getHomeViewForUser, isGroupAdmin } from './config/access';
+import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from './config/workspace';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from './utils/displayPreferences';
 import { getDemoAccessWindowLabel, isDemoEmail } from './utils/demo';
 import { usePublicMotivationSnapshot } from './hooks/usePublicMotivationSnapshot';
@@ -75,6 +77,8 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showAlternateAccess, setShowAlternateAccess] = useState(false);
   const [showPublicInfo, setShowPublicInfo] = useState(false);
+  const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
+  const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
   const [showAdminDemoPrompt, setShowAdminDemoPrompt] = useState(false);
   const [adminDemoPassword, setAdminDemoPassword] = useState('');
   const [pendingAdminDemoRole, setPendingAdminDemoRole] = useState<{
@@ -234,6 +238,8 @@ const App: React.FC = () => {
     setShowAdminDemoPrompt(false);
     setAdminDemoPassword('');
     setPendingAdminDemoRole(null);
+    setInstructorWorkspaceView(InstructorWorkspaceView.OVERVIEW);
+    setBusinessAdminWorkspaceView(BusinessAdminWorkspaceView.OVERVIEW);
   };
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
@@ -330,36 +336,6 @@ const App: React.FC = () => {
                     >
                       生徒としてすぐ試す
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAlternateAccess((prev) => !prev)}
-                      className="mt-3 flex w-full items-center justify-between rounded-xl border border-white/20 bg-white/5 px-4 py-3.5 text-base font-bold text-white/90 transition-colors hover:bg-white/10"
-                    >
-                      <span>学校・先生向けの体験メニュー</span>
-                      {showAlternateAccess ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-                    {showAlternateAccess && (
-                      <div className="mt-3 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium leading-relaxed text-white/78">
-                          ここから先はすべてビジネス版デモです。既存の公式単語帳、学校向け運用画面、講師通知導線までそのまま確認できます。各デモは {getDemoAccessWindowLabel()} の期間限定で、別端末とは共有されません。
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {BUSINESS_DEMO_OPTIONS.map((option) => (
-                            <button
-                              key={option.title}
-                              onClick={() => handleDemoLogin(option.role, option.organizationRole)}
-                              data-testid={option.testId}
-                              className={`rounded-2xl border border-white/20 bg-white/10 px-4 py-4 text-left text-white transition-colors hover:bg-white/15 ${
-                                option.compact ? 'md:col-span-2' : ''
-                              }`}
-                            >
-                              <div className="text-base font-bold">{option.title}</div>
-                              <div className="mt-2 text-sm leading-relaxed text-white/78">{option.description}</div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -499,6 +475,47 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-3xl">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">School Demo</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学校・教室向けの体験は別ブロックで選ぶ</h2>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                  ビジネス版は、講師フォロー、組織運用、紙提出の自由英作文までを役割別ワークスペースで確認できます。学生向けの体験開始とは分けて案内します。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAlternateAccess((prev) => !prev)}
+                className="inline-flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-medace-200 hover:text-medace-700"
+              >
+                <span>学校・先生向けの体験メニュー</span>
+                {showAlternateAccess ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {showAlternateAccess && (
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {BUSINESS_DEMO_OPTIONS.map((option) => (
+                  <button
+                    key={option.title}
+                    onClick={() => handleDemoLogin(option.role, option.organizationRole)}
+                    data-testid={option.testId}
+                    className={`rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5 text-left transition-colors hover:border-medace-200 hover:bg-medace-50/60 ${
+                      option.compact ? 'md:col-span-2' : ''
+                    }`}
+                  >
+                    <div className="text-base font-bold text-slate-950">{option.title}</div>
+                    <div className="mt-2 text-sm leading-relaxed text-slate-600">{option.description}</div>
+                    <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-medace-600">
+                      {getDemoAccessWindowLabel()} の体験セッション
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       );
     }
@@ -541,12 +558,27 @@ const App: React.FC = () => {
       case 'instructor':
         return user.role === UserRole.INSTRUCTOR
           ? (isGroupAdmin(user)
-            ? <BusinessAdminDashboard user={user} onSelectBook={handleBookSelect} />
-            : <InstructorDashboard user={user} onSelectBook={handleBookSelect} />)
+            ? <BusinessAdminDashboard user={user} onSelectBook={handleBookSelect} activeView={businessAdminWorkspaceView} onChangeView={setBusinessAdminWorkspaceView} />
+            : <InstructorDashboard user={user} onSelectBook={handleBookSelect} activeView={instructorWorkspaceView} onChangeView={setInstructorWorkspaceView} />)
           : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
       default:
         return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setUser} />;
     }
+  };
+
+  const workspaceSections = user && currentView === 'instructor'
+    ? (isGroupAdmin(user) ? BUSINESS_ADMIN_WORKSPACE_SECTIONS : INSTRUCTOR_WORKSPACE_SECTIONS)
+    : [];
+  const activeWorkspaceSection = user && currentView === 'instructor'
+    ? (isGroupAdmin(user) ? businessAdminWorkspaceView : instructorWorkspaceView)
+    : undefined;
+  const handleSelectWorkspaceSection = (section: string) => {
+    if (!user || currentView !== 'instructor') return;
+    if (isGroupAdmin(user)) {
+      setBusinessAdminWorkspaceView(section as BusinessAdminWorkspaceView);
+      return;
+    }
+    setInstructorWorkspaceView(section as InstructorWorkspaceView);
   };
 
   return (
@@ -557,6 +589,9 @@ const App: React.FC = () => {
         onResetDemo={isDemoEmail(user?.email) ? handleResetDemo : undefined}
         currentView={currentView}
         onChangeView={setCurrentView}
+        workspaceSections={workspaceSections}
+        activeWorkspaceSection={activeWorkspaceSection}
+        onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
       >
         <Suspense
           fallback={

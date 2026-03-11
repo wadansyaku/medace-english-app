@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { BookOpen, LogOut, Zap, Star, Trophy } from 'lucide-react';
-import { UserRole, UserProfile, UserStudyMode } from '../types';
+import { UserRole, UserProfile, UserStudyMode, type WorkspaceSectionDefinition } from '../types';
 import { BRAND } from '../config/brand';
 import { getHomeViewForUser, getWorkspaceNavLabel, getWorkspaceRoleLabel } from '../config/access';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
@@ -13,9 +13,22 @@ interface LayoutProps {
   onResetDemo?: () => void;
   currentView: string;
   onChangeView: (view: string) => void;
+  workspaceSections?: WorkspaceSectionDefinition[];
+  activeWorkspaceSection?: string;
+  onSelectWorkspaceSection?: (section: string) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, currentView, onChangeView }) => {
+const Layout: React.FC<LayoutProps> = ({
+  children,
+  user,
+  onLogout,
+  onResetDemo,
+  currentView,
+  onChangeView,
+  workspaceSections = [],
+  activeWorkspaceSection,
+  onSelectWorkspaceSection,
+}) => {
   // Calculate progress to next level (Level * 100 XP)
   const stats = user?.stats || { xp: 0, level: 1, currentStreak: 0 };
   const xpToNext = stats.level * 100;
@@ -125,6 +138,32 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, onResetDemo, 
             </div>
           )}
         </div>
+        {user && workspaceSections.length > 0 && onSelectWorkspaceSection && activeWorkspaceSection && (
+          <div className="border-t border-medace-100/80 bg-white/82 backdrop-blur-xl">
+            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
+              {workspaceSections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => onSelectWorkspaceSection(section.id)}
+                  data-testid={`workspace-tab-${section.id.toLowerCase()}`}
+                  className={`shrink-0 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    activeWorkspaceSection === section.id
+                      ? 'border-medace-700 bg-medace-700 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200 hover:text-medace-700'
+                  }`}
+                >
+                  <div className="text-sm font-bold">{section.label}</div>
+                  {section.description && (
+                    <div className={`mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-white/72' : 'text-slate-400'}`}>
+                      {section.description}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Content */}

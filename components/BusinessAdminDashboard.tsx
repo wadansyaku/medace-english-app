@@ -1,15 +1,40 @@
-import React, { useEffect, useState } from 'react';
-import { OrganizationDashboardSnapshot, OrganizationRole, StudentRiskLevel, SUBSCRIPTION_PLAN_LABELS, UserProfile } from '../types';
-import { storage } from '../services/storage';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { getSubscriptionPolicy } from '../config/subscription';
-import { AlertCircle, BellRing, Building2, Loader2, ShieldCheck, Users } from 'lucide-react';
-import OfficialCatalogAccessPanel from './OfficialCatalogAccessPanel';
-import WorksheetPrintLauncher from './WorksheetPrintLauncher';
-import WritingOpsPanel from './WritingOpsPanel';
+import { storage } from '../services/storage';
+import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
+import {
+  BusinessAdminWorkspaceView,
+  OrganizationRole,
+  StudentRiskLevel,
+  SUBSCRIPTION_PLAN_LABELS,
+  type OrganizationDashboardSnapshot,
+  type StudentSummary,
+  type UserProfile,
+  type WritingAssignment,
+  type WritingQueueItem,
+} from '../types';
+import {
+  AlertCircle,
+  ArrowRight,
+  BellRing,
+  Building2,
+  CheckCircle2,
+  Loader2,
+  Search,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
+import WorkspaceMetricCard from './workspace/WorkspaceMetricCard';
+
+const OfficialCatalogAccessPanel = lazy(() => import('./OfficialCatalogAccessPanel'));
+const WorksheetPrintLauncher = lazy(() => import('./WorksheetPrintLauncher'));
+const WritingOpsPanel = lazy(() => import('./WritingOpsPanel'));
 
 interface BusinessAdminDashboardProps {
   user: UserProfile;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
+  activeView: BusinessAdminWorkspaceView;
+  onChangeView: (view: BusinessAdminWorkspaceView) => void;
 }
 
 const riskTone = (riskLevel: StudentRiskLevel): string => {
@@ -31,36 +56,76 @@ const formatDays = (timestamp: number): string => {
   return `${days}日前`;
 };
 
-const formatDateTime = (timestamp: number): string => {
-  return new Date(timestamp).toLocaleString('ja-JP', {
+const formatDateTime = (timestamp: number): string =>
+  new Date(timestamp).toLocaleString('ja-JP', {
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+
+const VIEW_COPY: Record<BusinessAdminWorkspaceView, { eyebrow: string; title: string; body: string }> = {
+  [BusinessAdminWorkspaceView.OVERVIEW]: {
+    eyebrow: 'Organization Overview',
+    title: '組織運用の詰まりを先に掴む',
+    body: '要フォロー生徒、担当割当の滞留、講師負荷、自由英作文の滞留を分けて見ながら、今優先する作業を決めます。',
+  },
+  [BusinessAdminWorkspaceView.ASSIGNMENTS]: {
+    eyebrow: 'Assignments',
+    title: '担当割当だけを一覧と詳細で更新する',
+    body: '生徒一覧から対象を絞り、右側で担当講師、要フォロー理由、最新履歴を見ながら割当を調整します。',
+  },
+  [BusinessAdminWorkspaceView.INSTRUCTORS]: {
+    eyebrow: 'Instructor Load',
+    title: '講師ごとの負荷と稼働を比較する',
+    body: '通知数、担当生徒数、接触生徒数を並べて、偏りや詰まりを確認します。',
+  },
+  [BusinessAdminWorkspaceView.WRITING]: {
+    eyebrow: 'Writing Management',
+    title: '自由英作文の進行状況と返却滞留を確認する',
+    body: '問題作成、配布、添削キュー、返却履歴を学校運用の流れとして見える化します。',
+  },
+  [BusinessAdminWorkspaceView.WORKSHEETS]: {
+    eyebrow: 'Worksheet Ops',
+    title: '配布用PDF問題の作成に集中する',
+    body: '生徒向け配布物は他の情報と切り離し、紙問題作成だけを素早く進めます。',
+  },
+  [BusinessAdminWorkspaceView.CATALOG]: {
+    eyebrow: 'Catalog Access',
+    title: '教材カタログは必要時だけ確認する',
+    body: '運用画面を整理するため、教材確認は独立ビューで必要な時だけ開きます。',
+  },
 };
 
-const MetricCard: React.FC<{ label: string; value: string; detail: string; }> = ({ label, value, detail }) => (
-  <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="text-sm font-bold text-slate-500">{label}</div>
-    <div className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</div>
-    <div className="mt-2 text-sm text-slate-500">{detail}</div>
-  </div>
-);
-
-const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, onSelectBook }) => {
+const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
+  user,
+  onSelectBook,
+  activeView,
+  onChangeView,
+}) => {
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
+  const [writingAssignments, setWritingAssignments] = useState<WritingAssignment[]>([]);
+  const [writingQueue, setWritingQueue] = useState<WritingQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assignmentSavingUid, setAssignmentSavingUid] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [assignmentFilter, setAssignmentFilter] = useState<'ALL' | 'DANGER' | 'UNASSIGNED'>('ALL');
+  const [assignmentQuery, setAssignmentQuery] = useState('');
+  const [selectedStudentUid, setSelectedStudentUid] = useState<string | null>(null);
 
   const loadSnapshot = async () => {
     setLoading(true);
     setError(null);
     try {
-      const nextSnapshot = await storage.getOrganizationDashboardSnapshot();
+      const [nextSnapshot, assignmentResponse, queueResponse] = await Promise.all([
+        storage.getOrganizationDashboardSnapshot(),
+        listWritingAssignments('organization'),
+        listWritingReviewQueue('QUEUE'),
+      ]);
       setSnapshot(nextSnapshot);
+      setWritingAssignments(assignmentResponse.assignments);
+      setWritingQueue(queueResponse.items);
     } catch (loadError) {
       console.error(loadError);
       setError((loadError as Error).message || '組織ダッシュボードの取得に失敗しました。');
@@ -72,6 +137,54 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
   useEffect(() => {
     void loadSnapshot();
   }, []);
+
+  const handleAssignmentChange = async (studentUid: string, instructorUid: string) => {
+    if (!snapshot) return;
+    setAssignmentSavingUid(studentUid);
+    setNotice(null);
+    try {
+      await storage.assignStudentInstructor(studentUid, instructorUid || null);
+      const instructorName = snapshot.instructors.find((instructor) => instructor.uid === instructorUid)?.displayName;
+      setNotice({
+        tone: 'success',
+        message: instructorUid
+          ? `担当講師を ${instructorName || '選択した講師'} に更新しました。`
+          : '担当講師の割当を解除しました。',
+      });
+      await loadSnapshot();
+    } catch (assignmentError) {
+      console.error(assignmentError);
+      setNotice({
+        tone: 'error',
+        message: (assignmentError as Error).message || '担当割当の更新に失敗しました。',
+      });
+    } finally {
+      setAssignmentSavingUid(null);
+    }
+  };
+
+  const filteredAssignments = useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.studentAssignments.filter((student) => {
+      if (assignmentFilter === 'DANGER' && student.riskLevel !== StudentRiskLevel.DANGER) return false;
+      if (assignmentFilter === 'UNASSIGNED' && student.assignedInstructorUid) return false;
+      if (assignmentQuery.trim()) {
+        const keyword = assignmentQuery.trim().toLowerCase();
+        return student.name.toLowerCase().includes(keyword) || student.email.toLowerCase().includes(keyword);
+      }
+      return true;
+    });
+  }, [assignmentFilter, assignmentQuery, snapshot]);
+
+  useEffect(() => {
+    if (filteredAssignments.length === 0) {
+      setSelectedStudentUid(null);
+      return;
+    }
+    if (!selectedStudentUid || !filteredAssignments.some((student) => student.uid === selectedStudentUid)) {
+      setSelectedStudentUid(filteredAssignments[0].uid);
+    }
+  }, [filteredAssignments, selectedStudentUid]);
 
   if (loading) {
     return (
@@ -94,30 +207,13 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
   const planCoverageRate = snapshot.totalStudents > 0
     ? Math.round((snapshot.learningPlanCount / snapshot.totalStudents) * 100)
     : 0;
-
-  const handleAssignmentChange = async (studentUid: string, instructorUid: string) => {
-    setAssignmentSavingUid(studentUid);
-    setNotice(null);
-    try {
-      await storage.assignStudentInstructor(studentUid, instructorUid || null);
-      const instructorName = snapshot?.instructors.find((instructor) => instructor.uid === instructorUid)?.displayName;
-      setNotice({
-        tone: 'success',
-        message: instructorUid
-          ? `担当講師を ${instructorName || '選択した講師'} に更新しました。`
-          : '担当講師の割当を解除しました。',
-      });
-      await loadSnapshot();
-    } catch (assignmentError) {
-      console.error(assignmentError);
-      setNotice({
-        tone: 'error',
-        message: (assignmentError as Error).message || '担当割当の更新に失敗しました。',
-      });
-    } finally {
-      setAssignmentSavingUid(null);
-    }
-  };
+  const instructorLoad = [...snapshot.instructors].sort((left, right) => right.assignedStudentCount - left.assignedStudentCount);
+  const selectedAssignmentStudent = filteredAssignments.find((student) => student.uid === selectedStudentUid) || filteredAssignments[0] || null;
+  const recentEvents = snapshot.assignmentEvents.slice(0, 6);
+  const reviewReadyCount = writingQueue.length;
+  const revisionRequestedCount = writingAssignments.filter((assignment) => assignment.status === 'REVISION_REQUESTED').length;
+  const issuedCount = writingAssignments.filter((assignment) => assignment.status === 'ISSUED').length;
+  const viewCopy = VIEW_COPY[activeView];
 
   return (
     <div data-testid="business-admin-dashboard" className="space-y-8 pb-12">
@@ -152,45 +248,527 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
             <Building2 className="h-5 w-5" />
             <span className="text-sm font-bold">{snapshot.organizationName}</span>
           </div>
-          <h2 className="mt-3 text-3xl font-black tracking-tight">教室運用を一画面で見渡す</h2>
-          <p className="mt-4 max-w-3xl text-sm leading-relaxed text-white/75">
-            サービス運営画面ではなく、あなたのグループだけを管理する画面です。生徒の稼働、講師のフォロー、学習プラン浸透を組織単位で確認できます。
-          </p>
+          <div className="mt-6 max-w-3xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">{viewCopy.eyebrow}</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight">{viewCopy.title}</h2>
+            <p className="mt-4 text-sm leading-relaxed text-white/75">{viewCopy.body}</p>
+          </div>
 
-          <div className="mt-7 grid gap-3 md:grid-cols-3">
-            {[
-              '広告なしで教室配布に耐える画面設計',
-              '講師フォローと学習プランの運用率を可視化',
-              'サービス全体ではなく、自組織の状態だけに集中',
-            ].map((item) => (
-              <div key={item} className="rounded-3xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-white/82">
-                {item}
-              </div>
-            ))}
+          <div className="mt-7 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50"
+            >
+              <Users className="h-4 w-4" />
+              割当を確認する
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeView(BusinessAdminWorkspaceView.INSTRUCTORS)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              講師負荷を見る
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeView(BusinessAdminWorkspaceView.WRITING)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              作文進捗を見る
+            </button>
           </div>
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-8">
-        <MetricCard label="メンバー" value={`${snapshot.totalMembers}`} detail={`${snapshot.totalStudents}名の生徒 / ${snapshot.totalInstructors}名の講師`} />
-        <MetricCard label="7日稼働" value={`${snapshot.activeStudents7d}`} detail="1週間以内に学習履歴がある生徒" />
-        <MetricCard label="要フォロー" value={`${snapshot.atRiskStudents}`} detail="学習が止まりかけている生徒" />
-        <MetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail="学習プランが設定済みの割合" />
-        <MetricCard label="通知後再開" value={`${snapshot.reactivatedStudents7d}`} detail="72時間以内に学習再開した生徒" />
-        <MetricCard label="再開率" value={`${snapshot.reactivationRate7d}%`} detail="直近7日通知からの再開率" />
-        <MetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail="講師が明示的に割り当て済みの割合" />
-        <MetricCard label="未割当生徒" value={`${snapshot.unassignedStudents}`} detail="担当講師がまだ決まっていない生徒" />
-      </div>
+      {activeView === BusinessAdminWorkspaceView.OVERVIEW && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <WorkspaceMetricCard label="登録生徒" value={`${snapshot.totalStudents}名`} detail="組織内の学習対象生徒数" />
+            <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="学習が止まりかけている生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail={`未割当 ${snapshot.unassignedStudents}名`} tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail={`${snapshot.learningPlanCount}名が設定済み`} tone="accent" />
+          </div>
 
-      <OfficialCatalogAccessPanel
-        user={user}
-        onSelectBook={onSelectBook}
-        eyebrow="Business Demo Catalog"
-        title="ビジネス版の既存単語帳を確認する"
-        description="学校管理者体験でも、既存の公式単語帳をそのまま開けます。組織運用を見ながら、教材の中身やテスト導線まで確認できます。"
-      />
+          <div className="grid gap-6 xl:grid-cols-2">
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">At-risk Students</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今見ておきたい生徒</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS)}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:border-medace-200 hover:text-medace-700"
+                >
+                  割当ビューへ <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-5 space-y-3">
+                {snapshot.atRiskStudentList.slice(0, 5).map((student) => (
+                  <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{student.name}</div>
+                        <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
+                        {riskLabel(student.riskLevel)}
+                      </span>
+                    </div>
+                    <div className="mt-3 text-sm text-slate-600">{student.recommendedAction || '担当講師の確認と次の声かけ内容を調整する'}</div>
+                  </div>
+                ))}
+                {snapshot.atRiskStudentList.length === 0 && (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-5 text-sm text-emerald-800">
+                    今すぐ介入が必要な生徒はいません。運用は安定しています。
+                  </div>
+                )}
+              </div>
+            </section>
 
-      <div className="grid gap-6 xl:grid-cols-[0.98fr_1.02fr]">
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Blockers</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当割当の詰まり</h3>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">未割当</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.unassignedStudents}</div>
+                  <div className="mt-1 text-sm text-slate-600">担当講師がまだ決まっていない生徒</div>
+                </div>
+                <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">未設定プラン</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.totalStudents - snapshot.learningPlanCount}</div>
+                  <div className="mt-1 text-sm text-slate-600">学習プランが未設定の生徒</div>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS)}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                >
+                  割当を更新する
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeView(BusinessAdminWorkspaceView.INSTRUCTORS)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
+                >
+                  講師負荷を見る
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Load</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師ごとの負荷</h3>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {instructorLoad.slice(0, 4).map((instructor) => (
+                  <div key={instructor.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{instructor.displayName}</div>
+                        <div className="mt-1 text-xs text-slate-400">{instructor.email}</div>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                        instructor.organizationRole === OrganizationRole.GROUP_ADMIN
+                          ? 'border-medace-200 bg-medace-50 text-medace-800'
+                          : 'border-slate-200 bg-white text-slate-600'
+                      }`}>
+                        {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : '講師'}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">接触生徒</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifiedStudentCount}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日通知</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifications7d}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <BellRing className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Snapshot</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">自由英作文の進行</h3>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">配布済み</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{issuedCount}</div>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">添削待ち</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{reviewReadyCount}</div>
+                </div>
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">再提出待ち</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{revisionRequestedCount}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onChangeView(BusinessAdminWorkspaceView.WRITING)}
+                className="mt-5 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
+              >
+                作文ワークスペースへ <ArrowRight className="h-4 w-4" />
+              </button>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.ASSIGNMENTS && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <WorkspaceMetricCard label="割当対象" value={`${filteredAssignments.length}名`} detail="現在の条件に一致する生徒" />
+            <WorkspaceMetricCard label="未割当" value={`${snapshot.unassignedStudents}名`} detail="担当講師が決まっていない生徒" tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="リスク高の生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="割当済み率" value={`${snapshot.assignmentCoverageRate}%`} detail="組織全体の割当進行" tone="accent" />
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignments Split View</p>
+              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">一覧から選び、右側で担当を更新する</h3>
+            </div>
+            <div className="flex flex-col gap-3 md:flex-row">
+              <div className="flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+                {[
+                  { key: 'ALL', label: '全生徒' },
+                  { key: 'DANGER', label: '要フォロー' },
+                  { key: 'UNASSIGNED', label: '未割当' },
+                ].map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setAssignmentFilter(option.key as 'ALL' | 'DANGER' | 'UNASSIGNED')}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold ${assignmentFilter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={assignmentQuery}
+                  onChange={(event) => setAssignmentQuery(event.target.value)}
+                  placeholder="生徒名・メールで検索"
+                  className="w-64 text-sm text-slate-700 outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+            <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+              <div className="grid grid-cols-[0.72fr_1.14fr_0.88fr_1.1fr] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                <div>リスク</div>
+                <div>生徒</div>
+                <div>現担当</div>
+                <div>次アクション</div>
+              </div>
+              <div>
+                {filteredAssignments.length === 0 ? (
+                  <div className="px-6 py-16 text-center text-sm text-slate-500">該当する生徒はいません。</div>
+                ) : (
+                  filteredAssignments.map((student) => (
+                    <button
+                      key={student.uid}
+                      type="button"
+                      onClick={() => setSelectedStudentUid(student.uid)}
+                      className={`grid w-full grid-cols-[0.72fr_1.14fr_0.88fr_1.1fr] gap-3 border-b border-slate-100 px-5 py-4 text-left transition-colors last:border-b-0 ${
+                        selectedAssignmentStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div>
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
+                          {riskLabel(student.riskLevel)}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{student.name}</div>
+                        <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        <div className="font-bold text-slate-900">{student.assignedInstructorName || '未割当'}</div>
+                        {student.assignmentUpdatedAt && <div className="mt-1 text-xs text-slate-400">{formatDateTime(student.assignmentUpdatedAt)}</div>}
+                      </div>
+                      <div className="text-sm leading-relaxed text-slate-600">{student.recommendedAction || '担当講師と次の介入方針を決める'}</div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="space-y-6">
+              <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                {selectedAssignmentStudent ? (
+                  <div className="space-y-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Detail</p>
+                        <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{selectedAssignmentStudent.name}</h3>
+                        <p className="mt-2 text-sm text-slate-500">{selectedAssignmentStudent.email}</p>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(selectedAssignmentStudent.riskLevel)}`}>
+                        {riskLabel(selectedAssignmentStudent.riskLevel)}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{formatDays(selectedAssignmentStudent.lastActive)}</div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{selectedAssignmentStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">習得語</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{selectedAssignmentStudent.totalLearned}</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師を割り当てる</label>
+                      <select
+                        data-testid={`assignment-select-${selectedAssignmentStudent.uid}`}
+                        value={selectedAssignmentStudent.assignedInstructorUid || ''}
+                        onChange={(event) => handleAssignmentChange(selectedAssignmentStudent.uid, event.target.value)}
+                        disabled={assignmentSavingUid === selectedAssignmentStudent.uid}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100 disabled:opacity-60"
+                      >
+                        <option value="">未割当</option>
+                        {snapshot.instructors.map((instructor) => (
+                          <option key={instructor.uid} value={instructor.uid}>
+                            {instructor.displayName} {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '(管理者)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {assignmentSavingUid === selectedAssignmentStudent.uid && (
+                        <div className="mt-2 text-xs font-medium text-slate-500">担当を更新しています...</div>
+                      )}
+                    </div>
+
+                    {selectedAssignmentStudent.riskReasons && selectedAssignmentStudent.riskReasons.length > 0 && (
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">介入理由</div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedAssignmentStudent.riskReasons.map((reason) => (
+                            <span key={reason} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedAssignmentStudent.recommendedAction && (
+                      <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5 text-sm leading-relaxed text-medace-900">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">推奨アクション</div>
+                        <div className="mt-3">{selectedAssignmentStudent.recommendedAction}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
+                    左側の一覧から生徒を選んでください。
+                  </div>
+                )}
+              </div>
+
+              <section data-testid="assignment-history-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <BellRing className="h-5 w-5 text-medace-600" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment History</p>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当変更の履歴</h3>
+                  </div>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {recentEvents.length > 0 ? recentEvents.map((event) => (
+                    <div key={event.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-bold text-slate-950">{event.studentName}</div>
+                          <div className="mt-1 text-xs text-slate-400">
+                            {event.previousInstructorName || '未割当'} → {event.nextInstructorName || '未割当'}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-slate-500">
+                          <div>{formatDateTime(event.createdAt)}</div>
+                          <div className="mt-1">変更者: {event.changedByName}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
+                      まだ担当変更の履歴はありません。
+                    </div>
+                  )}
+                </div>
+              </section>
+            </section>
+          </div>
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.INSTRUCTORS && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <WorkspaceMetricCard label="講師数" value={`${snapshot.totalInstructors}名`} detail="組織内で稼働中の講師" />
+            <WorkspaceMetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail="講師に明示的に割り当て済み" tone="accent" />
+            <WorkspaceMetricCard label="通知後再開" value={`${snapshot.reactivatedStudents7d}名`} detail="72時間以内に学習再開" tone="success" />
+            <WorkspaceMetricCard label="7日通知" value={`${snapshot.notifications7d}件`} detail="組織全体のフォロー通知数" />
+          </div>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <Users className="h-5 w-5 text-medace-600" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Load</p>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師ごとの負荷比較</h3>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              {instructorLoad.map((instructor) => (
+                <div key={instructor.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-950">{instructor.displayName}</div>
+                      <div className="mt-1 text-xs text-slate-400">{instructor.email}</div>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                      instructor.organizationRole === OrganizationRole.GROUP_ADMIN
+                        ? 'border-medace-200 bg-medace-50 text-medace-800'
+                        : 'border-slate-200 bg-white text-slate-600'
+                    }`}>
+                      {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : '講師'}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">接触生徒</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifiedStudentCount}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日通知</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifications7d}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.WRITING && (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <WorkspaceMetricCard label="配布済み" value={`${issuedCount}件`} detail="まだ提出されていない課題" />
+            <WorkspaceMetricCard label="添削待ち" value={`${reviewReadyCount}件`} detail="講師確認待ちの提出" tone={reviewReadyCount > 0 ? 'warning' : 'success'} />
+            <WorkspaceMetricCard label="再提出待ち" value={`${revisionRequestedCount}件`} detail="返却後の再提出待ち" tone={revisionRequestedCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="完了済み" value={`${writingAssignments.filter((assignment) => assignment.status === 'COMPLETED').length}件`} detail="返却と完了まで終了" />
+          </div>
+          <WritingOpsPanel user={user} />
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.WORKSHEETS && (
+        <div className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Worksheet Ops</p>
+            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">配布用PDF問題を独立して作る</h3>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              組織運用と同じ画面に混ぜず、配布物作成だけをここで処理します。今日の授業や面談で配る問題を短時間で用意できます。
+            </p>
+          </section>
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <WorksheetPrintLauncher
+              user={user}
+              buttonLabel="生徒別にPDF問題を作る"
+              buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+            />
+          </section>
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.CATALOG && (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Catalog Access</p>
+              <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">教材カタログは必要なときだけ開く</h3>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
+                管理者の主作業は組織運用です。教材閲覧は独立ビューに分け、教材の中身やテスト導線の確認が必要なときだけ使います。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChangeView(BusinessAdminWorkspaceView.OVERVIEW)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
+            >
+              概要へ戻る <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-6">
+            <Suspense
+              fallback={
+                <div className="flex min-h-[180px] flex-col items-center justify-center rounded-[28px] border border-dashed border-slate-200 bg-slate-50 text-slate-500">
+                  <Loader2 className="h-7 w-7 animate-spin text-medace-500" />
+                  <div className="mt-3 text-sm font-medium">単語帳一覧を読み込み中...</div>
+                </div>
+              }
+            >
+              <OfficialCatalogAccessPanel
+                user={user}
+                onSelectBook={onSelectBook}
+                eyebrow="Business Demo Catalog"
+                title="ビジネス版の既存単語帳を確認する"
+                description="学校管理者体験でも、既存の公式単語帳をそのまま開けます。組織運用を見ながら、教材の中身やテスト導線まで確認できます。"
+              />
+            </Suspense>
+          </div>
+        </section>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.OVERVIEW && (
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">
             <ShieldCheck className="h-5 w-5 text-medace-600" />
@@ -206,251 +784,8 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({ user, o
               </div>
             ))}
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">広告</div>
-              <div className="mt-2 text-lg font-black text-slate-950">なし</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">通知数</div>
-              <div className="mt-2 text-lg font-black text-slate-950">{snapshot.notifications7d}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">費用補足</div>
-              <div className="mt-2 text-sm font-bold leading-relaxed text-slate-950">{policy.pricingNote}</div>
-            </div>
-          </div>
         </section>
-
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-3">
-            <Users className="h-5 w-5 text-medace-600" />
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Ops</p>
-              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師体制</h3>
-            </div>
-          </div>
-          <div className="mt-5 space-y-3">
-            {snapshot.instructors.map((instructor) => (
-              <div key={instructor.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-bold text-slate-950">{instructor.displayName}</div>
-                    <div className="mt-1 text-xs text-slate-400">{instructor.email}</div>
-                  </div>
-                  <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
-                    instructor.organizationRole === OrganizationRole.GROUP_ADMIN
-                      ? 'border-medace-200 bg-medace-50 text-medace-800'
-                      : 'border-slate-200 bg-white text-slate-600'
-                  }`}>
-                    {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : '講師'}
-                  </span>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">接触生徒</div>
-                    <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifiedStudentCount}</div>
-                  </div>
-                  <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日通知</div>
-                    <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifications7d}</div>
-                  </div>
-                  <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
-                    <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Ops</p>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師担当の割当</h3>
-            <p className="mt-2 text-sm text-slate-500">要フォロー理由を見ながら、生徒ごとの担当講師を更新できます。</p>
-          </div>
-          <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-800">
-            割当済み {snapshot.assignmentCoverageRate}% / 未割当 {snapshot.unassignedStudents}名
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          {snapshot.studentAssignments.map((student) => (
-            <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-slate-950">{student.name}</div>
-                  <div className="mt-1 text-xs text-slate-400">{student.email}</div>
-                </div>
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
-                  {riskLabel(student.riskLevel)}
-                </span>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{formatDays(student.lastActive)}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">プラン</div>
-                  <div className="mt-2 text-sm font-black text-slate-950">{student.hasLearningPlan ? '設定済み' : '未設定'}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">現担当</div>
-                  <div className="mt-2 text-sm font-black text-slate-950">{student.assignedInstructorName || '未割当'}</div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {student.assignmentUpdatedAt ? `更新: ${formatDateTime(student.assignmentUpdatedAt)}` : '更新履歴なし'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師を割り当てる</label>
-                <select
-                  data-testid={`assignment-select-${student.uid}`}
-                  value={student.assignedInstructorUid || ''}
-                  onChange={(event) => handleAssignmentChange(student.uid, event.target.value)}
-                  disabled={assignmentSavingUid === student.uid}
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100 disabled:opacity-60"
-                >
-                  <option value="">未割当</option>
-                  {snapshot.instructors.map((instructor) => (
-                    <option key={instructor.uid} value={instructor.uid}>
-                      {instructor.displayName} {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '(管理者)' : ''}
-                    </option>
-                  ))}
-                </select>
-                {assignmentSavingUid === student.uid && (
-                  <div className="mt-2 text-xs font-medium text-slate-500">担当を更新しています...</div>
-                )}
-              </div>
-
-              {student.riskReasons && student.riskReasons.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {student.riskReasons.map((reason) => (
-                    <span key={reason} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                      {reason}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {student.recommendedAction && (
-                <div className="mt-4 rounded-2xl border border-medace-100 bg-white px-4 py-3 text-sm text-slate-700">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-600">推奨アクション</div>
-                  <div className="mt-2 leading-relaxed">{student.recommendedAction}</div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section data-testid="assignment-history-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <BellRing className="h-5 w-5 text-medace-600" />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment History</p>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当変更の履歴</h3>
-          </div>
-        </div>
-        <div className="mt-5 space-y-3">
-          {snapshot.assignmentEvents.length > 0 ? snapshot.assignmentEvents.map((event) => (
-            <div key={event.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-slate-950">{event.studentName}</div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {event.previousInstructorName || '未割当'} → {event.nextInstructorName || '未割当'}
-                  </div>
-                </div>
-                <div className="text-right text-xs text-slate-500">
-                  <div>{formatDateTime(event.createdAt)}</div>
-                  <div className="mt-1">変更者: {event.changedByName}</div>
-                </div>
-              </div>
-            </div>
-          )) : (
-            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
-              まだ担当変更の履歴はありません。
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Worksheet Ops</p>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">配布用PDF問題</h3>
-            <p className="mt-2 text-sm text-slate-500">学習済み単語を問題形式にして、そのまま印刷またはPDF保存できます。</p>
-          </div>
-          <WorksheetPrintLauncher
-            user={user}
-            buttonLabel="生徒別にPDF問題を作る"
-            buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
-          />
-        </div>
-      </section>
-
-      <WritingOpsPanel user={user} />
-
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-red-500" />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Student Queue</p>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今見ておきたい生徒</h3>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          {snapshot.atRiskStudentList.map((student) => (
-            <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-slate-950">{student.name}</div>
-                  <div className="mt-1 text-xs text-slate-400">{student.email}</div>
-                </div>
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
-                  {riskLabel(student.riskLevel)}
-                </span>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{formatDays(student.lastActive)}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">習得語</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{student.totalLearned}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">正答率</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{Math.round((student.accuracy || 0) * 100)}%</div>
-                </div>
-              </div>
-              {student.lastNotificationMessage && (
-                <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">
-                    <BellRing className="h-4 w-4" /> 直近の講師フォロー
-                  </div>
-                  <div className="mt-2 leading-relaxed">{student.lastNotificationMessage}</div>
-                </div>
-              )}
-            </div>
-          ))}
-          {snapshot.atRiskStudentList.length === 0 && (
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-5 text-sm text-emerald-800">
-              今すぐ介入が必要な生徒はいません。運用は安定しています。
-            </div>
-          )}
-        </div>
-      </section>
+      )}
     </div>
   );
 };

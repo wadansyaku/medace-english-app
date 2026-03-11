@@ -11,9 +11,11 @@ import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import {
   WRITING_AI_PROVIDER_LABELS,
   WRITING_ASSIGNMENT_STATUS_LABELS,
+  WRITING_SUBMISSION_SOURCE_LABELS,
   WritingSubmissionSource,
   type UserProfile,
   type WritingAssignment,
+  type WritingAssignmentStatus,
 } from '../types';
 import {
   createWritingUploadUrl,
@@ -29,6 +31,8 @@ interface WritingStudentSectionProps {
   user: UserProfile;
 }
 
+const WORKFLOW_STEPS = ['課題', '提出', '処理中', '返却済み'] as const;
+
 const formatDateTime = (timestamp?: number): string => {
   if (!timestamp) return '未提出';
   return new Date(timestamp).toLocaleString('ja-JP', {
@@ -42,6 +46,72 @@ const formatDateTime = (timestamp?: number): string => {
 const canSubmit = (assignment: WritingAssignment): boolean => (
   assignment.status === 'ISSUED' || assignment.status === 'REVISION_REQUESTED'
 );
+
+const canOpenFeedback = (assignment: WritingAssignment): boolean => (
+  Boolean(assignment.latestSubmissionId)
+  && (assignment.status === 'RETURNED' || assignment.status === 'REVISION_REQUESTED' || assignment.status === 'COMPLETED')
+);
+
+const getAssignmentPhase = (
+  status: WritingAssignmentStatus,
+): {
+  label: string;
+  description: string;
+  tone: string;
+  activeStep: number;
+} => {
+  switch (status) {
+    case 'ISSUED':
+      return {
+        label: '課題',
+        description: '紙で答案を書いて、スマホから提出してください。',
+        tone: 'border-medace-200 bg-medace-50 text-medace-700',
+        activeStep: 1,
+      };
+    case 'SUBMITTED':
+      return {
+        label: '提出済み',
+        description: 'アップロード済みです。OCR と評価処理が進んでいます。',
+        tone: 'border-sky-200 bg-sky-50 text-sky-700',
+        activeStep: 2,
+      };
+    case 'REVIEW_READY':
+      return {
+        label: '処理中',
+        description: 'AI 比較の下書きができ、講師の最終確認を待っています。',
+        tone: 'border-sky-200 bg-sky-50 text-sky-700',
+        activeStep: 3,
+      };
+    case 'REVISION_REQUESTED':
+      return {
+        label: '再提出',
+        description: '返却コメントを確認して、1 回だけ書き直し提出ができます。',
+        tone: 'border-amber-200 bg-amber-50 text-amber-700',
+        activeStep: 4,
+      };
+    case 'RETURNED':
+      return {
+        label: '返却済み',
+        description: '講師確認後の添削結果を確認できます。',
+        tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        activeStep: 4,
+      };
+    case 'COMPLETED':
+      return {
+        label: '完了',
+        description: '返却内容の確認まで完了しています。',
+        tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        activeStep: 4,
+      };
+    default:
+      return {
+        label: '準備中',
+        description: '講師が課題を準備しています。',
+        tone: 'border-slate-200 bg-slate-50 text-slate-600',
+        activeStep: 1,
+      };
+  }
+};
 
 const renderAsset = (asset: WritingSubmissionDetailResponse['submission']['assets'][number]) => {
   if (asset.mimeType.startsWith('image/')) {
@@ -76,7 +146,8 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
     setLoading(true);
     try {
       const response = await listWritingAssignments('mine');
-      setAssignments(response.assignments);
+      const sortedAssignments = [...response.assignments].sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
+      setAssignments(sortedAssignments);
     } catch (error) {
       console.error(error);
       setNotice({
@@ -180,7 +251,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
     || feedbackDetail?.submission.evaluations[0];
 
   return (
-    <section data-testid="writing-student-section" className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
+    <section data-testid="writing-student-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Track</p>
@@ -209,66 +280,117 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
           <Loader2 className="h-8 w-8 animate-spin text-medace-500" />
         </div>
       ) : (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-6 space-y-4">
           {assignments.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
               まだ自由英作文課題は配布されていません。
             </div>
           )}
-          {assignments.map((assignment) => (
-            <div key={assignment.id} className="rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-bold text-slate-950">{assignment.promptTitle}</div>
-                  <div className="mt-1 text-xs text-slate-400">{assignment.wordCountMin} - {assignment.wordCountMax} words</div>
+
+          {assignments.map((assignment) => {
+            const phase = getAssignmentPhase(assignment.status);
+            return (
+              <article key={assignment.id} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                <div className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+                  <div className="space-y-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{assignment.promptTitle}</div>
+                        <div className="mt-1 text-xs text-slate-400">{assignment.wordCountMin} - {assignment.wordCountMax} words</div>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${phase.tone}`}>
+                        {phase.label}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      {WORKFLOW_STEPS.map((step, index) => {
+                        const active = phase.activeStep >= index + 1;
+                        return (
+                          <div
+                            key={step}
+                            className={`rounded-2xl border px-3 py-3 ${
+                              active
+                                ? 'border-medace-200 bg-white text-slate-950'
+                                : 'border-slate-200 bg-slate-100 text-slate-400'
+                            }`}
+                          >
+                            <div className="text-[11px] font-bold uppercase tracking-[0.16em]">Step {index + 1}</div>
+                            <div className="mt-2 text-sm font-bold">{step}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-3xl border border-white bg-white px-5 py-5">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">課題文</div>
+                      <div className="mt-3 text-sm leading-relaxed text-slate-700">{assignment.promptText}</div>
+                      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                        {phase.description}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex h-full flex-col gap-4">
+                    <div className="rounded-3xl border border-white bg-white px-5 py-5">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">課題情報</div>
+                      <div className="mt-4 grid gap-3">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出コード</div>
+                          <div className="mt-2 text-lg font-black text-slate-950">{assignment.submissionCode}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+                          <div className="mt-2 text-lg font-black text-slate-950">{assignment.attemptCount} / {assignment.maxAttempts}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">最終更新</div>
+                          <div className="mt-2 text-sm font-black text-slate-950">{formatDateTime(assignment.updatedAt)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-white bg-white px-5 py-5">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">次にやること</div>
+                      <div className="mt-3 text-sm leading-relaxed text-slate-700">{phase.description}</div>
+                    </div>
+
+                    <div className="mt-auto flex flex-col gap-3">
+                      {canSubmit(assignment) && (
+                        <button
+                          type="button"
+                          data-testid={`writing-open-submit-${assignment.id}`}
+                          onClick={() => setSubmitTarget(assignment)}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                        >
+                          <Send className="h-4 w-4" />
+                          {assignment.status === 'REVISION_REQUESTED' ? '書き直して再提出する' : 'スマホで提出する'}
+                        </button>
+                      )}
+
+                      {canOpenFeedback(assignment) && (
+                        <button
+                          type="button"
+                          data-testid={`writing-open-feedback-${assignment.id}`}
+                          onClick={() => openFeedback(assignment)}
+                          className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
+                        >
+                          {openingFeedbackId === assignment.latestSubmissionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                          添削結果を見る
+                        </button>
+                      )}
+
+                      {!canSubmit(assignment) && !canOpenFeedback(assignment) && (
+                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500">
+                          {WRITING_ASSIGNMENT_STATUS_LABELS[assignment.status]} のため、次の操作を待っています。
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
-                  {WRITING_ASSIGNMENT_STATUS_LABELS[assignment.status]}
-                </span>
-              </div>
-              <div className="mt-4 rounded-2xl border border-white bg-white px-4 py-4 text-sm leading-relaxed text-slate-700">
-                {assignment.promptText}
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出コード</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{assignment.submissionCode}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{assignment.attemptCount} / {assignment.maxAttempts}</div>
-                </div>
-                <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">最終更新</div>
-                  <div className="mt-2 text-sm font-black text-slate-950">{formatDateTime(assignment.updatedAt)}</div>
-                </div>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-3">
-                {canSubmit(assignment) && (
-                  <button
-                    type="button"
-                    data-testid={`writing-open-submit-${assignment.id}`}
-                    onClick={() => setSubmitTarget(assignment)}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
-                  >
-                    <Send className="h-4 w-4" />
-                    スマホで提出する
-                  </button>
-                )}
-                {assignment.latestSubmissionId && (
-                  <button
-                    type="button"
-                    data-testid={`writing-open-feedback-${assignment.id}`}
-                    onClick={() => openFeedback(assignment)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
-                  >
-                    {openingFeedbackId === assignment.latestSubmissionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                    添削結果を見る
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
 
@@ -280,66 +402,105 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
             setFiles([]);
             setManualTranscript('');
           }}
-          panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
+          panelClassName="max-w-4xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
         >
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Submit Writing</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{submitTarget.promptTitle}</h3>
             <p className="mt-2 text-sm text-slate-500">
-              PDF 1枚または画像最大4枚まで提出できます。OCRが読み取りにくい場合に備えて、本文の補助テキストも入力できます。
+              提出条件を確認してからファイルを選び、最後に送信を確定します。
             </p>
 
-            <div className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">答案ファイル</label>
+            <div className="mt-6 grid gap-4">
+              <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">1</div>
+                  <div>
+                    <div className="text-sm font-black text-slate-950">提出条件</div>
+                    <div className="mt-1 text-sm text-slate-500">形式と提出コード、attempt 回数を確認します。</div>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl border border-white bg-white px-4 py-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出コード</div>
+                    <div className="mt-2 text-lg font-black text-slate-950">{submitTarget.submissionCode}</div>
+                  </div>
+                  <div className="rounded-2xl border border-white bg-white px-4 py-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出形式</div>
+                    <div className="mt-2 text-sm font-black text-slate-950">PDF 1枚 / 画像最大4枚</div>
+                  </div>
+                  <div className="rounded-2xl border border-white bg-white px-4 py-4">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+                    <div className="mt-2 text-sm font-black text-slate-950">{submitTarget.attemptCount + 1} 回目 / 最大 {submitTarget.maxAttempts} 回</div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">2</div>
+                  <div>
+                    <div className="text-sm font-black text-slate-950">アップロード済みファイル</div>
+                    <div className="mt-1 text-sm text-slate-500">スマホで撮影した画像か PDF を選択します。</div>
+                  </div>
+                </div>
                 <input
                   data-testid="writing-student-file-input"
                   type="file"
                   accept="application/pdf,image/*"
                   multiple
                   onChange={(event) => setFiles(Array.from(event.target.files || []))}
-                  className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-bold"
+                  className="mt-4 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-bold"
                 />
-                {files.length > 0 && (
-                  <div className="mt-3 space-y-2 text-sm text-slate-600">
+                {files.length > 0 ? (
+                  <div className="mt-4 grid gap-2">
                     {files.map((file) => (
-                      <div key={`${file.name}-${file.size}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div key={`${file.name}-${file.size}`} className="rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-700">
                         {file.name}
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
+                    まだファイルは選択されていません。
+                  </div>
                 )}
-              </div>
+              </section>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">補助テキスト（任意）</label>
+              <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">3</div>
+                  <div>
+                    <div className="text-sm font-black text-slate-950">最終送信</div>
+                    <div className="mt-1 text-sm text-slate-500">OCR が読み取りにくい場合だけ補助テキストを入れて送信します。</div>
+                  </div>
+                </div>
                 <textarea
                   value={manualTranscript}
                   onChange={(event) => setManualTranscript(event.target.value)}
-                  className="mt-2 min-h-36 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                  className="mt-4 min-h-36 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
                   placeholder="OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。"
                 />
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setSubmitTarget(null)}
-                className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                data-testid="writing-submit-upload"
-                onClick={handleSubmit}
-                disabled={submitting || files.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
-                答案を提出する
-              </button>
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSubmitTarget(null)}
+                    className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="writing-submit-upload"
+                    onClick={handleSubmit}
+                    disabled={submitting || files.length === 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+                  >
+                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
+                    答案を提出する
+                  </button>
+                </div>
+              </section>
             </div>
           </div>
         </ModalOverlay>
@@ -368,13 +529,25 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
             </button>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {feedbackDetail.submission.assets.map((asset) => (
-              <div key={asset.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{asset.fileName}</div>
-                {renderAsset(asset)}
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">状態</div>
+              <div className="mt-2 text-sm font-black text-slate-950">{WRITING_ASSIGNMENT_STATUS_LABELS[feedbackDetail.assignment.status]}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出元</div>
+              <div className="mt-2 text-sm font-black text-slate-950">
+                {WRITING_SUBMISSION_SOURCE_LABELS[feedbackDetail.submission.submissionSource]}
               </div>
-            ))}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+              <div className="mt-2 text-sm font-black text-slate-950">{feedbackDetail.submission.attemptNo}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">返却時刻</div>
+              <div className="mt-2 text-sm font-black text-slate-950">{formatDateTime(feedbackDetail.submission.teacherReview?.releasedAt)}</div>
+            </div>
           </div>
 
           <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
@@ -435,13 +608,19 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
             </div>
           )}
 
-          <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              <MessageSquareText className="h-4 w-4" />
-              提出文
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">提出答案</div>
+              {feedbackDetail.submission.assets[0] && renderAsset(feedbackDetail.submission.assets[0])}
             </div>
-            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-              {feedbackDetail.submission.transcript}
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                <MessageSquareText className="h-4 w-4" />
+                提出文
+              </div>
+              <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                {feedbackDetail.submission.transcript}
+              </div>
             </div>
           </div>
         </ModalOverlay>

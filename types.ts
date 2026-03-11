@@ -450,6 +450,30 @@ export interface OrganizationDashboardSnapshot {
   assignmentEvents: AssignmentEvent[];
 }
 
+export enum InstructorWorkspaceView {
+  OVERVIEW = 'OVERVIEW',
+  STUDENTS = 'STUDENTS',
+  WRITING = 'WRITING',
+  WORKSHEETS = 'WORKSHEETS',
+  CATALOG = 'CATALOG',
+}
+
+export enum BusinessAdminWorkspaceView {
+  OVERVIEW = 'OVERVIEW',
+  ASSIGNMENTS = 'ASSIGNMENTS',
+  INSTRUCTORS = 'INSTRUCTORS',
+  WRITING = 'WRITING',
+  WORKSHEETS = 'WORKSHEETS',
+  CATALOG = 'CATALOG',
+}
+
+export interface WorkspaceSectionDefinition<T extends string = string> {
+  id: T;
+  label: string;
+  shortLabel?: string;
+  description?: string;
+}
+
 export type WorksheetQuestionMode = 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
 
 export interface StudentWorksheetWord {

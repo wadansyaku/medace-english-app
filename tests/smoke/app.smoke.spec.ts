@@ -63,6 +63,7 @@ test('group admin can open the organization dashboard and update an assignment',
   await page.getByTestId('demo-login-group-admin').click();
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await page.getByTestId('workspace-tab-assignments').click();
   const assignmentSelect = page.locator('[data-testid^="assignment-select-"]').first();
   await assignmentSelect.selectOption({ index: 1 });
 
@@ -77,6 +78,7 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   await page.getByTestId('demo-login-instructor').click();
 
   await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
+  await page.getByTestId('workspace-tab-students').click();
   await page.locator('[data-testid^="send-notification-"]').first().click();
 
   await expect(page.getByTestId('notification-composer')).toBeVisible();
@@ -106,6 +108,7 @@ test('group admin and business student can complete the writing workflow with on
   await openBusinessMenu(adminPage);
   await adminPage.getByTestId('demo-login-group-admin').click();
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
   await openBusinessMenu(studentPage);
@@ -115,6 +118,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
 
   await adminPage.reload();
+  await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
   const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
@@ -143,6 +147,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
 
   await adminPage.reload();
+  await adminPage.getByTestId('workspace-tab-writing').click();
   await adminPage.getByRole('button', { name: '添削キュー' }).click();
   await expect(adminPage.getByTestId('writing-review-queue')).toBeVisible();
   await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
@@ -166,6 +171,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
 
   await adminPage.reload();
+  await adminPage.getByTestId('workspace-tab-writing').click();
   await adminPage.getByRole('button', { name: '添削キュー' }).click();
   await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
   await adminPage.getByTestId('writing-review-public-comment').fill('構成が安定しました。次は語彙の幅も意識しましょう。');
