@@ -16,6 +16,7 @@ jobs:
     if: github.repository == 'wadansyaku/medace-english-app' && (github.ref_name == 'main' || github.ref_name == 'master')
     runs-on: ubuntu-latest
     env:
+      GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
     permissions:

@@ -20,6 +20,7 @@ jobs:
     if: github.repository == 'wadansyaku/medace-english-app' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     env:
+      GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
       PREVIEW_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
