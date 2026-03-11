@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
+const mobileViewport = { width: 390, height: 844 };
+const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
 const completeDiagnostic = async (page: Page) => {
   await expect(page.getByTestId('onboarding-test')).toBeVisible();
 
@@ -28,6 +31,34 @@ const maybeCompleteOnboarding = async (page: Page) => {
     await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
   }
 };
+
+const seedPhrasebook = async (page: Page, title: string) => page.evaluate(async (bookTitle) => {
+  const response = await fetch('/api/storage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'batchImportWords',
+      payload: {
+        defaultBookName: bookTitle,
+        source: {
+          kind: 'rows',
+          rows: [
+            { bookName: bookTitle, number: 1, word: 'triage', definition: 'トリアージ' },
+            { bookName: bookTitle, number: 2, word: 'stabilize', definition: '安定させる' },
+          ],
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`batchImportWords failed with status ${response.status}`);
+  }
+
+  return response.json();
+}, title);
 
 test('public home shows the live motivation board before login', async ({ page }) => {
   await page.goto('/');
@@ -186,4 +217,116 @@ test('group admin and business student can complete the writing workflow with on
 
   await adminContext.close();
   await studentContext.close();
+});
+
+test.describe('student mobile ux', () => {
+  test.use({
+    viewport: mobileViewport,
+    userAgent: iphoneUserAgent,
+    hasTouch: true,
+    isMobile: true,
+  });
+
+  test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const primaryCta = page.getByRole('button', { name: /今日のクエストを開始|復習をもう1セットやる|学習できる教材がありません/ }).first();
+    await expect(primaryCta).toBeVisible();
+    const box = await primaryCta.boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
+  });
+
+  test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Flip Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const studyButton = page.getByTestId(`book-study-${bookId}`);
+    await studyButton.scrollIntoViewIfNeeded();
+    await studyButton.click();
+
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    await expect(page.getByTestId('study-flip-button')).toBeVisible();
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-0')).toBeVisible();
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+  });
+
+  test('business student can use the mobile writing submit flow', async ({ browser }) => {
+    const adminContext = await browser.newContext();
+    const studentContext = await browser.newContext({
+      viewport: mobileViewport,
+      userAgent: iphoneUserAgent,
+      hasTouch: true,
+      isMobile: true,
+    });
+    const adminPage = await adminContext.newPage();
+    const studentPage = await studentContext.newPage();
+
+    const openBusinessMenu = async (currentPage: Page) => {
+      await currentPage.goto('/');
+      await currentPage.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
+    };
+
+    await openBusinessMenu(adminPage);
+    await adminPage.getByTestId('demo-login-group-admin').click();
+    await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+    await adminPage.getByTestId('workspace-tab-writing').click();
+
+    await openBusinessMenu(studentPage);
+    await studentPage.getByTestId('demo-login-business-student').click();
+    await maybeCompleteOnboarding(studentPage);
+    await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+
+    await adminPage.reload();
+    await adminPage.getByTestId('workspace-tab-writing').click();
+
+    const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      const option = Array.from(select.options).find((candidate) => candidate.text.includes('グループ生徒 Demo'));
+      return option?.value || '';
+    });
+    expect(demoStudentValue).not.toBe('');
+
+    await adminPage.getByTestId('writing-student-select').selectOption(demoStudentValue);
+    await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
+    await adminPage.getByTestId('writing-generate-submit').click();
+    await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
+    await adminPage.getByRole('button', { name: /下書き/ }).first().click();
+    await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
+    await adminPage.getByTestId('writing-issue-assignment').click();
+    await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
+
+    await studentPage.reload();
+    await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+    await expect(studentPage.getByText('ファイル選択へ進む')).toBeVisible();
+    await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
+    await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+      name: 'mobile-attempt.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('mobile-writing-attempt'),
+    });
+    await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
+    await studentPage.getByPlaceholder('OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。').fill(
+      'Students should use tablets because they can review notes quickly and organize homework more clearly.',
+    );
+    await studentPage.getByTestId('writing-submit-upload').click();
+    await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
+
+    await adminContext.close();
+    await studentContext.close();
+  });
 });

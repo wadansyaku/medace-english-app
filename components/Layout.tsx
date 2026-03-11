@@ -5,6 +5,7 @@ import { UserRole, UserProfile, UserStudyMode, type WorkspaceSectionDefinition }
 import { BRAND } from '../config/brand';
 import { getHomeViewForUser, getWorkspaceNavLabel, getWorkspaceRoleLabel } from '../config/access';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
+import useIsStandalone from '../hooks/useIsStandalone';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -38,11 +39,24 @@ const Layout: React.FC<LayoutProps> = ({
   const workspaceLabel = getWorkspaceRoleLabel(user);
   const isGameMode = (user?.studyMode || UserStudyMode.FOCUS) === UserStudyMode.GAME;
   const isDemoUser = isDemoEmail(user?.email);
+  const isStandalone = useIsStandalone();
+  const isStudent = user?.role === UserRole.STUDENT;
+  const compactStudentShell = isStandalone && isStudent;
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.body.dataset.displayMode = isStandalone ? 'standalone' : 'browser';
+    return () => {
+      delete document.body.dataset.displayMode;
+    };
+  }, [isStandalone]);
 
   return (
     <div className="min-h-screen bg-medace-50/40 flex flex-col font-sans">
       {/* Header */}
-      <header className="bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)]">
+      <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)] ${
+        compactStudentShell ? 'safe-pad-top' : ''
+      }`}>
         {isDemoUser && (
           <div className="border-b border-amber-200/80 bg-[#fff4df]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -64,7 +78,9 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
           </div>
         )}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[80px] flex items-center justify-between py-2">
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between ${
+          compactStudentShell ? 'min-h-[68px] py-1.5' : 'min-h-[80px] py-2'
+        }`}>
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
             <div className="rounded-2xl bg-medace-300 p-3 shadow-lg shadow-medace-200/70">
               <BookOpen className="text-medace-900 w-6 h-6" />
@@ -167,12 +183,16 @@ const Layout: React.FC<LayoutProps> = ({
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <main className={`flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${
+        compactStudentShell ? 'py-5 sm:py-8' : 'py-10'
+      }`}>
         {children}
       </main>
 
       {/* Footer */}
-      <footer className="bg-white/85 backdrop-blur border-t border-medace-100 py-6 mt-auto">
+      <footer className={`bg-white/85 backdrop-blur border-t border-medace-100 mt-auto ${
+        compactStudentShell ? 'safe-pad-bottom py-4' : 'py-6'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 text-center text-medace-800/45 text-[0.95rem] font-medium">
           &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
         </div>

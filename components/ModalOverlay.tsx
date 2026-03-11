@@ -8,6 +8,7 @@ interface ModalOverlayProps {
   zIndexClassName?: string;
   closeOnOverlayClick?: boolean;
   align?: 'top' | 'center';
+  mobileBehavior?: 'default' | 'sheet' | 'fullscreen';
 }
 
 const ModalOverlay: React.FC<ModalOverlayProps> = ({
@@ -17,6 +18,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   zIndexClassName = 'z-50',
   closeOnOverlayClick = true,
   align = 'top',
+  mobileBehavior = 'default',
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,13 +68,25 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
         }
       }}
     >
-      <div className={`flex min-h-full justify-center p-3 sm:p-6 ${align === 'center' ? 'items-center' : 'items-start sm:items-center'}`}>
+      <div
+        className={`flex min-h-full justify-center ${
+          mobileBehavior === 'default'
+            ? `p-3 sm:p-6 ${align === 'center' ? 'items-center' : 'items-start sm:items-center'}`
+            : `items-end p-0 sm:p-6 sm:${align === 'center' ? 'items-center' : 'items-center'}`
+        }`}
+      >
         <div
           ref={panelRef}
           role="dialog"
           aria-modal="true"
           tabIndex={-1}
-          className={`relative my-4 w-full outline-none ${panelClassName}`}
+          className={`relative w-full outline-none ${panelClassName} ${
+            mobileBehavior === 'sheet'
+              ? 'my-0 min-h-[72dvh] max-h-[92dvh] rounded-t-[32px] rounded-b-none w-screen max-w-none sm:my-4 sm:min-h-0 sm:max-h-[calc(100dvh-3rem)] sm:w-full sm:max-w-[min(100vw,48rem)] sm:rounded-[32px]'
+              : mobileBehavior === 'fullscreen'
+                ? 'my-0 min-h-[100dvh] max-h-[100dvh] w-screen max-w-none rounded-none sm:my-4 sm:min-h-0 sm:max-h-[calc(100dvh-3rem)] sm:w-full sm:max-w-[min(100vw,64rem)] sm:rounded-[32px]'
+                : 'my-4'
+          }`}
           onClick={(event) => event.stopPropagation()}
         >
           {children}

@@ -1,10 +1,27 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { WordData, UserProfile, EnglishLevel } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Award,
+  Clock,
+  Edit2,
+  Flag,
+  Image as ImageIcon,
+  Languages,
+  Loader2,
+  RotateCw,
+  Save,
+  Sparkles,
+  Volume2,
+  X,
+  Zap,
+} from 'lucide-react';
+import { EnglishLevel, type UserProfile, type WordData } from '../types';
 import { storage } from '../services/storage';
-import { generateGeminiSentence, generateWordImage, GeneratedContext } from '../services/gemini';
-import { ArrowLeft, RotateCw, Sparkles, Volume2, Clock, Zap, AlertCircle, Image as ImageIcon, Loader2, Award, Lock, Languages, Edit2, Save, X, Flame, Flag } from 'lucide-react';
-import ModalOverlay from './ModalOverlay';
+import { type GeneratedContext, generateGeminiSentence, generateWordImage } from '../services/gemini';
+import useIsMobileViewport from '../hooks/useIsMobileViewport';
+import MobileSheetDialog from './mobile/MobileSheetDialog';
+import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 
 interface StudyModeProps {
   user: UserProfile;
@@ -13,15 +30,49 @@ interface StudyModeProps {
   onSessionComplete: (user: UserProfile) => void;
 }
 
+function HelpCircleIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+      <path d="M12 17h.01"></path>
+    </svg>
+  );
+}
+
+type RatingTone = {
+  id: number;
+  label: string;
+  className: string;
+  icon: React.ReactNode;
+};
+
+const RATING_OPTIONS: RatingTone[] = [
+  { id: 0, label: 'もう一度', className: 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
+  { id: 1, label: '難しい', className: 'border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100', icon: <HelpCircleIcon /> },
+  { id: 2, label: '普通', className: 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
+  { id: 3, label: '簡単', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
+];
+
+const getSupports3D = (): boolean => {
+  if (typeof window === 'undefined') return true;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const supports3D = typeof CSS !== 'undefined'
+    && typeof CSS.supports === 'function'
+    && CSS.supports('transform-style', 'preserve-3d')
+    && CSS.supports('perspective', '1px');
+  return !reducedMotion && supports3D;
+};
+
 const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionComplete }) => {
+  const isMobileViewport = useIsMobileViewport();
   const [queue, setQueue] = useState<WordData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isBookOwner, setIsBookOwner] = useState(false);
   const [bookContext, setBookContext] = useState<string | undefined>(undefined);
-  
-  // AI States (Current Card)
+
   const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
   const [aiContextLoading, setAiContextLoading] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
@@ -29,69 +80,67 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const [aiImageLoading, setAiImageLoading] = useState(false);
   const [showHints, setShowHints] = useState(false);
   const [imageHintUnavailable, setImageHintUnavailable] = useState(false);
-  
-  // AI Cache (Prefetching)
+
   const contextCache = useRef<Map<string, GeneratedContext | null>>(new Map());
   const cardStartedAtRef = useRef(Date.now());
-  
-  // Editing State
+
   const [isEditing, setIsEditing] = useState(false);
   const [editWord, setEditWord] = useState('');
   const [editDef, setEditDef] = useState('');
   const [reportReason, setReportReason] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
-  
-  // Completion & Gamification States
+
   const [isFinished, setIsFinished] = useState(false);
   const [earnedXP, setEarnedXP] = useState(0);
   const [streakBonusXP, setStreakBonusXP] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [updatedUser, setUpdatedUser] = useState<UserProfile | null>(null);
   const [reviewWords, setReviewWords] = useState<WordData[]>([]);
-
-  // Voice Setup
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [supports3D, setSupports3D] = useState(true);
 
-  // Voice Initialization
+  useEffect(() => {
+    setSupports3D(getSupports3D());
+  }, []);
+
   useEffect(() => {
     const loadVoices = () => {
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length === 0) return;
-        let bestVoice = voices.find(v => v.name === 'Google US English');
-        if (!bestVoice) bestVoice = voices.find(v => v.name === 'Samantha');
-        if (!bestVoice) bestVoice = voices.find(v => v.lang === 'en-US');
-        setSelectedVoice(bestVoice || null);
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) return;
+      let bestVoice = voices.find((voice) => voice.name === 'Google US English');
+      if (!bestVoice) bestVoice = voices.find((voice) => voice.name === 'Samantha');
+      if (!bestVoice) bestVoice = voices.find((voice) => voice.lang === 'en-US');
+      setSelectedVoice(bestVoice || null);
     };
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }, []);
 
-  // Load Queue & Ownership Check
   useEffect(() => {
     const loadWords = async () => {
       try {
         let data: WordData[] = [];
         if (bookId === 'smart-session') {
-            data = await storage.getDailySessionWords(user.uid, 20);
-            setIsBookOwner(false); 
+          data = await storage.getDailySessionWords(user.uid, 20);
+          setIsBookOwner(false);
         } else {
-            data = await storage.getBookSession(user.uid, bookId, 10);
-            
-            // Check ownership & context
-            const books = await storage.getBooks();
-            const currentBook = books.find(b => b.id === bookId);
-            if (currentBook) {
-                setBookContext(currentBook.sourceContext); // Load context
-                try {
-                    const isMine = (currentBook.description?.includes(user.uid)) || 
-                                   (JSON.parse(currentBook.description || '{}').createdBy === user.uid);
-                    setIsBookOwner(!!isMine);
-                } catch (e) {
-                    setIsBookOwner(false);
-                }
+          data = await storage.getBookSession(user.uid, bookId, 10);
+          const books = await storage.getBooks();
+          const currentBook = books.find((book) => book.id === bookId);
+          if (currentBook) {
+            setBookContext(currentBook.sourceContext);
+            try {
+              const isMine = (currentBook.description?.includes(user.uid))
+                || (JSON.parse(currentBook.description || '{}').createdBy === user.uid);
+              setIsBookOwner(!!isMine);
+            } catch {
+              setIsBookOwner(false);
             }
+          }
         }
         setQueue(data);
       } catch (err) {
@@ -100,17 +149,16 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         setLoading(false);
       }
     };
-    loadWords();
+    void loadWords();
   }, [bookId, user.uid]);
 
-  // Prefetch Logic (Context-Aware)
   useEffect(() => {
     if (queue.length === 0 || !showHints) return;
 
     let cancelled = false;
-
     const loadHints = async () => {
       const current = queue[currentIndex];
+      if (!current) return;
 
       if (current.exampleSentence && current.exampleMeaning && !contextCache.current.has(current.id)) {
         contextCache.current.set(current.id, {
@@ -128,22 +176,16 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           setAiContextLoading(false);
         }
       } else {
-        if (!cancelled) {
-          setAiContextLoading(true);
-        }
+        if (!cancelled) setAiContextLoading(true);
         try {
-          const ctx = await generateGeminiSentence(current.word, current.definition, userLevel, bookContext);
-          contextCache.current.set(current.id, ctx);
-          if (!cancelled) {
-            setAiContext(ctx ?? null);
-          }
-          if (ctx) {
-            void storage.updateWordCache(current.id, ctx.english, ctx.japanese);
+          const context = await generateGeminiSentence(current.word, current.definition, userLevel, bookContext);
+          contextCache.current.set(current.id, context);
+          if (!cancelled) setAiContext(context ?? null);
+          if (context) {
+            await storage.updateWordCache(current.id, context.english, context.japanese);
           }
         } finally {
-          if (!cancelled) {
-            setAiContextLoading(false);
-          }
+          if (!cancelled) setAiContextLoading(false);
         }
       }
 
@@ -159,22 +201,21 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       }
 
       generateGeminiSentence(nextWord.word, nextWord.definition, userLevel, bookContext)
-        .then((ctx) => {
-          contextCache.current.set(nextWord.id, ctx);
-          if (ctx) {
-            return storage.updateWordCache(nextWord.id, ctx.english, ctx.japanese);
+        .then((context) => {
+          contextCache.current.set(nextWord.id, context);
+          if (context) {
+            return storage.updateWordCache(nextWord.id, context.english, context.japanese);
           }
+          return undefined;
         })
         .catch(() => {});
     };
 
-    loadHints();
-
+    void loadHints();
     return () => {
       cancelled = true;
     };
-  }, [queue, currentIndex, user.englishLevel, bookContext, showHints]);
-
+  }, [bookContext, currentIndex, queue, showHints, user.englishLevel]);
 
   const currentWord = queue[currentIndex];
   const reviewPreview = reviewWords.slice(0, 3);
@@ -188,44 +229,55 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     }
   }, [currentIndex, currentWord, isFinished, loading]);
 
-  // Edit Handlers
-  const startEditing = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!isBookOwner) {
-          // If official, open Report Modal instead
-          setReportReason('');
-          setShowReportModal(true);
-          return;
-      }
-      setEditWord(currentWord.word);
-      setEditDef(currentWord.definition);
-      setIsEditing(true);
+  const resetCard = () => {
+    setIsFlipped(false);
+    setAiContext(null);
+    setAiImage(null);
+    setShowTranslation(false);
+    setShowHints(false);
+    setImageHintUnavailable(false);
+    setIsEditing(false);
+  };
+
+  const handleExit = () => {
+    onSessionComplete(updatedUser || user);
+  };
+
+  const startEditing = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!currentWord) return;
+    if (!isBookOwner) {
+      setReportReason('');
+      setShowReportModal(true);
+      return;
+    }
+    setEditWord(currentWord.word);
+    setEditDef(currentWord.definition);
+    setIsEditing(true);
+  };
+
+  const cancelEditing = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    setIsEditing(false);
+  };
+
+  const saveEditing = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!currentWord || !editWord.trim() || !editDef.trim()) return;
+    const updated: WordData = { ...currentWord, word: editWord, definition: editDef };
+    await storage.updateWord(updated);
+    const nextQueue = [...queue];
+    nextQueue[currentIndex] = updated;
+    setQueue(nextQueue);
+    setIsEditing(false);
   };
 
   const submitReport = async () => {
-      if (!reportReason.trim()) return;
-      await storage.reportWord(currentWord.id, reportReason);
-      setShowReportModal(false);
-      setReportReason('');
-      setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
-  };
-
-  const cancelEditing = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      setIsEditing(false);
-  };
-
-  const saveEditing = async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!editWord.trim() || !editDef.trim()) return;
-
-      const updated: WordData = { ...currentWord, word: editWord, definition: editDef };
-      await storage.updateWord(updated);
-
-      const newQueue = [...queue];
-      newQueue[currentIndex] = updated;
-      setQueue(newQueue);
-      setIsEditing(false);
+    if (!currentWord || !reportReason.trim()) return;
+    await storage.reportWord(currentWord.id, reportReason);
+    setShowReportModal(false);
+    setReportReason('');
+    setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
   };
 
   const handleRating = async (rating: number) => {
@@ -237,48 +289,33 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       Math.max(0, Date.now() - cardStartedAtRef.current),
     );
     if (rating <= 1) {
-      setReviewWords((prev) => prev.some((word) => word.id === currentWord.id) ? prev : [...prev, currentWord]);
+      setReviewWords((previous) => (
+        previous.some((word) => word.id === currentWord.id)
+          ? previous
+          : [...previous, currentWord]
+      ));
     }
     if (currentIndex < queue.length - 1) {
-        resetCard();
-        setTimeout(() => setCurrentIndex(prev => prev + 1), 200);
+      resetCard();
+      window.setTimeout(() => setCurrentIndex((previous) => previous + 1), supports3D ? 180 : 0);
     } else {
-        finishSession();
-    }
-  };
-  
-  const finishSession = async () => {
       const baseXP = queue.length * 10;
       const currentStreak = user.stats?.currentStreak || 0;
-      const bonusMultiplier = Math.min(currentStreak, 10) * 0.1; 
+      const bonusMultiplier = Math.min(currentStreak, 10) * 0.1;
       const bonusXP = Math.round(baseXP * bonusMultiplier);
       const totalXP = baseXP + bonusXP;
-
       const result = await storage.addXP(user, totalXP);
       setEarnedXP(baseXP);
       setStreakBonusXP(bonusXP);
       setLeveledUp(result.leveledUp);
-      setUpdatedUser(result.user); 
+      setUpdatedUser(result.user);
       setIsFinished(true);
+    }
   };
 
-  const handleExit = () => {
-      onSessionComplete(updatedUser || user);
-  };
-
-  const resetCard = () => {
-    setIsFlipped(false);
-    setAiContext(null); 
-    setAiImage(null);
-    setShowTranslation(false);
-    setShowHints(false);
-    setImageHintUnavailable(false);
-    setIsEditing(false);
-  }
-
-  const generateImage = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (aiImage || aiImageLoading) return;
+  const generateImage = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!currentWord || aiImage || aiImageLoading) return;
     setAiImageLoading(true);
     const imageBase64 = await generateWordImage(currentWord.word, currentWord.definition);
     setAiImage(imageBase64);
@@ -286,297 +323,382 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     setAiImageLoading(false);
   };
 
-  const speakText = (e: React.MouseEvent, text: string) => {
-    e.stopPropagation();
+  const speakText = (event: React.MouseEvent, text: string) => {
+    event.stopPropagation();
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.rate = 0.9; 
+    utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
   };
 
-  if (loading) return <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-10 w-10 border-medace-500 border-t-2"></div></div>;
+  const openBack = () => {
+    if (!isEditing) {
+      setIsFlipped(true);
+    }
+  };
 
-  if (queue.length === 0) return (
-    <div className="text-center p-10">
-      <p className="text-lg font-bold text-slate-700 mb-2">学習対象の単語はありません</p>
-      <button onClick={onBack} className="px-6 py-2 bg-medace-600 text-white rounded-lg font-bold">ダッシュボードに戻る</button>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex justify-center p-10">
+        <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-medace-500"></div>
+      </div>
+    );
+  }
 
-  if (isFinished) return (
-    <div className="relative mx-auto max-w-2xl overflow-hidden rounded-[32px] bg-white p-8 shadow-2xl animate-in zoom-in duration-500">
+  if (queue.length === 0) {
+    return (
+      <div className="p-10 text-center">
+        <p className="mb-2 text-lg font-bold text-slate-700">学習対象の単語はありません</p>
+        <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-white">ダッシュボードに戻る</button>
+      </div>
+    );
+  }
+
+  if (!currentWord) return null;
+
+  if (isFinished) {
+    return (
+      <div className="relative mx-auto max-w-2xl overflow-hidden rounded-[32px] bg-white p-6 shadow-2xl animate-in zoom-in duration-500 sm:p-8">
         <div className="absolute inset-0 bg-gradient-to-b from-yellow-50 via-white to-white"></div>
         <div className="relative z-10">
-            <div className="flex flex-col items-center text-center">
-                {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-medace-500 px-4 py-2 text-sm font-black text-white shadow-lg">LEVEL UP!</span></div>}
-                <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 shadow-inner">
-                    <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
-                </div>
-                <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
-                <p className="mt-2 text-sm text-slate-500">{queue.length}語を進めました。次に直すところだけ見れば十分です。</p>
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
-                    +{earnedXP + streakBonusXP} XP {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
-                </div>
+          <div className="flex flex-col items-center text-center">
+            {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-medace-500 px-4 py-2 text-sm font-black text-white shadow-lg">LEVEL UP!</span></div>}
+            <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 shadow-inner">
+              <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
             </div>
+            <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
+            <p className="mt-2 text-sm text-slate-500">{queue.length}語を進めました。次に直すところだけ見れば十分です。</p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
+              +{earnedXP + streakBonusXP} XP {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
+            </div>
+          </div>
 
-            <div className="mt-8 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次に見直す単語</div>
-                    {reviewPreview.length > 0 ? (
-                        <div className="mt-4 space-y-3">
-                            {reviewPreview.map((word) => (
-                                <div key={word.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="font-bold text-slate-900">{word.word}</div>
-                                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">今夜もう一度</span>
-                                    </div>
-                                    <div className="mt-1 text-sm text-slate-500">{word.definition}</div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="mt-4 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-                            もう一度に回す単語はありません。このまま次の学習に進めます。
-                        </div>
-                    )}
-                </div>
-
-                <div className="rounded-3xl border border-medace-100 bg-[#fff8ef] p-5">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次の一手</div>
-                    <div className="mt-4 space-y-3 text-sm text-slate-600">
-                        <div className="rounded-2xl bg-white px-4 py-4">
-                            <div className="font-bold text-slate-900">次の復習タイミング</div>
-                            <div className="mt-1 leading-relaxed">{nextReviewMessage}</div>
-                        </div>
-                        <div className="rounded-2xl bg-white px-4 py-4">
-                            <div className="font-bold text-slate-900">明日の入り方</div>
-                            <div className="mt-1 leading-relaxed">最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。</div>
-                        </div>
+          <div className="mt-8 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次に見直す単語</div>
+              {reviewPreview.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {reviewPreview.map((word) => (
+                    <div key={word.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-bold text-slate-900">{word.word}</div>
+                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">今夜もう一度</span>
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">{word.definition}</div>
                     </div>
+                  ))}
                 </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                  もう一度に回す単語はありません。このまま次の学習に進めます。
+                </div>
+              )}
             </div>
 
-            <button onClick={handleExit} className="mt-8 w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700">
-                ダッシュボードに戻る
-            </button>
+            <div className="rounded-3xl border border-medace-100 bg-[#fff8ef] p-5">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次の一手</div>
+              <div className="mt-4 space-y-3 text-sm text-slate-600">
+                <div className="rounded-2xl bg-white px-4 py-4">
+                  <div className="font-bold text-slate-900">次の復習タイミング</div>
+                  <div className="mt-1 leading-relaxed">{nextReviewMessage}</div>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-4">
+                  <div className="font-bold text-slate-900">明日の入り方</div>
+                  <div className="mt-1 leading-relaxed">最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={handleExit} className="mt-8 w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700">
+            ダッシュボードに戻る
+          </button>
         </div>
-    </div>
+      </div>
+    );
+  }
+
+  const reportDialogMode = isMobileViewport ? 'fullscreen' : 'sheet';
+  const frontFace = (
+    <section
+      data-testid="study-card-front"
+      aria-hidden={isFlipped}
+      className="study-card-face border border-slate-200 bg-white px-5 py-6 shadow-xl transition-shadow hover:shadow-2xl sm:px-8 sm:py-8"
+      onClick={openBack}
+    >
+      <div className="flex h-full flex-col items-center justify-center text-center">
+        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
+        <h2 className="mt-5 break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{currentWord.word}</h2>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={(event) => speakText(event, currentWord.word)}
+            className="rounded-full bg-orange-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
+          >
+            <Volume2 className="h-6 w-6" />
+          </button>
+        </div>
+        <div className="mt-auto pt-8 text-xs font-medium text-slate-300">
+          カードか下のボタンで答えを確認
+        </div>
+      </div>
+    </section>
+  );
+  const backFace = (
+    <section
+      data-testid="study-card-back"
+      aria-hidden={!isFlipped}
+      className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-white shadow-xl sm:px-6 sm:py-5"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-200">意味</div>
+            <div className="mt-2 text-lg font-black text-white/95">{currentWord.word}</div>
+          </div>
+          {!isEditing ? (
+            <button
+              onClick={startEditing}
+              className={`rounded-full border border-white/15 p-2 transition-colors ${isBookOwner ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-white/70 hover:bg-red-500/20 hover:text-red-100'}`}
+              title={isBookOwner ? '定義を編集' : '問題を報告する'}
+            >
+              {isBookOwner ? <Edit2 className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={saveEditing} className="rounded-full border border-white/15 p-2 text-green-200 transition-colors hover:bg-white/10 hover:text-green-100"><Save className="h-4 w-4" /></button>
+              <button onClick={cancelEditing} className="rounded-full border border-white/15 p-2 text-red-200 transition-colors hover:bg-white/10 hover:text-red-100"><X className="h-4 w-4" /></button>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-[24px] border border-white/10 bg-white/8 px-4 py-4">
+          {isEditing ? (
+            <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
+              <input
+                type="text"
+                value={editWord}
+                onChange={(event) => setEditWord(event.target.value)}
+                className="w-full rounded-2xl border border-white/20 bg-white/10 p-3 text-white"
+              />
+              <textarea
+                value={editDef}
+                onChange={(event) => setEditDef(event.target.value)}
+                className="h-28 w-full resize-none rounded-2xl border border-white/20 bg-white/10 p-3 text-white"
+              />
+            </div>
+          ) : (
+            <p className="text-center text-2xl font-black leading-snug text-white sm:text-3xl">{currentWord.definition}</p>
+          )}
+        </div>
+
+        <div className="mt-4 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+          {!showHints ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowHints(true);
+              }}
+              className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/6 px-4 py-5 text-center text-white/78 transition-colors hover:bg-white/10"
+            >
+              <Sparkles className="h-5 w-5 text-medace-300" />
+              <span className="text-sm font-bold">まだ難しいときだけヒントを見る</span>
+              <span className="text-xs text-white/60">例文・訳・画像ヒントをあとから開けます</span>
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white/68">
+                <span>ヒントを表示中</span>
+                <button
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShowHints(false);
+                  }}
+                  className="rounded-full border border-white/15 px-3 py-1 text-[11px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                >
+                  閉じる
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                {aiContextLoading ? (
+                  <div className="flex flex-col items-center gap-2 py-4 text-medace-200">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-xs">AI例文を生成中...</span>
+                  </div>
+                ) : aiContext ? (
+                  <div className="text-center">
+                    <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
+                      <span className="flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        AI例文 {bookContext && `(${bookContext.slice(0, 15)}...)`}
+                      </span>
+                      <button onClick={(event) => speakText(event, aiContext.english)} className="transition-colors hover:text-white"><Volume2 className="h-4 w-4" /></button>
+                    </div>
+                    <p className="mb-3 text-base font-medium leading-relaxed text-white/88 sm:text-lg">"{aiContext.english}"</p>
+
+                    {showTranslation ? (
+                      <p className="animate-in fade-in border-t border-white/10 pt-2 text-xs text-white/70 sm:text-sm">{aiContext.japanese}</p>
+                    ) : (
+                      <button onClick={() => setShowTranslation(true)} className="mx-auto flex items-center justify-center gap-1 text-xs text-white/65 transition-colors hover:text-white">
+                        <Languages className="h-3 w-3" /> 訳を表示
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-center text-xs text-white/60">このカードは単語と意味に集中しましょう。</p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                {aiImageLoading ? (
+                  <div className="flex flex-col items-center gap-2 py-6 text-medace-200">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-xs text-center">AIイメージ生成中...</span>
+                  </div>
+                ) : aiImage ? (
+                  <div className="relative h-40 w-full overflow-hidden rounded-2xl bg-white/5">
+                    <img src={aiImage} alt="視覚的記憶補助" className="h-full w-full object-contain opacity-90 transition-opacity hover:opacity-100" />
+                  </div>
+                ) : imageHintUnavailable ? (
+                  <p className="px-4 py-6 text-center text-xs text-white/60">画像ヒントは今は利用できません。</p>
+                ) : (
+                  <button onClick={generateImage} className="group flex h-full w-full flex-col items-center justify-center gap-2 py-6 text-white/65 transition-colors hover:text-white">
+                    <div className="rounded-full bg-white/10 p-2 transition-colors group-hover:bg-white/18">
+                      <ImageIcon className="h-4 w-4" />
+                    </div>
+                    <span className="text-xs font-bold text-center">画像ヒントを表示</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 
   return (
-    <div className="max-w-2xl mx-auto">
-      
-      {/* Report Modal */}
+    <div className="mx-auto max-w-3xl pb-24">
       {showReportModal && (
-          <ModalOverlay onClose={() => setShowReportModal(false)} panelClassName="max-w-md" align="center">
-              <div className="w-full rounded-2xl border border-medace-100 bg-white p-6">
-                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                      <Flag className="w-5 h-5 text-red-500" /> 問題を報告
-                  </h3>
-                  <p className="text-sm text-slate-500 mb-4">
-                      不適切な例文や間違いを報告してください。講師が確認後、修正を行います。
-                  </p>
-                  <textarea 
-                    value={reportReason}
-                    onChange={e => setReportReason(e.target.value)}
-                    className="w-full h-24 border p-3 rounded-lg mb-4 text-sm"
-                    placeholder="例: 例文が古文として不自然です / 意味が間違っています"
-                  />
-                  <div className="flex gap-3">
-                      <button onClick={() => setShowReportModal(false)} className="flex-1 rounded-lg bg-medace-50 py-2 font-bold text-medace-800">キャンセル</button>
-                      <button onClick={submitReport} disabled={!reportReason.trim()} className="flex-1 py-2 bg-red-500 text-white rounded-lg font-bold disabled:opacity-50">報告する</button>
-                  </div>
-              </div>
-          </ModalOverlay>
+        <MobileSheetDialog
+          onClose={() => setShowReportModal(false)}
+          mode={reportDialogMode}
+          panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-md sm:rounded-[28px] sm:border sm:border-medace-100 sm:shadow-2xl"
+        >
+          <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[28px] sm:px-6">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+              <Flag className="h-5 w-5 text-red-500" /> 問題を報告
+            </h3>
+            <p className="mt-3 text-sm text-slate-500">
+              不適切な例文や間違いを報告してください。講師が確認後、修正を行います。
+            </p>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            <textarea
+              value={reportReason}
+              onChange={(event) => setReportReason(event.target.value)}
+              className="h-32 w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              placeholder="例: 例文が古文として不自然です / 意味が間違っています"
+            />
+          </div>
+          <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button onClick={() => setShowReportModal(false)} className="min-h-11 rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-700">キャンセル</button>
+              <button onClick={submitReport} disabled={!reportReason.trim()} className="min-h-11 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white disabled:opacity-50">報告する</button>
+            </div>
+          </MobileStickyActionBar>
+        </MobileSheetDialog>
       )}
 
       {reportNotice && (
-          <ModalOverlay onClose={() => setReportNotice(null)} panelClassName="max-w-md" align="center">
-              <div className="rounded-[28px] border border-medace-100 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Report Saved</div>
-                  <h3 className="mt-3 text-xl font-black text-slate-950">報告を受け付けました</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{reportNotice}</p>
-                  <button
-                    onClick={() => setReportNotice(null)}
-                    className="mt-6 w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
-                  >
-                    閉じる
-                  </button>
-              </div>
-          </ModalOverlay>
+        <MobileSheetDialog
+          onClose={() => setReportNotice(null)}
+          mode={reportDialogMode}
+          panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-md sm:rounded-[28px] sm:border sm:border-medace-100 sm:shadow-[0_18px_50px_rgba(15,23,42,0.18)]"
+        >
+          <div className="flex-1 px-4 py-8 sm:px-6 sm:py-6">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Report Saved</div>
+            <h3 className="mt-3 text-xl font-black text-slate-950">報告を受け付けました</h3>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">{reportNotice}</p>
+          </div>
+          <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
+            <button
+              onClick={() => setReportNotice(null)}
+              className="w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+            >
+              閉じる
+            </button>
+          </MobileStickyActionBar>
+        </MobileSheetDialog>
       )}
 
-      <div className="flex items-center justify-between mb-4 md:mb-6">
-        <button onClick={onBack} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium">
-          <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">中断</span>
+      <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
+        <button onClick={onBack} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800">
+          <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
-            {bookId === 'smart-session' && <span className="bg-medace-100 text-medace-700 text-xs font-bold px-2 py-1 rounded flex items-center gap-1"><Zap className="w-3 h-3" /> デイリークエスト</span>}
-            <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">
-            {currentIndex + 1} / {queue.length}
+          {bookId === 'smart-session' && (
+            <span className="flex items-center gap-1 rounded bg-medace-100 px-2 py-1 text-xs font-bold text-medace-700">
+              <Zap className="h-3 w-3" /> デイリークエスト
             </span>
+          )}
+          <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">
+            {currentIndex + 1} / {queue.length}
+          </span>
         </div>
       </div>
 
-      <div 
-        className="relative w-full min-h-[50vh] md:h-[550px] cursor-pointer group perspective-1000 mb-6 md:mb-8"
-        onClick={() => { if(!isEditing) setIsFlipped(!isFlipped); }}
-      >
-        <div className={`card-inner w-full h-full transition-transform duration-500 preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`} 
-             style={{ transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)', transformStyle: 'preserve-3d' }}>
-          
-          {/* Front */}
-          <div className="card-front absolute w-full h-full bg-white rounded-3xl shadow-xl border border-slate-200 flex flex-col items-center justify-center backface-hidden p-4 md:p-8 hover:shadow-2xl transition-shadow">
-            <div className="text-slate-400 text-xs md:text-sm font-bold uppercase tracking-widest mb-4 md:mb-6">単語</div>
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-800 mb-4 md:mb-6 tracking-tight text-center break-words max-w-full">{currentWord.word}</h2>
-            <div className="flex gap-3">
-                <button onClick={(e) => speakText(e, currentWord.word)} className="p-3 rounded-full bg-orange-50 text-medace-500 hover:bg-medace-100 transition-colors">
-                <Volume2 className="w-6 h-6" />
-                </button>
-            </div>
-            <p className="absolute bottom-6 text-slate-300 text-xs font-medium">タップして裏返す</p>
-          </div>
-
-          {/* Back */}
-          <div className="card-back absolute flex h-full w-full flex-col overflow-hidden rounded-3xl bg-medace-500 shadow-xl backface-hidden" style={{ transform: 'rotateY(180deg)' }}>
-            <div className="p-4 md:p-8 flex flex-col h-full overflow-y-auto scrollbar-hide relative">
-                
-                <div className="flex justify-between w-full mb-2 md:mb-4 relative z-10">
-                    <div className="text-medace-400 text-xs md:text-sm font-bold uppercase tracking-widest">意味</div>
-                    {!isEditing ? (
-                        <button 
-                            onClick={startEditing}
-                            className={`p-1 transition-colors ${isBookOwner ? 'text-white/55 hover:text-white' : 'text-white/55 hover:text-red-200'}`}
-                            title={isBookOwner ? "定義を編集" : "問題を報告する"}
-                        >
-                            {isBookOwner ? <Edit2 className="w-4 h-4" /> : <Flag className="w-4 h-4" />}
-                        </button>
-                    ) : (
-                        <div className="flex gap-2">
-                            <button onClick={saveEditing} className="text-green-400 hover:text-green-300"><Save className="w-5 h-5" /></button>
-                            <button onClick={cancelEditing} className="text-red-400 hover:text-red-300"><X className="w-5 h-5" /></button>
-                        </div>
-                    )}
-                </div>
-
-                {isEditing ? (
-                    <div className="flex flex-col gap-4 mb-6" onClick={(e) => e.stopPropagation()}>
-                        <div>
-                            <input type="text" value={editWord} onChange={(e) => setEditWord(e.target.value)} className="w-full rounded border border-white/20 bg-white/10 p-2 text-white" />
-                        </div>
-                        <div>
-                            <textarea value={editDef} onChange={(e) => setEditDef(e.target.value)} className="h-24 w-full resize-none rounded border border-white/20 bg-white/10 p-2 text-white" />
-                        </div>
-                    </div>
-                ) : (
-                    <p className="text-2xl md:text-3xl text-white font-bold mb-4 md:mb-6 text-center">{currentWord.definition}</p>
-                )}
-
-                <div className="grid grid-cols-1 gap-3 flex-grow content-start">
-                    {!showHints ? (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowHints(true);
-                            }}
-                            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/6 px-4 py-5 text-center text-white/78 transition-colors hover:bg-white/10"
-                        >
-                            <Sparkles className="h-5 w-5 text-medace-300" />
-                            <span className="text-sm font-bold">まだ難しいときだけヒントを見る</span>
-                            <span className="text-xs text-white/60">例文・訳・画像ヒントをあとから開けます</span>
-                        </button>
-                    ) : (
-                        <>
-                            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/6 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white/68" onClick={(e) => e.stopPropagation()}>
-                                <span>ヒントを表示中</span>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowHints(false);
-                                    }}
-                                    className="rounded-full border border-white/15 px-3 py-1 text-[11px] font-bold text-white/82 transition-colors hover:bg-white/10"
-                                >
-                                    閉じる
-                                </button>
-                            </div>
-
-                            <div className="relative flex w-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 transition-colors hover:bg-white/12 md:p-4" onClick={(e) => e.stopPropagation()}>
-                                {aiContextLoading ? (
-                                    <div className="flex flex-col items-center gap-2 py-4 text-medace-400 animate-pulse">
-                                        <Loader2 className="w-5 h-5 animate-spin" /> <span className="text-xs">AI例文を生成中...</span>
-                                    </div>
-                                ) : aiContext ? (
-                                    <div className="text-center">
-                                        <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-400">
-                                            <span className="flex items-center gap-1">
-                                                <Sparkles className="w-3 h-3" />
-                                                AI例文 {bookContext && `(${bookContext.slice(0,15)}...)`}
-                                            </span>
-                                            <button onClick={(e) => speakText(e, aiContext.english)} className="transition-colors hover:text-white"><Volume2 className="w-4 h-4" /></button>
-                                        </div>
-                                        <p className="mb-3 text-base font-medium leading-relaxed text-white/88 md:text-lg">"{aiContext.english}"</p>
-
-                                        {showTranslation ? (
-                                            <p className="animate-in fade-in border-t border-white/10 pt-2 text-xs text-white/70 md:text-sm">{aiContext.japanese}</p>
-                                        ) : (
-                                            <button onClick={() => setShowTranslation(true)} className="mx-auto flex items-center justify-center gap-1 text-xs text-white/65 transition-colors hover:text-white">
-                                                <Languages className="w-3 h-3" /> 訳を表示
-                                            </button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <p className="text-center text-xs text-white/60">このカードは単語と意味に集中しましょう。</p>
-                                )}
-                            </div>
-
-                            <div className="relative flex min-h-[100px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/10 transition-colors hover:bg-white/12 md:min-h-[120px]" onClick={(e) => e.stopPropagation()}>
-                                {aiImageLoading ? (
-                                    <div className="flex flex-col items-center gap-2 text-blue-400 animate-pulse">
-                                        <Loader2 className="w-5 h-5 animate-spin" /> <span className="text-xs text-center">AIイメージ生成中...</span>
-                                    </div>
-                                ) : aiImage ? (
-                                    <div className="relative h-32 w-full group md:h-40">
-                                        <img src={aiImage} alt="視覚的記憶補助" className="h-full w-full object-contain opacity-90 transition-opacity group-hover:opacity-100" />
-                                    </div>
-                                ) : imageHintUnavailable ? (
-                                    <p className="px-4 text-center text-xs text-white/60">画像ヒントは今は利用できません。</p>
-                                ) : (
-                                    <button onClick={generateImage} className="group flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-white/65 transition-colors hover:text-white">
-                                        <div className="rounded-full bg-white/10 p-2 transition-colors group-hover:bg-white/18">
-                                            <ImageIcon className="w-4 h-4" />
-                                        </div>
-                                        <span className="text-xs font-bold text-center">画像ヒントを表示</span>
-                                    </button>
-                                )}
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
+      <div className="study-card-shell">
+        <div className="study-card-3d">
+          <div className={`study-card-inner ${isFlipped ? 'is-flipped' : ''} ${supports3D ? '' : 'instant-swap'}`}>
+            {supports3D ? (
+              <>
+                {frontFace}
+                {backFace}
+              </>
+            ) : (
+              isFlipped ? backFace : frontFace
+            )}
           </div>
         </div>
       </div>
 
-      {isFlipped && !isEditing ? (
-        <div className="grid grid-cols-4 gap-2 md:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
-            <button onClick={() => handleRating(0)} className="flex flex-col items-center gap-1 p-2 md:p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 hover:bg-red-100 active:scale-95 transition-transform"><span className="text-[10px] md:text-xs font-bold">もう一度</span><AlertCircle className="w-5 h-5 mt-1" /></button>
-            <button onClick={() => handleRating(1)} className="flex flex-col items-center gap-1 rounded-xl border border-amber-100 bg-amber-50 p-2 text-amber-700 transition-transform active:scale-95 hover:bg-amber-100 md:p-3"><span className="text-[10px] font-bold md:text-xs">難しい</span><HelpCircleIcon /></button>
-            <button onClick={() => handleRating(2)} className="flex flex-col items-center gap-1 p-2 md:p-3 bg-blue-50 text-blue-600 rounded-xl border border-blue-100 hover:bg-blue-100 active:scale-95 transition-transform"><span className="text-[10px] md:text-xs font-bold">普通</span><Clock className="w-5 h-5 mt-1" /></button>
-            <button onClick={() => handleRating(3)} className="flex flex-col items-center gap-1 p-2 md:p-3 bg-green-50 text-green-600 rounded-xl border border-green-100 hover:bg-green-100 active:scale-95 transition-transform"><span className="text-[10px] md:text-xs font-bold">簡単</span><Zap className="w-5 h-5 mt-1" /></button>
-        </div>
-      ) : (
-        <div className="flex justify-center pb-6 md:pb-0">
-             <button onClick={() => { if(!isEditing) setIsFlipped(true); }} disabled={isEditing} className={`flex items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-105 ${isEditing ? 'cursor-not-allowed bg-medace-200' : 'bg-medace-600 text-white hover:bg-medace-700'}`}>
-                <RotateCw className="w-5 h-5" /> 答えを確認
+      <MobileStickyActionBar className="safe-pad-bottom mt-4 border-t-0 bg-transparent px-0 pb-0 pt-4">
+        {isFlipped && !isEditing ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
+            {RATING_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                data-testid={`study-rate-${option.id}`}
+                onClick={() => handleRating(option.id)}
+                className={`flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 ${option.className}`}
+              >
+                <span>{option.label}</span>
+                {option.icon}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <button
+              data-testid="study-flip-button"
+              onClick={openBack}
+              disabled={isEditing}
+              className={`flex min-h-12 items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
+                isEditing ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-white hover:bg-medace-700'
+              }`}
+            >
+              <RotateCw className="h-5 w-5" /> 答えを確認
             </button>
-        </div>
-      )}
+          </div>
+        )}
+      </MobileStickyActionBar>
     </div>
   );
 };
-
-const HelpCircleIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-1"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>);
 
 export default StudyMode;

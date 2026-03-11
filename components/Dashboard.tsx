@@ -19,6 +19,8 @@ import DashboardSettingsModal from './dashboard/DashboardSettingsModal';
 import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
 import PlanEditorModal from './dashboard/PlanEditorModal';
 import WritingStudentSection from './WritingStudentSection';
+import MobileSheetDialog from './mobile/MobileSheetDialog';
+import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { getTodayDateKey } from '../utils/date';
 import {
   DisplayDensity,
@@ -27,6 +29,7 @@ import {
   saveDisplayPreferences,
 } from '../utils/displayPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
+import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
@@ -53,6 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     removeMyBook,
   } = useDashboardData(user.uid);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const isMobileViewport = useIsMobileViewport();
 
   // Toggle State for Library
   const [showLibrary, setShowLibrary] = useState(false);
@@ -437,6 +441,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     : '目標試験・学習時間・苦手分野を設定すると、プラン提案の精度が上がります。';
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
   const latestCoachNotification = coachNotifications[0] || null;
+  const canShowWritingSection = currentPlan === SubscriptionPlan.TOB_PAID && user.organizationName;
 
   if (loading && planningBooks.length === 0) {
     return (
@@ -448,9 +453,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   }
   
   return (
-    <div data-testid="student-dashboard" className="space-y-6 md:space-y-10 animate-in fade-in duration-500 relative pb-20">
+    <div data-testid="student-dashboard" className="relative flex flex-col gap-5 pb-24 animate-in fade-in duration-500 md:gap-8 md:pb-20">
         {pageNotice && (
-          <div className={`sticky top-3 z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
+          <div className={`sticky top-[calc(0.75rem+var(--safe-top))] z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
             pageNotice.tone === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : 'border-red-200 bg-red-50 text-red-700'
@@ -462,35 +467,45 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         {/* MODALS */}
 
         {pendingDeleteBook && (
-          <ModalOverlay onClose={() => setPendingDeleteBook(null)} align="center" panelClassName="max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <Trash2 className="h-5 w-5 text-red-500" />
-              <div>
-                <div className="text-lg font-black text-slate-950">単語帳を削除する</div>
-                <div className="mt-1 text-sm text-slate-500">「{pendingDeleteBook.title}」を削除します。</div>
+          <MobileSheetDialog
+            onClose={() => setPendingDeleteBook(null)}
+            mode={isMobileViewport ? 'fullscreen' : 'sheet'}
+            panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
+          >
+            <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
+              <div className="flex items-center gap-3">
+                <Trash2 className="h-5 w-5 text-red-500" />
+                <div>
+                  <div className="text-lg font-black text-slate-950">単語帳を削除する</div>
+                  <div className="mt-1 text-sm text-slate-500">「{pendingDeleteBook.title}」を削除します。</div>
+                </div>
               </div>
             </div>
-            <div className="mt-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-              学習履歴との関連データも一緒に削除されます。この操作は取り消せません。
+            <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                学習履歴との関連データも一緒に削除されます。この操作は取り消せません。
+              </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setPendingDeleteBook(null)}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteBook}
-                className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white"
-              >
-                <Trash2 className="h-4 w-4" />
-                削除する
-              </button>
-            </div>
-          </ModalOverlay>
+            <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[32px]">
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteBook(null)}
+                  className="min-h-11 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteBook}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-bold text-white"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  削除する
+                </button>
+              </div>
+            </MobileStickyActionBar>
+          </MobileSheetDialog>
         )}
         
         <PlanEditorModal
@@ -561,31 +576,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           onCreate={handleCreatePhrasebook}
         />
 
-      <DashboardHeroSection
-        grade={user.grade || UserGrade.ADULT}
-        englishLevel={user.englishLevel}
-        heroTitle={heroTitle}
-        heroCopy={heroCopy}
-        preferenceSummary={preferenceSummary}
-        hasStudyBooks={hasStudyBooks}
-        questButtonLabel={questButtonLabel}
-        learningPlan={learningPlan}
-        generatingPlan={generatingPlan}
-        remainingWords={remainingWords}
-        dueCount={dueCount}
-        estimatedMinutes={estimatedMinutes}
-        todayCount={todayCount}
-        todayWordGoal={todayWordGoal}
-        todayProgressPercent={todayProgressPercent}
-        gameLeagueBadge={isGameMode ? userLeague : undefined}
-        onOpenSettings={() => setShowSettingsModal(true)}
-        onStartQuest={() => onSelectBook('smart-session', 'study')}
-        onOpenPlan={() => setShowPlanEditModal(true)}
-        onGeneratePlan={handleGeneratePlan}
-      />
+      <div className="order-1">
+        <DashboardHeroSection
+          grade={user.grade || UserGrade.ADULT}
+          englishLevel={user.englishLevel}
+          heroTitle={heroTitle}
+          heroCopy={heroCopy}
+          preferenceSummary={preferenceSummary}
+          hasStudyBooks={hasStudyBooks}
+          questButtonLabel={questButtonLabel}
+          learningPlan={learningPlan}
+          generatingPlan={generatingPlan}
+          remainingWords={remainingWords}
+          dueCount={dueCount}
+          estimatedMinutes={estimatedMinutes}
+          todayCount={todayCount}
+          todayWordGoal={todayWordGoal}
+          todayProgressPercent={todayProgressPercent}
+          gameLeagueBadge={isGameMode ? userLeague : undefined}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          onStartQuest={() => onSelectBook('smart-session', 'study')}
+          onOpenPlan={() => setShowPlanEditModal(true)}
+          onGeneratePlan={handleGeneratePlan}
+        />
+      </div>
 
       {latestCoachNotification && (
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
+        <section className="order-3 rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:order-2 md:p-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="rounded-2xl border border-medace-100 bg-medace-50 p-3 text-medace-700">
@@ -640,37 +657,43 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </section>
       )}
 
-      <DashboardPlanSection
-        learningPlan={learningPlan}
-        learningPreference={learningPreference}
-        preferenceSummary={preferenceSummary}
-        plannedBooks={plannedBooks}
-        canGenerateAiPlan={canGenerateAiPlan}
-        generatingPlan={generatingPlan}
-        hasStudyBooks={hasStudyBooks}
-        onEditPlan={() => setShowPlanEditModal(true)}
-        onGeneratePlan={handleGeneratePlan}
-      />
+      <div className="order-4 md:order-3">
+        <DashboardPlanSection
+          learningPlan={learningPlan}
+          learningPreference={learningPreference}
+          preferenceSummary={preferenceSummary}
+          plannedBooks={plannedBooks}
+          canGenerateAiPlan={canGenerateAiPlan}
+          generatingPlan={generatingPlan}
+          hasStudyBooks={hasStudyBooks}
+          onEditPlan={() => setShowPlanEditModal(true)}
+          onGeneratePlan={handleGeneratePlan}
+        />
+      </div>
 
       {isGameMode && hasStudyBooks && (
-        <StudyCompanion
-          user={user}
-          dueCount={dueCount}
-          todayCount={todayCount}
-          weekTotal={weekTotal}
-          dailyGoal={todayWordGoal}
-          weeklyGoal={weeklyGoal}
-          stabilizedWords={stabilizedWords}
-          onStartQuest={() => onSelectBook('smart-session', 'study')}
-        />
+        <div className="order-5 md:order-4">
+          <StudyCompanion
+            user={user}
+            dueCount={dueCount}
+            todayCount={todayCount}
+            weekTotal={weekTotal}
+            dailyGoal={todayWordGoal}
+            weeklyGoal={weeklyGoal}
+            stabilizedWords={stabilizedWords}
+            onStartQuest={() => onSelectBook('smart-session', 'study')}
+          />
+        </div>
       )}
 
       {motivationSnapshot && (
-        <MotivationBoard snapshot={motivationSnapshot} />
+        <div className="order-7 md:order-5">
+          <MotivationBoard snapshot={motivationSnapshot} />
+        </div>
       )}
 
       {coachNotifications.length > 1 && (
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-7 shadow-sm">
+        <section className="order-8 rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:order-8 md:p-7">
           <div className="flex items-center gap-3">
             <BrainCircuit className="w-5 h-5 text-medace-600" />
             <div>
@@ -697,53 +720,61 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </section>
       )}
 
-      {currentPlan === SubscriptionPlan.TOB_PAID && user.organizationName && (
-        <WritingStudentSection user={user} />
+      {canShowWritingSection && (
+        <div className="order-2 md:order-6">
+          <WritingStudentSection user={user} />
+        </div>
       )}
 
       {canShowAccountDetails && (
-        <DashboardAccountSection
-          open={showAccountDetails}
-          user={user}
-          accountOverview={accountOverview}
-          aiBudgetPercent={aiBudgetPercent}
-          aiUsageLabel={aiUsageLabel}
-          aiUsageCopy={aiUsageCopy}
-          plannedBookCount={plannedBooks.length}
-          coachNotificationCount={coachNotifications.length}
-          showAdSlots={showAdSlots}
-          onToggle={() => setShowAccountDetails((previous) => !previous)}
-        />
+        <div className="order-10 md:order-9">
+          <DashboardAccountSection
+            open={showAccountDetails}
+            user={user}
+            accountOverview={accountOverview}
+            aiBudgetPercent={aiBudgetPercent}
+            aiUsageLabel={aiUsageLabel}
+            aiUsageCopy={aiUsageCopy}
+            plannedBookCount={plannedBooks.length}
+            coachNotificationCount={coachNotifications.length}
+            showAdSlots={showAdSlots}
+            onToggle={() => setShowAccountDetails((previous) => !previous)}
+          />
+        </div>
       )}
 
-      <DashboardProgressSection
-        open={showProgressDetails}
-        activityLogs={activityLogs}
-        dailyGoal={learningPlan?.dailyWordGoal}
-        masteryDist={masteryDist}
-        isGameMode={isGameMode}
-        leaderboard={leaderboard}
-        todayCount={todayCount}
-        todayWordGoal={todayWordGoal}
-        todayProgressPercent={todayProgressPercent}
-        weekTotal={weekTotal}
-        weeklyGoal={weeklyGoal}
-        weeklyRemaining={weeklyRemaining}
-        currentStreak={user.stats?.currentStreak || 0}
-        onToggle={() => setShowProgressDetails((previous) => !previous)}
-      />
+      <div className="order-9 md:order-10">
+        <DashboardProgressSection
+          open={showProgressDetails}
+          activityLogs={activityLogs}
+          dailyGoal={learningPlan?.dailyWordGoal}
+          masteryDist={masteryDist}
+          isGameMode={isGameMode}
+          leaderboard={leaderboard}
+          todayCount={todayCount}
+          todayWordGoal={todayWordGoal}
+          todayProgressPercent={todayProgressPercent}
+          weekTotal={weekTotal}
+          weeklyGoal={weeklyGoal}
+          weeklyRemaining={weeklyRemaining}
+          currentStreak={user.stats?.currentStreak || 0}
+          onToggle={() => setShowProgressDetails((previous) => !previous)}
+        />
+      </div>
 
-      <DashboardLibrarySection
-        books={books}
-        myBooks={myBooks}
-        recommendedOfficialBooks={recommendedOfficialBooks}
-        progressMap={progressMap}
-        showLibrary={showLibrary}
-        onToggleLibrary={() => setShowLibrary((previous) => !previous)}
-        onOpenCreateModal={() => setShowCreateModal(true)}
-        onDelete={handleDeleteBook}
-        onSelect={onSelectBook}
-      />
+      <div className="order-6 md:order-11">
+        <DashboardLibrarySection
+          books={books}
+          myBooks={myBooks}
+          recommendedOfficialBooks={recommendedOfficialBooks}
+          progressMap={progressMap}
+          showLibrary={showLibrary}
+          onToggleLibrary={() => setShowLibrary((previous) => !previous)}
+          onOpenCreateModal={() => setShowCreateModal(true)}
+          onDelete={handleDeleteBook}
+          onSelect={onSelectBook}
+        />
+      </div>
     </div>
   );
 };

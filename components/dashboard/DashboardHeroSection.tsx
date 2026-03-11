@@ -2,6 +2,7 @@ import React from 'react';
 import { Edit2, Loader2, Play, Settings, Sparkles } from 'lucide-react';
 import { BRAND } from '../../config/brand';
 import { GRADE_LABELS, type LearningPlan, type UserGrade } from '../../types';
+import ResponsiveMetricRail from '../mobile/ResponsiveMetricRail';
 
 interface DashboardHeroSectionProps {
   grade: UserGrade;
@@ -48,7 +49,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   onOpenPlan,
   onGeneratePlan,
 }) => (
-  <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-7 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)] md:p-8">
+  <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-5 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)] md:p-8">
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_26%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_24%)]"></div>
     <div className="relative">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -73,29 +74,29 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </button>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+      <div className="mt-6 grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-medace-200">Today Focus</p>
-          <h2 className="mt-3 text-3xl font-black leading-tight tracking-tight md:text-4xl">今日やることは 1 つだけ</h2>
-          <p className="mt-4 text-2xl font-black tracking-tight text-white">{heroTitle}</p>
-          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-white/74 md:text-base">{heroCopy}</p>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
+          <h2 className="mt-2 text-[1.9rem] font-black leading-tight tracking-tight md:text-4xl">今日やることは 1 つだけ</h2>
+          <p className="mt-3 text-[1.45rem] font-black tracking-tight text-white md:text-2xl">{heroTitle}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/76 md:text-base">{heroCopy}</p>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-3">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
-            <div className="mt-2 text-sm leading-relaxed text-white/80">{preferenceSummary}</div>
+            <div className="mt-2 text-sm leading-relaxed text-white/80 line-clamp-2 md:line-clamp-none">{preferenceSummary}</div>
           </div>
 
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <button
               onClick={onStartQuest}
               disabled={!hasStudyBooks}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-medace-900/40"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3.5 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-medace-900/40"
             >
               <Play className="h-4 w-4 fill-current" /> {questButtonLabel}
             </button>
             {learningPlan ? (
               <button
                 onClick={onOpenPlan}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10"
               >
                 <Edit2 className="h-4 w-4" /> 今日のプランを見る
               </button>
@@ -103,7 +104,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               <button
                 onClick={onGeneratePlan}
                 disabled={generatingPlan || !hasStudyBooks}
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50"
               >
                 {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 最初のプランを作る
@@ -112,28 +113,20 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-white/10 bg-white/8 p-5 backdrop-blur-sm">
+        <div className="rounded-[28px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm md:p-5">
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">今日の目安</div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">残り</div>
-              <div className="mt-2 text-3xl font-black">{remainingWords}</div>
-              <div className="mt-1 text-sm text-white/68">語</div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">復習待ち</div>
-              <div className="mt-2 text-3xl font-black">{dueCount}</div>
-              <div className="mt-1 text-sm text-white/68">語</div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/55">目安時間</div>
-              <div className="mt-2 text-3xl font-black">{estimatedMinutes}</div>
-              <div className="mt-1 text-sm text-white/68">分</div>
-            </div>
+          <div className="mt-4">
+            <ResponsiveMetricRail
+              items={[
+                { id: 'remaining', label: '残り', value: `${remainingWords}`, helper: '語' },
+                { id: 'due', label: '復習待ち', value: `${dueCount}`, helper: '語' },
+                { id: 'minutes', label: '目安時間', value: `${estimatedMinutes}`, helper: '分' },
+              ]}
+            />
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.16em] text-white/60">
+            <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-white/60">
               <span>今日の進み具合</span>
               <span>{todayCount} / {todayWordGoal} 語</span>
             </div>

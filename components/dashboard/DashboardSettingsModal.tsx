@@ -12,7 +12,8 @@ import {
   USER_STUDY_MODE_LABELS,
 } from '../../types';
 import type { DisplayDensity, DisplayFontSize } from '../../utils/displayPreferences';
-import ModalOverlay from '../ModalOverlay';
+import MobileSheetDialog from '../mobile/MobileSheetDialog';
+import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import QuickChoiceButton from './QuickChoiceButton';
 
 const TARGET_EXAM_PRESETS = ['定期テスト', '英検5級', '英検4級', '英検3級', '英検準2級', '英検2級', '共通テスト'];
@@ -102,28 +103,35 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 }) => {
   if (!open) return null;
 
+  const quickChoiceRailClassName = 'flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible';
+  const quickChoiceClassName = 'min-h-11 shrink-0 sm:min-h-0';
+
   return (
-    <ModalOverlay
+    <MobileSheetDialog
       onClose={onClose}
-      panelClassName="max-w-5xl rounded-[32px] border border-slate-200 bg-white p-7 shadow-2xl sm:p-8"
+      mode="fullscreen"
+      panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
-      <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
-        <X className="h-5 w-5" />
-      </button>
-      <div className="flex flex-wrap items-start gap-4 border-b border-slate-100 pb-5 pr-12">
-        <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
-          <User className="h-6 w-6" />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-slate-500">Profile Settings</p>
-          <h3 className="mt-2 text-[1.9rem] font-black tracking-tight text-slate-950">設定・プロフィール</h3>
-          <p className="mt-2 max-w-2xl text-[0.98rem] leading-relaxed text-slate-500">
-            よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。
-          </p>
+      <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-7 sm:pt-6">
+        <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 sm:right-5 sm:top-5">
+          <X className="h-5 w-5" />
+        </button>
+        <div className="flex flex-wrap items-start gap-4 pr-12">
+          <div className="rounded-2xl bg-slate-100 p-3 text-slate-600">
+            <User className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-500">Profile Settings</p>
+            <h3 className="mt-2 text-[1.7rem] font-black tracking-tight text-slate-950 sm:text-[1.9rem]">設定・プロフィール</h3>
+            <p className="mt-2 max-w-2xl text-[0.95rem] leading-relaxed text-slate-500 sm:text-[0.98rem]">
+              よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
+      <div className="grid gap-5 lg:grid-cols-[0.92fr_1.08fr]">
         <section className="space-y-5">
           <div className="ui-panel-subtle">
             <div className="flex items-center gap-2 text-base font-bold text-slate-900">
@@ -155,7 +163,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
               </div>
               <div>
                 <label className="ui-form-label">表示モード</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {[UserStudyModeEnum.FOCUS, UserStudyModeEnum.GAME].map((mode) => (
                     <button
                       key={mode}
@@ -264,13 +272,14 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
             <div className="mt-5 space-y-5">
               <div>
                 <label className="ui-form-label">目標試験・確認対象</label>
-                <div className="flex flex-wrap gap-2">
+                <div className={quickChoiceRailClassName}>
                   {TARGET_EXAM_PRESETS.map((preset) => (
                     <QuickChoiceButton
                       key={preset}
                       active={editTargetExam === preset}
                       label={preset}
                       onClick={() => onEditTargetExam(preset)}
+                      className={quickChoiceClassName}
                     />
                   ))}
                 </div>
@@ -286,13 +295,14 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
               <div className="grid gap-4 sm:grid-cols-[0.92fr_1.08fr]">
                 <div>
                   <label className="ui-form-label">目標の目安</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className={quickChoiceRailClassName}>
                     {TARGET_SCORE_PRESETS.map((preset) => (
                       <QuickChoiceButton
                         key={preset}
                         active={editTargetScore === preset}
                         label={preset}
                         onClick={() => onEditTargetScore(preset)}
+                        className={quickChoiceClassName}
                       />
                     ))}
                   </div>
@@ -328,13 +338,14 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
               <div>
                 <label className="ui-form-label">週の学習日数</label>
-                <div className="flex flex-wrap gap-2">
+                <div className={quickChoiceRailClassName}>
                   {WEEKLY_STUDY_DAY_OPTIONS.map((days) => (
                     <QuickChoiceButton
                       key={days}
                       active={editWeeklyStudyDays === days}
                       label={`${days}日`}
                       onClick={() => onEditWeeklyStudyDays(days)}
+                      className={quickChoiceClassName}
                     />
                   ))}
                 </div>
@@ -342,13 +353,14 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
               <div>
                 <label className="ui-form-label">1日の学習時間</label>
-                <div className="flex flex-wrap gap-2">
+                <div className={quickChoiceRailClassName}>
                   {DAILY_STUDY_MINUTE_OPTIONS.map((minutes) => (
                     <QuickChoiceButton
                       key={minutes}
                       active={editDailyStudyMinutes === minutes}
                       label={`${minutes}分`}
                       onClick={() => onEditDailyStudyMinutes(minutes)}
+                      className={quickChoiceClassName}
                     />
                   ))}
                 </div>
@@ -368,13 +380,14 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
               <div>
                 <label className="ui-form-label">苦手分野</label>
-                <div className="flex flex-wrap gap-2">
+                <div className={quickChoiceRailClassName}>
                   {WEAK_SKILL_PRESETS.map((preset) => (
                     <QuickChoiceButton
                       key={preset}
                       active={editWeakSkillFocus === preset}
                       label={preset}
                       onClick={() => onEditWeakSkillFocus(preset)}
+                      className={quickChoiceClassName}
                     />
                   ))}
                 </div>
@@ -426,24 +439,27 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
           </div>
         </section>
       </div>
-
-      <div className="sticky bottom-0 mt-6 flex flex-col-reverse gap-3 border-t border-slate-100 bg-white/95 pt-4 backdrop-blur sm:flex-row sm:justify-end">
-        <button
-          onClick={onClose}
-          type="button"
-          className="rounded-2xl border border-slate-200 px-6 py-3 text-base font-bold text-slate-600 transition-colors hover:bg-slate-50"
-        >
-          閉じる
-        </button>
-        <button
-          onClick={onSave}
-          disabled={isSavingProfile}
-          className="rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          {isSavingProfile ? '保存中...' : '変更を保存'}
-        </button>
       </div>
-    </ModalOverlay>
+
+      <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-7">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            onClick={onClose}
+            type="button"
+            className="min-h-11 rounded-2xl border border-slate-200 px-6 py-3 text-base font-bold text-slate-600 transition-colors hover:bg-slate-50"
+          >
+            閉じる
+          </button>
+          <button
+            onClick={onSave}
+            disabled={isSavingProfile}
+            className="min-h-11 rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {isSavingProfile ? '保存中...' : '変更を保存'}
+          </button>
+        </div>
+      </MobileStickyActionBar>
+    </MobileSheetDialog>
   );
 };
 

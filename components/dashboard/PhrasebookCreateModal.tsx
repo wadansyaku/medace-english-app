@@ -1,7 +1,8 @@
 import React from 'react';
 import { BookOpen, FileText, Image as ImageIcon, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
 
-import ModalOverlay from '../ModalOverlay';
+import MobileSheetDialog from '../mobile/MobileSheetDialog';
+import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 
 interface PhrasebookCreateModalProps {
   open: boolean;
@@ -41,32 +42,38 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
   if (!open) return null;
 
   return (
-    <ModalOverlay onClose={onClose} align="center" panelClassName="max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
-      <button onClick={onClose} className="absolute right-4 top-4 text-slate-400 transition-colors hover:text-slate-600 font-bold">
-        <X className="h-5 w-5" />
-      </button>
-
-      <div className="text-center mb-6">
-        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-medace-100 text-medace-600">
-          <Sparkles className="w-6 h-6" />
+    <MobileSheetDialog
+      onClose={onClose}
+      mode="fullscreen"
+      panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
+    >
+      <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
+        <button onClick={onClose} className="absolute right-4 top-4 font-bold text-slate-400 transition-colors hover:text-slate-600">
+          <X className="h-5 w-5" />
+        </button>
+        <div className="pr-12 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-medace-100 text-medace-600">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <h3 className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
+          <p className="text-sm text-slate-500">AIが文脈を解析し、あなただけの教材を生成します。</p>
         </div>
-        <h3 className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
-        <p className="text-sm text-slate-500">AIが文脈を解析し、あなただけの教材を生成します。</p>
       </div>
 
-      {errorMsg && (
-        <div className="mb-4 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600 flex items-start gap-2">
-          <span className="mt-0.5">⚠️</span>
-          <span>{errorMsg}</span>
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+        {errorMsg && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
+            <span className="mt-0.5">⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
       <div className="space-y-4">
         <div>
           <label className="mb-1 block text-xs font-bold uppercase text-slate-500">タイトル</label>
           <input
             type="text"
-            className="w-full rounded-lg border border-slate-300 p-2 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
             placeholder="例: 好きな洋楽の歌詞"
             value={newBookTitle}
             onChange={(event) => onChangeTitle(event.target.value)}
@@ -77,7 +84,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
           <button
             type="button"
             onClick={() => onChangeMode('TEXT')}
-            className={`flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'TEXT' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'TEXT' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <div className="flex items-center justify-center gap-2">
               <FileText className="w-4 h-4" /> テキスト入力
@@ -86,7 +93,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
           <button
             type="button"
             onClick={() => onChangeMode('FILE')}
-            className={`flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'FILE' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'FILE' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <div className="flex items-center justify-center gap-2">
               <ImageIcon className="w-4 h-4" /> 画像/PDF
@@ -98,7 +105,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
           <div>
             <label className="mb-1 block text-xs font-bold uppercase text-slate-500">ソーステキスト</label>
             <textarea
-              className="h-32 w-full resize-none rounded-lg border border-slate-300 p-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
+              className="h-40 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
               placeholder="ここに英文を貼り付けてください..."
               value={rawText}
               onChange={(event) => onChangeRawText(event.target.value)}
@@ -126,18 +133,30 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
               : `${currentPlanLabel} では画像/PDFからのAI教材化は使えません。`}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={creating || !newBookTitle || !canUseSelectedCreateMode}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-medace-600 py-3 font-bold text-white transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          {creating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-          {creating ? 'AIが文脈を分析中...' : '作成する'}
-        </button>
       </div>
-    </ModalOverlay>
+      </div>
+
+      <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[32px]">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            キャンセル
+          </button>
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={creating || !newBookTitle || !canUseSelectedCreateMode}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {creating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+            {creating ? 'AIが文脈を分析中...' : '作成する'}
+          </button>
+        </div>
+      </MobileStickyActionBar>
+    </MobileSheetDialog>
   );
 };
 
