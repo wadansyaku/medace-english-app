@@ -183,6 +183,7 @@ const startServer = (persistDir, port) => {
   ], {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   });
 
   child.stdout.on('data', (chunk) => {
@@ -193,6 +194,55 @@ const startServer = (persistDir, port) => {
   });
 
   return { child, logs };
+};
+
+const stopChildProcess = async (child, graceMs = 2_000) => {
+  if (!child || child.exitCode !== null) {
+    return;
+  }
+
+  const signalProcessTree = (signal) => {
+    if (!child.pid) return;
+    if (process.platform === 'win32') {
+      child.kill(signal);
+      return;
+    }
+    process.kill(-child.pid, signal);
+  };
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener('close', onClose);
+      resolve();
+    };
+    const onClose = () => finish();
+
+    child.once('close', onClose);
+
+    try {
+      signalProcessTree('SIGTERM');
+    } catch {
+      finish();
+      return;
+    }
+
+    const forceKillTimer = setTimeout(() => {
+      if (child.exitCode === null) {
+        try {
+          signalProcessTree('SIGKILL');
+        } catch {
+          // Ignore secondary termination failures; the close handler or final timer resolves.
+        }
+      }
+    }, graceMs);
+    forceKillTimer.unref?.();
+
+    const settleTimer = setTimeout(() => finish(), graceMs + 1_000);
+    settleTimer.unref?.();
+  });
 };
 
 const importOfficialCatalog = async (admin, title, accessScope, catalogSource) => {
@@ -480,11 +530,7 @@ const main = async () => {
     console.log('API integration tests passed.');
   } finally {
     if (server?.child) {
-      server.child.kill('SIGTERM');
-      await delay(1_000);
-      if (!server.child.killed) {
-        server.child.kill('SIGKILL');
-      }
+      await stopChildProcess(server.child);
     }
     await rm(persistDir, { recursive: true, force: true });
   }
