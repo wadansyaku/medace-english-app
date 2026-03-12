@@ -27,6 +27,7 @@ import {
   handleGetDueCount,
   handleGetLearningPlan,
   handleGetLearningPreference,
+  handleGetStudiedWordIdsByBook,
   handleResetAllData,
   handleSaveHistory,
   handleSaveLearningPlan,
@@ -103,6 +104,8 @@ export const handleStorageAction = async (
         payload.result as unknown as StorageActionRequest<'saveHistory'>['payload']['result'],
         Number(payload.responseTimeMs || 0),
       );
+    case 'getStudiedWordIdsByBook':
+      return handleGetStudiedWordIdsByBook(env, user, String(payload.bookId || ''));
     case 'getBookProgress':
       return handleGetBookProgress(env, user, String(payload.bookId || ''));
     case 'getAllStudentsProgress':

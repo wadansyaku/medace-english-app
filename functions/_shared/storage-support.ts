@@ -58,6 +58,7 @@ export interface DbHistoryRow {
   correct_count: number;
   attempt_count: number;
   total_response_time_ms: number;
+  interaction_source: LearningHistory['interactionSource'] | null;
 }
 
 export interface DbLearningPreferenceRow {

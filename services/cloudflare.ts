@@ -143,6 +143,13 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
+  async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
+    return this.callStorage({
+      action: 'getStudiedWordIdsByBook',
+      payload: { bookId },
+    });
+  }
+
   async getBookProgress(uid: string, bookId: string): Promise<BookProgress> {
     return this.callStorage({
       action: 'getBookProgress',

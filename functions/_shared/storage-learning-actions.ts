@@ -95,8 +95,8 @@ export const handleSaveSrsHistory = async (
   await env.DB.prepare(`
     INSERT INTO learning_histories (
       user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms, interaction_source
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, word_id) DO UPDATE SET
       book_id = excluded.book_id,
       status = excluded.status,
@@ -106,7 +106,8 @@ export const handleSaveSrsHistory = async (
       ease_factor = excluded.ease_factor,
       correct_count = excluded.correct_count,
       attempt_count = excluded.attempt_count,
-      total_response_time_ms = excluded.total_response_time_ms
+      total_response_time_ms = excluded.total_response_time_ms,
+      interaction_source = excluded.interaction_source
   `).bind(
     user.id,
     word.id,
@@ -119,6 +120,7 @@ export const handleSaveSrsHistory = async (
     correctCount,
     attemptCount,
     totalResponseTimeMs,
+    'STUDY',
   ).run();
 };
 
@@ -149,13 +151,17 @@ export const handleSaveHistory = async (
     attempt_count: (existing?.attempt_count || 0) + Number(result.attemptCount || 0),
     total_response_time_ms:
       (existing?.total_response_time_ms || 0) + Math.max(0, Math.round(responseTimeMs)),
+    interaction_source:
+      existing?.interaction_source === 'STUDY'
+        ? 'STUDY'
+        : (result.interactionSource || existing?.interaction_source || null),
   };
 
   await env.DB.prepare(`
     INSERT INTO learning_histories (
       user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms, interaction_source
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id, word_id) DO UPDATE SET
       book_id = excluded.book_id,
       status = excluded.status,
@@ -165,7 +171,8 @@ export const handleSaveHistory = async (
       ease_factor = excluded.ease_factor,
       correct_count = excluded.correct_count,
       attempt_count = excluded.attempt_count,
-      total_response_time_ms = excluded.total_response_time_ms
+      total_response_time_ms = excluded.total_response_time_ms,
+      interaction_source = excluded.interaction_source
   `).bind(
     payload.user_id,
     payload.word_id,
@@ -178,7 +185,25 @@ export const handleSaveHistory = async (
     payload.correct_count,
     payload.attempt_count,
     payload.total_response_time_ms,
+    payload.interaction_source,
   ).run();
+};
+
+export const handleGetStudiedWordIdsByBook = async (
+  env: AppEnv,
+  user: DbUserRow,
+  bookId: string,
+): Promise<string[]> => {
+  await assertBookReadAccess(env, user, bookId);
+  const rows = await readAll<{ word_id: string }>(
+    env,
+    `SELECT word_id
+     FROM learning_histories
+     WHERE user_id = ? AND book_id = ? AND interaction_source = 'STUDY'`,
+    user.id,
+    bookId,
+  );
+  return Array.from(new Set(rows.map((row) => row.word_id)));
 };
 
 export const handleGetBookProgress = async (env: AppEnv, user: DbUserRow, bookId: string) => (

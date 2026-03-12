@@ -142,6 +142,10 @@ export interface StorageActionMap {
     };
     response: null;
   };
+  getStudiedWordIdsByBook: {
+    payload: { bookId: string };
+    response: string[];
+  };
   getBookProgress: {
     payload: { bookId: string };
     response: BookProgress;

@@ -39,6 +39,7 @@ import { CloudflareStorageService } from './cloudflare';
 import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 import { buildDemoEmail, getDemoDisplayName, isDemoEmail } from '../utils/demo';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
+import { getStrictStudyWordIds, resolveInteractionSource } from '../utils/quiz';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -65,6 +66,7 @@ export interface IStorageService {
   
   saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs?: number): Promise<void>;
   saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }, responseTimeMs?: number): Promise<void>;
+  getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
   
   getAllStudentsProgress(): Promise<StudentSummary[]>;
@@ -944,6 +946,7 @@ class IndexedDBStorageService implements IStorageService {
                 correctCount,
                 attemptCount,
                 totalResponseTimeMs,
+                interactionSource: 'STUDY',
               },
             });
             resolve();
@@ -970,12 +973,28 @@ class IndexedDBStorageService implements IStorageService {
            attemptCount: (existing?.attemptCount || 0) + Number(result.attemptCount || 0),
            totalResponseTimeMs:
              (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs)),
+           interactionSource: resolveInteractionSource(existing?.interactionSource, result.interactionSource),
          };
          store.put({ id, data: payload });
          resolve();
        };
        req.onerror = () => resolve();
      });
+  }
+
+  async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
+    const store = await this.getStore(STORES.HISTORY);
+    return new Promise((resolve) => {
+      const request = store.getAll();
+      request.onsuccess = () => {
+        const records = (request.result || []) as Array<{ id: string; data: LearningHistory }>;
+        const histories = records
+          .filter((record) => record.id.startsWith(uid + '_'))
+          .map((record) => record.data);
+        resolve(getStrictStudyWordIds(histories, bookId));
+      };
+      request.onerror = () => resolve([]);
+    });
   }
 
   async getBookProgress(uid: string, bookId: string): Promise<BookProgress> {

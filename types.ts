@@ -171,6 +171,7 @@ export interface LearningHistory {
   correctCount: number;
   attemptCount: number;
   totalResponseTimeMs: number;
+  interactionSource?: LearningInteractionSource;
 }
 
 export interface BookProgress {
@@ -475,6 +476,18 @@ export interface WorkspaceSectionDefinition<T extends string = string> {
 }
 
 export type WorksheetQuestionMode = 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
+
+export type LearningInteractionSource = 'STUDY' | 'QUIZ';
+
+export type QuizSelectionMode = 'FULL_RANDOM' | 'RANGE_RANDOM' | 'LEARNED_ONLY';
+
+export interface QuizSessionConfig {
+  selectionMode: QuizSelectionMode;
+  questionMode: WorksheetQuestionMode;
+  questionCount: 5 | 10 | 20;
+  rangeStart: number;
+  rangeEnd: number;
+}
 
 export interface StudentWorksheetWord {
   wordId: string;

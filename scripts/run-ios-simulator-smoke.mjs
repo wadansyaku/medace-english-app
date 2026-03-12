@@ -506,6 +506,16 @@ const seedPhrasebook = async (sessionId, title) => {
   return response.data;
 };
 
+const answerSeededQuizQuestion = async (sessionId) => {
+  const prompt = await execute(sessionId, `
+    const element = document.querySelector('[data-testid="quiz-question-card"]');
+    return (element?.innerText || element?.textContent || '').trim();
+  `);
+  const answer = String(prompt).includes('triage') ? 'トリアージ' : '安定させる';
+  await clickByTestId(sessionId, 'quiz-show-options');
+  await clickVisibleButtonContaining(sessionId, answer);
+};
+
 const seedReturnedWritingFeedback = async (adminCookie, studentUid) => {
   const templatesResponse = await serverRequest('GET', '/api/writing/templates', null, {
     cookie: adminCookie,
@@ -691,6 +701,22 @@ const runFlow = async (sessionId) => {
     return state?.visible ? state : null;
   }, 20000);
 
+  await clickByTestId(sessionId, `book-quiz-${bookId}`);
+  await waitFor('quiz setup view', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-setup-view');
+    return state?.visible ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'quiz-selection-learned_only');
+  await waitFor('quiz learned empty state', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-empty-state');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-back-button');
+  await waitFor('student dashboard after quiz back', async () => {
+    const state = await isVisibleByTestId(sessionId, 'student-dashboard');
+    return state?.visible ? state : null;
+  }, 15000);
+
   await clickByTestId(sessionId, `book-study-${bookId}`);
   await waitFor('study card front', async () => {
     const state = await isVisibleByTestId(sessionId, 'study-card-front');
@@ -719,6 +745,88 @@ const runFlow = async (sessionId) => {
   await sleep(400);
   await runCommand('xcrun', ['simctl', 'io', 'booted', 'screenshot', screenshotPath]);
   console.log(`Saved simulator screenshot: ${screenshotPath}`);
+
+  await clickByTestId(sessionId, 'study-rate-3');
+  await waitFor('second study card front', async () => {
+    const state = await isVisibleByTestId(sessionId, 'study-card-front');
+    return state?.visible && state.ariaHidden !== 'true' ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'study-flip-button');
+  await waitFor('second rating buttons', async () => {
+    const state = await isVisibleByTestId(sessionId, 'study-rate-3');
+    return state?.visible ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'study-rate-3');
+  await waitFor('study finish button', async () => {
+    const state = await isVisibleByTestId(sessionId, 'study-finish-exit');
+    return state?.visible ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'study-finish-exit');
+  await waitFor('student dashboard after study finish', async () => {
+    const state = await isVisibleByTestId(sessionId, 'student-dashboard');
+    return state?.visible ? state : null;
+  }, 15000);
+
+  await clickByTestId(sessionId, `book-quiz-${bookId}`);
+  await waitFor('quiz setup view after study', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-setup-view');
+    return state?.visible ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'quiz-selection-learned_only');
+  await clickByTestId(sessionId, 'quiz-setup-primary-cta');
+  await waitFor('quiz ready view', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-ready-view');
+    return state?.visible ? state : null;
+  }, 15000);
+  await clickByTestId(sessionId, 'quiz-ready-start');
+  await waitFor('quiz running view', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-running-view');
+    return state?.visible ? state : null;
+  }, 15000);
+
+  await clickByTestId(sessionId, 'quiz-back-button');
+  await waitFor('quiz exit confirm dialog', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-exit-confirm-dialog');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-exit-cancel');
+  await waitFor('quiz running view after cancel', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-running-view');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-back-button');
+  await waitFor('quiz exit confirm dialog again', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-exit-confirm-dialog');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-exit-confirm');
+  await waitFor('quiz setup view after confirm', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-setup-view');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-setup-primary-cta');
+  await waitFor('quiz ready view rerun', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-ready-view');
+    return state?.visible ? state : null;
+  }, 12000);
+  await clickByTestId(sessionId, 'quiz-ready-start');
+  await waitFor('quiz running view rerun', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-running-view');
+    return state?.visible ? state : null;
+  }, 12000);
+  await answerSeededQuizQuestion(sessionId);
+  await waitFor('second quiz question', async () => {
+    const state = await execute(sessionId, `
+      const root = document.querySelector('[data-testid="quiz-running-view"]');
+      return root ? root.innerText.includes('第 2 問') : false;
+    `);
+    return state ? { ok: true } : null;
+  }, 12000);
+  await answerSeededQuizQuestion(sessionId);
+  await waitFor('quiz result view', async () => {
+    const state = await isVisibleByTestId(sessionId, 'quiz-result-view');
+    return state?.visible ? state : null;
+  }, 15000);
 
   await loginDemoViaApi(sessionId, 'STUDENT', 'STUDENT');
   await webdriver('POST', `/session/${sessionId}/url`, { url: appUrl });

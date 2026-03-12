@@ -60,6 +60,103 @@ const seedPhrasebook = async (page: Page, title: string) => page.evaluate(async 
   return response.json();
 }, title);
 
+const getLatestWritingAssignmentForStudentUid = async (
+  page: Page,
+  scope: 'all' | 'mine',
+  studentUid: string,
+  status: string,
+) => page.evaluate(async ({ nextScope, nextStudentUid, nextStatus }) => {
+  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`);
+  if (!response.ok) {
+    throw new Error(`writing assignments fetch failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const assignments = (payload.assignments || []) as Array<{
+    id: string;
+    studentUid: string;
+    status: string;
+    submissionCode: string;
+    updatedAt: number;
+  }>;
+
+  return assignments
+    .filter((assignment) => assignment.status === nextStatus && assignment.studentUid === nextStudentUid)
+    .sort((left, right) => right.updatedAt - left.updatedAt)[0] || null;
+}, { nextScope: scope, nextStudentUid: studentUid, nextStatus: status });
+
+const getWritingAssignmentById = async (
+  page: Page,
+  scope: 'all' | 'mine',
+  assignmentId: string,
+) => page.evaluate(async ({ nextScope, nextAssignmentId }) => {
+  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`);
+  if (!response.ok) {
+    throw new Error(`writing assignments fetch failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const assignments = (payload.assignments || []) as Array<{
+    id: string;
+    status: string;
+    latestSubmissionId?: string | null;
+    updatedAt: number;
+  }>;
+
+  return assignments.find((assignment) => assignment.id === nextAssignmentId) || null;
+}, { nextScope: scope, nextAssignmentId: assignmentId });
+
+const waitForWritingAssignment = async (
+  page: Page,
+  scope: 'all' | 'mine',
+  assignmentId: string,
+  expectedStatuses: string[],
+  timeoutMs = 20_000,
+) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const assignment = await getWritingAssignmentById(page, scope, assignmentId);
+    if (assignment && expectedStatuses.includes(assignment.status)) {
+      return assignment;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  throw new Error(`Assignment ${assignmentId} did not reach [${expectedStatuses.join(', ')}] within ${timeoutMs}ms`);
+};
+
+const getCurrentSessionUser = async (page: Page) => page.evaluate(async () => {
+  const response = await fetch('/api/session');
+  if (!response.ok) {
+    throw new Error(`session fetch failed with status ${response.status}`);
+  }
+  return response.json() as Promise<{ uid: string; displayName: string; role: string; organizationRole?: string } | null>;
+});
+
+const completeSeededStudySession = async (page: Page, bookId: string) => {
+  await page.getByTestId(`book-study-${bookId}`).click();
+  await expect(page.getByTestId('study-card-front')).toBeVisible();
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+    await page.getByTestId('study-rate-3').click();
+  }
+
+  await expect(page.getByTestId('study-finish-exit')).toBeVisible();
+  await page.getByTestId('study-finish-exit').click();
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+};
+
+const answerSeededQuizQuestion = async (page: Page) => {
+  const promptText = await page.getByTestId('quiz-question-card').innerText();
+  const answer = promptText.includes('triage') ? 'トリアージ' : '安定させる';
+
+  await page.getByTestId('quiz-show-options').click();
+  await page.getByRole('button', { name: answer }).click();
+};
+
 const findUnexpectedHorizontalOverflow = async (page: Page) => page.evaluate(() => {
   const viewportWidth = window.innerWidth;
   const offenders: Array<{ tag: string; className: string; text: string; right: number; left: number; width: number }> = [];
@@ -183,28 +280,29 @@ test('group admin and business student can complete the writing workflow with on
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  const businessStudent = await getCurrentSessionUser(studentPage);
+  expect(businessStudent?.uid).toBeTruthy();
 
   await adminPage.reload();
   await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
-  const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
-    const select = element as HTMLSelectElement;
-    const option = Array.from(select.options).find((candidate) => candidate.text.includes('グループ生徒 Demo'));
-    return option?.value || '';
-  });
-  expect(demoStudentValue).not.toBe('');
-
-  await adminPage.getByTestId('writing-student-select').selectOption(demoStudentValue);
+  await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
   await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
   await adminPage.getByTestId('writing-generate-submit').click();
   await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
+  const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+  expect(generatedAssignment?.id).toBeTruthy();
+  await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
+  await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
   await adminPage.getByTestId('writing-issue-assignment').click();
   await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
+  await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['ISSUED']);
+  await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
 
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
-  await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+  await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
   await studentPage.getByTestId('writing-student-file-input').setInputFiles({
     name: 'attempt-1.png',
     mimeType: 'image/png',
@@ -283,6 +381,10 @@ test.describe('student mobile ux', () => {
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await page.getByRole('button', { name: /くわしい学習記録/ }).click();
+    await page.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+    await page.getByRole('button', { name: /公式コース/ }).click();
+
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
   });
@@ -314,7 +416,7 @@ test.describe('student mobile ux', () => {
     await primaryCta.click();
 
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
-    await expect(page.getByText('My単語帳 作成')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My単語帳 作成' })).toBeVisible();
   });
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {
@@ -417,6 +519,91 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('study-rate-3')).toBeVisible();
   });
 
+  test('student quiz shows an empty learned-only state before any study ratings on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Quiz Empty Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-quiz-${bookId}`).click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-selection-learned_only').click();
+
+    await expect(page.getByTestId('quiz-empty-state')).toBeVisible();
+    await expect(page.getByTestId('quiz-empty-state')).toContainText('学習モードで評価した単語');
+    await expect(page.getByTestId('quiz-setup-primary-cta')).toBeDisabled();
+  });
+
+  test('student can complete the learned-only quiz flow on mobile after studying', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Quiz Learned Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await completeSeededStudySession(page, bookId);
+
+    await page.getByTestId(`book-quiz-${bookId}`).click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-selection-learned_only').click();
+    await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
+    await page.getByTestId('quiz-setup-primary-cta').click();
+
+    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
+    await page.getByTestId('quiz-ready-start').click();
+    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+
+    await answerSeededQuizQuestion(page);
+    await expect(page.getByText(/第 2 問/)).toBeVisible();
+    await answerSeededQuizQuestion(page);
+
+    await expect(page.getByTestId('quiz-result-view')).toBeVisible();
+    await expect(page.getByTestId('quiz-result-retry')).toBeVisible();
+  });
+
+  test('student can back out from a running quiz with confirmation on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Quiz Back Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-quiz-${bookId}`).click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-setup-primary-cta').click();
+    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
+    await page.getByTestId('quiz-ready-start').click();
+    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+
+    await page.getByTestId('quiz-back-button').click();
+    await expect(page.getByTestId('quiz-exit-confirm-dialog')).toBeVisible();
+    await page.getByTestId('quiz-exit-cancel').click();
+    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+
+    await page.getByTestId('quiz-back-button').click();
+    await expect(page.getByTestId('quiz-exit-confirm-dialog')).toBeVisible();
+    await page.getByTestId('quiz-exit-confirm').click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+  });
+
   test('business student can use the mobile writing submit flow', async ({ browser }) => {
     const adminContext = await browser.newContext();
     const studentContext = await browser.newContext({
@@ -443,28 +630,28 @@ test.describe('student mobile ux', () => {
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    const businessStudent = await getCurrentSessionUser(studentPage);
+    expect(businessStudent?.uid).toBeTruthy();
 
     await adminPage.reload();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      const option = Array.from(select.options).find((candidate) => candidate.text.includes('グループ生徒 Demo'));
-      return option?.value || '';
-    });
-    expect(demoStudentValue).not.toBe('');
-
-    await adminPage.getByTestId('writing-student-select').selectOption(demoStudentValue);
+    await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
     await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
     await adminPage.getByTestId('writing-generate-submit').click();
     await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
-    await adminPage.getByRole('button', { name: /下書き/ }).first().click();
+    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+    expect(generatedAssignment?.id).toBeTruthy();
+    await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
     await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
     await adminPage.getByTestId('writing-issue-assignment').click();
     await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
+    await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['ISSUED']);
+    await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
 
     await studentPage.reload();
-    await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await expect(studentPage.getByText('ファイル選択へ進む')).toBeVisible();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
     await studentPage.getByTestId('writing-student-file-input').setInputFiles({
@@ -509,26 +696,28 @@ test.describe('student mobile ux', () => {
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    const businessStudent = await getCurrentSessionUser(studentPage);
+    expect(businessStudent?.uid).toBeTruthy();
 
     await adminPage.reload();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
-      const select = element as HTMLSelectElement;
-      const option = Array.from(select.options).find((candidate) => candidate.text.includes('グループ生徒 Demo'));
-      return option?.value || '';
-    });
-    expect(demoStudentValue).not.toBe('');
-
-    await adminPage.getByTestId('writing-student-select').selectOption(demoStudentValue);
+    await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
     await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
     await adminPage.getByTestId('writing-generate-submit').click();
     await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
+    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+    expect(generatedAssignment?.id).toBeTruthy();
+    await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
+    await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
     await adminPage.getByTestId('writing-issue-assignment').click();
     await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
+    await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['ISSUED']);
+    await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
 
     await studentPage.reload();
-    await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
     await studentPage.getByTestId('writing-student-file-input').setInputFiles({
       name: 'mobile-feedback.png',
@@ -549,9 +738,12 @@ test.describe('student mobile ux', () => {
     await adminPage.getByTestId('writing-review-public-comment').fill('理由のつながりが伝わっています。次は語彙の選び方も広げましょう。');
     await adminPage.getByTestId('writing-approve-return').click();
     await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
+    await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['RETURNED', 'COMPLETED']);
+    await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['RETURNED', 'COMPLETED']);
 
     await studentPage.reload();
-    await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
+    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await studentPage.getByTestId(`writing-open-feedback-${generatedAssignment.id}`).click();
     await expect(studentPage.getByTestId('writing-feedback-mobile-view')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();

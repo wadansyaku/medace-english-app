@@ -35,15 +35,15 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   onDelete,
   onSelect,
 }) => (
-  <div className={isCompact ? 'space-y-6' : 'space-y-7 md:space-y-10'}>
+  <div className={isCompact ? 'space-y-5' : 'space-y-7 md:space-y-10'}>
     <div className="min-h-[200px]">
-      <div className="mb-4 flex items-center justify-between md:mb-6">
-        <h3 className="border-l-4 border-purple-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
+      <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
+        <h3 className="min-w-0 border-l-4 border-purple-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
         <button
           onClick={onOpenCreateModal}
-          className="flex min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
+          className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
         >
-          <Plus className="h-4 w-4" /> 新規作成
+          <Plus className="h-4 w-4" /> {isCompact ? '作成' : '新規作成'}
         </button>
       </div>
       {myBooks.length > 0 ? (
@@ -102,11 +102,13 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
       <div className="border-t border-slate-200 pt-5 md:pt-6">
         <button
           onClick={onToggleLibrary}
-          className="group flex w-full items-center justify-between rounded-xl bg-slate-50 p-4 transition-colors hover:bg-slate-100"
+          className="group flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 p-4 transition-colors hover:bg-slate-100"
         >
           <div className="flex items-center gap-3">
             <Library className="h-5 w-5 text-slate-400 group-hover:text-medace-500" />
-            <span className="font-bold text-slate-600 group-hover:text-slate-800">すべての公式コースを見る</span>
+            <span className="min-w-0 text-left font-bold text-slate-600 group-hover:text-slate-800">
+              {isCompact ? '公式コースをもっと見る' : 'すべての公式コースを見る'}
+            </span>
           </div>
           {showLibrary ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
         </button>

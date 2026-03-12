@@ -127,6 +127,7 @@ interface DashboardProgressSectionProps {
   weeklyGoal: number;
   weeklyRemaining: number;
   currentStreak: number;
+  isCompact?: boolean;
   onToggle: () => void;
 }
 
@@ -144,16 +145,17 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
   weeklyGoal,
   weeklyRemaining,
   currentStreak,
+  isCompact = false,
   onToggle,
 }) => (
   <div className="space-y-4">
     <button
       onClick={onToggle}
-      className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 text-left shadow-sm transition-colors hover:bg-slate-50"
+      className={`flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50 ${isCompact ? 'px-4 py-3.5' : 'px-5 py-4'}`}
     >
       <div>
         <div className="text-sm font-bold text-slate-900">くわしい学習記録</div>
-        <div className="mt-1 text-sm text-slate-500">週間記録やランキングは必要なときだけ確認できます。</div>
+        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>週間記録やランキングは必要なときだけ確認できます。</div>
       </div>
       {open ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
     </button>

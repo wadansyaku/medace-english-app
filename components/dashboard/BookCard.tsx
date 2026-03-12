@@ -14,7 +14,7 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
 
   return (
-    <div className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+    <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       <div className="relative z-10 flex-grow p-4 sm:p-6">
         <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4">
           <div className={`rounded-lg p-2.5 sm:p-3 ${book.isPriority ? 'bg-orange-100 text-medace-600' : 'bg-slate-100 text-slate-500'}`}>
@@ -80,9 +80,9 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
         <button
           onClick={() => onSelect(book.id, 'quiz')}
           data-testid={`book-quiz-${book.id}`}
-          className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:min-h-11 sm:flex-1 sm:bg-slate-200 sm:px-3 sm:py-2.5 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
+          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
         >
-          <Play className="h-4 w-4 fill-current" /> テスト
+          <Play className="h-4 w-4 fill-current" /> 条件を決めてテスト
         </button>
       </div>
     </div>

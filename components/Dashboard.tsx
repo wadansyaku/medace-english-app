@@ -746,19 +746,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
       {canShowAccountDetails && (
         <div className="order-10 md:order-9">
-          <DashboardAccountSection
-            open={showAccountDetails}
-            user={user}
-            accountOverview={accountOverview}
-            aiBudgetPercent={aiBudgetPercent}
+        <DashboardAccountSection
+          open={showAccountDetails}
+          user={user}
+          accountOverview={accountOverview}
+          aiBudgetPercent={aiBudgetPercent}
             aiUsageLabel={aiUsageLabel}
             aiUsageCopy={aiUsageCopy}
-            plannedBookCount={plannedBooks.length}
-            coachNotificationCount={coachNotifications.length}
-            showAdSlots={showAdSlots}
-            onToggle={() => setShowAccountDetails((previous) => !previous)}
-          />
-        </div>
+          plannedBookCount={plannedBooks.length}
+          coachNotificationCount={coachNotifications.length}
+          showAdSlots={showAdSlots}
+          isCompact={isStudentMobileShell}
+          onToggle={() => setShowAccountDetails((previous) => !previous)}
+        />
+      </div>
       )}
 
       <div className="order-7 md:order-10">
@@ -776,6 +777,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           weeklyGoal={weeklyGoal}
           weeklyRemaining={weeklyRemaining}
           currentStreak={user.stats?.currentStreak || 0}
+          isCompact={isStudentMobileShell}
           onToggle={() => setShowProgressDetails((previous) => !previous)}
         />
       </div>
