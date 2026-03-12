@@ -30,6 +30,8 @@ import {
   currentMonthKey,
   getBookProgress,
   getLastTokyoDateKeys,
+  getMasteryProgressSql,
+  getMasterySourceSql,
   getUserOrganizationRole,
   getUserSubscriptionPlan,
   getVisibleDueCount,
@@ -200,7 +202,7 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
        FROM books b
        LEFT JOIN learning_histories h
          ON h.book_id = b.id
-        AND (h.attempt_count > 0 OR h.interval_days > 0)
+        AND ${getMasteryProgressSql('h')}
        GROUP BY b.id, b.title, b.word_count, b.created_by
        ORDER BY learner_count DESC, average_progress DESC, learned_entries DESC, b.title ASC
        LIMIT 6`,
@@ -521,7 +523,9 @@ export const handleGetLeaderboard = async (env: AppEnv, currentUserId: string): 
 export const handleGetMasteryDistribution = async (env: AppEnv, userId: string): Promise<MasteryDistribution> => {
   const rows = await readAll<DbHistoryRow>(
     env,
-    'SELECT * FROM learning_histories WHERE user_id = ?',
+    `SELECT *
+     FROM learning_histories
+     WHERE user_id = ? AND ${getMasterySourceSql()}`,
     userId,
   );
 

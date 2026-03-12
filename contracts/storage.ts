@@ -8,7 +8,6 @@ import {
   BookProgress,
   DashboardSnapshot,
   LeaderboardEntry,
-  LearningHistory,
   LearningPlan,
   LearningPreference,
   MasteryDistribution,
@@ -135,9 +134,11 @@ export interface StorageActionMap {
     payload: { word: WordData; rating: number; responseTimeMs: number };
     response: null;
   };
-  saveHistory: {
+  recordQuizAttempt: {
     payload: {
-      result: Partial<LearningHistory> & { wordId: string; bookId: string };
+      wordId: string;
+      bookId: string;
+      correct: boolean;
       responseTimeMs: number;
     };
     response: null;

@@ -1,5 +1,6 @@
-import { ActivityLog, LearningHistory, LearningPlan, LearningPreference, LearningPreferenceIntensity, UserProfile } from '../../types';
+import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, UserProfile } from '../../types';
 import { formatDateKey } from '../../utils/date';
+import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
 import {
   AppEnv,
@@ -10,6 +11,7 @@ import {
   assertBookReadAccess,
   defaultLearningPreference,
   getBookProgress,
+  getMasterySourceSql,
   getVisibleDueCount,
   normalizeHistoryStatus,
   readAll,
@@ -124,38 +126,43 @@ export const handleSaveSrsHistory = async (
   ).run();
 };
 
-export const handleSaveHistory = async (
+export const handleRecordQuizAttempt = async (
   env: AppEnv,
   user: DbUserRow,
-  result: Partial<LearningHistory> & { wordId: string; bookId: string; },
+  wordId: string,
+  bookId: string,
+  correct: boolean,
   responseTimeMs = 0,
 ): Promise<void> => {
-  await assertBookReadAccess(env, user, result.bookId);
+  await assertBookReadAccess(env, user, bookId);
   const existing = await readFirst<DbHistoryRow>(
     env,
     'SELECT * FROM learning_histories WHERE user_id = ? AND word_id = ?',
     user.id,
-    result.wordId,
+    wordId,
   );
 
-  const payload: DbHistoryRow = {
-    user_id: user.id,
-    word_id: result.wordId,
-    book_id: result.bookId,
-    status: (result.status || existing?.status || 'learning') as LearningHistory['status'],
-    last_studied_at: Date.now(),
-    next_review_date: result.nextReviewDate || existing?.next_review_date || Date.now(),
-    interval_days: result.interval || existing?.interval_days || 0,
-    ease_factor: result.easeFactor || existing?.ease_factor || 2.5,
-    correct_count: (existing?.correct_count || 0) + Number(result.correctCount || 0),
-    attempt_count: (existing?.attempt_count || 0) + Number(result.attemptCount || 0),
-    total_response_time_ms:
-      (existing?.total_response_time_ms || 0) + Math.max(0, Math.round(responseTimeMs)),
-    interaction_source:
-      existing?.interaction_source === 'STUDY'
-        ? 'STUDY'
-        : (result.interactionSource || existing?.interaction_source || null),
-  };
+  const nextHistory = buildQuizAttemptHistory({
+    existing: existing
+      ? {
+          wordId: existing.word_id,
+          bookId: existing.book_id,
+          status: existing.status,
+          lastStudiedAt: existing.last_studied_at,
+          nextReviewDate: existing.next_review_date,
+          interval: existing.interval_days,
+          easeFactor: existing.ease_factor,
+          correctCount: existing.correct_count,
+          attemptCount: existing.attempt_count,
+          totalResponseTimeMs: existing.total_response_time_ms,
+          interactionSource: existing.interaction_source || undefined,
+        }
+      : undefined,
+    wordId,
+    bookId,
+    correct,
+    responseTimeMs,
+  });
 
   await env.DB.prepare(`
     INSERT INTO learning_histories (
@@ -174,18 +181,18 @@ export const handleSaveHistory = async (
       total_response_time_ms = excluded.total_response_time_ms,
       interaction_source = excluded.interaction_source
   `).bind(
-    payload.user_id,
-    payload.word_id,
-    payload.book_id,
-    payload.status,
-    payload.last_studied_at,
-    payload.next_review_date,
-    payload.interval_days,
-    payload.ease_factor,
-    payload.correct_count,
-    payload.attempt_count,
-    payload.total_response_time_ms,
-    payload.interaction_source,
+    user.id,
+    nextHistory.wordId,
+    nextHistory.bookId,
+    nextHistory.status,
+    nextHistory.lastStudiedAt,
+    nextHistory.nextReviewDate,
+    nextHistory.interval,
+    nextHistory.easeFactor,
+    nextHistory.correctCount,
+    nextHistory.attemptCount,
+    nextHistory.totalResponseTimeMs,
+    nextHistory.interactionSource || null,
   ).run();
 };
 
@@ -199,7 +206,7 @@ export const handleGetStudiedWordIdsByBook = async (
     env,
     `SELECT word_id
      FROM learning_histories
-     WHERE user_id = ? AND book_id = ? AND interaction_source = 'STUDY'`,
+     WHERE user_id = ? AND book_id = ? AND ${getMasterySourceSql()}`,
     user.id,
     bookId,
   );

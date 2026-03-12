@@ -27,9 +27,9 @@ import {
   handleGetDueCount,
   handleGetLearningPlan,
   handleGetLearningPreference,
+  handleRecordQuizAttempt,
   handleGetStudiedWordIdsByBook,
   handleResetAllData,
-  handleSaveHistory,
   handleSaveLearningPlan,
   handleSaveLearningPreference,
   handleSaveSrsHistory,
@@ -97,11 +97,13 @@ export const handleStorageAction = async (
         Number(payload.rating || 0),
         Number(payload.responseTimeMs || 0),
       );
-    case 'saveHistory':
-      return handleSaveHistory(
+    case 'recordQuizAttempt':
+      return handleRecordQuizAttempt(
         env,
         user,
-        payload.result as unknown as StorageActionRequest<'saveHistory'>['payload']['result'],
+        String(payload.wordId || ''),
+        String(payload.bookId || ''),
+        Boolean(payload.correct),
         Number(payload.responseTimeMs || 0),
       );
     case 'getStudiedWordIdsByBook':

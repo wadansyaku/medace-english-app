@@ -264,6 +264,34 @@ const importOfficialCatalog = async (admin, title, accessScope, catalogSource) =
   assert(result.importedBookCount === 1, `[admin] expected one imported book for ${title}`);
 };
 
+const executeLocalSql = async (persistDir, sql) => {
+  await runCommand('npx', [
+    'wrangler',
+    'd1',
+    'execute',
+    'medace-db',
+    '--local',
+    '--persist-to',
+    persistDir,
+    '--command',
+    sql,
+  ]);
+};
+
+const executeLocalSqlFile = async (persistDir, filePath) => {
+  await runCommand('npx', [
+    'wrangler',
+    'd1',
+    'execute',
+    'medace-db',
+    '--local',
+    '--persist-to',
+    persistDir,
+    '--file',
+    filePath,
+  ]);
+};
+
 const main = async () => {
   const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-api-tests-'));
   const port = await getAvailablePort();
@@ -407,10 +435,70 @@ const main = async () => {
       responseTimeMs: 1200,
     });
 
+    const masteryBeforeQuiz = await orgStudent.storage('getMasteryDistribution');
+    assert(masteryBeforeQuiz.total === 1, 'study history should create exactly one mastery row');
+    assert(masteryBeforeQuiz.learning === 1, 'studied word should remain in learning after the first study rating');
+
+    await orgStudent.storage('recordQuizAttempt', {
+      wordId: reviewWords[0].id,
+      bookId: reviewBook.id,
+      correct: false,
+      responseTimeMs: 850,
+    });
+
+    const masteryAfterQuiz = await orgStudent.storage('getMasteryDistribution');
+    assert(masteryAfterQuiz.total === 1, 'quiz attempt on a studied word should not create an extra mastery row');
+    assert(masteryAfterQuiz.learning === 1, 'quiz attempt should not downgrade the studied word mastery status');
+    assert(masteryAfterQuiz.review === 0, 'quiz attempt should not move a studied word into review by itself');
+
+    const progressBeforeQuizOnly = await orgStudent.storage('getBookProgress', { bookId: reviewBook.id });
+    assert(progressBeforeQuizOnly.learnedCount === 1, 'study history should count toward book progress');
+
+    await orgStudent.storage('recordQuizAttempt', {
+      wordId: reviewWords[1].id,
+      bookId: reviewBook.id,
+      correct: false,
+      responseTimeMs: 900,
+    });
+
+    const progressAfterQuizOnly = await orgStudent.storage('getBookProgress', { bookId: reviewBook.id });
+    assert(progressAfterQuizOnly.learnedCount === 1, 'quiz-only history must not inflate book progress');
+
+    const dueCountAfterQuizOnly = await orgStudent.storage('getDueCount');
+    assert(dueCountAfterQuizOnly === 0, 'quiz-only history must not create due reviews');
+
+    const studiedWordIdsAfterQuizOnly = await orgStudent.storage('getStudiedWordIdsByBook', { bookId: reviewBook.id });
+    assert(studiedWordIdsAfterQuizOnly.length === 1, 'learned-only quiz candidates should still come only from study history');
+    assert(studiedWordIdsAfterQuizOnly[0] === reviewWords[0].id, 'quiz-only history should not enter learned-only eligibility');
+
+    const worksheetAfterQuizOnly = await groupAdmin.storage('getStudentWorksheetSnapshot', {
+      studentUid: orgStudentUser.uid,
+    });
+    assert(
+      !worksheetAfterQuizOnly.words.some((word) => word.wordId === reviewWords[1].id),
+      'quiz-only history should not appear in worksheet mastery output',
+    );
+
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     assert(orgSnapshot.notifications7d >= 1, 'organization snapshot should count recent notifications');
     assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
     assert(orgSnapshot.reactivationRate7d >= 1, 'organization snapshot should report a non-zero reactivation rate');
+    const orgStudentSummaryAfterQuiz = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
+    assert(orgStudentSummaryAfterQuiz?.totalLearned === 1, 'organization totalLearned should ignore quiz-only rows');
+
+    await executeLocalSql(
+      persistDir,
+      `UPDATE learning_histories SET interaction_source = NULL WHERE user_id = '${orgStudentUser.uid}' AND word_id = '${reviewWords[0].id}'`,
+    );
+    const studiedWordIdsWithoutSource = await orgStudent.storage('getStudiedWordIdsByBook', { bookId: reviewBook.id });
+    assert(studiedWordIdsWithoutSource.length === 0, 'null interaction_source should drop mastery eligibility before backfill');
+
+    await executeLocalSqlFile(persistDir, 'migrations/0011_backfill_learning_history_source.sql');
+    const studiedWordIdsAfterBackfill = await orgStudent.storage('getStudiedWordIdsByBook', { bookId: reviewBook.id });
+    assert(
+      studiedWordIdsAfterBackfill.includes(reviewWords[0].id),
+      'backfill migration should restore legacy study rows to mastery eligibility',
+    );
 
     const writingTemplates = await groupAdmin.get('/api/writing/templates');
     assert(writingTemplates.templates.length >= 2, 'writing templates should be available');

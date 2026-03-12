@@ -12,6 +12,7 @@ import {
   buildInClause,
   createBookId,
   ensurePositiveLimit,
+  getMasterySourceSql,
   getVisibleBookIds,
   readAll,
   readFirst,
@@ -252,6 +253,7 @@ export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, l
      FROM learning_histories h
      JOIN words w ON w.id = h.word_id
      WHERE h.user_id = ? AND h.status != 'graduated' AND h.next_review_date <= ?
+       AND ${getMasterySourceSql('h')}
        AND w.book_id IN (${buildInClause(visibleBookIds.length)})
      ORDER BY h.next_review_date ASC
      LIMIT ?`,
@@ -272,6 +274,7 @@ export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, l
      WHERE NOT EXISTS (
        SELECT 1 FROM learning_histories h
        WHERE h.user_id = ? AND h.word_id = w.id
+         AND ${getMasterySourceSql('h')}
      )
        AND w.book_id IN (${buildInClause(visibleBookIds.length)})
      ORDER BY w.book_id ASC, w.word_number ASC
@@ -299,6 +302,7 @@ export const handleGetBookSession = async (
      FROM learning_histories h
      JOIN words w ON w.id = h.word_id
      WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date <= ?
+       AND ${getMasterySourceSql('h')}
      ORDER BY h.next_review_date ASC
      LIMIT ?`,
     user.id,
@@ -317,6 +321,7 @@ export const handleGetBookSession = async (
          AND NOT EXISTS (
            SELECT 1 FROM learning_histories h
            WHERE h.user_id = ? AND h.word_id = w.id
+             AND ${getMasterySourceSql('h')}
          )
        ORDER BY w.word_number ASC
        LIMIT ?`,
@@ -334,6 +339,7 @@ export const handleGetBookSession = async (
        FROM learning_histories h
        JOIN words w ON w.id = h.word_id
        WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date > ?
+         AND ${getMasterySourceSql('h')}
        ORDER BY h.next_review_date ASC
        LIMIT ?`,
       user.id,

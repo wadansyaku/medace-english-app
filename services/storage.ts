@@ -39,7 +39,13 @@ import { CloudflareStorageService } from './cloudflare';
 import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
 import { buildDemoEmail, getDemoDisplayName, isDemoEmail } from '../utils/demo';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
-import { getStrictStudyWordIds, resolveInteractionSource } from '../utils/quiz';
+import {
+  buildQuizAttemptHistory,
+  getStrictStudyWordIds,
+  isDueMasteryHistory,
+  isMasteryHistoryRecord,
+  isMasteryProgressHistory,
+} from '../utils/quiz';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -65,7 +71,7 @@ export interface IStorageService {
   getDueCount(uid: string): Promise<number>;
   
   saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs?: number): Promise<void>;
-  saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }, responseTimeMs?: number): Promise<void>;
+  recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs?: number): Promise<void>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
   
@@ -809,10 +815,12 @@ class IndexedDBStorageService implements IStorageService {
           const record = cursor.value;
           if (record.id.startsWith(uid + '_')) {
              const h = record.data as LearningHistory;
-             if (h.status !== 'graduated') {
-                 if (h.nextReviewDate <= now) dueWordIds.push(h.wordId);
+             if (isDueMasteryHistory(h, now)) {
+                 dueWordIds.push(h.wordId);
              }
-             allStudiedWordIds.add(h.wordId);
+             if (isMasteryHistoryRecord(h)) {
+                 allStudiedWordIds.add(h.wordId);
+             }
           }
           cursor.continue();
         } else { resolve(); }
@@ -855,7 +863,10 @@ class IndexedDBStorageService implements IStorageService {
         req.onsuccess = () => {
             const records = req.result || [];
             records.forEach((r:any) => {
-                if (r.id.startsWith(uid + '_')) historyMap.set(r.data.wordId, r.data);
+                const history = r.data as LearningHistory;
+                if (r.id.startsWith(uid + '_') && isMasteryHistoryRecord(history)) {
+                  historyMap.set(history.wordId, history);
+                }
             });
             resolve();
         }
@@ -905,7 +916,7 @@ class IndexedDBStorageService implements IStorageService {
             const cursor = (e.target as IDBRequest).result;
             if (cursor) {
                 const h = cursor.value.data as LearningHistory;
-                if (cursor.value.id.startsWith(uid + '_') && h.nextReviewDate <= now && h.status !== 'graduated') count++;
+                if (cursor.value.id.startsWith(uid + '_') && isDueMasteryHistory(h, now)) count++;
                 cursor.continue();
             } else resolve(count);
         };
@@ -954,27 +965,20 @@ class IndexedDBStorageService implements IStorageService {
     });
   }
 
-  async saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string, bookId: string }, responseTimeMs = 0): Promise<void> {
+  async recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs = 0): Promise<void> {
      const store = await this.getStore(STORES.HISTORY, 'readwrite');
-     const id = `${uid}_${result.wordId}`;
+     const id = `${uid}_${wordId}`;
      return new Promise((resolve) => {
        const req = store.get(id);
        req.onsuccess = () => {
          const existing = req.result?.data as Partial<LearningHistory> | undefined;
-         const payload: LearningHistory = {
-           wordId: result.wordId || existing?.wordId || '',
-           bookId: result.bookId || existing?.bookId || '',
-           status: (result.status || existing?.status || 'learning') as LearningHistory['status'],
-           lastStudiedAt: Date.now(),
-           nextReviewDate: result.nextReviewDate || existing?.nextReviewDate || Date.now(),
-           interval: result.interval || existing?.interval || 0,
-           easeFactor: result.easeFactor || existing?.easeFactor || 2.5,
-           correctCount: (existing?.correctCount || 0) + Number(result.correctCount || 0),
-           attemptCount: (existing?.attemptCount || 0) + Number(result.attemptCount || 0),
-           totalResponseTimeMs:
-             (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs)),
-           interactionSource: resolveInteractionSource(existing?.interactionSource, result.interactionSource),
-         };
+         const payload = buildQuizAttemptHistory({
+           existing,
+           wordId,
+           bookId,
+           correct,
+           responseTimeMs,
+         });
          store.put({ id, data: payload });
          resolve();
        };
@@ -1008,7 +1012,7 @@ class IndexedDBStorageService implements IStorageService {
             let learned = 0;
             all.forEach((r: any) => {
                 if (r.id.startsWith(uid + '_') && r.data.bookId === bookId) {
-                    if(r.data.attemptCount > 0 || r.data.interval > 0) learned++;
+                    if (isMasteryProgressHistory(r.data as LearningHistory)) learned++;
                 }
             });
             const percentage = calculatePercentage(learned, words.length);
@@ -1400,7 +1404,7 @@ class IndexedDBStorageService implements IStorageService {
               const all = req.result || [];
               const dist = { new: 0, learning: 0, review: 0, graduated: 0, total: 0 };
               all.forEach((r:any) => {
-                  if (r.id.startsWith(uid + '_')) {
+                  if (r.id.startsWith(uid + '_') && isMasteryHistoryRecord(r.data as LearningHistory)) {
                       const h = r.data as LearningHistory;
                       if (h.status === 'graduated') dist.graduated++;
                       else if (h.status === 'review' || (h.status === 'learning' && h.interval > 3)) dist.review++;

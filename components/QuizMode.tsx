@@ -98,6 +98,9 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState(buildLoadingMessage('EN_TO_JA'));
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [pendingAttempt, setPendingAttempt] = useState<{ correct: boolean; responseTimeMs: number } | null>(null);
+  const [persistingAttempt, setPersistingAttempt] = useState(false);
   const questionStartedAtRef = useRef(Date.now());
 
   const minWordNumber = useMemo(() => {
@@ -162,6 +165,9 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
     setInputResult(null);
     setScore(0);
     setMissedQuestions([]);
+    setSaveError(null);
+    setPendingAttempt(null);
+    setPersistingAttempt(false);
   };
 
   useEffect(() => {
@@ -277,9 +283,28 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
     setScreen('READY');
   };
 
-  const completeQuestion = async (correct: boolean, responseTimeMs: number) => {
+  const persistAttempt = async (correct: boolean, responseTimeMs: number) => {
     const question = questions[currentQIndex];
     if (!question) return;
+
+    setPersistingAttempt(true);
+    setSaveError(null);
+    setPendingAttempt({ correct, responseTimeMs });
+
+    try {
+      await storage.recordQuizAttempt(
+        user.uid,
+        question.wordId,
+        question.bookId,
+        correct,
+        responseTimeMs,
+      );
+    } catch (error) {
+      console.error('Quiz attempt save failed', error);
+      setSaveError('解答結果の保存に失敗しました。通信を確認して、もう一度保存してください。');
+      setPersistingAttempt(false);
+      return;
+    }
 
     if (correct) {
       setScore((previous) => previous + 1);
@@ -291,15 +316,8 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
       ));
     }
 
-    await storage.saveHistory(user.uid, {
-      wordId: question.wordId,
-      bookId: question.bookId,
-      status: correct ? 'learning' : 'review',
-      lastStudiedAt: Date.now(),
-      correctCount: correct ? 1 : 0,
-      attemptCount: 1,
-      interactionSource: 'QUIZ',
-    }, responseTimeMs);
+    setPendingAttempt(null);
+    setPersistingAttempt(false);
 
     window.setTimeout(() => {
       if (currentQIndex < questions.length - 1) {
@@ -308,6 +326,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
         setShowOptions(false);
         setAnswerInput('');
         setInputResult(null);
+        setSaveError(null);
         return;
       }
 
@@ -316,14 +335,14 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
   };
 
   const handleOptionClick = async (option: string) => {
-    if (selectedOption || !currentQuestion) return;
+    if (selectedOption || !currentQuestion || persistingAttempt) return;
     setSelectedOption(option);
-    await completeQuestion(option === currentQuestion.answer, Math.max(0, Date.now() - questionStartedAtRef.current));
+    await persistAttempt(option === currentQuestion.answer, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
 
   const handleHintSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!currentQuestion || inputResult || !answerInput.trim()) return;
+    if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt) return;
 
     const correct = isCorrectSpellingHintAnswer(
       answerInput,
@@ -331,7 +350,12 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
       currentQuestion.hintPrefix || '',
     );
     setInputResult(correct ? 'correct' : 'incorrect');
-    await completeQuestion(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
+    await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
+  };
+
+  const handleRetrySave = async () => {
+    if (!pendingAttempt || persistingAttempt) return;
+    await persistAttempt(pendingAttempt.correct, pendingAttempt.responseTimeMs);
   };
 
   const handleHeaderBack = () => {
@@ -737,7 +761,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
                   type="text"
                   value={answerInput}
                   onChange={(event) => setAnswerInput(event.target.value)}
-                  disabled={!!inputResult}
+                  disabled={!!inputResult || persistingAttempt}
                   autoFocus
                   className="ui-input text-lg"
                   placeholder={`${currentQuestion.hintPrefix || ''}...`}
@@ -758,10 +782,10 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
               <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
                 <button
                   type="submit"
-                  disabled={!answerInput.trim() || !!inputResult}
+                  disabled={!answerInput.trim() || !!inputResult || persistingAttempt}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  <CheckCircle className="h-5 w-5" /> 入力して判定する
+                  <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '入力して判定する'}
                 </button>
               </MobileStickyActionBar>
             </form>
@@ -803,7 +827,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
                     key={`${currentQuestion.id}-${index}`}
                     type="button"
                     onClick={() => void handleOptionClick(option)}
-                    disabled={!!selectedOption}
+                    disabled={!!selectedOption || persistingAttempt}
                     className={`flex w-full items-center justify-between rounded-2xl p-5 text-left text-lg font-semibold transition-all duration-200 ${buttonClass}`}
                   >
                     <span>{option}</span>
@@ -811,6 +835,21 @@ const QuizMode: React.FC<QuizModeProps> = ({ user, bookId, onBack }) => {
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {saveError && pendingAttempt && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700" data-testid="quiz-save-error">
+              <div>{saveError}</div>
+              <button
+                type="button"
+                data-testid="quiz-save-retry"
+                onClick={() => void handleRetrySave()}
+                disabled={persistingAttempt}
+                className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2.5 font-bold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {persistingAttempt ? '再保存中...' : 'もう一度保存する'}
+              </button>
             </div>
           )}
         </div>

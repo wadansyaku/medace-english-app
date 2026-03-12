@@ -5,7 +5,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, DashboardSnapshot, LeaderboardEntry, LearningHistory, LearningPlan, LearningPreference, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationRole, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, DashboardSnapshot, LeaderboardEntry, LearningPlan, LearningPreference, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationRole, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage';
 
@@ -136,10 +136,10 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async saveHistory(uid: string, result: Partial<LearningHistory> & { wordId: string; bookId: string; }, responseTimeMs = 0): Promise<void> {
+  async recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs = 0): Promise<void> {
     await this.callStorage({
-      action: 'saveHistory',
-      payload: { result, responseTimeMs },
+      action: 'recordQuizAttempt',
+      payload: { wordId, bookId, correct, responseTimeMs },
     });
   }
 

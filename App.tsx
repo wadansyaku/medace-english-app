@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useReducer, useState } from 'react';
 import Layout from './components/Layout';
 import ModalOverlay from './components/ModalOverlay';
 import { OrganizationRole, UserRole, UserProfile } from './types';
@@ -61,11 +61,81 @@ const BUSINESS_DEMO_OPTIONS: Array<{
   },
 ];
 
+type AppView = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo';
+type HomeAppView = Extract<AppView, 'dashboard' | 'instructor' | 'admin'>;
+
+interface AppNavigationState {
+  currentView: AppView;
+  returnView: HomeAppView;
+  selectedBook: { bookId: string } | null;
+}
+
+type AppNavigationAction =
+  | { type: 'reset' }
+  | { type: 'go-home'; view: HomeAppView }
+  | { type: 'open-book'; bookId: string; mode: Extract<AppView, 'study' | 'quiz'> }
+  | { type: 'finish-book-view' }
+  | { type: 'open-public-info' }
+  | { type: 'close-public-info' };
+
+const initialNavigationState: AppNavigationState = {
+  currentView: 'login',
+  returnView: 'dashboard',
+  selectedBook: null,
+};
+
+const isHomeAppView = (view: string): view is HomeAppView => (
+  view === 'dashboard' || view === 'instructor' || view === 'admin'
+);
+
+const getHomeAppView = (user: UserProfile): HomeAppView => {
+  const view = getHomeViewForUser(user);
+  return view === 'admin' || view === 'instructor' ? view : 'dashboard';
+};
+
+const navigationReducer = (
+  state: AppNavigationState,
+  action: AppNavigationAction,
+): AppNavigationState => {
+  switch (action.type) {
+    case 'reset':
+      return initialNavigationState;
+    case 'go-home':
+      return {
+        currentView: action.view,
+        returnView: action.view,
+        selectedBook: null,
+      };
+    case 'open-book':
+      return {
+        currentView: action.mode,
+        returnView: isHomeAppView(state.currentView) ? state.currentView : state.returnView,
+        selectedBook: { bookId: action.bookId },
+      };
+    case 'finish-book-view':
+      return {
+        ...state,
+        currentView: state.returnView,
+        selectedBook: null,
+      };
+    case 'open-public-info':
+      return {
+        ...state,
+        currentView: 'publicInfo',
+      };
+    case 'close-public-info':
+      return {
+        ...state,
+        currentView: 'login',
+      };
+    default:
+      return state;
+  }
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [currentView, setCurrentView] = useState('login'); 
-  const [returnView, setReturnView] = useState('dashboard');
-  const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  const [navigationState, dispatchNavigation] = useReducer(navigationReducer, initialNavigationState);
   const [authLoading, setAuthLoading] = useState(true);
   
   // Login Form State
@@ -76,7 +146,6 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
   const [authError, setAuthError] = useState<string | null>(null);
   const [showAlternateAccess, setShowAlternateAccess] = useState(false);
-  const [showPublicInfo, setShowPublicInfo] = useState(false);
   const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
   const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
   const [showAdminDemoPrompt, setShowAdminDemoPrompt] = useState(false);
@@ -90,6 +159,7 @@ const App: React.FC = () => {
     loading: publicMotivationLoading,
     error: publicMotivationError,
   } = usePublicMotivationSnapshot(!user);
+  const { currentView, selectedBook } = navigationState;
 
   // --- Restore Session (Async) ---
   useEffect(() => {
@@ -98,7 +168,7 @@ const App: React.FC = () => {
         const sessionUser = await storage.getSession();
         if (sessionUser) {
           setUser(sessionUser);
-          setCurrentView(getHomeViewForUser(sessionUser));
+          dispatchNavigation({ type: 'go-home', view: getHomeAppView(sessionUser) });
         }
       } catch (e) {
         console.error("Session restore failed", e);
@@ -120,13 +190,11 @@ const App: React.FC = () => {
   ) => {
     setAuthError(null);
     setAuthLoading(true);
-    setSelectedBookId(null);
-    setReturnView('dashboard');
     try {
       const loggedInUser = await storage.login(role, demoPassword, organizationRole);
       if (loggedInUser) {
         setUser(loggedInUser);
-        setCurrentView(getHomeViewForUser(loggedInUser));
+        dispatchNavigation({ type: 'go-home', view: getHomeAppView(loggedInUser) });
       } else {
         setAuthError("ログインに失敗しました。");
       }
@@ -206,7 +274,7 @@ const App: React.FC = () => {
           );
           if (loggedInUser) {
               setUser(loggedInUser);
-              setCurrentView(getHomeViewForUser(loggedInUser));
+              dispatchNavigation({ type: 'go-home', view: getHomeAppView(loggedInUser) });
           }
       } catch (err: any) {
           setAuthError(err.message || "認証エラーが発生しました。");
@@ -225,16 +293,13 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     setUser(null);
     await storage.clearSession();
-    setCurrentView('login');
-    setReturnView('dashboard');
-    setSelectedBookId(null);
+    dispatchNavigation({ type: 'reset' });
     setDisplayName('');
     setEmail('');
     setPassword('');
     setConfirmPassword('');
     setAuthError(null);
     setShowAlternateAccess(false);
-    setShowPublicInfo(false);
     setShowAdminDemoPrompt(false);
     setAdminDemoPassword('');
     setPendingAdminDemoRole(null);
@@ -243,14 +308,12 @@ const App: React.FC = () => {
   };
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
-    setReturnView(currentView);
-    setSelectedBookId(bookId);
-    setCurrentView(mode);
+    dispatchNavigation({ type: 'open-book', bookId, mode });
   };
 
   const handleSessionComplete = (updatedUser: UserProfile) => {
     setUser(updatedUser);
-    setCurrentView(returnView);
+    dispatchNavigation({ type: 'finish-book-view' });
   };
 
   // --- Render Views ---
@@ -265,10 +328,10 @@ const App: React.FC = () => {
     }
 
     if (!user) {
-      if (showPublicInfo) {
+      if (currentView === 'publicInfo') {
         return (
           <PublicInfoPage
-            onBack={() => setShowPublicInfo(false)}
+            onBack={() => dispatchNavigation({ type: 'close-public-info' })}
             motivationSnapshot={publicMotivationSnapshot}
             motivationLoading={publicMotivationLoading}
             motivationError={publicMotivationError}
@@ -465,7 +528,7 @@ const App: React.FC = () => {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setShowPublicInfo(true)}
+                      onClick={() => dispatchNavigation({ type: 'open-public-info' })}
                       className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-base font-bold text-slate-700 transition-colors hover:bg-slate-100"
                     >
                       アプリの説明・料金を見る <ArrowRight className="h-4 w-4" />
@@ -527,7 +590,7 @@ const App: React.FC = () => {
           user={user} 
           onComplete={(updated) => {
             setUser(updated);
-            setCurrentView('dashboard');
+            dispatchNavigation({ type: 'go-home', view: 'dashboard' });
           }} 
         />
       );
@@ -537,20 +600,20 @@ const App: React.FC = () => {
       case 'dashboard':
         return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setUser} />;
       case 'study':
-        return selectedBookId ? (
+        return selectedBook ? (
           <StudyMode 
             user={user} 
-            bookId={selectedBookId} 
-            onBack={() => setCurrentView(returnView)}
+            bookId={selectedBook.bookId} 
+            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
             onSessionComplete={handleSessionComplete}
           />
         ) : null;
       case 'quiz':
-        return selectedBookId ? (
+        return selectedBook ? (
           <QuizMode 
             user={user} 
-            bookId={selectedBookId} 
-            onBack={() => setCurrentView(returnView)} 
+            bookId={selectedBook.bookId} 
+            onBack={() => dispatchNavigation({ type: 'finish-book-view' })} 
           />
         ) : null;
       case 'admin':
@@ -580,6 +643,14 @@ const App: React.FC = () => {
     }
     setInstructorWorkspaceView(section as InstructorWorkspaceView);
   };
+  const handleChangeView = (view: string) => {
+    if (view === 'login') {
+      dispatchNavigation({ type: 'close-public-info' });
+      return;
+    }
+    if (!isHomeAppView(view)) return;
+    dispatchNavigation({ type: 'go-home', view });
+  };
 
   return (
     <>
@@ -588,7 +659,7 @@ const App: React.FC = () => {
         onLogout={handleLogout}
         onResetDemo={isDemoEmail(user?.email) ? handleResetDemo : undefined}
         currentView={currentView}
-        onChangeView={setCurrentView}
+        onChangeView={handleChangeView}
         workspaceSections={workspaceSections}
         activeWorkspaceSection={activeWorkspaceSection}
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
