@@ -37,6 +37,7 @@ export const useStudentDashboardViewModel = ({
   const motivationSnapshot = snapshot?.motivationSnapshot ?? null;
   const coachNotifications = snapshot?.coachNotifications ?? [];
   const accountOverview = snapshot?.accountOverview ?? null;
+  const commercialRequests = snapshot?.commercialRequests ?? [];
 
   const planningBooks = [...books, ...myBooks];
   const hasStudyBooks = planningBooks.length > 0;
@@ -149,6 +150,7 @@ export const useStudentDashboardViewModel = ({
     motivationSnapshot,
     coachNotifications,
     accountOverview,
+    commercialRequests,
     planningBooks,
     hasStudyBooks,
     isGameMode,

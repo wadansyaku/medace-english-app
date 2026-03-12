@@ -322,6 +322,7 @@ const main = async () => {
     assert(typeof publicMotivation.updatedAt === 'number', 'public motivation endpoint should include an updatedAt timestamp');
 
     const admin = new SessionClient(baseUrl, 'admin');
+    const publicClient = new SessionClient(baseUrl, 'public');
     const freeStudent = new SessionClient(baseUrl, 'free-student');
     const orgStudent = new SessionClient(baseUrl, 'org-student');
     const groupAdmin = new SessionClient(baseUrl, 'group-admin');
@@ -342,6 +343,72 @@ const main = async () => {
     const orgStudentUser = await orgStudent.demoLogin('STUDENT', 'STUDENT');
     const groupAdminUser = await groupAdmin.demoLogin('INSTRUCTOR', 'GROUP_ADMIN');
     await instructor.demoLogin('INSTRUCTOR');
+
+    const publicCommercialEmail = 'phase4-public@example.jp';
+    const anonymousBusinessTrial = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_TRIAL',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'GROUP_ADMIN',
+        seatEstimate: '31-100名',
+        message: '学校導入の初回相談をしたいです。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousBusinessTrial.status === 200, 'anonymous commercial request should be accepted');
+
+    const anonymousRoleConversion = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_ROLE_CONVERSION',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'INSTRUCTOR',
+        seatEstimate: '31-100名',
+        message: '講師アカウントの切り替え相談です。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousRoleConversion.status === 200, 'second anonymous commercial request should be accepted when the kind differs');
+
+    await executeLocalSql(
+      persistDir,
+      `UPDATE commercial_requests
+          SET status = 'CANCELLED'
+        WHERE normalized_contact_email = '${publicCommercialEmail}'
+          AND kind = 'BUSINESS_TRIAL'`,
+    );
+
+    const anonymousBusinessTrialRetry = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_TRIAL',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'GROUP_ADMIN',
+        seatEstimate: '31-100名',
+        message: '導入相談を再送します。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousBusinessTrialRetry.status === 200, 'anonymous commercial request should allow a retry after the open request is closed');
+
+    const anonymousRateLimited = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'PERSONAL_UPGRADE',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        message: '短時間送信のレート制限を確認します。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousRateLimited.status === 429, 'anonymous commercial request should enforce a short-term rate limit');
 
     const orgBooks = await orgStudent.storage('getBooks');
     const orgBookTitles = orgBooks.map((book) => book.title);
@@ -377,6 +444,21 @@ const main = async () => {
     assert(
       !freeBooksAfterPhrasebook.some((book) => book.title === 'Follow-up Drill'),
       'other students should not see another user\'s phrasebook',
+    );
+
+    const freeStudentCommercialRequest = await freeStudent.storage('submitCommercialRequest', {
+      kind: 'PERSONAL_UPGRADE',
+      contactName: freeStudentUser.displayName,
+      contactEmail: freeStudentUser.email,
+      message: '広告なしの個人利用と学校導入の違いを相談したいです。',
+      source: 'DASHBOARD_ACCOUNT',
+    });
+    assert(freeStudentCommercialRequest.status === 'OPEN', 'logged-in student commercial request should start as OPEN');
+
+    const freeStudentCommercialStatus = await freeStudent.storage('getCommercialRequestStatus');
+    assert(
+      freeStudentCommercialStatus.some((request) => request.id === freeStudentCommercialRequest.id),
+      'logged-in student should see their submitted commercial request status',
     );
 
     const crossOrgAssignment = await groupAdmin.storageRaw('assignStudentInstructor', {
@@ -611,6 +693,89 @@ const main = async () => {
 
     const printableFeedback = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}/printable-feedback`);
     assert(printableFeedback.html.includes('自由英作文返却'), 'printable feedback should contain the feedback HTML');
+
+    const futureAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: '翌週公開の案内',
+      body: 'まだ表示されない future announcement です。',
+      severity: 'UPDATE',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+      startsAt: Date.now() + 60 * 60 * 1000,
+    });
+    const hiddenAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      !hiddenAnnouncementFeed.announcements.some((announcement) => announcement.id === futureAnnouncement.id),
+      'future announcement should stay hidden before its publish window starts',
+    );
+
+    const majorAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: 'Phase 4 major update',
+      body: '学校導線とお知らせ機能を更新しました。',
+      severity: 'MAJOR',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+    });
+    const majorAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      majorAnnouncementFeed.highestPriorityModal?.id === majorAnnouncement.id,
+      'MAJOR announcement should appear as the highest-priority modal for an unseen target user',
+    );
+    await freeStudent.storage('markAnnouncementSeen', { announcementId: majorAnnouncement.id });
+    const seenMajorFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      seenMajorFeed.highestPriorityModal?.id !== majorAnnouncement.id,
+      'seen MAJOR announcement should not reopen the modal',
+    );
+
+    const criticalAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: 'Phase 4 critical notice',
+      body: '重大なお知らせの確認導線を有効化しました。',
+      severity: 'CRITICAL',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+    });
+    const criticalAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      criticalAnnouncementFeed.highestPriorityModal?.id === criticalAnnouncement.id,
+      'CRITICAL announcement should take over the modal slot',
+    );
+    assert(
+      criticalAnnouncementFeed.stickyBanner?.id === criticalAnnouncement.id,
+      'CRITICAL announcement should also appear in the sticky banner',
+    );
+    await freeStudent.storage('acknowledgeAnnouncement', { announcementId: criticalAnnouncement.id });
+    const acknowledgedCriticalFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      acknowledgedCriticalFeed.highestPriorityModal?.id !== criticalAnnouncement.id,
+      'acknowledged CRITICAL announcement should not reopen the modal',
+    );
+    assert(
+      acknowledgedCriticalFeed.stickyBanner?.id !== criticalAnnouncement.id,
+      'acknowledged CRITICAL announcement should clear the sticky banner',
+    );
+
+    const adminCommercialQueue = await admin.storage('listCommercialRequests');
+    assert(
+      adminCommercialQueue.some((request) => request.id === freeStudentCommercialRequest.id),
+      'admin should be able to see the logged-in user commercial request',
+    );
+
+    const provisionedCommercialRequest = await admin.storage('updateCommercialRequest', {
+      id: freeStudentCommercialRequest.id,
+      status: 'PROVISIONED',
+      resolutionNote: '導入案内を送付し、組織アカウントへ反映しました。',
+      linkedUserUid: freeStudentUser.uid,
+      targetSubscriptionPlan: 'TOB_FREE',
+      targetOrganizationName: 'Phase 4 Integration Academy',
+      targetOrganizationRole: 'GROUP_ADMIN',
+    });
+    assert(provisionedCommercialRequest.status === 'PROVISIONED', 'admin should be able to provision a commercial request');
+
+    const provisionedSession = await freeStudent.get('/api/session');
+    assert(provisionedSession.subscriptionPlan === 'TOB_FREE', 'provisioned user should receive the target subscription plan');
+    assert(provisionedSession.organizationName === 'Phase 4 Integration Academy', 'provisioned user should receive the target organization name');
+    assert(provisionedSession.organizationRole === 'GROUP_ADMIN', 'provisioned user should receive the target organization role');
+    assert(provisionedSession.role === 'INSTRUCTOR', 'GROUP_ADMIN provisioning should elevate the user to instructor role');
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');
     assert(groupAdminReset.status === 403, 'group admin should not be allowed to reset all data');

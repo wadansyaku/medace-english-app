@@ -23,6 +23,7 @@ import {
   UserRole,
 } from '../../types';
 import { buildPublicMotivationSnapshot } from './public-motivation';
+import { handleGetCommercialRequestStatus } from './commercial-actions';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { handleGetAllStudentsProgress, handleGetCoachNotifications } from './storage-organization-actions';
 import type { AppEnv, DbUserRow } from './types';
@@ -693,7 +694,7 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
   officialBooks.sort((left, right) => (left.isPriority === right.isPriority ? left.title.localeCompare(right.title) : left.isPriority ? -1 : 1));
   myBooks.sort((left, right) => right.id.localeCompare(left.id));
 
-  const [progressResults, dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview] = await Promise.all([
+  const [progressResults, dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview, commercialRequests] = await Promise.all([
     Promise.all([...officialBooks, ...myBooks].map((book) => getBookProgress(env, user.id, book.id))),
     getVisibleDueCount(env, user),
     handleGetLearningPlan(env, user),
@@ -704,6 +705,7 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     handleGetMotivationSnapshot(env, user),
     handleGetCoachNotifications(env, user.id),
     handleGetAccountOverview(env, user),
+    handleGetCommercialRequestStatus(env, user),
   ]);
 
   const progressMap: Record<string, BookProgress> = {};
@@ -724,5 +726,6 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     motivationSnapshot,
     coachNotifications,
     accountOverview,
+    commercialRequests,
   };
 };

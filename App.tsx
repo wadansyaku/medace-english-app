@@ -8,7 +8,9 @@ import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from
 import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
+import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
 import { getHomeAppRoute, isHomeAppRoute, type HomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
+import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -41,6 +43,7 @@ const App: React.FC = () => {
       setBusinessAdminWorkspaceView(BusinessAdminWorkspaceView.OVERVIEW);
     },
   });
+  const announcementFeed = useAnnouncementFeed(Boolean(user));
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
     dispatchNavigation({ type: 'open-book', bookId, mode });
@@ -165,6 +168,18 @@ const App: React.FC = () => {
           {renderContent()}
         </Suspense>
       </Layout>
+
+      {user && (
+        <AnnouncementOverlay
+          feed={announcementFeed.feed}
+          onAcknowledge={(announcementId) => {
+            void announcementFeed.acknowledge(announcementId);
+          }}
+          onDismissMajor={(announcementId) => {
+            void announcementFeed.markSeen(announcementId);
+          }}
+        />
+      )}
 
       {adminDemoPrompt.open && <AdminDemoPrompt {...adminDemoPrompt} />}
     </>

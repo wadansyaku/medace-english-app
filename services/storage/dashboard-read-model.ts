@@ -254,6 +254,7 @@ export const getDashboardSnapshot = async (
         },
       },
     },
+    commercialRequests: [],
   };
 };
 

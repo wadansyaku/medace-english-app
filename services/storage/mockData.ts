@@ -1,9 +1,16 @@
 import {
+  AnnouncementAudienceRole,
+  AnnouncementSeverity,
+  CommercialRequestKind,
+  CommercialRequestStatus,
+  CommercialWorkspaceRole,
   EnglishLevel,
   LearningPreference,
   LearningPreferenceIntensity,
   OrganizationRole,
+  ProductAnnouncement,
   SubscriptionPlan,
+  type CommercialRequest,
   UserGrade,
   UserProfile,
   UserRole,
@@ -66,6 +73,48 @@ export const IDB_MOCK_USERS: UserProfile[] = [
 export const IDB_MOCK_ASSIGNMENTS = [
   { studentUid: 'student-biz-1', instructorUid: 'mock-instructor-001' },
   { studentUid: 'student-biz-2', instructorUid: 'mock-instructor-001' },
+];
+
+export const IDB_MOCK_COMMERCIAL_REQUESTS: CommercialRequest[] = [
+  {
+    id: 101,
+    kind: CommercialRequestKind.BUSINESS_TRIAL,
+    status: CommercialRequestStatus.OPEN,
+    contactName: '高木 直人',
+    contactEmail: 'school-admin@example.jp',
+    organizationName: 'Steady Study Demo Academy',
+    requestedWorkspaceRole: CommercialWorkspaceRole.GROUP_ADMIN,
+    seatEstimate: '31-100名',
+    message: '体験導入の進め方を知りたいです。',
+    source: 'PUBLIC_GUIDE',
+    createdAt: Date.now() - 6 * 3600 * 1000,
+    updatedAt: Date.now() - 6 * 3600 * 1000,
+  },
+];
+
+export const IDB_MOCK_PRODUCT_ANNOUNCEMENTS: ProductAnnouncement[] = [
+  {
+    id: 'mock-update-free',
+    title: '無料プランからの導入相談が分かりやすくなりました',
+    body: '設定画面からパーソナル相談と学校・教室導入相談の両方を送れるようになりました。',
+    severity: AnnouncementSeverity.UPDATE,
+    subscriptionPlans: [SubscriptionPlan.TOC_FREE],
+    audienceRoles: [AnnouncementAudienceRole.STUDENT],
+    publishedAt: Date.now() - 3 * 3600 * 1000,
+    createdAt: Date.now() - 3 * 3600 * 1000,
+    updatedAt: Date.now() - 3 * 3600 * 1000,
+  },
+  {
+    id: 'mock-major-business',
+    title: '学校・教室向けワークスペースを更新しました',
+    body: '講師フォロー、添削キュー、導入相談の運用を 1 つの導線で確認できます。',
+    severity: AnnouncementSeverity.MAJOR,
+    subscriptionPlans: [SubscriptionPlan.TOB_FREE, SubscriptionPlan.TOB_PAID],
+    audienceRoles: [AnnouncementAudienceRole.INSTRUCTOR, AnnouncementAudienceRole.GROUP_ADMIN, AnnouncementAudienceRole.ADMIN],
+    publishedAt: Date.now() - 2 * 3600 * 1000,
+    createdAt: Date.now() - 2 * 3600 * 1000,
+    updatedAt: Date.now() - 2 * 3600 * 1000,
+  },
 ];
 
 export const defaultLearningPreference = (userUid: string): LearningPreference => ({

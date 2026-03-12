@@ -1,11 +1,14 @@
 import type {
+  AnnouncementReceipt,
+  CommercialRequest,
   LearningHistory,
+  ProductAnnouncement,
   StudentWorksheetSnapshot,
   UserProfile,
 } from '../../types';
 
 export const DB_NAME = 'MedAceDB';
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export const STORES = {
   BOOKS: 'books',
@@ -15,6 +18,9 @@ export const STORES = {
   PLANS: 'plans',
   PREFERENCES: 'preferences',
   ASSIGNMENTS: 'assignments',
+  COMMERCIAL_REQUESTS: 'commercialRequests',
+  PRODUCT_ANNOUNCEMENTS: 'productAnnouncements',
+  ANNOUNCEMENT_RECEIPTS: 'announcementReceipts',
 } as const;
 
 export interface StoredLearningHistoryRecord {
@@ -30,6 +36,12 @@ export interface StoredSessionRecord {
 export interface StoredAssignmentRecord {
   studentUid: string;
   instructorUid: string | null;
+}
+
+export type StoredCommercialRequestRecord = CommercialRequest;
+export type StoredProductAnnouncementRecord = ProductAnnouncement;
+export interface StoredAnnouncementReceiptRecord extends AnnouncementReceipt {
+  id: string;
 }
 
 export type GetStore = (storeName: string, mode?: IDBTransactionMode) => Promise<IDBObjectStore>;
@@ -49,6 +61,9 @@ export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, r
     if (!db.objectStoreNames.contains(STORES.PLANS)) db.createObjectStore(STORES.PLANS, { keyPath: 'uid' });
     if (!db.objectStoreNames.contains(STORES.PREFERENCES)) db.createObjectStore(STORES.PREFERENCES, { keyPath: 'userUid' });
     if (!db.objectStoreNames.contains(STORES.ASSIGNMENTS)) db.createObjectStore(STORES.ASSIGNMENTS, { keyPath: 'studentUid' });
+    if (!db.objectStoreNames.contains(STORES.COMMERCIAL_REQUESTS)) db.createObjectStore(STORES.COMMERCIAL_REQUESTS, { keyPath: 'id', autoIncrement: true });
+    if (!db.objectStoreNames.contains(STORES.PRODUCT_ANNOUNCEMENTS)) db.createObjectStore(STORES.PRODUCT_ANNOUNCEMENTS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORES.ANNOUNCEMENT_RECEIPTS)) db.createObjectStore(STORES.ANNOUNCEMENT_RECEIPTS, { keyPath: 'id' });
   };
   request.onsuccess = () => resolve(request.result);
 });

@@ -1,11 +1,14 @@
 import {
   CatalogImportRequest,
   CatalogImportResult,
+  CommercialRequestPayload,
+  CommercialRequestUpdatePayload,
+  ProductAnnouncementUpsertPayload,
   StorageAction,
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, DashboardSnapshot, LeaderboardEntry, LearningPlan, LearningPreference, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationRole, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, LeaderboardEntry, LearningPlan, LearningPreference, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationRole, ProductAnnouncement, ProductAnnouncementFeed, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage';
 
@@ -230,5 +233,56 @@ export class CloudflareStorageService implements IStorageService {
 
   async getActivityLogs(uid: string): Promise<ActivityLog[]> {
     return this.callStorage({ action: 'getActivityLogs' });
+  }
+
+  async getCommercialRequestStatus(): Promise<CommercialRequest[]> {
+    return this.callStorage({ action: 'getCommercialRequestStatus' });
+  }
+
+  async submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest> {
+    return this.callStorage({
+      action: 'submitCommercialRequest',
+      payload,
+    });
+  }
+
+  async listProductAnnouncements(): Promise<ProductAnnouncementFeed> {
+    return this.callStorage({ action: 'listProductAnnouncements' });
+  }
+
+  async markAnnouncementSeen(announcementId: string): Promise<void> {
+    await this.callStorage({
+      action: 'markAnnouncementSeen',
+      payload: { announcementId },
+    });
+  }
+
+  async acknowledgeAnnouncement(announcementId: string): Promise<void> {
+    await this.callStorage({
+      action: 'acknowledgeAnnouncement',
+      payload: { announcementId },
+    });
+  }
+
+  async listCommercialRequests(): Promise<CommercialRequest[]> {
+    return this.callStorage({ action: 'listCommercialRequests' });
+  }
+
+  async updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest> {
+    return this.callStorage({
+      action: 'updateCommercialRequest',
+      payload,
+    });
+  }
+
+  async listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]> {
+    return this.callStorage({ action: 'listProductAnnouncementsAdmin' });
+  }
+
+  async upsertProductAnnouncement(payload: ProductAnnouncementUpsertPayload): Promise<ProductAnnouncement> {
+    return this.callStorage({
+      action: 'upsertProductAnnouncement',
+      payload,
+    });
   }
 }

@@ -1,18 +1,24 @@
 import React from 'react';
 import { RefreshCw, Settings, Sparkles, Target, User, X } from 'lucide-react';
+import type { CommercialRequestPayload } from '../../contracts/storage';
 import {
+  ANNOUNCEMENT_SEVERITY_LABELS,
+  type CommercialRequest,
   GRADE_LABELS,
   LEARNING_PREFERENCE_INTENSITY_LABELS,
+  type ProductAnnouncementFeed,
   SUBSCRIPTION_PLAN_LABELS,
   LearningPreferenceIntensity,
   type AccountOverview,
   UserGrade,
+  type UserProfile,
   type UserStudyMode,
   UserStudyMode as UserStudyModeEnum,
   USER_STUDY_MODE_LABELS,
 } from '../../types';
 import type { DisplayDensity, DisplayFontSize } from '../../utils/displayPreferences';
 import useIsMobileViewport from '../../hooks/useIsMobileViewport';
+import CommercialUpgradePanel from '../commercial/CommercialUpgradePanel';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import QuickChoiceButton from './QuickChoiceButton';
@@ -33,7 +39,10 @@ const DISPLAY_DENSITY_OPTIONS: Array<{ value: DisplayDensity; label: string; des
 
 interface DashboardSettingsModalProps {
   open: boolean;
+  user: UserProfile;
   accountOverview: AccountOverview | null;
+  commercialRequests: CommercialRequest[];
+  announcementFeed: ProductAnnouncementFeed;
   currentEnglishLevel?: string;
   editName: string;
   editGrade: UserGrade;
@@ -52,6 +61,7 @@ interface DashboardSettingsModalProps {
   onClose: () => void;
   onRetakeLevel: () => void;
   onSave: () => void;
+  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
   onEditName: (value: string) => void;
   onEditGrade: (value: UserGrade) => void;
   onEditStudyMode: (value: UserStudyMode) => void;
@@ -98,7 +108,10 @@ const MobileSettingsSection: React.FC<MobileSettingsSectionProps> = ({
 
 const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
   open,
+  user,
   accountOverview,
+  commercialRequests,
+  announcementFeed,
   currentEnglishLevel,
   editName,
   editGrade,
@@ -117,6 +130,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
   onClose,
   onRetakeLevel,
   onSave,
+  onSubmitCommercialRequest,
   onEditName,
   onEditGrade,
   onEditStudyMode,
@@ -198,6 +212,37 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                 )}
               </div>
             </section>
+
+            <MobileSettingsSection
+              title="導入・お知らせ"
+              description="学校・教室向け導入、プラン相談、最近のお知らせをまとめて確認できます。"
+              badge={<span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-[11px] font-bold text-medace-700">新機能</span>}
+            >
+              <CommercialUpgradePanel
+                user={user}
+                accountOverview={accountOverview}
+                requests={commercialRequests}
+                source="SETTINGS_MODAL"
+                onSubmit={onSubmitCommercialRequest}
+              />
+
+              {announcementFeed.announcements.length > 0 && (
+                <div className="rounded-[28px] border border-slate-200 bg-white p-4">
+                  <div className="text-sm font-black text-slate-950">最近のお知らせ</div>
+                  <div className="mt-3 space-y-3">
+                    {announcementFeed.announcements.slice(0, 3).map((announcement) => (
+                      <div key={announcement.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-sm font-bold text-slate-900">{announcement.title}</div>
+                          <div className="text-xs font-bold text-medace-700">{ANNOUNCEMENT_SEVERITY_LABELS[announcement.severity]}</div>
+                        </div>
+                        <div className="mt-2 text-sm leading-relaxed text-slate-600">{announcement.body}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </MobileSettingsSection>
 
             <MobileSettingsSection
               title="今日の学習条件"
@@ -639,6 +684,32 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="ui-panel-subtle">
+            <CommercialUpgradePanel
+              user={user}
+              accountOverview={accountOverview}
+              requests={commercialRequests}
+              source="SETTINGS_MODAL"
+              onSubmit={onSubmitCommercialRequest}
+            />
+            {announcementFeed.announcements.length > 0 && (
+              <div className="mt-5 rounded-[28px] border border-slate-200 bg-white p-5">
+                <div className="text-base font-black text-slate-950">お知らせ履歴</div>
+                <div className="mt-4 space-y-3">
+                  {announcementFeed.announcements.slice(0, 4).map((announcement) => (
+                    <div key={announcement.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-bold text-slate-900">{announcement.title}</div>
+                        <div className="text-xs font-bold text-medace-700">{ANNOUNCEMENT_SEVERITY_LABELS[announcement.severity]}</div>
+                      </div>
+                      <div className="mt-2 text-sm leading-relaxed text-slate-600">{announcement.body}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

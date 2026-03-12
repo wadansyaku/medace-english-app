@@ -1,6 +1,12 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  AnnouncementAudienceRole,
+  AnnouncementSeverity,
+  CommercialRequest,
+  CommercialRequestKind,
+  CommercialRequestStatus,
+  CommercialWorkspaceRole,
   AssignmentEvent,
   BookAccessScope,
   BookCatalogSource,
@@ -11,10 +17,13 @@ import {
   LearningPlan,
   LearningPreference,
   MasteryDistribution,
+  ProductAnnouncement,
+  ProductAnnouncementFeed,
   OrganizationDashboardSnapshot,
   OrganizationRole,
   StudentSummary,
   StudentWorksheetSnapshot,
+  SubscriptionPlan,
   UserProfile,
   UserRole,
   WordData,
@@ -71,6 +80,38 @@ export interface CatalogImportResult {
   importedWordCount: number;
   skippedRowCount: number;
   warnings: CatalogImportIssue[];
+}
+
+export interface CommercialRequestPayload {
+  kind: CommercialRequestKind;
+  contactName: string;
+  contactEmail: string;
+  organizationName?: string;
+  requestedWorkspaceRole?: CommercialWorkspaceRole;
+  seatEstimate?: string;
+  message: string;
+  source: string;
+}
+
+export interface CommercialRequestUpdatePayload {
+  id: number;
+  status: CommercialRequestStatus;
+  resolutionNote?: string;
+  linkedUserUid?: string;
+  targetSubscriptionPlan?: SubscriptionPlan;
+  targetOrganizationName?: string;
+  targetOrganizationRole?: OrganizationRole;
+}
+
+export interface ProductAnnouncementUpsertPayload {
+  id?: string;
+  title: string;
+  body: string;
+  severity: AnnouncementSeverity;
+  subscriptionPlans: SubscriptionPlan[];
+  audienceRoles: AnnouncementAudienceRole[];
+  startsAt?: number;
+  endsAt?: number;
 }
 
 export interface StorageActionMap {
@@ -198,6 +239,42 @@ export interface StorageActionMap {
   getActivityLogs: {
     payload: undefined;
     response: ActivityLog[];
+  };
+  getCommercialRequestStatus: {
+    payload: undefined;
+    response: CommercialRequest[];
+  };
+  submitCommercialRequest: {
+    payload: CommercialRequestPayload;
+    response: CommercialRequest;
+  };
+  listProductAnnouncements: {
+    payload: undefined;
+    response: ProductAnnouncementFeed;
+  };
+  markAnnouncementSeen: {
+    payload: { announcementId: string };
+    response: null;
+  };
+  acknowledgeAnnouncement: {
+    payload: { announcementId: string };
+    response: null;
+  };
+  listCommercialRequests: {
+    payload: undefined;
+    response: CommercialRequest[];
+  };
+  updateCommercialRequest: {
+    payload: CommercialRequestUpdatePayload;
+    response: CommercialRequest;
+  };
+  listProductAnnouncementsAdmin: {
+    payload: undefined;
+    response: ProductAnnouncement[];
+  };
+  upsertProductAnnouncement: {
+    payload: ProductAnnouncementUpsertPayload;
+    response: ProductAnnouncement;
   };
 }
 
