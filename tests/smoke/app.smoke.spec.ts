@@ -241,6 +241,31 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
   });
 
+  test('student onboarding keeps mobile start and next actions within reach', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await expect(page.getByTestId('onboarding-profile')).toBeVisible();
+
+    await page.getByRole('button', { name: '中学3年生' }).click();
+    await page.getByRole('button', { name: '学校英語はだいたい分かる' }).click();
+
+    const startButton = page.getByTestId('onboarding-start-button');
+    await expect(startButton).toBeVisible();
+    const startBox = await startButton.boundingBox();
+    expect(startBox).not.toBeNull();
+    expect((startBox?.y ?? 1000) + (startBox?.height ?? 0)).toBeLessThanOrEqual(844);
+
+    await startButton.click();
+    await expect(page.getByTestId('onboarding-test')).toBeVisible();
+    await page.getByTestId('diagnostic-option').first().click();
+
+    const nextButton = page.getByTestId('onboarding-next-button');
+    await expect(nextButton).toBeVisible();
+    const nextBox = await nextButton.boundingBox();
+    expect(nextBox).not.toBeNull();
+    expect((nextBox?.y ?? 1000) + (nextBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('demo-login-student').click();

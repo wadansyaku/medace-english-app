@@ -3,6 +3,9 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Compass, GraduationCap, Radar,
 import { DIAGNOSTIC_PHASE_LABELS, DIAGNOSTIC_QUESTIONS, SELF_ASSESSMENT_OPTIONS, SelfAssessmentKey, evaluateDiagnostic } from '../data/diagnostic';
 import { EnglishLevel, GRADE_LABELS, UserGrade, UserProfile } from '../types';
 import { storage } from '../services/storage';
+import useIsMobileViewport from '../hooks/useIsMobileViewport';
+import MobileStickyActionBar from './mobile/MobileStickyActionBar';
+import MobileStepPager from './mobile/MobileStepPager';
 
 interface OnboardingProps {
   user: UserProfile;
@@ -33,6 +36,7 @@ const LEVEL_BADGE_STYLE: Record<EnglishLevel, string> = {
 };
 
 const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = false, onCancel }) => {
+  const isMobileViewport = useIsMobileViewport();
   const [step, setStep] = useState<'PROFILE' | 'TEST' | 'RESULT'>('PROFILE');
   const [selectedGrade, setSelectedGrade] = useState<UserGrade>(user.grade || UserGrade.ADULT);
   const [selfAssessment, setSelfAssessment] = useState<SelfAssessmentKey | null>(null);
@@ -104,8 +108,184 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
   };
 
   if (step === 'PROFILE') {
+    if (isMobileViewport) {
+      return (
+        <div data-testid="onboarding-profile" className="bg-[#fff8f1] px-1 pb-28 pt-1">
+          <div className="mx-auto max-w-xl space-y-4">
+            <section className="relative overflow-hidden rounded-[28px] bg-medace-500 p-5 text-white shadow-[0_20px_50px_rgba(255,130,22,0.22)]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.24),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_24%)]"></div>
+              <div className="relative">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase text-white/72">
+                  <Radar className="h-4 w-4" /> Placement Design
+                </div>
+                <h1 className="mt-4 text-[1.7rem] font-black leading-tight tracking-tight">
+                  {isRetake ? '学習スタート帯を再診断する' : '最初のスタート帯を、短時間で決める'}
+                </h1>
+                <p className="mt-3 text-[13px] leading-relaxed text-white/78">
+                  文法・語彙・読解を 12 問で確認し、Steady Study を始めるための推定レベルを出します。
+                </p>
+
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {[
+                    { value: '12', label: '問題' },
+                    { value: '4-5分', label: '所要時間' },
+                    { value: '選択式', label: '入力なし' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-white/10 bg-white/6 px-3 py-3">
+                      <div className="text-lg font-black text-white">{item.value}</div>
+                      <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/58">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 rounded-3xl border border-white/10 bg-white/6 px-4 py-4">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/58">診断の特徴</div>
+                  <div className="mt-3 space-y-2 text-sm text-white/84">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-medace-200" />
+                      <span>AI生成ではなく固定問題なので、毎回ぶれません。</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-medace-200" />
+                      <span>結果では「なぜその帯か」まで確認できます。</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold tracking-[0.18em] uppercase text-slate-400">Setup</p>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                    {isRetake ? 'いまの実感を更新する' : '学年と現在地を選ぶ'}
+                  </h2>
+                </div>
+                {isRetake && onCancel && (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    <X className="h-4 w-4" /> 閉じる
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <MobileStepPager
+                  steps={[
+                    { id: 'grade', label: '学年・立場' },
+                    { id: 'assessment', label: 'いまの実感' },
+                  ]}
+                  activeStep={selfAssessment ? 1 : 0}
+                />
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <GraduationCap className="h-4 w-4 text-medace-600" />
+                  <h3 className="text-sm font-black text-slate-900">1. 学年・立場</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {GRADES.map((grade) => (
+                    <button
+                      key={grade.id}
+                      type="button"
+                      onClick={() => setSelectedGrade(grade.id)}
+                      className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                        selectedGrade === grade.id
+                          ? 'border-medace-500 bg-medace-50 shadow-sm'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-sm font-bold text-slate-900">{grade.label}</div>
+                      <div className="mt-1 text-[12px] leading-relaxed text-slate-500">{grade.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Compass className="h-4 w-4 text-medace-600" />
+                  <h3 className="text-sm font-black text-slate-900">2. いまの実感</h3>
+                </div>
+                <div className="grid gap-3">
+                  {SELF_ASSESSMENT_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSelfAssessment(option.id)}
+                      className={`rounded-3xl border px-4 py-4 text-left transition-all ${
+                        selfAssessment === option.id
+                          ? 'border-medace-600 bg-medace-500 text-white shadow-[0_18px_40px_rgba(255,130,22,0.18)]'
+                          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className={`text-sm font-bold ${selfAssessment === option.id ? 'text-white' : 'text-slate-900'}`}>
+                            {option.title}
+                          </div>
+                          <p className={`mt-1 line-clamp-2 text-[13px] leading-relaxed ${
+                            selfAssessment === option.id ? 'text-white/72' : 'text-slate-500'
+                          }`}>
+                            {option.description}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                          selfAssessment === option.id
+                            ? 'border-white/20 bg-white/10 text-white/88'
+                            : 'border-slate-200 bg-slate-50 text-slate-500'
+                        }`}>
+                          {option.estimatedBand}
+                        </span>
+                      </div>
+                      <div className={`mt-2 text-[11px] font-bold tracking-[0.14em] uppercase ${
+                        selfAssessment === option.id ? 'text-medace-200' : 'text-medace-600'
+                      }`}>
+                        {option.helper}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-3xl border border-medace-100 bg-medace-50/70 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <Target className="mt-0.5 h-4 w-4 shrink-0 text-medace-600" />
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">診断の設計方針</div>
+                    <p className="mt-1 text-[13px] leading-relaxed text-slate-600">
+                      最初は易しめから入り、後半で抽象度を上げます。入力負荷を減らすため、すべて選択式です。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                data-testid="onboarding-start-button"
+                onClick={handleStart}
+                disabled={!selfAssessment}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-white transition-colors hover:bg-medace-700 disabled:opacity-50"
+              >
+                診断を始める <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          </MobileStickyActionBar>
+        </div>
+      );
+    }
+
     return (
-      <div data-testid="onboarding-profile" className="min-h-screen bg-[#fff8f1] py-10 px-4">
+      <div data-testid="onboarding-profile" className="bg-[#fff8f1] px-4 py-10">
         <div className="max-w-6xl mx-auto grid xl:grid-cols-[0.96fr_1.04fr] gap-6">
           <div className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_28px_80px_rgba(255,130,22,0.22)] md:p-10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.24),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.12),_transparent_24%)]"></div>
@@ -255,8 +435,173 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
   }
 
   if (step === 'RESULT' && result && finalLevel) {
+    if (isMobileViewport) {
+      const reviewItems = result.reviewItems.filter((item) => !item.isCorrect).slice(0, 3);
+      return (
+        <div data-testid="onboarding-result" className="bg-[#fff8f1] px-1 pb-28 pt-1">
+          <div className="mx-auto max-w-xl space-y-4">
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold tracking-[0.18em] uppercase text-slate-400">Placement Result</p>
+                  <h2 className="mt-2 text-[1.75rem] font-black tracking-tight text-slate-950">推定スタート帯は {finalLevel}</h2>
+                </div>
+                {isRetake && onCancel && (
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                  >
+                    <X className="h-4 w-4" /> 閉じる
+                  </button>
+                )}
+              </div>
+
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">{result.summaryBody}</p>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className={`rounded-3xl border px-4 py-4 ${LEVEL_BADGE_STYLE[finalLevel]}`}>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em]">Estimated Level</div>
+                  <div className="mt-2 text-3xl font-black tracking-tight">{finalLevel}</div>
+                  <div className="mt-1 text-sm font-medium">{result.summaryTitle}</div>
+                </div>
+                <div className="rounded-3xl border border-medace-100 bg-medace-50/75 px-4 py-4">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Confidence</div>
+                  <div className="mt-2 text-xl font-black text-slate-900">{result.confidence === 'HIGH' ? '高め' : '標準'}</div>
+                  <div className="mt-1 text-sm text-slate-600">{result.correctCount} / {result.totalQuestions} 問正解</div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-medace-900/75">
+                {result.alignmentNote}
+              </div>
+
+              <div className="mt-4 rounded-3xl border border-medace-600 bg-medace-500 px-4 py-4 text-white">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">おすすめペース</div>
+                <div className="mt-2 text-3xl font-black tracking-tight">
+                  {result.recommendedDailyGoal}
+                  <span className="ml-1 text-base text-white/65">語 / 日</span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-white/78">
+                  最初の 2 週間は、このペースで復習を崩さず回せるかを優先してください。
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+              <p className="text-xs font-bold tracking-[0.18em] uppercase text-slate-400">Next Focus</p>
+              <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">このスタート帯で意識すること</h3>
+              <div className="mt-4 space-y-3">
+                {result.nextFocus.map((focus) => (
+                  <div key={focus} className="rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-slate-700">
+                    {focus}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <details className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+              <summary className="cursor-pointer list-none text-lg font-black tracking-tight text-slate-950">診断の内訳</summary>
+              <div className="mt-4 grid gap-3">
+                {(Object.entries(result.phaseScores) as Array<[keyof typeof result.phaseScores, { correct: number; total: number }]>).map(([phase, score]) => (
+                  <div key={phase} className="rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{DIAGNOSTIC_PHASE_LABELS[phase]}</div>
+                    <div className="mt-2 text-2xl font-black text-slate-900">
+                      {score.correct}
+                      <span className="text-base text-slate-400">/{score.total}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {phase === 'warmup' ? '基礎の安定度' : phase === 'core' ? '標準的な文脈力' : '上位帯の伸びしろ'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <details className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+              <summary className="cursor-pointer list-none text-lg font-black tracking-tight text-slate-950">スキル別コメント</summary>
+              <div className="mt-4 grid gap-3">
+                {result.skillSummaries.map((summary) => (
+                  <div key={summary.skill} className="rounded-3xl border border-slate-200 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-base font-bold text-slate-900">{summary.label}</div>
+                      <div className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                        summary.status === 'strong'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : summary.status === 'steady'
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700'
+                      }`}>
+                        {summary.status === 'strong' ? '安定' : summary.status === 'steady' ? '育成中' : '優先'}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{summary.message}</p>
+                    <div className="mt-3 flex justify-between text-[11px] font-bold text-slate-400">
+                      <span>{summary.correct} / {summary.total}</span>
+                      <span>{Math.round(summary.ratio * 100)}%</span>
+                    </div>
+                    <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${
+                          summary.status === 'strong'
+                            ? 'bg-emerald-500'
+                            : summary.status === 'steady'
+                              ? 'bg-sky-500'
+                              : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${Math.max(8, Math.round(summary.ratio * 100))}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <details className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-xl">
+              <summary className="cursor-pointer list-none text-lg font-black tracking-tight text-slate-950">見直すと効く問題</summary>
+              <div className="mt-4 space-y-3">
+                {reviewItems.map((item) => (
+                  <div key={item.id} className="rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-bold text-slate-900">
+                        {item.skill === 'grammar' ? '文法' : item.skill === 'vocabulary' ? '語彙' : '読解'}
+                      </div>
+                      <div className={`rounded-full border px-2.5 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[item.level]}`}>{item.level}</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.question}</p>
+                    <div className="mt-3 text-xs text-slate-500">正解: {item.correctAnswer}</div>
+                    <div className="mt-2 text-sm text-slate-600">{item.explanation}</div>
+                  </div>
+                ))}
+                {result.missedCount === 0 && (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                    取りこぼしはありませんでした。今の帯で十分にスタートできます。
+                  </div>
+                )}
+              </div>
+            </details>
+          </div>
+
+          <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                data-testid="onboarding-save-button"
+                onClick={saveResult}
+                disabled={isSaving}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-white transition-colors hover:bg-medace-700 disabled:opacity-50"
+              >
+                {isSaving ? '保存中...' : 'このレベルで学習を始める'}
+                {!isSaving && <ChevronRight className="h-5 w-5" />}
+              </button>
+            </div>
+          </MobileStickyActionBar>
+        </div>
+      );
+    }
+
     return (
-      <div data-testid="onboarding-result" className="min-h-screen bg-[#fff8f1] px-4 py-10">
+      <div data-testid="onboarding-result" className="bg-[#fff8f1] px-4 py-10">
         <div className="max-w-6xl mx-auto space-y-6">
         <div className="rounded-[32px] border border-slate-200 bg-white p-6 md:p-8 shadow-xl">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
@@ -422,7 +767,148 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
   }
 
   return (
-    <div data-testid="onboarding-test" className="min-h-screen bg-[#fff8f1] px-4 py-8">
+    isMobileViewport ? (
+      <div data-testid="onboarding-test" className="bg-[#fff8f1] px-1 pb-28 pt-1">
+        <div className="mx-auto max-w-xl space-y-4">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-medace-100 bg-medace-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-medace-700">
+                  {currentQuestion.skill === 'grammar' ? 'Grammar' : currentQuestion.skill === 'vocabulary' ? 'Vocabulary' : 'Reading'}
+                </div>
+                <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-950">第 {currentQuestionIndex + 1} 問</h3>
+              </div>
+              <div className={`rounded-full border px-3 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[currentQuestion.level]}`}>
+                {currentQuestion.level}
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">進捗</div>
+                <div className="mt-2 text-sm font-black text-slate-950">{currentQuestionIndex + 1} / {DIAGNOSTIC_QUESTIONS.length}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">回答済み</div>
+                <div className="mt-2 text-sm font-black text-slate-950">{answeredCount} 問</div>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="mb-2 flex justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <span>全体の進み具合</span>
+                <span>{progressPercent}%</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-medace-500 transition-all duration-300" style={{ width: `${progressPercent}%` }}></div>
+              </div>
+            </div>
+
+            {isRetake && onCancel && (
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  <X className="h-4 w-4" /> 閉じる
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-xl">
+            <div className="rounded-[24px] border border-medace-100 bg-[#fff8ef] p-4">
+              {currentQuestion.prompt && (
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+                  {currentQuestion.prompt}
+                </div>
+              )}
+              <h4 className={`font-bold leading-relaxed text-slate-950 whitespace-pre-wrap ${
+                currentQuestion.prompt ? 'mt-4 text-xl' : 'text-xl'
+              }`}>
+                {currentQuestion.question}
+              </h4>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {currentQuestion.options.map((option, index) => {
+                const isSelected = currentAnswer === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    data-testid="diagnostic-option"
+                    onClick={() => handleSelectAnswer(option)}
+                    className={`rounded-3xl border px-4 py-4 text-left transition-all ${
+                      isSelected
+                        ? 'border-medace-600 bg-medace-500 text-white shadow-[0_18px_40px_rgba(255,130,22,0.18)]'
+                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-black ${
+                        isSelected ? 'border-white/20 bg-white/10 text-white' : 'border-slate-200 bg-slate-50 text-slate-500'
+                      }`}>
+                        {String.fromCharCode(65 + index)}
+                      </div>
+                      <div className={`text-sm leading-relaxed font-medium ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                        {option}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <details className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-xl">
+            <summary className="cursor-pointer list-none text-sm font-black text-slate-950">この問題で見ていること</summary>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">学年</div>
+                <div className="mt-2 text-sm font-black text-slate-950">{GRADE_LABELS[selectedGrade]}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">現在の判定帯</div>
+                <div className="mt-2 text-sm font-black text-slate-950">{DIAGNOSTIC_PHASE_LABELS[currentQuestion.phase]} · {currentQuestion.level}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                {currentQuestion.phase === 'warmup'
+                  ? 'まずは基礎の安定度を見ています。'
+                  : currentQuestion.phase === 'core'
+                    ? 'ここから標準的な読解・文脈判断を見ます。'
+                    : '上位帯でどこまで届くかを確認しています。'}
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 transition-colors hover:bg-medace-50"
+            >
+              <ChevronLeft className="h-4 w-4" /> 戻る
+            </button>
+
+            <button
+              type="button"
+              data-testid="onboarding-next-button"
+              onClick={handleNext}
+              disabled={!currentAnswer}
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700 disabled:opacity-50"
+            >
+              {currentQuestionIndex === DIAGNOSTIC_QUESTIONS.length - 1 ? '判定を見る' : '次へ'}
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </MobileStickyActionBar>
+      </div>
+    ) : (
+    <div data-testid="onboarding-test" className="bg-[#fff8f1] px-4 py-8">
       <div className="max-w-5xl mx-auto">
         <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-xl">
           <div className="grid lg:grid-cols-[0.33fr_0.67fr]">
@@ -556,6 +1042,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete, isRetake = fa
         </div>
       </div>
     </div>
+    )
   );
 };
 
