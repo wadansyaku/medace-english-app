@@ -4,6 +4,7 @@ import { Clock3, Sparkles, Target, TimerReset, Users } from 'lucide-react';
 
 interface MotivationBoardProps {
   snapshot: MotivationSnapshot;
+  isCompact?: boolean;
 }
 
 const SCOPE_STYLES: Record<MotivationScopeStats['scope'], {
@@ -45,91 +46,101 @@ const formatAverageTime = (value: number | null): string => {
   return `${Math.round(value / 100) / 10}秒`;
 };
 
-const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot }) => {
+const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot, isCompact = false }) => {
   const hasPendingTimingData = snapshot.scopes.some((scope) => scope.averageResponseTimeMs === null);
 
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-7">
+    <section className={`rounded-[32px] border border-slate-200 bg-white shadow-sm ${isCompact ? 'p-5' : 'p-6 md:p-7'}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Motivation Board</p>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">みんなの積み上げ</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+          <h3 className={`mt-2 font-black tracking-tight text-slate-950 ${isCompact ? 'text-xl' : 'text-2xl'}`}>みんなの積み上げ</h3>
+          <p className={`max-w-2xl text-sm leading-relaxed text-slate-500 ${isCompact ? 'mt-1.5 line-clamp-2' : 'mt-2'}`}>
             あなた自身の累計に加えて、所属グループとアプリ全体の積み上がりを同じ画面で確認できます。
           </p>
         </div>
-        <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700">
-          累計ベースで自動更新
-        </div>
+        {isCompact ? (
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-500">
+            左右にスワイプ
+          </div>
+        ) : (
+          <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700">
+            累計ベースで自動更新
+          </div>
+        )}
       </div>
 
-      <div className="mt-5 rounded-[28px] bg-medace-500 px-5 py-5 text-white">
+      <div className={`rounded-[28px] bg-medace-500 text-white ${isCompact ? 'mt-4 px-4 py-4' : 'mt-5 px-5 py-5'}`}>
         <div className="flex items-start gap-3">
           <div className="rounded-2xl bg-white/15 p-3 text-white">
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
             <div className="text-sm font-bold text-white/80">今日のモチベーション</div>
-            <div className="mt-1 text-xl font-black tracking-tight">{snapshot.insight.title}</div>
-            <div className="mt-2 text-sm leading-relaxed text-white/85">{snapshot.insight.body}</div>
+            <div className={`font-black tracking-tight ${isCompact ? 'mt-1 text-lg' : 'mt-1 text-xl'}`}>{snapshot.insight.title}</div>
+            <div className={`text-sm leading-relaxed text-white/85 ${isCompact ? 'mt-1.5 line-clamp-3' : 'mt-2'}`}>{snapshot.insight.body}</div>
           </div>
         </div>
       </div>
 
-      <div className={`mt-5 grid gap-4 ${snapshot.scopes.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
+      <div className={isCompact
+        ? 'mt-4 flex snap-x gap-3 overflow-x-auto pb-1'
+        : `mt-5 grid gap-4 ${snapshot.scopes.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
         {snapshot.scopes.map((scope) => {
           const scopeStyle = SCOPE_STYLES[scope.scope];
 
           return (
             <article
               key={scope.scope}
-              className={`rounded-[28px] border p-5 shadow-sm ${scopeStyle.cardClassName}`}
+              className={`rounded-[28px] border shadow-sm ${scopeStyle.cardClassName} ${
+                isCompact ? 'w-[84vw] max-w-[320px] shrink-0 snap-start p-4' : 'p-5'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-lg font-black tracking-tight text-slate-950">{scope.label}</div>
-                  <div className="mt-1 text-sm leading-relaxed text-slate-500">{scope.description}</div>
+                  <div className={`font-black tracking-tight text-slate-950 ${isCompact ? 'text-base' : 'text-lg'}`}>{scope.label}</div>
+                  <div className={`leading-relaxed text-slate-500 ${isCompact ? 'mt-1 text-[13px] line-clamp-2' : 'mt-1 text-sm'}`}>{scope.description}</div>
                 </div>
                 <div className={`rounded-full border px-3 py-1 text-[11px] font-bold ${scopeStyle.badgeClassName}`}>
                   {scope.scope === 'PERSONAL' ? 'あなたの累計' : `登録者 ${formatCount(scope.registeredUsers)} 人`}
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
+              <div className={`grid grid-cols-2 gap-3 ${isCompact ? 'mt-4' : 'mt-5'}`}>
+                <div className={`rounded-2xl border border-white/70 bg-white/80 ${isCompact ? 'px-3 py-3' : 'px-4 py-4'}`}>
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     <Target className="h-3.5 w-3.5" />
                     総回答数
                   </div>
-                  <div className={`mt-2 text-2xl font-black ${scopeStyle.accentClassName}`}>{formatCount(scope.totalAnswers)}</div>
+                  <div className={`font-black ${scopeStyle.accentClassName} ${isCompact ? 'mt-1.5 text-xl' : 'mt-2 text-2xl'}`}>{formatCount(scope.totalAnswers)}</div>
                 </div>
 
-                <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
+                <div className={`rounded-2xl border border-white/70 bg-white/80 ${isCompact ? 'px-3 py-3' : 'px-4 py-4'}`}>
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     <Users className="h-3.5 w-3.5" />
                     総正解数
                   </div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{formatCount(scope.totalCorrect)}</div>
+                  <div className={`font-black text-slate-950 ${isCompact ? 'mt-1.5 text-xl' : 'mt-2 text-2xl'}`}>{formatCount(scope.totalCorrect)}</div>
                 </div>
 
-                <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
+                <div className={`rounded-2xl border border-white/70 bg-white/80 ${isCompact ? 'px-3 py-3' : 'px-4 py-4'}`}>
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     <Clock3 className="h-3.5 w-3.5" />
                     累計学習時間
                   </div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{formatDuration(scope.totalStudyTimeMs)}</div>
+                  <div className={`font-black text-slate-950 ${isCompact ? 'mt-1.5 text-xl' : 'mt-2 text-2xl'}`}>{formatDuration(scope.totalStudyTimeMs)}</div>
                 </div>
 
-                <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
+                <div className={`rounded-2xl border border-white/70 bg-white/80 ${isCompact ? 'px-3 py-3' : 'px-4 py-4'}`}>
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
                     <TimerReset className="h-3.5 w-3.5" />
                     平均解答時間
                   </div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{formatAverageTime(scope.averageResponseTimeMs)}</div>
+                  <div className={`font-black text-slate-950 ${isCompact ? 'mt-1.5 text-xl' : 'mt-2 text-2xl'}`}>{formatAverageTime(scope.averageResponseTimeMs)}</div>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-white/85 px-4 py-3">
+              <div className={`flex items-center justify-between gap-3 rounded-2xl border border-slate-200/70 bg-white/85 px-4 py-3 ${isCompact ? 'mt-3' : 'mt-4'}`}>
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">正答率</div>
                   <div className="mt-1 text-lg font-black text-slate-950">{scope.accuracyRate}%</div>

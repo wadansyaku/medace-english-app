@@ -47,7 +47,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
       mode="fullscreen"
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
-      <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
+      <div data-testid="phrasebook-create-modal" className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
         <button onClick={onClose} className="absolute right-4 top-4 font-bold text-slate-400 transition-colors hover:text-slate-600">
           <X className="h-5 w-5" />
         </button>

@@ -105,15 +105,14 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
           <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap ${isMobileCompact ? 'mt-3' : 'mt-4'}`}>
             <button
               onClick={onStartQuest}
-              disabled={!hasStudyBooks}
               data-testid="student-hero-primary-cta"
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:bg-white/60 disabled:text-medace-900/40 ${
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white font-bold text-medace-900 transition-colors hover:bg-medace-50 ${
                 isMobileCompact ? 'min-h-11 px-4 py-3 text-sm' : 'px-5 py-3.5 text-sm'
               }`}
             >
               <Play className="h-4 w-4 fill-current" /> {questButtonLabel}
             </button>
-            {learningPlan ? (
+            {hasStudyBooks && learningPlan ? (
               <button
                 onClick={onOpenPlan}
                 className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 ${
@@ -122,10 +121,10 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               >
                 <Edit2 className="h-4 w-4" /> 今日のプランを見る
               </button>
-            ) : (
+            ) : hasStudyBooks ? (
               <button
                 onClick={onGeneratePlan}
-                disabled={generatingPlan || !hasStudyBooks}
+                disabled={generatingPlan}
                 className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50 ${
                   isMobileCompact ? 'min-h-11 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
@@ -133,7 +132,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                 {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 最初のプランを作る
               </button>
-            )}
+            ) : null}
           </div>
 
           <div className={`rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>

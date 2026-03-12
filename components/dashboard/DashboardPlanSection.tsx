@@ -10,8 +10,10 @@ interface DashboardPlanSectionProps {
   canGenerateAiPlan: boolean;
   generatingPlan: boolean;
   hasStudyBooks: boolean;
+  isCompact?: boolean;
   onEditPlan: () => void;
   onGeneratePlan: () => void;
+  onOpenCreateModal: () => void;
 }
 
 const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
@@ -22,14 +24,16 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
   canGenerateAiPlan,
   generatingPlan,
   hasStudyBooks,
+  isCompact = false,
   onEditPlan,
   onGeneratePlan,
+  onOpenCreateModal,
 }) => (
-  <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-7">
+  <section className={`rounded-[32px] border border-slate-200 bg-white shadow-sm ${isCompact ? 'p-5' : 'p-6 md:p-7'}`}>
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">学習プラン</p>
-        <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+        <h3 className={`mt-2 font-black tracking-tight text-slate-950 ${isCompact ? 'text-xl' : 'text-2xl'}`}>
           {learningPlan ? '今日の学習プラン' : 'まだプラン未作成'}
         </h3>
       </div>
@@ -42,11 +46,11 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
 
     {learningPlan ? (
       <>
-        <p className="mt-4 text-base font-bold text-medace-600">"{learningPlan.goalDescription}"</p>
+        <p className={`font-bold text-medace-600 ${isCompact ? 'mt-3 text-sm' : 'mt-4 text-base'}`}>"{learningPlan.goalDescription}"</p>
         {learningPreference && (
           <div className="mt-4 rounded-2xl border border-medace-100 bg-medace-50/70 px-4 py-4 text-sm text-medace-900">
             <div className="font-bold">プラン生成に使う条件</div>
-            <div className="mt-1 leading-relaxed">{preferenceSummary}</div>
+            <div className={`mt-1 leading-relaxed ${isCompact ? 'line-clamp-2' : ''}`}>{preferenceSummary}</div>
           </div>
         )}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -74,6 +78,24 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
           ))}
         </div>
       </>
+    ) : !hasStudyBooks ? (
+      <div className="mt-4 rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4">
+        <div className="text-sm font-black text-slate-950">最初の教材を 1 冊用意する</div>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          写真・PDF・テキストから My単語帳 を作ると、すぐにスマホ学習を始められます。
+        </p>
+        <div className={`grid gap-3 ${isCompact ? 'mt-3' : 'mt-4 sm:grid-cols-[1fr_auto]'}`}>
+          <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-[13px] leading-relaxed text-slate-600">
+            まずは教科書 1 ページ分でも十分です。あとから追加できます。
+          </div>
+          <button
+            onClick={onOpenCreateModal}
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+          >
+            My単語帳を作る
+          </button>
+        </div>
+      </div>
     ) : (
       <div className="mt-5 rounded-3xl bg-medace-500 px-5 py-5 text-white">
         <p className="text-sm leading-relaxed text-white/75">

@@ -407,19 +407,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         return (prioritized.length > 0 ? prioritized : books).slice(0, 3);
       })();
   const heroTitle = !hasStudyBooks
-    ? '学習を始める教材がまだありません'
+    ? '最初の教材を 1 冊つくる'
     : remainingWords > 0
       ? `あと${remainingWords}語で今日の目標です`
       : '今日はここまでで十分です';
   const heroCopy = !hasStudyBooks
-    ? '現在のワークスペースには学習対象の教材がありません。公式教材の配信か、利用可能な教材作成導線の追加が必要です。'
+    ? '写真・PDF・テキストから My単語帳 を作れば、そのままスマホ学習を始められます。まずは教科書 1 ページ分で十分です。'
     : remainingWords > 0
       ? dueCount > 0
         ? `まずは復習待ちの ${reviewFirstCount} 語から始めれば、そのまま今日のノルマに入れます。`
         : '今日は短く区切って進めれば十分です。まずはクエストを1回だけ始めましょう。'
       : '余力があればテストかMy単語帳に進み、無理ならここで終えても流れは崩れません。';
   const questButtonLabel = !hasStudyBooks
-    ? '学習できる教材がありません'
+    ? 'My単語帳を作る'
     : remainingWords > 0
       ? '今日のクエストを開始'
       : '復習をもう1セットやる';
@@ -605,7 +605,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           gameLeagueBadge={isGameMode ? userLeague : undefined}
           isMobileCompact={isStudentMobileShell}
           onOpenSettings={() => setShowSettingsModal(true)}
-          onStartQuest={() => onSelectBook('smart-session', 'study')}
+          onStartQuest={() => {
+            if (hasStudyBooks) {
+              onSelectBook('smart-session', 'study');
+              return;
+            }
+            setShowCreateModal(true);
+          }}
           onOpenPlan={() => setShowPlanEditModal(true)}
           onGeneratePlan={handleGeneratePlan}
         />
@@ -676,8 +682,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           canGenerateAiPlan={canGenerateAiPlan}
           generatingPlan={generatingPlan}
           hasStudyBooks={hasStudyBooks}
+          isCompact={isStudentMobileShell}
           onEditPlan={() => setShowPlanEditModal(true)}
           onGeneratePlan={handleGeneratePlan}
+          onOpenCreateModal={() => setShowCreateModal(true)}
         />
       </div>
 
@@ -697,8 +705,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       )}
 
       {motivationSnapshot && (
-        <div className="order-7 md:order-5">
-          <MotivationBoard snapshot={motivationSnapshot} />
+        <div className="order-10 md:order-5">
+          <MotivationBoard snapshot={motivationSnapshot} isCompact={isStudentMobileShell} />
         </div>
       )}
 
@@ -753,7 +761,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </div>
       )}
 
-      <div className="order-9 md:order-10">
+      <div className="order-7 md:order-10">
         <DashboardProgressSection
           open={showProgressDetails}
           activityLogs={activityLogs}
@@ -772,13 +780,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
-      <div className="order-11 md:order-11">
+      <div className="order-6 md:order-11">
         <DashboardLibrarySection
           books={books}
           myBooks={myBooks}
           recommendedOfficialBooks={recommendedOfficialBooks}
           progressMap={progressMap}
           showLibrary={showLibrary}
+          isCompact={isStudentMobileShell}
           onToggleLibrary={() => setShowLibrary((previous) => !previous)}
           onOpenCreateModal={() => setShowCreateModal(true)}
           onDelete={handleDeleteBook}

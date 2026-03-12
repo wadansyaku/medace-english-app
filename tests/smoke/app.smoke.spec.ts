@@ -241,6 +241,20 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
   });
 
+  test('student without books can open phrasebook creation from the hero on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const primaryCta = page.getByTestId('student-hero-primary-cta');
+    await expect(primaryCta).toContainText('My単語帳を作る');
+    await primaryCta.click();
+
+    await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
+    await expect(page.getByText('My単語帳 作成')).toBeVisible();
+  });
+
   test('student onboarding keeps mobile start and next actions within reach', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('demo-login-student').click();

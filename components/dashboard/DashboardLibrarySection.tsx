@@ -9,6 +9,7 @@ interface DashboardLibrarySectionProps {
   recommendedOfficialBooks: BookMetadata[];
   progressMap: Record<string, BookProgress>;
   showLibrary: boolean;
+  isCompact?: boolean;
   onToggleLibrary: () => void;
   onOpenCreateModal: () => void;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
@@ -28,18 +29,19 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   recommendedOfficialBooks,
   progressMap,
   showLibrary,
+  isCompact = false,
   onToggleLibrary,
   onOpenCreateModal,
   onDelete,
   onSelect,
 }) => (
-  <div className="space-y-7 md:space-y-10">
+  <div className={isCompact ? 'space-y-6' : 'space-y-7 md:space-y-10'}>
     <div className="min-h-[200px]">
       <div className="mb-4 flex items-center justify-between md:mb-6">
         <h3 className="border-l-4 border-purple-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
         <button
           onClick={onOpenCreateModal}
-          className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
+          className="flex min-h-11 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
         >
           <Plus className="h-4 w-4" /> 新規作成
         </button>
@@ -58,10 +60,15 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-100 p-8 text-center">
-          <p className="mb-2 font-bold text-slate-500">まだMy単語帳がありません</p>
-          <p className="mb-4 text-sm text-slate-400">教科書の写真やPDFから、あなただけの教材を作成しましょう！</p>
-          <button onClick={onOpenCreateModal} className="font-bold text-medace-600 underline hover:text-medace-700">
+        <div className={`rounded-3xl border-2 border-dashed border-slate-200 bg-slate-100 text-center ${isCompact ? 'p-5' : 'p-8'}`}>
+          <p className="font-bold text-slate-700">まだMy単語帳がありません</p>
+          <p className={`mt-2 text-sm leading-relaxed ${isCompact ? 'text-slate-500' : 'text-slate-400'}`}>
+            教科書の写真や PDF を読み込ませて、最初の 1 冊をすぐ作れます。
+          </p>
+          <button
+            onClick={onOpenCreateModal}
+            className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 font-bold text-white transition-colors hover:bg-medace-700 ${isCompact ? 'mt-3 w-full px-4 py-3 text-sm' : 'mt-4 px-4 py-3 text-sm'}`}
+          >
             今すぐ作成する
           </button>
         </div>
@@ -83,7 +90,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
           />
         ))}
         {books.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3">
+          <div className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3 ${isCompact ? 'p-4' : 'p-6'}`}>
             現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
           </div>
         )}
