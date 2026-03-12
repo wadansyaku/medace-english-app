@@ -60,6 +60,42 @@ const seedPhrasebook = async (page: Page, title: string) => page.evaluate(async 
   return response.json();
 }, title);
 
+const findUnexpectedHorizontalOverflow = async (page: Page) => page.evaluate(() => {
+  const viewportWidth = window.innerWidth;
+  const offenders: Array<{ tag: string; className: string; text: string; right: number; left: number; width: number }> = [];
+
+  for (const element of document.querySelectorAll('body *')) {
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) continue;
+    if (rect.right <= viewportWidth + 1) continue;
+
+    let current: HTMLElement | null = element as HTMLElement;
+    let withinScrollable = false;
+    while (current && current !== document.body) {
+      const currentStyle = window.getComputedStyle(current);
+      if ((currentStyle.overflowX === 'auto' || currentStyle.overflowX === 'scroll') && current.scrollWidth > current.clientWidth + 1) {
+        withinScrollable = true;
+        break;
+      }
+      current = current.parentElement;
+    }
+
+    if (withinScrollable) continue;
+
+    offenders.push({
+      tag: element.tagName,
+      className: (element as HTMLElement).className,
+      text: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+      right: Math.round(rect.right),
+      left: Math.round(rect.left),
+      width: Math.round(rect.width),
+    });
+  }
+
+  return offenders;
+});
+
 test('public home shows the live motivation board before login', async ({ page }) => {
   await page.goto('/');
 
@@ -239,6 +275,16 @@ test.describe('student mobile ux', () => {
     const box = await primaryCta.boundingBox();
     expect(box).not.toBeNull();
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
+  });
+
+  test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const offenders = await findUnexpectedHorizontalOverflow(page);
+    expect(offenders).toEqual([]);
   });
 
   test('student settings keeps the save action reachable on mobile', async ({ page }) => {

@@ -51,11 +51,11 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   onOpenPlan,
   onGeneratePlan,
 }) => (
-  <section className={`relative overflow-hidden bg-medace-500 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)] ${
+  <section className={`relative min-w-0 overflow-hidden bg-medace-500 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)] ${
     isMobileCompact ? 'rounded-[28px] p-4' : 'rounded-[32px] p-5 md:p-8'
   }`}>
     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_26%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_24%)]"></div>
-    <div className="relative">
+    <div className="relative min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full border border-white/10 bg-white/5 font-bold uppercase tracking-[0.18em] text-white/70 ${
@@ -87,26 +87,26 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </button>
       </div>
 
-      <div className={`grid gap-4 lg:gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start ${
+      <div className={`grid min-w-0 gap-4 lg:gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:items-start ${
         isMobileCompact ? 'mt-4' : 'mt-5 lg:mt-6'
       }`}>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-medace-200">Today Focus</p>
-          <h2 className={`font-black leading-tight tracking-tight ${isMobileCompact ? 'mt-1.5 text-[1.35rem]' : 'mt-2 text-[1.7rem] sm:text-[1.9rem] md:text-4xl'}`}>
+          <h2 className={`min-w-0 font-black leading-tight tracking-tight ${isMobileCompact ? 'mt-1.5 text-[1.35rem]' : 'mt-2 text-[1.7rem] sm:text-[1.9rem] md:text-4xl'}`}>
             今日やることは 1 つだけ
           </h2>
-          <p className={`font-black tracking-tight text-white ${isMobileCompact ? 'mt-2 text-[1.12rem]' : 'mt-2.5 text-[1.3rem] sm:text-[1.45rem] md:text-2xl'}`}>
+          <p className={`min-w-0 font-black tracking-tight text-white ${isMobileCompact ? 'mt-2 text-[1.12rem]' : 'mt-2.5 text-[1.3rem] sm:text-[1.45rem] md:text-2xl'}`}>
             {heroTitle}
           </p>
-          <p className={`max-w-2xl leading-relaxed text-white/76 ${isMobileCompact ? 'mt-2 text-[13px] line-clamp-2' : 'mt-2.5 text-sm line-clamp-3 md:mt-3 md:line-clamp-none md:text-base'}`}>
+          <p className={`max-w-2xl min-w-0 leading-relaxed text-white/76 ${isMobileCompact ? 'mt-2 text-[13px] line-clamp-2' : 'mt-2.5 text-sm line-clamp-3 md:mt-3 md:line-clamp-none md:text-base'}`}>
             {heroCopy}
           </p>
 
-          <div className={`flex flex-col gap-3 sm:flex-row sm:flex-wrap ${isMobileCompact ? 'mt-3' : 'mt-4'}`}>
+          <div className={`flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap ${isMobileCompact ? 'mt-3' : 'mt-4'}`}>
             <button
               onClick={onStartQuest}
               data-testid="student-hero-primary-cta"
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-white font-bold text-medace-900 transition-colors hover:bg-medace-50 ${
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white font-bold text-medace-900 transition-colors hover:bg-medace-50 sm:w-auto ${
                 isMobileCompact ? 'min-h-11 px-4 py-3 text-sm' : 'px-5 py-3.5 text-sm'
               }`}
             >
@@ -115,7 +115,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             {hasStudyBooks && learningPlan ? (
               <button
                 onClick={onOpenPlan}
-                className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 ${
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 sm:w-auto ${
                   isMobileCompact ? 'min-h-11 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
@@ -125,7 +125,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               <button
                 onClick={onGeneratePlan}
                 disabled={generatingPlan}
-                className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50 ${
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 font-bold text-white/85 transition-colors hover:bg-white/10 disabled:opacity-50 sm:w-auto ${
                   isMobileCompact ? 'min-h-11 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
@@ -135,15 +135,15 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             ) : null}
           </div>
 
-          <div className={`rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>
+          <div className={`min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
-            <div className={`leading-relaxed text-white/80 ${isMobileCompact ? 'mt-1.5 text-[13px] line-clamp-2' : 'mt-2 text-sm line-clamp-2 md:line-clamp-none'}`}>
+            <div className={`min-w-0 leading-relaxed text-white/80 ${isMobileCompact ? 'mt-1.5 text-[13px] line-clamp-2' : 'mt-2 text-sm line-clamp-2 md:line-clamp-none'}`}>
               {preferenceSummary}
             </div>
           </div>
         </div>
 
-        <div className={`rounded-[28px] border border-white/10 bg-white/8 backdrop-blur-sm ${isMobileCompact ? 'p-3' : 'p-3.5 md:p-5'}`}>
+        <div className={`min-w-0 rounded-[28px] border border-white/10 bg-white/8 backdrop-blur-sm ${isMobileCompact ? 'p-3' : 'p-3.5 md:p-5'}`}>
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">今日の目安</div>
           <div className={isMobileCompact ? 'mt-3' : 'mt-4'}>
             <ResponsiveMetricRail
