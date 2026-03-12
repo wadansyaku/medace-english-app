@@ -252,7 +252,7 @@ export const toAssignment = (
   updatedAt: Number(row.updated_at || 0),
   lastSubmittedAt: Number(row.last_submitted_at || 0) || undefined,
   lastReturnedAt: Number(row.last_returned_at || 0) || undefined,
-  latestSubmissionId: options.latestSubmissionId || options.latestSubmission?.id || row.latest_submission_id || undefined,
+  latestSubmissionId: options.latestSubmissionId || options.latestSubmission?.id,
   latestSubmission: options.latestSubmission,
 });
 
