@@ -1,8 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type MouseEvent } from 'react';
 
 import { storage } from '../services/storage';
-import { extractVocabularyFromMedia, extractVocabularyFromText, isAiUnavailableError } from '../services/gemini';
+import { extractVocabularyFromMedia, extractVocabularyFromText, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
 import {
+  type BookMetadata,
+  EnglishLevel,
   type LearningPlan,
   type LearningPreference,
   LearningPreferenceIntensity,
@@ -16,11 +18,14 @@ import {
   getStoredDisplayPreferences,
   saveDisplayPreferences,
 } from '../utils/displayPreferences';
+import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface UseStudentDashboardControllerParams {
   user: UserProfile;
   learningPlan: LearningPlan | null;
   learningPreference: LearningPreference | null;
+  planningBooks: BookMetadata[];
+  canGenerateAiPlan: boolean;
   onUserUpdate: (user: UserProfile) => void;
   refreshDashboard: () => Promise<void>;
   updateLearningPlan: (plan: LearningPlan | null) => void;
@@ -32,16 +37,22 @@ export const useStudentDashboardController = ({
   user,
   learningPlan,
   learningPreference,
+  planningBooks,
+  canGenerateAiPlan,
   onUserUpdate,
   refreshDashboard,
   updateLearningPlan,
   updateLearningPreference,
   removeMyBook,
 }: UseStudentDashboardControllerParams) => {
+  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showPlanEditModal, setShowPlanEditModal] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showProgressDetails, setShowProgressDetails] = useState(false);
+  const [showAccountDetails, setShowAccountDetails] = useState(false);
   const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'error'; message: string; } | null>(null);
   const [pendingDeleteBook, setPendingDeleteBook] = useState<{ id: string; title: string } | null>(null);
 
@@ -106,6 +117,41 @@ export const useStudentDashboardController = ({
       return;
     }
     setSelectedPlanBooks((previous) => [...previous, bookId]);
+  };
+
+  const handleGeneratePlan = async () => {
+    if (planningBooks.length === 0) return;
+    setGeneratingPlan(true);
+    try {
+      const plan = canGenerateAiPlan
+        ? await generateLearningPlan(
+            user.grade || UserGrade.ADULT,
+            user.englishLevel || EnglishLevel.B1,
+            planningBooks,
+            learningPreference,
+          )
+        : buildFallbackLearningPlan({
+            uid: user.uid,
+            grade: user.grade || UserGrade.ADULT,
+            level: user.englishLevel || EnglishLevel.B1,
+            availableBooks: planningBooks,
+            learningPreference,
+          });
+
+      if (plan) {
+        plan.uid = user.uid;
+        await storage.saveLearningPlan(plan);
+        updateLearningPlan(plan);
+        setPageNotice({ tone: 'success', message: '学習プランを作成しました。' });
+      } else {
+        setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
+      }
+    } catch (error) {
+      console.error(error);
+      setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
+    } finally {
+      setGeneratingPlan(false);
+    }
   };
 
   const handleUpdatePlan = async () => {
@@ -269,6 +315,13 @@ export const useStudentDashboardController = ({
   };
 
   return {
+    generatingPlan,
+    showLibrary,
+    setShowLibrary,
+    showProgressDetails,
+    setShowProgressDetails,
+    showAccountDetails,
+    setShowAccountDetails,
     showCreateModal,
     setShowCreateModal,
     showSettingsModal,
@@ -284,6 +337,7 @@ export const useStudentDashboardController = ({
     editDailyGoal,
     setEditDailyGoal,
     selectedPlanBooks,
+    handleGeneratePlan,
     togglePlanBook,
     handleUpdatePlan,
     createMode,

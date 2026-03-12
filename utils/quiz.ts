@@ -5,7 +5,10 @@ import type {
   WordData,
 } from '../types';
 import {
+  buildMasteryDistribution,
+  getMasteryDistributionBucket,
   getStrictStudyWordIds,
+  hasMasteryProgress,
   isDueMasteryHistory,
   isMasteryHistoryRecord,
   isMasteryProgressHistory,
@@ -14,7 +17,10 @@ import {
 } from '../shared/learningHistory';
 
 export {
+  buildMasteryDistribution,
+  getMasteryDistributionBucket,
   getStrictStudyWordIds,
+  hasMasteryProgress,
   isDueMasteryHistory,
   isMasteryHistoryRecord,
   isMasteryProgressHistory,

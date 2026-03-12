@@ -12,7 +12,10 @@ import {
   UserRole,
   WordData,
 } from '../../types';
-import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
+import {
+  getMasteryProgressSqlCondition,
+  MASTERY_INTERACTION_SOURCE,
+} from '../../shared/learningHistory';
 import { formatDateKey, formatMonthKey, getTodayDateKey, shiftDateKey } from '../../utils/date';
 import { isDemoEmail } from '../../utils/demo';
 import { canAccessOfficialBook as canAccessOfficialBookForPlan, normalizeOfficialBookText } from '../../utils/bookAccess';
@@ -128,7 +131,7 @@ export const getMasterySourceSql = (tableAlias?: string): string => (
 export const getMasteryProgressSql = (tableAlias?: string): string => {
   const attemptCount = qualifyColumn('attempt_count', tableAlias);
   const intervalDays = qualifyColumn('interval_days', tableAlias);
-  return `(${getMasterySourceSql(tableAlias)} AND (${attemptCount} > 0 OR ${intervalDays} > 0))`;
+  return `(${getMasterySourceSql(tableAlias)} AND ${getMasteryProgressSqlCondition(attemptCount, intervalDays)})`;
 };
 
 export const createBookId = (bookName: string, ownerId?: string, uniqueSalt?: string): string => {
@@ -166,6 +169,20 @@ export const normalizeHistoryStatus = (interval: number): LearningHistory['statu
   if (interval > 3) return 'review';
   return 'learning';
 };
+
+export const toLearningHistory = (row: DbHistoryRow): LearningHistory => ({
+  wordId: row.word_id,
+  bookId: row.book_id,
+  status: row.status,
+  lastStudiedAt: row.last_studied_at,
+  nextReviewDate: row.next_review_date,
+  interval: row.interval_days,
+  easeFactor: row.ease_factor,
+  correctCount: row.correct_count,
+  attemptCount: row.attempt_count,
+  totalResponseTimeMs: row.total_response_time_ms,
+  interactionSource: row.interaction_source || undefined,
+});
 
 export const readAll = async <TRow>(env: AppEnv, sql: string, ...bindings: unknown[]): Promise<TRow[]> => {
   const result = await env.DB.prepare(sql).bind(...bindings).all();

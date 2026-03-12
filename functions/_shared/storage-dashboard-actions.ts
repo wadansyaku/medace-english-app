@@ -1,4 +1,5 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
+import { buildMasteryDistribution } from '../../shared/learningHistory';
 import {
   AccountOverview,
   AdminAiActionSummary,
@@ -39,6 +40,7 @@ import {
   readAll,
   readFirst,
   readVisibleBookRows,
+  toLearningHistory,
   toBookMetadata,
   toTokyoDateKey,
   type DbHistoryRow,
@@ -528,22 +530,7 @@ export const handleGetMasteryDistribution = async (env: AppEnv, userId: string):
      WHERE user_id = ? AND ${getMasterySourceSql()}`,
     userId,
   );
-
-  const distribution: MasteryDistribution = {
-    new: 0,
-    learning: 0,
-    review: 0,
-    graduated: 0,
-    total: rows.length,
-  };
-
-  rows.forEach((row) => {
-    if (row.status === 'graduated') distribution.graduated += 1;
-    else if (row.status === 'review' || (row.status === 'learning' && row.interval_days > 3)) distribution.review += 1;
-    else distribution.learning += 1;
-  });
-
-  return distribution;
+  return buildMasteryDistribution(rows.map(toLearningHistory));
 };
 
 export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow): Promise<MotivationSnapshot> => {

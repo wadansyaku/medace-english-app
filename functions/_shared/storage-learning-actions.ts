@@ -1,4 +1,5 @@
 import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, UserProfile } from '../../types';
+import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { formatDateKey } from '../../utils/date';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
@@ -122,7 +123,7 @@ export const handleSaveSrsHistory = async (
     correctCount,
     attemptCount,
     totalResponseTimeMs,
-    'STUDY',
+    MASTERY_INTERACTION_SOURCE,
   ).run();
 };
 

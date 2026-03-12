@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { LearningHistory, WordData } from '../types';
 import {
+  buildMasteryDistribution,
   buildQuizAttemptHistory,
   getActualQuizQuestionCount,
+  getMasteryDistributionBucket,
   getQuizCandidateWords,
   getStrictStudyWordIds,
+  hasMasteryProgress,
   isDueMasteryHistory,
   isMasteryProgressHistory,
   normalizeQuizRange,
@@ -121,6 +124,21 @@ describe('quiz utils', () => {
     expect(resolveInteractionSource('STUDY', 'QUIZ')).toBe('STUDY');
   });
 
+  it('classifies mastery buckets from the shared helper path', () => {
+    expect(getMasteryDistributionBucket(histories[0])).toBe('learning');
+    expect(getMasteryDistributionBucket({
+      ...histories[0],
+      interval: 5,
+    })).toBe('review');
+    expect(getMasteryDistributionBucket({
+      ...histories[0],
+      status: 'graduated',
+      interval: 21,
+    })).toBe('graduated');
+    expect(hasMasteryProgress(0, 0)).toBe(false);
+    expect(hasMasteryProgress(1, 0)).toBe(true);
+  });
+
   it('keeps quiz-only history out of mastery progress and due counts', () => {
     const quizOnlyHistory = buildQuizAttemptHistory({
       wordId: 'w2',
@@ -169,5 +187,31 @@ describe('quiz utils', () => {
     expect(updated.interactionSource).toBe('STUDY');
     expect(isMasteryProgressHistory(updated)).toBe(true);
     expect(isDueMasteryHistory(updated, 12_000)).toBe(true);
+  });
+
+  it('builds mastery distribution from study-only histories', () => {
+    const distribution = buildMasteryDistribution([
+      histories[0],
+      {
+        ...histories[0],
+        wordId: 'w4',
+        interval: 6,
+      },
+      {
+        ...histories[0],
+        wordId: 'w5',
+        status: 'graduated',
+        interval: 25,
+      },
+      histories[1],
+    ]);
+
+    expect(distribution).toEqual({
+      new: 0,
+      learning: 1,
+      review: 1,
+      graduated: 1,
+      total: 3,
+    });
   });
 });

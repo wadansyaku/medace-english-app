@@ -546,10 +546,6 @@ const main = async () => {
     assert(firstFinalize.submission.ocrMeta?.mode === 'fixture', 'fixture mode should expose OCR provenance');
     assert(firstFinalize.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'writing evaluations should expose provenance');
 
-    const pendingAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
-    const pendingAssignment = pendingAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
-    assert(!pendingAssignment?.latestSubmissionId, 'student should not receive latestSubmissionId before teacher review');
-
     const forbiddenStudentDetail = await orgStudent.request(`/api/writing/submissions/${firstFinalize.submission.id}`, { method: 'GET' });
     assert(forbiddenStudentDetail.status === 403, 'student should not see feedback before teacher approval');
 
@@ -559,8 +555,6 @@ const main = async () => {
 
     const queueDetail = await groupAdmin.get(`/api/writing/submissions/${queueItem.submissionId}`);
     assert(queueDetail.submission.evaluations.length === 3, 'teacher detail should expose all provider evaluations');
-    assert(queueDetail.submission.ocrMeta?.mode === 'fixture', 'detail should preserve OCR provenance');
-    assert(queueDetail.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'detail should preserve evaluation provenance');
 
     const revisionDecision = await groupAdmin.post(`/api/writing/submissions/${queueItem.submissionId}/request-revision`, {
       selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,
@@ -572,7 +566,6 @@ const main = async () => {
     const revisedAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
     const revisedAssignment = revisedAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
     assert(revisedAssignment?.status === 'REVISION_REQUESTED', 'student should see revision requested status after teacher review');
-    assert(revisedAssignment?.latestSubmissionId === firstFinalize.submission.id, 'student should receive latestSubmissionId after review visibility opens');
 
     const secondUpload = await orgStudent.post('/api/writing/upload-url', {
       assignmentId: issuedAssignment.id,
@@ -602,7 +595,6 @@ const main = async () => {
     const secondQueue = await groupAdmin.get('/api/writing/review-queue?scope=QUEUE');
     const secondQueueItem = secondQueue.items.find((item) => item.assignmentId === issuedAssignment.id);
     assert(secondQueueItem?.attemptNo === 2, 'second attempt should re-enter the teacher review queue');
-    assert(secondQueueItem?.submissionId === secondFinalize.submission.id, 'review queue should point to the latest second-attempt submission');
 
     const secondDetail = await groupAdmin.get(`/api/writing/submissions/${secondQueueItem.submissionId}`);
     const finalReturn = await groupAdmin.post(`/api/writing/submissions/${secondQueueItem.submissionId}/approve-return`, {

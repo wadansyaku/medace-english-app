@@ -7,23 +7,16 @@ import {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
-  EnglishLevel,
   LeaderboardEntry,
-  LearningHistory,
   LearningPlan,
   LearningPreference,
-  MotivationSnapshot,
-  MotivationScopeStats,
   MasteryDistribution,
   OrganizationDashboardSnapshot,
   OrganizationRole,
-  StudentRiskLevel,
   StudentSummary,
   StudentWorksheetSnapshot,
-  SubscriptionPlan,
   UserProfile,
   UserRole,
-  UserStats,
   WordData,
 } from '../types';
 import {
@@ -32,31 +25,56 @@ import {
   CatalogImportRow,
   CatalogImportResult,
 } from '../contracts/storage';
-import { getSubscriptionPolicy } from '../config/subscription';
 import { CloudflareStorageService } from './cloudflare';
-import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
-import { isDemoEmail } from '../utils/demo';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
 import {
-  buildQuizAttemptHistory,
-  getStrictStudyWordIds,
-  isDueMasteryHistory,
-  isMasteryHistoryRecord,
-  isMasteryProgressHistory,
-} from '../utils/quiz';
-import {
-  createEphemeralDemoUser,
   defaultLearningPreference,
-  IDB_MOCK_ASSIGNMENTS,
-  IDB_MOCK_USERS,
   isBookOwnedByUser,
 } from './storage/mockData';
 import {
-  buildMockMotivationTotals,
-  createMotivationInsight,
-  createMotivationScope,
-  type MotivationAggregateTotals,
-} from './storage/motivation';
+  addXP as addXpWithAuthSession,
+  authenticate as authenticateWithAuthSession,
+  clearSession as clearAuthSession,
+  getSession as getAuthSession,
+  login as loginWithAuthSession,
+  saveSession as saveAuthSession,
+  updateSessionUser as updateAuthSessionUser,
+  type AuthSessionContext,
+} from './storage/auth-session';
+import {
+  getActivityLogs as getActivityLogsReadModel,
+  getAdminDashboardSnapshot as getAdminDashboardSnapshotReadModel,
+  getDashboardSnapshot as getDashboardSnapshotReadModel,
+  getLeaderboard as getLeaderboardReadModel,
+  getMasteryDistribution as getMasteryDistributionReadModel,
+  type DashboardReadModelContext,
+} from './storage/dashboard-read-model';
+import {
+  getObjectStore,
+  initStorageDb,
+  readStoreRecord,
+  requestToPromise,
+  STORES,
+  waitForTransaction,
+} from './storage/idb-support';
+import {
+  getBookProgress as getBookProgressFromHistory,
+  getBookSession as getBookSessionFromHistory,
+  getDailySessionWords as getDailySessionWordsFromHistory,
+  getDueCount as getDueCountFromHistory,
+  getStudiedWordIdsByBook as getStudiedWordIdsByBookFromHistory,
+  recordQuizAttempt as recordQuizAttemptFromHistory,
+  saveSrsHistory as saveSrsHistoryFromHistory,
+  type LearningHistoryContext,
+} from './storage/learning-history';
+import {
+  getAllStudentsProgress as getAllStudentsProgressReadModel,
+  getOrganizationDashboardSnapshot as getOrganizationDashboardSnapshotReadModel,
+  getStudentWorksheetSnapshot as getStudentWorksheetSnapshotReadModel,
+  sendInstructorNotification as sendInstructorNotificationReadModel,
+  type OrganizationReadModelContext,
+} from './storage/organization-read-model';
+import { getCoachNotifications } from './storage/writing-read-model';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -106,18 +124,6 @@ export interface IStorageService {
   getMasteryDistribution(uid: string): Promise<MasteryDistribution>;
   getActivityLogs(uid: string): Promise<ActivityLog[]>;
 }
-
-const DB_NAME = 'MedAceDB';
-const DB_VERSION = 4;
-const STORES = {
-  BOOKS: 'books',
-  WORDS: 'words',
-  HISTORY: 'history',
-  SESSION: 'session',
-  PLANS: 'plans',
-  PREFERENCES: 'preferences',
-  ASSIGNMENTS: 'assignments',
-};
 
 const slugifySegment = (value: string): string => value
   .normalize('NFKC')
@@ -228,21 +234,6 @@ const normalizeCatalogImportRows = (
   };
 };
 
-// Helper for Progress Calculation
-const calculatePercentage = (learned: number, total: number): number => {
-    if (total === 0) return 0;
-    if (learned === 0) return 0;
-    if (learned === total) return 100;
-    
-    const pct = Math.round((learned / total) * 100);
-    if (pct === 0 && learned > 0) return 1; // Ensure at least 1% if started
-    if (pct === 100 && learned < total) return 99; // Prevent premature 100%
-    return pct;
-};
-
-const WORKSHEET_STATUSES: Array<StudentWorksheetSnapshot['words'][number]['status']> = ['graduated', 'review', 'learning'];
-const FALLBACK_WORKSHEET_WORD_LIMIT = 40;
-
 class IndexedDBStorageService implements IStorageService {
   private dbPromise: Promise<IDBDatabase>;
 
@@ -251,186 +242,75 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   private initDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onerror = (event) => reject((event.target as IDBOpenDBRequest).error);
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(STORES.BOOKS)) db.createObjectStore(STORES.BOOKS, { keyPath: 'id' });
-        if (!db.objectStoreNames.contains(STORES.WORDS)) {
-          const wordStore = db.createObjectStore(STORES.WORDS, { keyPath: 'id' });
-          wordStore.createIndex('bookId', 'bookId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains(STORES.HISTORY)) db.createObjectStore(STORES.HISTORY, { keyPath: 'id' });
-        if (!db.objectStoreNames.contains(STORES.SESSION)) db.createObjectStore(STORES.SESSION, { keyPath: 'key' });
-        if (!db.objectStoreNames.contains(STORES.PLANS)) db.createObjectStore(STORES.PLANS, { keyPath: 'uid' });
-        if (!db.objectStoreNames.contains(STORES.PREFERENCES)) db.createObjectStore(STORES.PREFERENCES, { keyPath: 'userUid' });
-        if (!db.objectStoreNames.contains(STORES.ASSIGNMENTS)) db.createObjectStore(STORES.ASSIGNMENTS, { keyPath: 'studentUid' });
-      };
-      request.onsuccess = (event) => resolve((event.target as IDBOpenDBRequest).result);
-    });
+    return initStorageDb();
   }
 
   private async getStore(storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
-    const db = await this.dbPromise;
-    const tx = db.transaction(storeName, mode);
-    return tx.objectStore(storeName);
+    return getObjectStore(this.dbPromise, storeName, mode);
   }
 
-  private async getHistoryTotals(uid: string): Promise<MotivationAggregateTotals> {
-    const historyStore = await this.getStore(STORES.HISTORY);
-    const totals: MotivationAggregateTotals = {
-      totalAnswers: 0,
-      totalCorrect: 0,
-      totalResponseTimeMs: 0,
-    };
-
-    await new Promise<void>((resolve) => {
-      const request = historyStore.openCursor();
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result;
-        if (!cursor) {
-          resolve();
-          return;
-        }
-
-        if (cursor.value.id.startsWith(`${uid}_`)) {
-          const history = cursor.value.data as Partial<LearningHistory>;
-          totals.totalAnswers += Number(history.attemptCount || 0);
-          totals.totalCorrect += Number(history.correctCount || 0);
-          totals.totalResponseTimeMs += Number(history.totalResponseTimeMs || 0);
-        }
-        cursor.continue();
-      };
-      request.onerror = () => resolve();
-    });
-
-    return totals;
-  }
-
-  private async getMotivationSnapshot(uid: string): Promise<MotivationSnapshot> {
-    const sessionUser = await this.getSession();
-    const personalTotals = await this.getHistoryTotals(uid);
-    const studentUsers = IDB_MOCK_USERS.filter((candidate) => candidate.role === UserRole.STUDENT);
-    const includeCurrentStudent = sessionUser?.role === UserRole.STUDENT
-      && !studentUsers.some((candidate) => candidate.uid === sessionUser.uid);
-    const globalRegisteredUsers = studentUsers.length + (includeCurrentStudent ? 1 : 0);
-
-    const scopes: MotivationScopeStats[] = [
-      createMotivationScope(
-        'PERSONAL',
-        'あなた',
-        'あなた自身の累計です。',
-        personalTotals,
-        1,
-      ),
-    ];
-
-    if (sessionUser?.organizationName) {
-      const groupRegisteredUsers = studentUsers.filter(
-        (candidate) => candidate.organizationName === sessionUser.organizationName,
-      ).length + (includeCurrentStudent ? 1 : 0);
-
-      scopes.push(
-        createMotivationScope(
-          'GROUP',
-          'グループ内',
-          `${sessionUser.organizationName} の学習者全体です。`,
-          buildMockMotivationTotals(personalTotals, Math.max(groupRegisteredUsers, 1), 0.81, 9800),
-          Math.max(groupRegisteredUsers, 1),
-        ),
-      );
-    }
-
-    scopes.push(
-      createMotivationScope(
-        'GLOBAL',
-        'アプリ全体',
-        '現在の利用者全体の累計です。',
-        buildMockMotivationTotals(personalTotals, Math.max(globalRegisteredUsers, 1), 0.78, 10800),
-        Math.max(globalRegisteredUsers, 1),
-      ),
-    );
-
+  private getAuthSessionContext(): AuthSessionContext {
     return {
-      scopes,
-      insight: createMotivationInsight(scopes),
+      getStore: this.getStore.bind(this),
+    };
+  }
+
+  private getLearningHistoryContext(): LearningHistoryContext {
+    return {
+      getStore: this.getStore.bind(this),
+      getWordsByBook: this.getWordsByBook.bind(this),
+    };
+  }
+
+  private getDashboardReadModelContext(): DashboardReadModelContext {
+    return {
+      getStore: this.getStore.bind(this),
+      getSession: this.getSession.bind(this),
+      getBooks: this.getBooks.bind(this),
+      getBookProgress: this.getBookProgress.bind(this),
+      getDueCount: this.getDueCount.bind(this),
+      getLearningPlan: this.getLearningPlan.bind(this),
+      getLearningPreference: this.getLearningPreference.bind(this),
+      getAllStudentsProgress: this.getAllStudentsProgress.bind(this),
+      getCoachNotifications,
+    };
+  }
+
+  private getOrganizationReadModelContext(): OrganizationReadModelContext {
+    return {
+      getStore: this.getStore.bind(this),
+      getSession: this.getSession.bind(this),
+      getBooks: this.getBooks.bind(this),
+      getWordsByBook: this.getWordsByBook.bind(this),
     };
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
-    if (role === UserRole.ADMIN && demoPassword !== 'admin') return null;
-    const demoUser = createEphemeralDemoUser(role, organizationRole);
-    await this.saveSession(demoUser);
-    return demoUser;
+    return loginWithAuthSession(this.getAuthSessionContext(), role, demoPassword, organizationRole);
   }
 
   async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null> {
-    if (isSignUp) {
-        const createdUser = { 
-            uid: `mock-user-${Date.now()}`, 
-            displayName: displayName?.trim() || email.split('@')[0], 
-            role: role || UserRole.STUDENT, 
-            email,
-            subscriptionPlan: SubscriptionPlan.TOC_FREE,
-            needsOnboarding: (role || UserRole.STUDENT) === UserRole.STUDENT,
-        };
-        await this.saveSession(createdUser);
-        return createdUser;
-    }
-    const matchedUser = IDB_MOCK_USERS.find(u => u.email === email) || IDB_MOCK_USERS[0];
-    await this.saveSession(matchedUser);
-    return matchedUser;
+    return authenticateWithAuthSession(this.getAuthSessionContext(), email, password, isSignUp, role, displayName);
   }
 
   async saveSession(user: UserProfile): Promise<void> {
-    const updatedUser = await this.updateStreak(user);
-    const store = await this.getStore(STORES.SESSION, 'readwrite');
-    store.put({ key: 'current', user: updatedUser });
+    return saveAuthSession(this.getAuthSessionContext(), user);
   }
-  
+
   async updateSessionUser(user: UserProfile): Promise<void> {
-    const store = await this.getStore(STORES.SESSION, 'readwrite');
-    store.put({ key: 'current', user });
+    return updateAuthSessionUser(this.getAuthSessionContext(), user);
   }
 
   async clearSession(): Promise<void> {
-    const store = await this.getStore(STORES.SESSION, 'readwrite');
-    store.delete('current');
+    return clearAuthSession(this.getAuthSessionContext());
   }
 
   async getSession(): Promise<UserProfile | null> {
-    const store = await this.getStore(STORES.SESSION);
-    return new Promise((resolve) => {
-      const request = store.get('current');
-      request.onsuccess = () => resolve(request.result ? request.result.user : null);
-      request.onerror = () => resolve(null);
-    });
-  }
-
-  private async updateStreak(user: UserProfile): Promise<UserProfile> {
-    const today = getTodayDateKey();
-    let stats: UserStats = user.stats || { xp: 0, level: 1, currentStreak: 0, lastLoginDate: '' };
-    if (stats.lastLoginDate !== today) {
-        const yesterdayStr = getRelativeDateKey(-1);
-        if (stats.lastLoginDate === yesterdayStr) stats.currentStreak += 1;
-        else if (stats.lastLoginDate !== today) stats.currentStreak = 1;
-        stats.lastLoginDate = today;
-    }
-    return { ...user, stats };
+    return getAuthSession(this.getAuthSessionContext());
   }
 
   async addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile, leveledUp: boolean }> {
-    if (!user.stats) user.stats = { xp: 0, level: 1, currentStreak: 1, lastLoginDate: getTodayDateKey() };
-    let { xp, level } = user.stats;
-    xp += amount;
-    const xpToNextLevel = level * 100;
-    let leveledUp = false;
-    if (xp >= xpToNextLevel) { xp -= xpToNextLevel; level += 1; leveledUp = true; }
-    const updatedStats = { ...user.stats, xp, level };
-    const updatedUser = { ...user, stats: updatedStats };
-    await this.updateSessionUser(updatedUser);
-    return { user: updatedUser, leveledUp };
+    return addXpWithAuthSession(this.getAuthSessionContext(), user, amount);
   }
 
   async batchImportWords(
@@ -626,367 +506,65 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async getDailySessionWords(uid: string, limit: number): Promise<WordData[]> {
-    const historyStore = await this.getStore(STORES.HISTORY);
-    const dueWordIds: string[] = [];
-    const allStudiedWordIds = new Set<string>();
-    const now = Date.now();
-
-    await new Promise<void>((resolve) => {
-      const request = historyStore.openCursor();
-      request.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest).result;
-        if (cursor) {
-          const record = cursor.value;
-          if (record.id.startsWith(uid + '_')) {
-             const h = record.data as LearningHistory;
-             if (isDueMasteryHistory(h, now)) {
-                 dueWordIds.push(h.wordId);
-             }
-             if (isMasteryHistoryRecord(h)) {
-                 allStudiedWordIds.add(h.wordId);
-             }
-          }
-          cursor.continue();
-        } else { resolve(); }
-      };
-    });
-
-    const sessionWords: WordData[] = [];
-    const wordsStore = await this.getStore(STORES.WORDS);
-    
-    for (const id of dueWordIds.slice(0, limit)) {
-        const w = await new Promise<WordData>((res) => { const req = wordsStore.get(id); req.onsuccess = () => res(req.result); });
-        if (w) sessionWords.push(w);
-    }
-
-    if (sessionWords.length < limit) {
-        const needed = limit - sessionWords.length;
-        const request = wordsStore.openCursor();
-        await new Promise<void>((resolve) => {
-            let count = 0;
-            request.onsuccess = (e) => {
-                const cursor = (e.target as IDBRequest).result;
-                if (cursor && count < needed) {
-                    const word = cursor.value as WordData;
-                    if (!allStudiedWordIds.has(word.id)) { sessionWords.push(word); count++; }
-                    cursor.continue();
-                } else { resolve(); }
-            };
-        });
-    }
-    return sessionWords;
+    return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit);
   }
 
   async getBookSession(uid: string, bookId: string, limit: number): Promise<WordData[]> {
-    const allWords = await this.getWordsByBook(bookId);
-    const historyStore = await this.getStore(STORES.HISTORY);
-    
-    const historyMap = new Map<string, LearningHistory>();
-    await new Promise<void>((resolve) => {
-        const req = historyStore.getAll();
-        req.onsuccess = () => {
-            const records = req.result || [];
-            records.forEach((r:any) => {
-                const history = r.data as LearningHistory;
-                if (r.id.startsWith(uid + '_') && isMasteryHistoryRecord(history)) {
-                  historyMap.set(history.wordId, history);
-                }
-            });
-            resolve();
-        }
-    });
-
-    const now = Date.now();
-    const due: WordData[] = [];
-    const newWords: WordData[] = [];
-    const ahead: WordData[] = [];
-
-    for (const word of allWords) {
-        const h = historyMap.get(word.id);
-        if (!h) {
-            newWords.push(word);
-        } else {
-            if (h.status === 'graduated') continue;
-            if (h.nextReviewDate <= now) due.push(word);
-            else ahead.push(word);
-        }
-    }
-
-    let session = [...due];
-    if (session.length < limit) {
-        const needed = limit - session.length;
-        session = [...session, ...newWords.slice(0, needed)];
-    }
-    if (session.length < limit) {
-        const needed = limit - session.length;
-        ahead.sort((a,b) => {
-            const hA = historyMap.get(a.id);
-            const hB = historyMap.get(b.id);
-            return (hA?.nextReviewDate || 0) - (hB?.nextReviewDate || 0);
-        });
-        session = [...session, ...ahead.slice(0, needed)];
-    }
-    
-    return session;
+    return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit);
   }
 
   async getDueCount(uid: string): Promise<number> {
-    const historyStore = await this.getStore(STORES.HISTORY);
-    let count = 0;
-    const now = Date.now();
-    return new Promise((resolve) => {
-        const request = historyStore.openCursor();
-        request.onsuccess = (e) => {
-            const cursor = (e.target as IDBRequest).result;
-            if (cursor) {
-                const h = cursor.value.data as LearningHistory;
-                if (cursor.value.id.startsWith(uid + '_') && isDueMasteryHistory(h, now)) count++;
-                cursor.continue();
-            } else resolve(count);
-        };
-    });
+    return getDueCountFromHistory(this.getLearningHistoryContext(), uid);
   }
 
   async saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs = 0): Promise<void> {
-    const store = await this.getStore(STORES.HISTORY, 'readwrite');
-    const id = `${uid}_${word.id}`;
-    return new Promise((resolve) => {
-        const req = store.get(id);
-        req.onsuccess = () => {
-            const existing = req.result?.data;
-            let interval = existing?.interval || 0;
-            let ease = existing?.easeFactor || 2.5;
-            let attemptCount = (existing?.attemptCount || 0) + 1;
-            let correctCount = (existing?.correctCount || 0) + (rating >= 2 ? 1 : 0);
-            let totalResponseTimeMs = (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs));
-
-            if (rating === 0) { interval = 0; ease = Math.max(1.3, ease - 0.2); }
-            else {
-                if (rating === 1) interval = 1;
-                else if (rating === 2) interval = interval === 0 ? 1 : Math.ceil(interval * ease);
-                else if (rating === 3) { interval = interval === 0 ? 3 : Math.ceil(interval * ease * 1.3); ease += 0.15; }
-                if (interval > 365) interval = 365;
-            }
-            const nextReview = Date.now() + (interval * 86400000);
-            store.put({
-              id,
-              data: {
-                wordId: word.id,
-                bookId: word.bookId,
-                status: interval > 20 ? 'graduated' : 'learning',
-                lastStudiedAt: Date.now(),
-                nextReviewDate: nextReview,
-                interval,
-                easeFactor: ease,
-                correctCount,
-                attemptCount,
-                totalResponseTimeMs,
-                interactionSource: 'STUDY',
-              },
-            });
-            resolve();
-        };
-    });
+    return saveSrsHistoryFromHistory(this.getLearningHistoryContext(), uid, word, rating, responseTimeMs);
   }
 
   async recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs = 0): Promise<void> {
-     const store = await this.getStore(STORES.HISTORY, 'readwrite');
-     const id = `${uid}_${wordId}`;
-     return new Promise((resolve) => {
-       const req = store.get(id);
-       req.onsuccess = () => {
-         const existing = req.result?.data as Partial<LearningHistory> | undefined;
-         const payload = buildQuizAttemptHistory({
-           existing,
-           wordId,
-           bookId,
-           correct,
-           responseTimeMs,
-         });
-         store.put({ id, data: payload });
-         resolve();
-       };
-       req.onerror = () => resolve();
-     });
+    return recordQuizAttemptFromHistory(this.getLearningHistoryContext(), uid, wordId, bookId, correct, responseTimeMs);
   }
 
   async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
-    const store = await this.getStore(STORES.HISTORY);
-    return new Promise((resolve) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        const records = (request.result || []) as Array<{ id: string; data: LearningHistory }>;
-        const histories = records
-          .filter((record) => record.id.startsWith(uid + '_'))
-          .map((record) => record.data);
-        resolve(getStrictStudyWordIds(histories, bookId));
-      };
-      request.onerror = () => resolve([]);
-    });
+    return getStudiedWordIdsByBookFromHistory(this.getLearningHistoryContext(), uid, bookId);
   }
 
   async getBookProgress(uid: string, bookId: string): Promise<BookProgress> {
-    const words = await this.getWordsByBook(bookId);
-    if (words.length === 0) return { bookId, learnedCount: 0, totalCount: 0, percentage: 0 };
-    const store = await this.getStore(STORES.HISTORY);
-    return new Promise((resolve) => {
-        const request = store.getAll();
-        request.onsuccess = () => {
-            const all = request.result || [];
-            let learned = 0;
-            all.forEach((r: any) => {
-                if (r.id.startsWith(uid + '_') && r.data.bookId === bookId) {
-                    if (isMasteryProgressHistory(r.data as LearningHistory)) learned++;
-                }
-            });
-            const percentage = calculatePercentage(learned, words.length);
-            resolve({ bookId, learnedCount: learned, totalCount: words.length, percentage });
-        };
-    });
+    return getBookProgressFromHistory(this.getLearningHistoryContext(), uid, bookId);
   }
 
   async getAllStudentsProgress(): Promise<StudentSummary[]> {
-    const sessionUser = await this.getSession();
-    const assignmentStore = await this.getStore(STORES.ASSIGNMENTS);
-    const assignments = await new Promise<Array<{ studentUid: string; instructorUid: string | null }>>((resolve) => {
-      const request = assignmentStore.getAll();
-      request.onsuccess = () => resolve((request.result || []) as Array<{ studentUid: string; instructorUid: string | null }>);
-      request.onerror = () => resolve([]);
-    });
-    const mergedAssignments = new Map<string, string | null>(
-      [...IDB_MOCK_ASSIGNMENTS, ...assignments].map((entry) => [entry.studentUid, entry.instructorUid])
-    );
-
-    const allStudents: StudentSummary[] = [
-      { uid: 'student-free-1', name: '鈴木 健太', email: 'kenta@medace.com', totalLearned: 150, totalAttempts: 300, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.85, subscriptionPlan: SubscriptionPlan.TOC_FREE, hasLearningPlan: true, riskReasons: ['直近7日で安定して学習'], recommendedAction: '称賛して現状維持' },
-      { uid: 'student-biz-1', name: '黒田 颯太', email: 'sota@demo-school.jp', totalLearned: 96, totalAttempts: 130, lastActive: Date.now() - 86400000, riskLevel: StudentRiskLevel.WARNING, accuracy: 0.76, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 昨日の復習を10語だけ戻しましょう。', hasLearningPlan: true, riskReasons: ['1日学習が空いている', '復習を先に戻したい段階'], recommendedAction: '復習10語の再開を促す' },
-      { uid: 'student-biz-2', name: '田中 陽葵', email: 'hina@demo-school.jp', totalLearned: 45, totalAttempts: 60, lastActive: Date.now() - 86400000 * 4, riskLevel: StudentRiskLevel.DANGER, accuracy: 0.60, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 2日空いたので、まずは10語だけ復習しましょう。', hasLearningPlan: false, riskReasons: ['3日以上学習が停止', '正答率が60%台', '学習プラン未設定'], recommendedAction: '担当講師が短い再開タスクを指定' },
-      { uid: 'student-biz-3', name: '森 結月', email: 'yuzuki@demo-school.jp', totalLearned: 188, totalAttempts: 240, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.88, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', hasLearningPlan: true, riskReasons: ['高い正答率で安定'], recommendedAction: '次の教材へ拡張' }
-    ];
-
-    const withAssignments = allStudents.map((student) => {
-      const assignedInstructorUid = mergedAssignments.get(student.uid) || undefined;
-      const assignedInstructor = IDB_MOCK_USERS.find((user) => user.uid === assignedInstructorUid);
-      return {
-        ...student,
-        assignedInstructorUid,
-        assignedInstructorName: assignedInstructor?.displayName,
-      };
-    });
-
-    if (sessionUser?.role === UserRole.ADMIN) {
-      return withAssignments;
-    }
-
-    if (sessionUser?.organizationName) {
-      const orgStudents = withAssignments.filter((student) => student.organizationName === sessionUser.organizationName);
-      const bypassAssignment =
-        sessionUser.organizationRole === OrganizationRole.GROUP_ADMIN ||
-        (sessionUser.role === UserRole.INSTRUCTOR
-          && sessionUser.organizationRole === OrganizationRole.INSTRUCTOR
-          && isDemoEmail(sessionUser.email));
-      if (bypassAssignment) {
-        return orgStudents;
-      }
-      return orgStudents.filter((student) => !student.assignedInstructorUid || student.assignedInstructorUid === sessionUser.uid);
-    }
-
-    return withAssignments.filter((student) => !student.organizationName);
+    return getAllStudentsProgressReadModel(this.getOrganizationReadModelContext());
   }
 
   async getStudentWorksheetSnapshot(studentUid: string): Promise<StudentWorksheetSnapshot> {
-    const students = await this.getAllStudentsProgress();
-    const targetStudent = students.find((student) => student.uid === studentUid) || students[0];
-    const books = await this.getBooks();
-
-    let words: StudentWorksheetSnapshot['words'] = [];
-
-    if (books.length > 0) {
-      const fallbackBooks = books.slice(0, Math.min(5, books.length));
-      const perBookLimit = Math.max(4, Math.ceil(FALLBACK_WORKSHEET_WORD_LIMIT / Math.max(fallbackBooks.length, 1)));
-
-      for (const [index, book] of fallbackBooks.entries()) {
-        const bookWords = await this.getWordsByBook(book.id);
-        const sampledWords = bookWords.slice(0, perBookLimit).map((word, wordIndex) => ({
-          wordId: word.id,
-          bookId: book.id,
-          bookTitle: book.title,
-          word: word.word,
-          definition: word.definition,
-          status: WORKSHEET_STATUSES[wordIndex % WORKSHEET_STATUSES.length],
-          lastStudiedAt: Date.now() - (index + wordIndex + 1) * 86400000,
-          attemptCount: 3 + wordIndex,
-          correctCount: 2 + wordIndex,
-        }));
-        words = [...words, ...sampledWords].slice(0, FALLBACK_WORKSHEET_WORD_LIMIT);
-        if (words.length >= FALLBACK_WORKSHEET_WORD_LIMIT) break;
-      }
-    }
-
-    if (words.length === 0) {
-      words = [
-        {
-          wordId: 'worksheet-1',
-          bookId: 'mock-book-1',
-          bookTitle: 'ビジネス英単語 小テスト',
-          word: 'diagnosis',
-          definition: '診断',
-          status: 'graduated',
-          lastStudiedAt: Date.now() - 86400000,
-          attemptCount: 6,
-          correctCount: 5,
-        },
-        {
-          wordId: 'worksheet-2',
-          bookId: 'mock-book-1',
-          bookTitle: 'ビジネス英単語 小テスト',
-          word: 'treatment',
-          definition: '治療',
-          status: 'review',
-          lastStudiedAt: Date.now() - 2 * 86400000,
-          attemptCount: 4,
-          correctCount: 3,
-        },
-        {
-          wordId: 'worksheet-3',
-          bookId: 'mock-book-2',
-          bookTitle: '医療英語ベーシック',
-          word: 'symptom',
-          definition: '症状',
-          status: 'learning',
-          lastStudiedAt: Date.now() - 3 * 86400000,
-          attemptCount: 2,
-          correctCount: 1,
-        },
-      ];
-    }
-
-    return {
-      studentUid: targetStudent?.uid || studentUid,
-      studentName: targetStudent?.name || '対象生徒',
-      organizationName: targetStudent?.organizationName,
-      words,
-    };
+    return getStudentWorksheetSnapshotReadModel(this.getOrganizationReadModelContext(), studentUid);
   }
 
   async sendInstructorNotification(studentUid: string, message: string, triggerReason: string, usedAi: boolean): Promise<void> {
-      void studentUid;
-      void message;
-      void triggerReason;
-      void usedAi;
+    return sendInstructorNotificationReadModel(
+      this.getOrganizationReadModelContext(),
+      studentUid,
+      message,
+      triggerReason,
+      usedAi,
+    );
   }
 
   async resetAllData(): Promise<void> {
-      const db = await this.dbPromise;
-      const tx = db.transaction([STORES.BOOKS, STORES.WORDS, STORES.HISTORY, STORES.SESSION, STORES.PLANS, STORES.PREFERENCES, STORES.ASSIGNMENTS], 'readwrite');
-      tx.objectStore(STORES.BOOKS).clear();
-      tx.objectStore(STORES.WORDS).clear();
-      tx.objectStore(STORES.HISTORY).clear();
-      tx.objectStore(STORES.SESSION).clear();
-      tx.objectStore(STORES.PLANS).clear();
-      tx.objectStore(STORES.PREFERENCES).clear();
-      tx.objectStore(STORES.ASSIGNMENTS).clear();
-      return new Promise(r => { tx.oncomplete = () => r(); });
+    const db = await this.dbPromise;
+    const tx = db.transaction(
+      [STORES.BOOKS, STORES.WORDS, STORES.HISTORY, STORES.SESSION, STORES.PLANS, STORES.PREFERENCES, STORES.ASSIGNMENTS],
+      'readwrite',
+    );
+    tx.objectStore(STORES.BOOKS).clear();
+    tx.objectStore(STORES.WORDS).clear();
+    tx.objectStore(STORES.HISTORY).clear();
+    tx.objectStore(STORES.SESSION).clear();
+    tx.objectStore(STORES.PLANS).clear();
+    tx.objectStore(STORES.PREFERENCES).clear();
+    tx.objectStore(STORES.ASSIGNMENTS).clear();
+    await waitForTransaction(tx);
   }
 
   async saveLearningPlan(plan: LearningPlan): Promise<void> {
@@ -1027,246 +605,27 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async getDashboardSnapshot(uid: string): Promise<DashboardSnapshot> {
-      const sessionUser = await this.getSession();
-      const plan = getSubscriptionPolicy(sessionUser?.subscriptionPlan || SubscriptionPlan.TOC_FREE);
-      const allBooks = await this.getBooks();
-      const official: BookMetadata[] = [];
-      const mine: BookMetadata[] = [];
-
-      allBooks.forEach((book) => {
-          let isMine = false;
-          try {
-              if (book.description && book.description.includes(uid)) isMine = true;
-              const desc = JSON.parse(book.description || '{}');
-              if (desc.createdBy === uid) isMine = true;
-          } catch { }
-
-          if (isMine) mine.push(book);
-          else official.push(book);
-      });
-
-      const accessibleOfficial = official.filter((book) => canAccessOfficialBook(sessionUser?.subscriptionPlan, book));
-
-      accessibleOfficial.sort((a, b) => (a.isPriority === b.isPriority ? a.title.localeCompare(b.title) : a.isPriority ? -1 : 1));
-      mine.sort((a, b) => b.id.localeCompare(a.id));
-
-      const progressResults = await Promise.all([...accessibleOfficial, ...mine].map((book) => this.getBookProgress(uid, book.id)));
-      const progressMap: Record<string, BookProgress> = {};
-      progressResults.forEach((progress) => {
-          progressMap[progress.bookId] = progress;
-      });
-
-      const [dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot] = await Promise.all([
-          this.getDueCount(uid),
-          this.getLearningPlan(uid),
-          this.getLearningPreference(uid),
-          this.getLeaderboard(uid),
-          this.getMasteryDistribution(uid),
-          this.getActivityLogs(uid),
-          this.getMotivationSnapshot(uid),
-      ]);
-
-      return {
-          dueCount,
-          officialBooks: accessibleOfficial,
-          myBooks: mine,
-          progressMap,
-          learningPlan,
-          learningPreference,
-          leaderboard,
-          masteryDist,
-          activityLogs,
-          motivationSnapshot,
-          coachNotifications: [
-              {
-                  id: 1,
-                  studentUid: uid,
-                  studentName: sessionUser?.displayName || 'あなた',
-                  instructorUid: 'mock-instructor-001',
-                  instructorName: 'Oak先生',
-                  message: 'Oak先生より: 今週は復習のペースが良いです。この調子で明日も15分だけ続けましょう。',
-                  triggerReason: '学習フォローアップ',
-                  deliveryChannel: 'IN_APP',
-                  usedAi: false,
-                  createdAt: Date.now() - 3600_000,
-              },
-          ],
-          accountOverview: {
-              subscriptionPlan: sessionUser?.subscriptionPlan || SubscriptionPlan.TOC_FREE,
-                  organizationRole: sessionUser?.organizationRole,
-                  organizationName: sessionUser?.organizationName,
-                  priceLabel: plan.priceLabel,
-                  pricingNote: plan.pricingNote,
-                  audienceLabel: plan.audienceLabel,
-                  featureSummary: plan.featureSummary,
-                  aiUsage: {
-                  monthKey: formatMonthKey(new Date()),
-                  estimatedCostMilliYen: 240,
-                  budgetMilliYen: plan.monthlyAiBudgetMilliYen,
-                  remainingMilliYen: Math.max(0, plan.monthlyAiBudgetMilliYen - 240),
-                  actionCounts: {
-                      generateGeminiSentence: 2,
-                  },
-              },
-          },
-      };
+    return getDashboardSnapshotReadModel(this.getDashboardReadModelContext(), uid);
   }
 
   async getAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot> {
-      const students = await this.getAllStudentsProgress();
-      const totalStudents = students.length;
-      const atRiskStudents = students
-        .filter((student) => student.riskLevel !== StudentRiskLevel.SAFE)
-        .sort((a, b) => a.lastActive - b.lastActive)
-        .slice(0, 6);
-
-      return {
-          overview: {
-              totalStudents,
-              activeToday: students.filter((student) => Date.now() - student.lastActive < 86400000).length,
-              active7d: students.filter((student) => Date.now() - student.lastActive < 7 * 86400000).length,
-              atRiskCount: atRiskStudents.length,
-              studentsWithPlan: Math.max(0, totalStudents - 1),
-              averageLearnedWords: totalStudents ? Math.round(students.reduce((sum, student) => sum + student.totalLearned, 0) / totalStudents) : 0,
-              averageAccuracyRate: totalStudents ? Math.round(students.reduce((sum, student) => sum + (student.accuracy || 0), 0) / totalStudents * 100) : 0,
-              officialBookCount: 0,
-              customBookCount: 0,
-              totalWordCount: 0,
-              reportedWordCount: 0,
-              notifications7d: 0,
-              aiRequestsThisMonth: 0,
-              aiCostThisMonthMilliYen: 0,
-          },
-          planBreakdown: Object.values(SubscriptionPlan).map((plan) => ({
-              plan,
-              count: students.filter((student) => student.subscriptionPlan === plan).length,
-          })),
-          riskBreakdown: [
-              { riskLevel: StudentRiskLevel.SAFE, count: students.filter((student) => student.riskLevel === StudentRiskLevel.SAFE).length },
-              { riskLevel: StudentRiskLevel.WARNING, count: students.filter((student) => student.riskLevel === StudentRiskLevel.WARNING).length },
-              { riskLevel: StudentRiskLevel.DANGER, count: students.filter((student) => student.riskLevel === StudentRiskLevel.DANGER).length },
-          ],
-          trend: [],
-          topBooks: [],
-          aiActions: [],
-          recentNotifications: [],
-          recentReports: [],
-          organizations: [],
-          atRiskStudents,
-      };
+    return getAdminDashboardSnapshotReadModel(this.getDashboardReadModelContext());
   }
 
   async getOrganizationDashboardSnapshot(): Promise<OrganizationDashboardSnapshot> {
-      const sessionUser = await this.getSession();
-      const students = await this.getAllStudentsProgress();
-      const instructors = IDB_MOCK_USERS
-        .filter((user) => user.role === UserRole.INSTRUCTOR && user.organizationName === sessionUser?.organizationName)
-        .map((user) => ({
-          uid: user.uid,
-          displayName: user.displayName,
-          email: user.email,
-          organizationRole: user.organizationRole,
-          notifiedStudentCount: user.organizationRole === OrganizationRole.GROUP_ADMIN ? students.length : Math.max(1, students.length - 1),
-          notifications7d: user.organizationRole === OrganizationRole.GROUP_ADMIN ? 5 : 3,
-          assignedStudentCount: students.filter((student) => student.assignedInstructorUid === user.uid).length,
-        }));
-
-      const assignedStudents = students.filter((student) => student.assignedInstructorUid).length;
-
-      return {
-        organizationName: sessionUser?.organizationName || 'Steady Study Demo Academy',
-        subscriptionPlan: sessionUser?.subscriptionPlan || SubscriptionPlan.TOB_PAID,
-        totalMembers: instructors.length + students.length,
-        totalStudents: students.length,
-        totalInstructors: instructors.length,
-        activeStudents7d: students.filter((student) => Date.now() - student.lastActive < 7 * 86400000).length,
-        atRiskStudents: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE).length,
-        learningPlanCount: Math.max(1, students.length - 1),
-        notifications7d: 8,
-        reactivatedStudents7d: Math.max(0, students.length - 2),
-        reactivationRate7d: students.length > 0 ? Math.round((Math.max(0, students.length - 2) / students.length) * 100) : 0,
-        assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
-        unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
-        instructors,
-        atRiskStudentList: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE),
-        studentAssignments: students,
-        assignmentEvents: [
-          {
-            id: 1,
-            studentUid: students[0]?.uid || 'student-biz-1',
-            studentName: students[0]?.name || '黒田 颯太',
-            previousInstructorUid: undefined,
-            previousInstructorName: undefined,
-            nextInstructorUid: instructors[0]?.uid,
-            nextInstructorName: instructors[0]?.displayName,
-            changedByUid: sessionUser?.uid || 'mock-group-admin-001',
-            changedByName: sessionUser?.displayName || '朝比奈 由奈',
-            createdAt: Date.now() - 2 * 3600_000,
-          },
-        ],
-      };
+    return getOrganizationDashboardSnapshotReadModel(this.getOrganizationReadModelContext());
   }
 
-  // Analytics Mock (IDB)
   async getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]> {
-      // In pure IDB mode, only the current user exists usually. We can mock "other students".
-      const user = await this.getSession();
-      const entries: LeaderboardEntry[] = [
-          { uid: 'rival-1', displayName: '田中 陽葵', xp: (user?.stats?.xp || 0) + 500, level: 15, rank: 1, isCurrentUser: false },
-          { uid: 'rival-2', displayName: '佐藤 翔太', xp: (user?.stats?.xp || 0) + 200, level: 14, rank: 2, isCurrentUser: false },
-          { uid: currentUid, displayName: user?.displayName || 'Me', xp: user?.stats?.xp || 0, level: user?.stats?.level || 1, rank: 3, isCurrentUser: true },
-          { uid: 'rival-3', displayName: '高橋 優子', xp: Math.max(0, (user?.stats?.xp || 0) - 300), level: 10, rank: 4, isCurrentUser: false },
-      ];
-      return entries.sort((a,b) => b.xp - a.xp).map((e, i) => ({...e, rank: i + 1}));
+    return getLeaderboardReadModel(this.getDashboardReadModelContext(), currentUid);
   }
 
   async getMasteryDistribution(uid: string): Promise<MasteryDistribution> {
-      const store = await this.getStore(STORES.HISTORY);
-      return new Promise((resolve) => {
-          const req = store.getAll();
-          req.onsuccess = () => {
-              const all = req.result || [];
-              const dist = { new: 0, learning: 0, review: 0, graduated: 0, total: 0 };
-              all.forEach((r:any) => {
-                  if (r.id.startsWith(uid + '_') && isMasteryHistoryRecord(r.data as LearningHistory)) {
-                      const h = r.data as LearningHistory;
-                      if (h.status === 'graduated') dist.graduated++;
-                      else if (h.status === 'review' || (h.status === 'learning' && h.interval > 3)) dist.review++;
-                      else dist.learning++;
-                      dist.total++;
-                  }
-              });
-              resolve(dist);
-          }
-      });
+    return getMasteryDistributionReadModel(this.getDashboardReadModelContext(), uid);
   }
 
   async getActivityLogs(uid: string): Promise<ActivityLog[]> {
-    const store = await this.getStore(STORES.HISTORY);
-    return new Promise((resolve) => {
-        const req = store.getAll();
-        req.onsuccess = () => {
-            const all = req.result || [];
-            const counts: Record<string, number> = {};
-            all.forEach((r: any) => {
-                if(r.id.startsWith(uid + '_')) {
-                    const date = formatDateKey(r.data.lastStudiedAt);
-                    counts[date] = (counts[date] || 0) + 1;
-                }
-            });
-            
-            const logs = Object.keys(counts).map(date => {
-                const count = counts[date];
-                let intensity: 0|1|2|3|4 = 0;
-                if (count > 0) intensity = 1;
-                if (count > 5) intensity = 2;
-                if (count > 15) intensity = 3;
-                if (count > 30) intensity = 4;
-                return { date, count, intensity };
-            });
-            resolve(logs);
-        }
-    });
+    return getActivityLogsReadModel(this.getDashboardReadModelContext(), uid);
   }
 }
 
