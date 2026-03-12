@@ -15,7 +15,9 @@ dist-ssr
 .dev.vars
 .playwright-cli/
 output/playwright/
+output/simulator/
 test-results/
+test-results-rerun/
 playwright-report/
 tmp
 _worker.bundle

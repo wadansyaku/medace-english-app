@@ -1,6 +1,7 @@
 import type { StorageAction, StorageActionRequest } from '../../contracts/storage';
 import { UserRole } from '../../types';
 import { requireRole } from './auth';
+import getServerRuntimeFlags from './runtime';
 import {
   handleBatchImportWords,
   handleDeleteBook,
@@ -48,15 +49,22 @@ export const handleStorageAction = async (
   env: AppEnv,
   user: DbUserRow,
   body: StorageActionRequest<StorageAction>,
+  request: Request,
 ): Promise<unknown> => {
   const action = body?.action;
   const payload = (('payload' in body ? body.payload : undefined) || {}) as Record<string, unknown>;
+  const runtimeFlags = getServerRuntimeFlags(request, env);
 
   switch (action) {
     case 'addXP':
       return handleAddXP(env, user, Number(payload.amount || 0));
     case 'batchImportWords':
-      return handleBatchImportWords(env, user, payload as unknown as StorageActionRequest<'batchImportWords'>['payload']);
+      return handleBatchImportWords(
+        env,
+        user,
+        payload as unknown as StorageActionRequest<'batchImportWords'>['payload'],
+        runtimeFlags,
+      );
     case 'getBooks':
       return handleGetBooks(env, user);
     case 'deleteBook':
@@ -128,6 +136,9 @@ export const handleStorageAction = async (
       );
     case 'resetAllData':
       requireRole(user, [UserRole.ADMIN]);
+      if (!runtimeFlags.enableDestructiveAdminActions) {
+        throw new HttpError(403, '本番環境ではデータ初期化を API から実行できません。preview またはローカル検証環境に限定してください。');
+      }
       return handleResetAllData(env);
     case 'saveLearningPlan':
       return handleSaveLearningPlan(env, user, payload.plan as unknown as StorageActionRequest<'saveLearningPlan'>['payload']['plan']);

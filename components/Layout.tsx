@@ -3,7 +3,9 @@ import React from 'react';
 import { BookOpen, ChevronDown, ChevronUp, LogOut, Zap } from 'lucide-react';
 import { UserRole, UserProfile, UserStudyMode, type WorkspaceSectionDefinition } from '../types';
 import { BRAND } from '../config/brand';
+import getClientRuntimeFlags from '../config/runtime';
 import { getHomeViewForUser, getWorkspaceNavLabel, getWorkspaceRoleLabel } from '../config/access';
+import useNetworkStatus from '../hooks/useNetworkStatus';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
 import useIsStandalone from '../hooks/useIsStandalone';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
@@ -42,7 +44,10 @@ const Layout: React.FC<LayoutProps> = ({
   const isDemoUser = isDemoEmail(user?.email);
   const isStandalone = useIsStandalone();
   const compactStudentShell = useIsStudentMobileShell(user);
+  const runtimeFlags = getClientRuntimeFlags();
+  const isOnline = useNetworkStatus();
   const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
+  const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -58,6 +63,28 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-medace-50/40 flex flex-col font-sans">
+      {showOfflineBlocker && (
+        <div
+          data-testid="offline-blocking-banner"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/72 px-4"
+        >
+          <div className="max-w-lg rounded-[28px] border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">Online-only pilot</p>
+            <h2 className="mt-3 text-2xl font-black">オフラインでは操作を継続できません</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-200">
+              この導入 pilot はオンライン接続前提です。ネットワーク接続を戻してから、学習・教材更新・履歴保存を再開してください。
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-900"
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)] ${
         compactStudentShell ? 'safe-pad-top' : ''

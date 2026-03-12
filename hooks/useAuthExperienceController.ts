@@ -1,20 +1,39 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { storage } from '../services/storage';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
 import { usePublicMotivationSnapshot } from './usePublicMotivationSnapshot';
-import { getHomeAppRoute, type AppNavigationAction } from './useAppNavigation';
+import { getHomeAppRoute, type AppNavigationAction, type AppNavigationState } from './useAppNavigation';
 
 type AuthMode = 'LOGIN' | 'SIGNUP';
 
 interface UseAuthExperienceControllerParams {
+  navigationState: AppNavigationState;
   dispatchNavigation: (action: AppNavigationAction) => void;
   onLogoutReset?: () => void;
 }
 
+const shouldPreserveCurrentRoute = (
+  navigationState: AppNavigationState,
+  nextHomeView: ReturnType<typeof getHomeAppRoute>,
+): boolean => {
+  switch (navigationState.currentView) {
+    case 'dashboard':
+    case 'instructor':
+    case 'admin':
+      return navigationState.currentView === nextHomeView;
+    case 'study':
+    case 'quiz':
+      return Boolean(navigationState.selectedBook?.bookId);
+    default:
+      return false;
+  }
+};
+
 export const useAuthExperienceController = ({
+  navigationState,
   dispatchNavigation,
   onLogoutReset,
 }: UseAuthExperienceControllerParams) => {
@@ -38,6 +57,11 @@ export const useAuthExperienceController = ({
     loading: publicMotivationLoading,
     error: publicMotivationError,
   } = usePublicMotivationSnapshot(!user);
+  const navigationStateRef = useRef(navigationState);
+
+  useEffect(() => {
+    navigationStateRef.current = navigationState;
+  }, [navigationState]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -45,7 +69,10 @@ export const useAuthExperienceController = ({
         const sessionUser = await storage.getSession();
         if (sessionUser) {
           setUser(sessionUser);
-          dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(sessionUser) });
+          const homeView = getHomeAppRoute(sessionUser);
+          if (!shouldPreserveCurrentRoute(navigationStateRef.current, homeView)) {
+            dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
+          }
         }
       } catch (error) {
         console.error('Session restore failed', error);
@@ -81,7 +108,10 @@ export const useAuthExperienceController = ({
         return;
       }
       setUser(loggedInUser);
-      dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(loggedInUser) });
+      const homeView = getHomeAppRoute(loggedInUser);
+      if (!shouldPreserveCurrentRoute(navigationState, homeView)) {
+        dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
+      }
     } catch (error: any) {
       console.error('Login failed', error);
       setAuthError(error?.message || 'ログインエラーが発生しました。');
@@ -157,7 +187,10 @@ export const useAuthExperienceController = ({
       );
       if (loggedInUser) {
         setUser(loggedInUser);
-        dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(loggedInUser) });
+        const homeView = getHomeAppRoute(loggedInUser);
+        if (!shouldPreserveCurrentRoute(navigationState, homeView)) {
+          dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
+        }
       }
     } catch (error: any) {
       setAuthError(error.message || '認証エラーが発生しました。');
@@ -187,7 +220,7 @@ export const useAuthExperienceController = ({
     onLogoutReset?.();
   };
 
-  const authExperienceProps = useMemo(() => ({
+  const authExperienceProps = {
     authMode,
     displayName,
     email,
@@ -206,18 +239,7 @@ export const useAuthExperienceController = ({
     onSubmitEmailAuth: handleEmailAuth,
     onDemoLogin: handleDemoLogin,
     onToggleAlternateAccess: () => setShowAlternateAccess((previous) => !previous),
-  }), [
-    authError,
-    authMode,
-    confirmPassword,
-    displayName,
-    email,
-    password,
-    publicMotivationError,
-    publicMotivationLoading,
-    publicMotivationSnapshot,
-    showAlternateAccess,
-  ]);
+  };
 
   return {
     user,

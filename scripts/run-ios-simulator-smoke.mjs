@@ -1,24 +1,37 @@
 import { mkdir } from 'node:fs/promises';
 
+import { getAvailablePort } from './_shared/ports.mjs';
 import { createSmokeConfig } from './ios-simulator-smoke/config.mjs';
 import { createProcessManager, sleep } from './ios-simulator-smoke/processes.mjs';
 import { createDoctorTools } from './ios-simulator-smoke/doctor.mjs';
 import { createWebDriverClient } from './ios-simulator-smoke/webdriver.mjs';
 import { createScenarioRunner } from './ios-simulator-smoke/scenario.mjs';
 
-const config = createSmokeConfig();
-const processManager = createProcessManager(config.cwd);
-const doctorTools = createDoctorTools({
-  runCommand: processManager.runCommand,
-  tryRunCommand: processManager.tryRunCommand,
-  runJsonCommand: processManager.runJsonCommand,
-  requestedDeviceName: config.requestedDeviceName,
-  requestedPlatformVersion: config.requestedPlatformVersion,
-  requestedUdid: config.requestedUdid,
-  installDriver: config.installDriver,
-});
+let activeProcessManager = null;
 
 const main = async () => {
+  const baseConfig = createSmokeConfig();
+  const smokePort = baseConfig.args.includes('--port') ? baseConfig.smokePort : await getAvailablePort();
+  const appiumPort = baseConfig.args.includes('--appium-port') ? baseConfig.appiumPort : await getAvailablePort();
+  const config = {
+    ...baseConfig,
+    smokePort,
+    appiumPort,
+    appUrl: `http://127.0.0.1:${smokePort}/`,
+    appiumBaseUrl: `http://127.0.0.1:${appiumPort}`,
+  };
+  const processManager = createProcessManager(config.cwd);
+  activeProcessManager = processManager;
+  const doctorTools = createDoctorTools({
+    runCommand: processManager.runCommand,
+    tryRunCommand: processManager.tryRunCommand,
+    runJsonCommand: processManager.runJsonCommand,
+    requestedDeviceName: config.requestedDeviceName,
+    requestedPlatformVersion: config.requestedPlatformVersion,
+    requestedUdid: config.requestedUdid,
+    installDriver: config.installDriver,
+  });
+
   await mkdir(config.outputDir, { recursive: true });
 
   const doctorInfo = await doctorTools.collectDoctorInfo();
@@ -121,6 +134,6 @@ const main = async () => {
 
 main().catch(async (error) => {
   console.error(error);
-  await processManager.cleanup();
+  await activeProcessManager?.cleanup();
   process.exit(1);
 });

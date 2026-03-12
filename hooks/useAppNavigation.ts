@@ -1,10 +1,11 @@
-import { useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { getHomeViewForUser } from '../config/access';
 import type { UserProfile } from '../types';
 
 export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
+export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 
 export interface AppNavigationState {
   currentView: AppRoute;
@@ -13,18 +14,31 @@ export interface AppNavigationState {
 }
 
 export type AppNavigationAction =
-  | { type: 'reset' }
-  | { type: 'go-home'; view: HomeAppRoute }
-  | { type: 'open-book'; bookId: string; mode: Extract<AppRoute, 'study' | 'quiz'> }
-  | { type: 'finish-book-view' }
-  | { type: 'open-public-info' }
-  | { type: 'close-public-info' };
+  | { type: 'reset'; historyMode?: NavigationHistoryMode }
+  | { type: 'go-home'; view: HomeAppRoute; historyMode?: NavigationHistoryMode }
+  | { type: 'open-book'; bookId: string; mode: Extract<AppRoute, 'study' | 'quiz'>; historyMode?: NavigationHistoryMode }
+  | { type: 'finish-book-view'; historyMode?: NavigationHistoryMode }
+  | { type: 'open-public-info'; historyMode?: NavigationHistoryMode }
+  | { type: 'close-public-info'; historyMode?: NavigationHistoryMode }
+  | { type: 'sync-from-location'; state: AppNavigationState; historyMode?: NavigationHistoryMode };
 
 const initialNavigationState: AppNavigationState = {
   currentView: 'login',
   returnView: 'dashboard',
   selectedBook: null,
 };
+
+const normalizePathname = (pathname: string): string => {
+  const trimmed = pathname.trim();
+  if (!trimmed) return '/';
+  return trimmed.length > 1 ? trimmed.replace(/\/+$/, '') : trimmed;
+};
+
+const buildHomeState = (view: HomeAppRoute): AppNavigationState => ({
+  currentView: view,
+  returnView: view,
+  selectedBook: null,
+});
 
 export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
   view === 'dashboard' || view === 'instructor' || view === 'admin'
@@ -33,6 +47,74 @@ export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
 export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
   const view = getHomeViewForUser(user);
   return view === 'admin' || view === 'instructor' ? view : 'dashboard';
+};
+
+export const parseNavigationPath = (pathname: string): AppNavigationState => {
+  const normalizedPath = normalizePathname(pathname);
+  const segments = normalizedPath.split('/').filter(Boolean);
+  const [root, bookId] = segments;
+
+  if (normalizedPath === '/public') {
+    return {
+      ...initialNavigationState,
+      currentView: 'publicInfo',
+    };
+  }
+
+  if (normalizedPath === '/dashboard') return buildHomeState('dashboard');
+  if (normalizedPath === '/instructor') return buildHomeState('instructor');
+  if (normalizedPath === '/admin') return buildHomeState('admin');
+
+  if (root === 'study' && bookId) {
+    return {
+      currentView: 'study',
+      returnView: 'dashboard',
+      selectedBook: { bookId: decodeURIComponent(bookId) },
+    };
+  }
+
+  if (root === 'quiz' && bookId) {
+    return {
+      currentView: 'quiz',
+      returnView: 'dashboard',
+      selectedBook: { bookId: decodeURIComponent(bookId) },
+    };
+  }
+
+  return initialNavigationState;
+};
+
+export const buildNavigationPath = (state: AppNavigationState): string => {
+  switch (state.currentView) {
+    case 'publicInfo':
+      return '/public';
+    case 'dashboard':
+      return '/dashboard';
+    case 'instructor':
+      return '/instructor';
+    case 'admin':
+      return '/admin';
+    case 'study':
+      return state.selectedBook ? `/study/${encodeURIComponent(state.selectedBook.bookId)}` : '/dashboard';
+    case 'quiz':
+      return state.selectedBook ? `/quiz/${encodeURIComponent(state.selectedBook.bookId)}` : '/dashboard';
+    case 'login':
+    default:
+      return '/';
+  }
+};
+
+const getDefaultHistoryMode = (action: AppNavigationAction): NavigationHistoryMode => {
+  switch (action.type) {
+    case 'reset':
+    case 'finish-book-view':
+    case 'close-public-info':
+      return 'replace';
+    case 'sync-from-location':
+      return 'none';
+    default:
+      return 'push';
+  }
 };
 
 const navigationReducer = (
@@ -70,13 +152,63 @@ const navigationReducer = (
         ...state,
         currentView: 'login',
       };
+    case 'sync-from-location':
+      return action.state;
     default:
       return state;
   }
 };
 
 export const useAppNavigation = () => {
-  const [navigationState, dispatchNavigation] = useReducer(navigationReducer, initialNavigationState);
+  const [navigationState, baseDispatchNavigation] = useReducer(
+    navigationReducer,
+    initialNavigationState,
+    () => (typeof window === 'undefined' ? initialNavigationState : parseNavigationPath(window.location.pathname)),
+  );
+  const pendingHistoryModeRef = useRef<NavigationHistoryMode>('replace');
+  const hasBoundHistoryRef = useRef(false);
+
+  const dispatchNavigation = useCallback((action: AppNavigationAction) => {
+    pendingHistoryModeRef.current = action.historyMode ?? getDefaultHistoryMode(action);
+    baseDispatchNavigation(action);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const nextPath = buildNavigationPath(navigationState);
+    const currentPath = normalizePathname(window.location.pathname);
+    const historyMode = hasBoundHistoryRef.current ? pendingHistoryModeRef.current : 'replace';
+
+    hasBoundHistoryRef.current = true;
+    pendingHistoryModeRef.current = 'none';
+
+    if (historyMode === 'none') return;
+    if (historyMode === 'replace') {
+      window.history.replaceState(null, '', nextPath);
+      return;
+    }
+    if (currentPath !== nextPath) {
+      window.history.pushState(null, '', nextPath);
+    }
+  }, [navigationState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const syncFromLocation = () => {
+      pendingHistoryModeRef.current = 'none';
+      baseDispatchNavigation({
+        type: 'sync-from-location',
+        state: parseNavigationPath(window.location.pathname),
+      });
+    };
+
+    window.addEventListener('popstate', syncFromLocation);
+    return () => {
+      window.removeEventListener('popstate', syncFromLocation);
+    };
+  }, []);
 
   return {
     navigationState,

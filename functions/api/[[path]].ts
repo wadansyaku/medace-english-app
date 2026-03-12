@@ -1,8 +1,15 @@
 import { AuthRequest, DemoLoginRequest, EmailAuthRequest, StorageAction, StorageActionRequest } from '../../contracts/storage';
 import { EnglishLevel, OrganizationRole, UserGrade, UserRole, UserStudyMode } from '../../types';
 import { clearSession, createSession, createUser, ensureDemoUser, findUserByEmail, mapUserRowToProfile, requireUser, verifyPassword, hashPassword } from '../_shared/auth';
+import {
+  assertAuthAttemptAllowed,
+  clearAuthFailures,
+  createAuthAttemptScopeKey,
+  recordAuthFailure,
+} from '../_shared/auth-rate-limit';
 import { handleAiAction } from '../_shared/ai-actions';
 import { handleError, HttpError, json, noContent, readJson } from '../_shared/http';
+import getServerRuntimeFlags from '../_shared/runtime';
 import { handleGetPublicMotivationSnapshot } from '../_shared/storage-dashboard-actions';
 import { handleStorageAction } from '../_shared/storage-actions';
 import { AppEnv } from '../_shared/types';
@@ -33,16 +40,36 @@ const isEnumValue = <TEnum extends Record<string, string>>(
 };
 
 const handleDemoLogin = async (env: AppEnv, request: Request, body: DemoLoginRequest): Promise<Response> => {
+  const runtimeFlags = getServerRuntimeFlags(request, env);
   const role = body.role || UserRole.STUDENT;
+
+  if (role !== UserRole.STUDENT && role !== UserRole.ADMIN && !runtimeFlags.enablePublicBusinessDemo) {
+    throw new HttpError(403, '学校・教室向けデモは preview / 個別案内のみです。');
+  }
+
+  if (body.organizationRole && !runtimeFlags.enablePublicBusinessDemo) {
+    throw new HttpError(403, '学校・教室向けデモは preview / 個別案内のみです。');
+  }
+
   if (role === UserRole.ADMIN) {
+    if (!runtimeFlags.enableAdminDemo) {
+      throw new HttpError(403, 'サービス管理者デモは preview / 個別案内のみです。');
+    }
+
+    const authScopeKey = createAuthAttemptScopeKey(request, 'admin-demo', role);
+    await assertAuthAttemptAllowed(env, authScopeKey);
+
     const hostname = new URL(request.url).hostname;
     const expectedPassword = env.ADMIN_DEMO_PASSWORD || (hostname === 'localhost' || hostname === '127.0.0.1' ? 'admin' : undefined);
     if (!expectedPassword) {
       throw new HttpError(403, 'ADMIN_DEMO_PASSWORD を設定してください。');
     }
     if (body.demoPassword !== expectedPassword) {
+      await recordAuthFailure(env, authScopeKey);
       throw new HttpError(403, '管理用パスワードが正しくありません。');
     }
+
+    await clearAuthFailures(env, authScopeKey);
   }
 
   const user = await ensureDemoUser(env, role, body.organizationRole);
@@ -56,6 +83,7 @@ const handleEmailAuth = async (env: AppEnv, request: Request, body: EmailAuthReq
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const requestedRole = body.role || UserRole.STUDENT;
+  const authScopeKey = createAuthAttemptScopeKey(request, 'email-auth', email || 'anonymous');
 
   if (!email || !password) {
     throw new HttpError(400, 'メールアドレスとパスワードを入力してください。');
@@ -94,11 +122,14 @@ const handleEmailAuth = async (env: AppEnv, request: Request, body: EmailAuthReq
     });
   }
 
+  await assertAuthAttemptAllowed(env, authScopeKey);
   const existing = await findUserByEmail(env, email);
   if (!existing || !(await verifyPassword(password, existing.password_hash))) {
+    await recordAuthFailure(env, authScopeKey);
     throw new HttpError(401, 'メールアドレスまたはパスワードが間違っています。');
   }
 
+  await clearAuthFailures(env, authScopeKey);
   const sessionCookie = await createSession(env, request, existing.id);
   return createJsonResponse(mapUserRowToProfile(existing), {
     headers: { 'Set-Cookie': sessionCookie },
@@ -186,7 +217,7 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
     if (pathname === 'storage' && request.method === 'POST') {
       const user = await requireUser(env, request);
       const body = await readJson<StorageActionRequest<StorageAction>>(request);
-      const result = await handleStorageAction(env, user, body);
+      const result = await handleStorageAction(env, user, body, request);
       return createJsonResponse(result);
     }
 

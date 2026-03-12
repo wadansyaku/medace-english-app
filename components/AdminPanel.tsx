@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
+import getClientRuntimeFlags from '../config/runtime';
 import { storage } from '../services/storage';
 import { extractVocabularyFromText, isAiUnavailableError } from '../services/gemini';
 import { BookAccessScope, BookCatalogSource } from '../types';
@@ -47,6 +48,9 @@ const AdminPanel: React.FC = () => {
   const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.LICENSED_PARTNER);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const runtimeFlags = getClientRuntimeFlags();
+  const destructiveActionsEnabled = runtimeFlags.enableDestructiveAdminActions;
+  const destructiveActionsMessage = '本番/導入 pilot では教材更新と初期化を UI から実行できません。バックアップ付き CLI runbook で dry-run 確認後に反映してください。';
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -183,7 +187,12 @@ const AdminPanel: React.FC = () => {
       onFileChange={handleFileChange}
       onAiImport={handleAiImport}
       onCsvUpload={handleCsvUpload}
-      onOpenResetModal={() => setShowResetModal(true)}
+      onOpenResetModal={() => {
+        if (!destructiveActionsEnabled) return;
+        setShowResetModal(true);
+      }}
+      destructiveActionsEnabled={destructiveActionsEnabled}
+      destructiveActionsMessage={destructiveActionsMessage}
     />
   );
 
@@ -232,6 +241,11 @@ const AdminPanel: React.FC = () => {
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-medace-900/70">
             学習状況、停滞リスク、教材運用、報告対応、AI利用を一画面で見渡せるように整理しています。
           </p>
+          {!destructiveActionsEnabled && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+              {destructiveActionsMessage}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

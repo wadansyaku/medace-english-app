@@ -1,5 +1,6 @@
 import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
 import { BookAccessScope, BookCatalogSource, BookMetadata, UserRole, WordData } from '../../types';
+import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { normalizeCatalogImport } from './catalog-import';
 import { HttpError } from './http';
 import {
@@ -31,6 +32,7 @@ export const handleBatchImportWords = async (
   env: AppEnv,
   user: DbUserRow,
   payload: CatalogImportRequest,
+  runtimeFlags?: RuntimeFlags,
 ): Promise<CatalogImportResult> => {
   const defaultBookName = String(payload?.defaultBookName || '').trim();
   const contextSummary = typeof payload?.contextSummary === 'string' ? payload.contextSummary : undefined;
@@ -45,6 +47,10 @@ export const handleBatchImportWords = async (
   }
 
   const isOfficialImport = user.role === UserRole.ADMIN && !createdByUid;
+  if (isOfficialImport && runtimeFlags && !runtimeFlags.enableDestructiveAdminActions) {
+    throw new HttpError(403, '本番環境では公式教材の更新を API から実行できません。バックアップ付き CLI runbook を使用してください。');
+  }
+
   const ownerId = isOfficialImport ? null : user.id;
   const grouped = new Map<string, { meta: BookMetadata & { createdBy: string | null; }; words: WordData[]; }>();
   const warnings = [...normalized.warnings];

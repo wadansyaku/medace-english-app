@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { AUTH_COPY, BRAND } from '../../config/brand';
+import getClientRuntimeFlags from '../../config/runtime';
 import { getDemoAccessWindowLabel } from '../../utils/demo';
 import PublicMotivationPanel from '../PublicMotivationPanel';
 import PublicInfoPage from '../PublicInfoPage';
@@ -102,6 +103,11 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   onOpenPublicInfo,
   onClosePublicInfo,
 }) => {
+  const runtimeFlags = getClientRuntimeFlags();
+  const businessDemoOptions = BUSINESS_DEMO_OPTIONS.filter((option) => (
+    runtimeFlags.enableAdminDemo || option.role !== UserRole.ADMIN
+  ));
+
   if (currentView === 'publicInfo') {
     return (
       <PublicInfoPage
@@ -166,6 +172,11 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                 <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-white/78">
                   初回診断やテストを最初から試せるよう、体験ログインごとに新しいデモ環境を作成します。前回の demo 状態は別ブラウザや別端末へ共有されません。
                 </p>
+                {runtimeFlags.appOnlineOnly && (
+                  <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-white/78">
+                    現在の導入 pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は段階導入前の対象外です。
+                  </p>
+                )}
                 <button
                   onClick={() => onDemoLogin(UserRole.STUDENT)}
                   data-testid="demo-login-student"
@@ -317,24 +328,30 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">School Demo</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学校・教室向けの体験は別ブロックで選ぶ</h2>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+              {runtimeFlags.enablePublicBusinessDemo ? '学校・教室向けの体験は別ブロックで選ぶ' : '学校・教室向け導入は個別案内で進める'}
+            </h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              ビジネス版は、講師フォロー、組織運用、紙提出の自由英作文までを役割別ワークスペースで確認できます。学生向けの体験開始とは分けて案内します。
+              {runtimeFlags.enablePublicBusinessDemo
+                ? 'ビジネス版は、講師フォロー、組織運用、紙提出の自由英作文までを役割別ワークスペースで確認できます。学生向けの体験開始とは分けて案内します。'
+                : '本番 pilot では学校・教室向けアカウントを手動発行し、preview か個別案内でのみ体験セッションを提供します。'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onToggleAlternateAccess}
-            className="inline-flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-medace-200 hover:text-medace-700"
-          >
-            <span>学校・先生向けの体験メニュー</span>
-            {showAlternateAccess ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          {runtimeFlags.enablePublicBusinessDemo && (
+            <button
+              type="button"
+              onClick={onToggleAlternateAccess}
+              className="inline-flex items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-medace-200 hover:text-medace-700"
+            >
+              <span>学校・先生向けの体験メニュー</span>
+              {showAlternateAccess ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+          )}
         </div>
 
-        {showAlternateAccess && (
+        {runtimeFlags.enablePublicBusinessDemo && showAlternateAccess && (
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {BUSINESS_DEMO_OPTIONS.map((option) => (
+            {businessDemoOptions.map((option) => (
               <button
                 key={option.title}
                 onClick={() => onDemoLogin(option.role, option.organizationRole)}
@@ -350,6 +367,12 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                 </div>
               </button>
             ))}
+          </div>
+        )}
+
+        {!runtimeFlags.enablePublicBusinessDemo && (
+          <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 px-5 py-5 text-sm leading-relaxed text-amber-900">
+            学校・教室向けデモは公開本番では非表示です。講師・管理者アカウントは手動発行し、導入案内とセットで案内してください。
           </div>
         )}
       </section>

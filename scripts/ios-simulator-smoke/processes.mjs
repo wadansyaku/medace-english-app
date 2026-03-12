@@ -5,16 +5,17 @@ export const sleep = (ms) => new Promise((resolve) => {
 });
 
 export const createProcessManager = (cwd, baseEnv = process.env) => {
+  const { FORCE_COLOR: _forceColor, ...sanitizedBaseEnv } = baseEnv;
   const managedChildren = [];
 
   const spawnCommand = (command, commandArgs, options = {}) => spawn(command, commandArgs, {
     cwd,
     env: {
-      ...baseEnv,
-      FORCE_COLOR: '0',
+      ...sanitizedBaseEnv,
       ...options.env,
     },
     stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   });
 
   const runCommand = (command, commandArgs, options = {}) => new Promise((resolve, reject) => {
@@ -107,10 +108,23 @@ export const createProcessManager = (cwd, baseEnv = process.env) => {
       }
 
       child.once('close', () => resolve());
-      child.kill('SIGTERM');
+      if (child.pid) {
+        try {
+          if (process.platform === 'win32') child.kill('SIGTERM');
+          else process.kill(-child.pid, 'SIGTERM');
+        } catch {
+          resolve();
+          return;
+        }
+      }
       setTimeout(() => {
         if (child.exitCode === null) {
-          child.kill('SIGKILL');
+          try {
+            if (process.platform === 'win32') child.kill('SIGKILL');
+            else process.kill(-child.pid, 'SIGKILL');
+          } catch {
+            resolve();
+          }
         }
       }, 2000);
     })));

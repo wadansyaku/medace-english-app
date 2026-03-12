@@ -1,5 +1,6 @@
 import React from 'react';
-import { ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
+import getClientRuntimeFlags from '../config/runtime';
 import { getSubscriptionPolicy } from '../config/subscription';
 import { type PublicMotivationSnapshot, SubscriptionPlan } from '../types';
 import PublicMotivationPanel from './PublicMotivationPanel';
@@ -41,6 +42,8 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   motivationLoading,
   motivationError,
 }) => {
+  const runtimeFlags = getClientRuntimeFlags();
+
   return (
     <div className="mx-auto mt-6 max-w-5xl space-y-6">
       <button
@@ -58,6 +61,28 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         title="公開ページで見える学習ライブ"
         description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
       />
+
+      {(runtimeFlags.appOnlineOnly || !runtimeFlags.enablePublicBusinessDemo) && (
+        <section className="rounded-[28px] border border-amber-200 bg-amber-50 px-6 py-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-white p-2 text-amber-700 shadow-sm">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div className="space-y-2 text-sm leading-relaxed text-amber-900">
+              {runtimeFlags.appOnlineOnly && (
+                <p>
+                  現在の pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は、導入前の段階実装を完了するまで対象外です。
+                </p>
+              )}
+              {!runtimeFlags.enablePublicBusinessDemo && (
+                <p>
+                  学校・教室向けアカウントは公開画面からは発行せず、招待または手動発行の案内とセットで進めます。
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
         <div className="border-b border-slate-100 bg-medace-50 p-8 md:p-10">

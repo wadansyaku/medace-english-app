@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 
 const cwd = process.cwd();
 const args = process.argv.slice(2);
+const { FORCE_COLOR: _forceColor, ...baseEnv } = process.env;
 
 const readArg = (name, fallback) => {
   const index = args.findIndex((arg) => arg === `--${name}`);
@@ -15,11 +16,12 @@ const readArg = (name, fallback) => {
 const port = readArg('port', process.env.PLAYWRIGHT_SMOKE_PORT || '41731');
 const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-smoke-'));
 
-const runCommand = (command, commandArgs, env = process.env) => new Promise((resolve, reject) => {
+const runCommand = (command, commandArgs, env = baseEnv) => new Promise((resolve, reject) => {
   const child = spawn(command, commandArgs, {
     cwd,
     env,
     stdio: 'inherit',
+    detached: process.platform !== 'win32',
   });
 
   child.on('error', reject);
@@ -36,7 +38,11 @@ let server;
 
 const signalProcessTree = (child, signal) => {
   if (!child?.pid) return;
-  child.kill(signal);
+  if (process.platform === 'win32') {
+    child.kill(signal);
+    return;
+  }
+  process.kill(-child.pid, signal);
 };
 
 const stopServerProcess = async (child, graceMs = 2_000) => {
@@ -107,7 +113,7 @@ try {
     '--persist-to',
     persistDir,
   ], {
-    ...process.env,
+    ...baseEnv,
     CI: '1',
   });
 
@@ -125,10 +131,11 @@ try {
   ], {
     cwd,
     env: {
-      ...process.env,
+      ...baseEnv,
       CI: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
   });
 
   server.stdout?.on('data', (chunk) => {

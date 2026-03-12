@@ -11,6 +11,10 @@ export interface AppEnv {
   CLOUDFLARE_OCR_MODEL?: string;
   CLOUDFLARE_EVAL_MODEL?: string;
   ADMIN_DEMO_PASSWORD?: string;
+  ENABLE_ADMIN_DEMO?: string;
+  ENABLE_PUBLIC_BUSINESS_DEMO?: string;
+  ENABLE_DESTRUCTIVE_ADMIN_ACTIONS?: string;
+  APP_ONLINE_ONLY?: string;
 }
 
 export interface DbUserRow {

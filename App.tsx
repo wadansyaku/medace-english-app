@@ -34,6 +34,7 @@ const App: React.FC = () => {
     handleResetDemo,
     adminDemoPrompt,
   } = useAuthExperienceController({
+    navigationState,
     dispatchNavigation,
     onLogoutReset: () => {
       setInstructorWorkspaceView(InstructorWorkspaceView.OVERVIEW);
@@ -79,7 +80,7 @@ const App: React.FC = () => {
           user={user} 
           onComplete={(updated) => {
             setCurrentUser(updated);
-            dispatchNavigation({ type: 'go-home', view: 'dashboard' });
+            dispatchNavigation({ type: 'go-home', view: 'dashboard', historyMode: 'replace' });
           }} 
         />
       );

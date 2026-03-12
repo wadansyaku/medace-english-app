@@ -240,6 +240,18 @@ test('public home shows the live motivation board before login', async ({ page }
   await expect(page.getByText(/いまの積み上がり/)).toBeVisible();
 });
 
+test('public guide updates the URL and browser back returns to login', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'アプリの説明・料金を見る' }).click();
+  await expect(page).toHaveURL(/\/public$/);
+  await expect(page.getByText('アプリの説明と')).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('heading', { name: '学習を再開する' })).toBeVisible();
+});
+
 test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
 
@@ -257,6 +269,32 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await expect(page.getByText('今日やることは 1 つだけ')).toBeVisible();
+});
+
+test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+  const importResult = await seedPhrasebook(page, 'Route Persistence Drill');
+  const bookId = importResult.importedBookIds?.[0];
+  expect(bookId).toBeTruthy();
+
+  await page.goto(`/study/${bookId}`);
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
+  }
+
+  await page.getByRole('button', { name: 'ダッシュボードに戻る' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 });
 
 test('group admin can open the organization dashboard and update an assignment', async ({ page }) => {
