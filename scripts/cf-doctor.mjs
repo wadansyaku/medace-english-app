@@ -8,7 +8,7 @@ const includeDeferred = process.argv.includes('--include-deferred');
 const REQUIRED_GITHUB_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
 const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
-const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
+const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY'];
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -78,7 +78,7 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
-const writingAiMode = process.env.WRITING_AI_MODE || '';
+const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
 const r2Buckets = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
   const pairs = [];
   if (bucket.bucket_name) pairs.push({ env: 'production', name: bucket.bucket_name });
@@ -147,6 +147,14 @@ if (cloudflareReady) {
       `Pages project ${pagesProject}`,
       pagesProjects.stdout.includes(pagesProject) ? 'present' : 'missing'
     );
+    const gitMirrorProject = `${pagesProject}-git`;
+    if (pagesProjects.stdout.includes(gitMirrorProject)) {
+      pushRecord(
+        'warn',
+        `Possible duplicate Pages project ${gitMirrorProject}`,
+        `present; disable Cloudflare Git auto-deploy or remove the mirror project if GitHub Actions is the canonical deploy path`,
+      );
+    }
   }
 
   if (d1Database) {
