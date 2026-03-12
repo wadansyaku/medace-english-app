@@ -394,6 +394,82 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   if (!currentWord) return null;
 
   if (isFinished) {
+    if (isMobileViewport) {
+      return (
+        <div className="bg-[#fff8f1] px-1 pb-28 pt-1">
+          <div className="mx-auto max-w-xl space-y-4">
+            <section className="rounded-[28px] bg-white px-5 py-5 shadow-xl">
+              <div className="flex flex-col items-center text-center">
+                {leveledUp && (
+                  <div className="mb-3 inline-flex rounded-full bg-medace-500 px-4 py-2 text-xs font-black text-white shadow-lg">
+                    LEVEL UP!
+                  </div>
+                )}
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+                  <Award className={`h-8 w-8 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
+                </div>
+                <h2 className="text-[1.7rem] font-black tracking-tight text-slate-950">クエスト完了！</h2>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                  {queue.length}語を進めました。次に直すところだけ見れば十分です。
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
+                  +{earnedXP + streakBonusXP} XP
+                  {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next Action</div>
+              <div className="mt-3 grid gap-3">
+                <div className="rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                  <div className="text-sm font-bold text-slate-900">次の復習タイミング</div>
+                  <div className="mt-1 text-sm leading-relaxed text-slate-600">{nextReviewMessage}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-sm font-bold text-slate-900">明日の入り方</div>
+                  <div className="mt-1 text-sm leading-relaxed text-slate-600">
+                    最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review Preview</div>
+              {reviewPreview.length > 0 ? (
+                <div className="mt-3 space-y-3">
+                  {reviewPreview.map((word) => (
+                    <div key={word.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-bold text-slate-900">{word.word}</div>
+                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">今夜もう一度</span>
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">{word.definition}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                  もう一度に回す単語はありません。このまま次の学習に進めます。
+                </div>
+              )}
+            </section>
+          </div>
+
+          <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
+            <button
+              data-testid="study-finish-exit"
+              onClick={handleExit}
+              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+            >
+              ダッシュボードに戻る
+            </button>
+          </MobileStickyActionBar>
+        </div>
+      );
+    }
+
     return (
       <div className="relative mx-auto max-w-2xl overflow-hidden rounded-[32px] bg-white p-6 shadow-2xl animate-in zoom-in duration-500 sm:p-8">
         <div className="absolute inset-0 bg-gradient-to-b from-yellow-50 via-white to-white"></div>

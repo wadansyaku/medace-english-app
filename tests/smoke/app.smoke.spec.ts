@@ -241,6 +241,22 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
   });
 
+  test('student settings keeps the save action reachable on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId('student-hero-settings').click();
+    await expect(page.getByTestId('settings-modal-mobile')).toBeVisible();
+
+    const saveButton = page.getByTestId('settings-save-button');
+    await expect(saveButton).toBeVisible();
+    const saveBox = await saveButton.boundingBox();
+    expect(saveBox).not.toBeNull();
+    expect((saveBox?.y ?? 1000) + (saveBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
   test('student without books can open phrasebook creation from the hero on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId('demo-login-student').click();
@@ -253,6 +269,28 @@ test.describe('student mobile ux', () => {
 
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
     await expect(page.getByText('My単語帳 作成')).toBeVisible();
+  });
+
+  test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await seedPhrasebook(page, 'Mobile Plan Drill');
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByRole('button', { name: '最初のプランを作る' }).click();
+    await expect(page.getByText('今日の学習プラン')).toBeVisible();
+    await page.getByRole('button', { name: '編集' }).click();
+
+    await expect(page.getByTestId('plan-editor-modal')).toBeVisible();
+    const saveButton = page.getByTestId('plan-editor-save-button');
+    await expect(saveButton).toBeVisible();
+    const saveBox = await saveButton.boundingBox();
+    expect(saveBox).not.toBeNull();
+    expect((saveBox?.y ?? 1000) + (saveBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student onboarding keeps mobile start and next actions within reach', async ({ page }) => {
@@ -278,6 +316,35 @@ test.describe('student mobile ux', () => {
     const nextBox = await nextButton.boundingBox();
     expect(nextBox).not.toBeNull();
     expect((nextBox?.y ?? 1000) + (nextBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
+  test('student can reach the finish action after a short study session on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Finish Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+
+    for (let index = 0; index < 2; index += 1) {
+      await page.getByTestId('study-flip-button').click();
+      await expect(page.getByTestId('study-rate-3')).toBeVisible();
+      await page.getByTestId('study-rate-3').click();
+    }
+
+    const finishButton = page.getByTestId('study-finish-exit');
+    await expect(finishButton).toBeVisible();
+    const finishBox = await finishButton.boundingBox();
+    expect(finishBox).not.toBeNull();
+    expect((finishBox?.y ?? 1000) + (finishBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
