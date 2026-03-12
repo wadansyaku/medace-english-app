@@ -1,10 +1,26 @@
 import type {
   LearningHistory,
-  LearningInteractionSource,
   QuizSelectionMode,
   QuizSessionConfig,
   WordData,
 } from '../types';
+import {
+  getStrictStudyWordIds,
+  isDueMasteryHistory,
+  isMasteryHistoryRecord,
+  isMasteryProgressHistory,
+  isStudyInteractionSource,
+  resolveInteractionSource,
+} from '../shared/learningHistory';
+
+export {
+  getStrictStudyWordIds,
+  isDueMasteryHistory,
+  isMasteryHistoryRecord,
+  isMasteryProgressHistory,
+  isStudyInteractionSource,
+  resolveInteractionSource,
+} from '../shared/learningHistory';
 
 export const clampQuizBoundary = (value: number, min: number, max: number): number => {
   if (!Number.isFinite(value)) return min;
@@ -24,37 +40,6 @@ export const normalizeQuizRange = (
     end: Math.max(clampedStart, clampedEnd),
   };
 };
-
-export const resolveInteractionSource = (
-  existingSource?: LearningInteractionSource,
-  nextSource?: LearningInteractionSource,
-): LearningInteractionSource | undefined => {
-  if (existingSource === 'STUDY' || nextSource === 'STUDY') return 'STUDY';
-  if (nextSource === 'QUIZ') return 'QUIZ';
-  if (existingSource === 'QUIZ') return 'QUIZ';
-  return undefined;
-};
-
-export const isStudyInteractionSource = (
-  source?: LearningInteractionSource | null,
-): source is 'STUDY' => source === 'STUDY';
-
-export const isMasteryHistoryRecord = (
-  history: Pick<LearningHistory, 'interactionSource'>,
-): boolean => isStudyInteractionSource(history.interactionSource);
-
-export const isMasteryProgressHistory = (
-  history: Pick<LearningHistory, 'interactionSource' | 'attemptCount' | 'interval'>,
-): boolean => isMasteryHistoryRecord(history) && (history.attemptCount > 0 || history.interval > 0);
-
-export const isDueMasteryHistory = (
-  history: Pick<LearningHistory, 'interactionSource' | 'status' | 'nextReviewDate'>,
-  now: number,
-): boolean => (
-  isStudyInteractionSource(history.interactionSource)
-  && history.status !== 'graduated'
-  && history.nextReviewDate <= now
-);
 
 export const buildQuizAttemptHistory = ({
   existing,
@@ -83,15 +68,6 @@ export const buildQuizAttemptHistory = ({
   totalResponseTimeMs: (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs)),
   interactionSource: resolveInteractionSource(existing?.interactionSource, 'QUIZ') || 'QUIZ',
 });
-
-export const getStrictStudyWordIds = (
-  histories: Array<Pick<LearningHistory, 'wordId' | 'bookId' | 'interactionSource'>>,
-  bookId: string,
-): string[] => Array.from(new Set(
-  histories
-    .filter((history) => history.bookId === bookId && isStudyInteractionSource(history.interactionSource))
-    .map((history) => history.wordId),
-));
 
 export const getQuizCandidateWords = ({
   words,

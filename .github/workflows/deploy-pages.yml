@@ -19,6 +19,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
+      WRITING_AI_MODE: ${{ vars.WRITING_AI_MODE || 'hybrid' }}
     permissions:
       contents: read
       deployments: write
@@ -94,7 +95,7 @@ jobs:
             names="(none)"
           fi
           missing=""
-          for required in ADMIN_DEMO_PASSWORD GEMINI_API_KEY; do
+          for required in ADMIN_DEMO_PASSWORD GEMINI_API_KEY WRITING_AI_MODE; do
             if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$required"; then
               missing="${missing}${missing:+,}$required"
             fi
@@ -115,6 +116,7 @@ jobs:
             echo "- Alias URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
+            echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
             echo "- Verification: typecheck + unit tests + API integration tests + cf:doctor"
             echo "- Production Secrets: \`${{ steps.production-secrets.outputs.names }}\`"
             echo "- Missing Production Secrets: \`${{ steps.production-secrets.outputs.missing }}\`"

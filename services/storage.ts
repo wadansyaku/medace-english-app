@@ -12,9 +12,8 @@ import {
   LearningHistory,
   LearningPlan,
   LearningPreference,
-  LearningPreferenceIntensity,
-  MotivationScopeStats,
   MotivationSnapshot,
+  MotivationScopeStats,
   MasteryDistribution,
   OrganizationDashboardSnapshot,
   OrganizationRole,
@@ -22,7 +21,6 @@ import {
   StudentSummary,
   StudentWorksheetSnapshot,
   SubscriptionPlan,
-  UserGrade,
   UserProfile,
   UserRole,
   UserStats,
@@ -37,7 +35,7 @@ import {
 import { getSubscriptionPolicy } from '../config/subscription';
 import { CloudflareStorageService } from './cloudflare';
 import { formatDateKey, formatMonthKey, getRelativeDateKey, getTodayDateKey } from '../utils/date';
-import { buildDemoEmail, getDemoDisplayName, isDemoEmail } from '../utils/demo';
+import { isDemoEmail } from '../utils/demo';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
 import {
   buildQuizAttemptHistory,
@@ -46,6 +44,19 @@ import {
   isMasteryHistoryRecord,
   isMasteryProgressHistory,
 } from '../utils/quiz';
+import {
+  createEphemeralDemoUser,
+  defaultLearningPreference,
+  IDB_MOCK_ASSIGNMENTS,
+  IDB_MOCK_USERS,
+  isBookOwnedByUser,
+} from './storage/mockData';
+import {
+  buildMockMotivationTotals,
+  createMotivationInsight,
+  createMotivationScope,
+  type MotivationAggregateTotals,
+} from './storage/motivation';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -107,58 +118,6 @@ const STORES = {
   PREFERENCES: 'preferences',
   ASSIGNMENTS: 'assignments',
 };
-
-// Mocks
-const IDB_MOCK_USERS: UserProfile[] = [
-  {
-    uid: 'mock-student-free-001',
-    displayName: '鈴木 健太',
-    role: UserRole.STUDENT,
-    email: 'kenta@medace.com',
-    grade: UserGrade.JHS2,
-    englishLevel: EnglishLevel.A2,
-    subscriptionPlan: SubscriptionPlan.TOC_FREE,
-    stats: { xp: 1250, level: 12, currentStreak: 5, lastLoginDate: '2023-10-27' }
-  },
-  {
-    uid: 'mock-student-biz-001',
-    displayName: '黒田 颯太',
-    role: UserRole.STUDENT,
-    organizationRole: OrganizationRole.STUDENT,
-    email: 'sota@demo-school.jp',
-    grade: UserGrade.JHS3,
-    englishLevel: EnglishLevel.B1,
-    subscriptionPlan: SubscriptionPlan.TOB_PAID,
-    organizationName: 'Steady Study Demo Academy',
-    stats: { xp: 820, level: 8, currentStreak: 3, lastLoginDate: '2023-10-27' }
-  },
-  {
-    uid: 'mock-instructor-001',
-    displayName: 'Oak 先生',
-    role: UserRole.INSTRUCTOR,
-    organizationRole: OrganizationRole.INSTRUCTOR,
-    email: 'oak@medace.com',
-    subscriptionPlan: SubscriptionPlan.TOB_PAID,
-    organizationName: 'Steady Study Demo Academy'
-  },
-  {
-    uid: 'mock-group-admin-001',
-    displayName: '朝比奈 由奈',
-    role: UserRole.INSTRUCTOR,
-    organizationRole: OrganizationRole.GROUP_ADMIN,
-    email: 'manager@medace-demo.jp',
-    subscriptionPlan: SubscriptionPlan.TOB_PAID,
-    organizationName: 'Steady Study Demo Academy'
-  },
-  {
-    uid: 'mock-admin-001',
-    displayName: 'システム管理者',
-    role: UserRole.ADMIN,
-    email: 'admin@medace.com',
-    subscriptionPlan: SubscriptionPlan.TOB_PAID,
-    organizationName: 'Steady Study HQ'
-  }
-];
 
 const slugifySegment = (value: string): string => value
   .normalize('NFKC')
@@ -283,141 +242,6 @@ const calculatePercentage = (learned: number, total: number): number => {
 
 const WORKSHEET_STATUSES: Array<StudentWorksheetSnapshot['words'][number]['status']> = ['graduated', 'review', 'learning'];
 const FALLBACK_WORKSHEET_WORD_LIMIT = 40;
-const DEFAULT_LEARNING_PREFERENCE = (userUid: string): LearningPreference => ({
-  userUid,
-  targetExam: '',
-  targetScore: '',
-  examDate: '',
-  weeklyStudyDays: 4,
-  dailyStudyMinutes: 20,
-  weakSkillFocus: '',
-  motivationNote: '',
-  intensity: LearningPreferenceIntensity.BALANCED,
-  updatedAt: Date.now(),
-});
-
-interface MotivationAggregateTotals {
-  totalAnswers: number;
-  totalCorrect: number;
-  totalResponseTimeMs: number;
-}
-
-const toAccuracyRate = (totalCorrect: number, totalAnswers: number): number => (
-  totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0
-);
-
-const toAverageResponseTimeMs = (totalResponseTimeMs: number, totalAnswers: number): number | null => {
-  if (totalAnswers <= 0 || totalResponseTimeMs <= 0) return null;
-  return Math.round(totalResponseTimeMs / totalAnswers);
-};
-
-const createMotivationScope = (
-  scope: MotivationScopeStats['scope'],
-  label: string,
-  description: string,
-  totals: MotivationAggregateTotals,
-  registeredUsers: number,
-): MotivationScopeStats => ({
-  scope,
-  label,
-  description,
-  totalAnswers: totals.totalAnswers,
-  totalCorrect: totals.totalCorrect,
-  accuracyRate: toAccuracyRate(totals.totalCorrect, totals.totalAnswers),
-  totalStudyTimeMs: totals.totalResponseTimeMs,
-  averageResponseTimeMs: toAverageResponseTimeMs(totals.totalResponseTimeMs, totals.totalAnswers),
-  registeredUsers,
-});
-
-const buildMockMotivationTotals = (
-  personal: MotivationAggregateTotals,
-  registeredUsers: number,
-  averageAccuracy: number,
-  averageResponseTimeMs: number,
-): MotivationAggregateTotals => {
-  const peerCount = Math.max(registeredUsers - 1, 0);
-  const peerAnswers = peerCount * 96;
-  const peerCorrect = Math.round(peerAnswers * averageAccuracy);
-  const peerResponseTimeMs = peerAnswers * averageResponseTimeMs;
-
-  return {
-    totalAnswers: personal.totalAnswers + peerAnswers,
-    totalCorrect: personal.totalCorrect + peerCorrect,
-    totalResponseTimeMs: personal.totalResponseTimeMs + peerResponseTimeMs,
-  };
-};
-
-const createMotivationInsight = (scopes: MotivationScopeStats[]): MotivationSnapshot['insight'] => {
-  const personal = scopes.find((scope) => scope.scope === 'PERSONAL');
-  const comparison = scopes.find((scope) => scope.scope === 'GROUP') || scopes.find((scope) => scope.scope === 'GLOBAL');
-
-  if (!personal || personal.totalAnswers === 0) {
-    return {
-      title: '最初の5問でモチベーションボードが動きます',
-      body: '学習かテストを1セット進めると、総回答数・正解数・解答時間の集計がここから育ち始めます。',
-    };
-  }
-
-  if (comparison && comparison.totalAnswers > 0) {
-    const answerShare = Math.max(1, Math.round((personal.totalAnswers / comparison.totalAnswers) * 100));
-    const timingCopy = personal.averageResponseTimeMs
-      ? `平均解答時間は ${Math.round(personal.averageResponseTimeMs / 100) / 10} 秒です。`
-      : '平均解答時間はこの更新以降の回答から集計します。';
-
-    return {
-      title: `あなたの回答が${comparison.label}の ${answerShare}% を占めています`,
-      body: `正答率は ${personal.accuracyRate}% です。${timingCopy}`,
-    };
-  }
-
-  return {
-    title: `総回答数 ${personal.totalAnswers} 問まで積み上がりました`,
-    body: `総正解数は ${personal.totalCorrect} 問、累計学習時間は ${Math.round(personal.totalStudyTimeMs / 60000)} 分です。`,
-  };
-};
-
-const IDB_MOCK_ASSIGNMENTS = [
-  { studentUid: 'student-biz-1', instructorUid: 'mock-instructor-001' },
-  { studentUid: 'student-biz-2', instructorUid: 'mock-instructor-001' },
-];
-
-const createEphemeralDemoUser = (role: UserRole, organizationRole?: OrganizationRole): UserProfile => ({
-  uid: `demo-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-  displayName: getDemoDisplayName(role, organizationRole),
-  role,
-  organizationRole,
-  email: buildDemoEmail(role, organizationRole),
-  subscriptionPlan:
-    organizationRole
-      ? SubscriptionPlan.TOB_PAID
-      : role === UserRole.STUDENT
-        ? SubscriptionPlan.TOC_FREE
-        : SubscriptionPlan.TOB_PAID,
-  organizationName:
-    role === UserRole.ADMIN
-      ? 'Steady Study HQ'
-      : organizationRole
-        ? 'Steady Study Demo Academy'
-        : undefined,
-  needsOnboarding: role === UserRole.STUDENT,
-  stats: {
-    xp: 0,
-    level: 1,
-    currentStreak: 1,
-    lastLoginDate: getTodayDateKey(),
-  },
-});
-
-const isBookOwnedByUser = (book: BookMetadata, userUid: string | undefined): boolean => {
-  if (!userUid) return false;
-  try {
-    if (book.description?.includes(userUid)) return true;
-    const parsed = JSON.parse(book.description || '{}') as { createdBy?: string };
-    return parsed.createdBy === userUid;
-  } catch {
-    return false;
-  }
-};
 
 class IndexedDBStorageService implements IStorageService {
   private dbPromise: Promise<IDBDatabase>;
@@ -1188,8 +1012,8 @@ class IndexedDBStorageService implements IStorageService {
       const store = await this.getStore(STORES.PREFERENCES);
       return new Promise((resolve) => {
           const req = store.get(uid);
-          req.onsuccess = () => resolve(req.result || DEFAULT_LEARNING_PREFERENCE(uid));
-          req.onerror = () => resolve(DEFAULT_LEARNING_PREFERENCE(uid));
+          req.onsuccess = () => resolve(req.result || defaultLearningPreference(uid));
+          req.onerror = () => resolve(defaultLearningPreference(uid));
       });
   }
 

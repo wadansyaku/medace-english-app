@@ -1,34 +1,39 @@
 import { expect, test, type Page } from '@playwright/test';
+import {
+  MOBILE_FLOW_BUTTON_LABELS,
+  MOBILE_FLOW_TEST_IDS,
+  MOBILE_FLOW_WRITING,
+} from '../../config/mobileFlow.js';
 
 const mobileViewport = { width: 390, height: 844 };
 const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 const completeDiagnostic = async (page: Page) => {
-  await expect(page.getByTestId('onboarding-test')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingTest)).toBeVisible();
 
   for (let index = 0; index < 12; index += 1) {
-    await page.getByTestId('diagnostic-option').first().click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.diagnosticOption).first().click();
     const nextButton = index === 11
-      ? page.getByRole('button', { name: '判定を見る' })
-      : page.getByRole('button', { name: '次へ' });
+      ? page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.onboardingResult })
+      : page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.onboardingNext });
     await nextButton.click();
   }
 };
 
 const maybeCompleteOnboarding = async (page: Page) => {
-  const dashboard = page.getByTestId('student-dashboard');
-  const onboarding = page.getByTestId('onboarding-profile');
+  const dashboard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard);
+  const onboarding = page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingProfile);
   await Promise.race([
     dashboard.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null),
     onboarding.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null),
   ]);
 
   if (await onboarding.isVisible().catch(() => false)) {
-    await page.getByRole('button', { name: /中学3年生/ }).click();
-    await page.getByRole('button', { name: /学校英語はだいたい分かる/ }).click();
-    await page.getByRole('button', { name: '診断を始める' }).click();
+    await page.getByRole('button', { name: new RegExp(MOBILE_FLOW_BUTTON_LABELS.onboardingGrade) }).click();
+    await page.getByRole('button', { name: new RegExp(MOBILE_FLOW_BUTTON_LABELS.onboardingConfidence) }).click();
+    await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.onboardingStart }).click();
     await completeDiagnostic(page);
-    await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
+    await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.onboardingCommit }).click();
   }
 };
 
@@ -156,30 +161,30 @@ const storageAction = async <T,>(page: Page, action: string, payload?: Record<st
 
 const completeSeededStudySession = async (page: Page, bookId: string) => {
   await page.getByTestId(`book-study-${bookId}`).click();
-  await expect(page.getByTestId('study-card-front')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
   for (let index = 0; index < 2; index += 1) {
-    await page.getByTestId('study-flip-button').click();
-    await expect(page.getByTestId('study-rate-3')).toBeVisible();
-    await page.getByTestId('study-rate-3').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
   }
 
-  await expect(page.getByTestId('study-finish-exit')).toBeVisible();
-  await page.getByTestId('study-finish-exit').click();
-  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 };
 
 const answerSeededQuizQuestion = async (page: Page, correct = true) => {
-  const promptText = await page.getByTestId('quiz-question-card').innerText();
+  const promptText = await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizQuestionCard).innerText();
   const correctAnswer = promptText.includes('triage') ? 'トリアージ' : '安定させる';
 
-  await page.getByTestId('quiz-show-options').click();
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizShowOptions).click();
   if (correct) {
     await page.getByRole('button', { name: correctAnswer }).click();
     return;
   }
 
-  const optionLabels = await page.locator('[data-testid="quiz-running-view"] button').allTextContents();
+  const optionLabels = await page.locator(`[data-testid="${MOBILE_FLOW_TEST_IDS.quizRunningView}"] button`).allTextContents();
   const wrongAnswer = optionLabels
     .map((label) => label.trim())
     .find((label) => label && label !== correctAnswer);
@@ -238,7 +243,7 @@ test('public home shows the live motivation board before login', async ({ page }
 test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByTestId('demo-login-student').click();
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await expect(page.getByTestId('onboarding-profile')).toBeVisible();
 
   await page.getByRole('button', { name: /中学2年生/ }).click();
@@ -337,7 +342,7 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
   await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
-  await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+  await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-1.png',
     mimeType: 'image/png',
     buffer: Buffer.from('student-attempt-one'),
@@ -358,12 +363,12 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
   await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
-  await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+  await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-2.png',
     mimeType: 'image/png',
     buffer: Buffer.from('student-attempt-two'),
   });
-  await studentPage.getByPlaceholder('OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。').fill(
+  await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(
     'I agree that students should use tablets because they can review lessons quickly and share ideas more easily. For example, they can check notes at home and ask better questions in class.',
   );
   await studentPage.getByTestId('writing-submit-upload').click();
@@ -397,12 +402,12 @@ test.describe('student mobile ux', () => {
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     await expect(page.getByTestId('demo-banner-toggle')).toBeVisible();
-    const primaryCta = page.getByTestId('student-hero-primary-cta');
+    const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
     await expect(primaryCta).toBeVisible();
     const box = await primaryCta.boundingBox();
     expect(box).not.toBeNull();
@@ -411,7 +416,7 @@ test.describe('student mobile ux', () => {
 
   test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -425,7 +430,7 @@ test.describe('student mobile ux', () => {
 
   test('student settings keeps the save action reachable on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -441,11 +446,11 @@ test.describe('student mobile ux', () => {
 
   test('student without books can open phrasebook creation from the hero on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    const primaryCta = page.getByTestId('student-hero-primary-cta');
+    const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
     await expect(primaryCta).toContainText('My単語帳を作る');
     await primaryCta.click();
 
@@ -455,7 +460,7 @@ test.describe('student mobile ux', () => {
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -477,7 +482,7 @@ test.describe('student mobile ux', () => {
 
   test('student onboarding keeps mobile start and next actions within reach', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await expect(page.getByTestId('onboarding-profile')).toBeVisible();
 
     await page.getByRole('button', { name: '中学3年生' }).click();
@@ -502,7 +507,7 @@ test.describe('student mobile ux', () => {
 
   test('student can reach the finish action after a short study session on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -531,7 +536,7 @@ test.describe('student mobile ux', () => {
 
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -568,7 +573,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
-    await page.getByTestId('quiz-selection-learned_only').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSelectionLearnedOnly).click();
 
     await expect(page.getByTestId('quiz-empty-state')).toBeVisible();
     await expect(page.getByTestId('quiz-empty-state')).toContainText('学習モードで評価した単語');
@@ -577,7 +582,7 @@ test.describe('student mobile ux', () => {
 
   test('student can complete the learned-only quiz flow on mobile after studying', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -591,7 +596,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
-    await page.getByTestId('quiz-selection-learned_only').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSelectionLearnedOnly).click();
     await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
     await page.getByTestId('quiz-setup-primary-cta').click();
 
@@ -609,7 +614,7 @@ test.describe('student mobile ux', () => {
 
   test('quiz-only mobile attempts do not inflate dashboard progress or due counts', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -649,7 +654,7 @@ test.describe('student mobile ux', () => {
 
   test('mobile quiz does not downgrade mastery for previously studied words', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -699,7 +704,7 @@ test.describe('student mobile ux', () => {
 
   test('student can back out from a running quiz with confirmation on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId('demo-login-student').click();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -718,13 +723,13 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('quiz-running-view')).toBeVisible();
 
     await page.getByTestId('quiz-back-button').click();
-    await expect(page.getByTestId('quiz-exit-confirm-dialog')).toBeVisible();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizExitConfirmDialog)).toBeVisible();
     await page.getByTestId('quiz-exit-cancel').click();
     await expect(page.getByTestId('quiz-running-view')).toBeVisible();
 
     await page.getByTestId('quiz-back-button').click();
-    await expect(page.getByTestId('quiz-exit-confirm-dialog')).toBeVisible();
-    await page.getByTestId('quiz-exit-confirm').click();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizExitConfirmDialog)).toBeVisible();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizExitConfirm).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
   });
 
@@ -778,13 +783,13 @@ test.describe('student mobile ux', () => {
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await expect(studentPage.getByText('ファイル選択へ進む')).toBeVisible();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
-    await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+    await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
       name: 'mobile-attempt.png',
       mimeType: 'image/png',
       buffer: Buffer.from('mobile-writing-attempt'),
     });
     await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
-    await studentPage.getByPlaceholder('OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。').fill(
+    await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(
       'Students should use tablets because they can review notes quickly and organize homework more clearly.',
     );
     await studentPage.getByTestId('writing-submit-upload').click();
@@ -843,13 +848,13 @@ test.describe('student mobile ux', () => {
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
-    await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+    await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
       name: 'mobile-feedback.png',
       mimeType: 'image/png',
       buffer: Buffer.from('mobile-feedback-attempt'),
     });
     await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
-    await studentPage.getByPlaceholder('OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。').fill(
+    await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(
       'Students should use tablets because they can review lessons quickly and share information with classmates.',
     );
     await studentPage.getByTestId('writing-submit-upload').click();
@@ -868,7 +873,7 @@ test.describe('student mobile ux', () => {
     await studentPage.reload();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
     await studentPage.getByTestId(`writing-open-feedback-${generatedAssignment.id}`).click();
-    await expect(studentPage.getByTestId('writing-feedback-mobile-view')).toBeVisible();
+    await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-improvements')).toBeVisible();

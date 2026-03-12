@@ -1,6 +1,7 @@
 export interface AppEnv {
   DB: any;
   WRITING_ASSETS?: any;
+  WRITING_AI_MODE?: string;
   GEMINI_API_KEY?: string;
   OPENAI_API_KEY?: string;
   OPENAI_OCR_MODEL?: string;

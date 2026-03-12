@@ -6,8 +6,8 @@ const cwd = process.cwd();
 const includeDeferred = process.argv.includes('--include-deferred');
 
 const REQUIRED_GITHUB_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
-const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE'];
-const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD'];
+const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
+const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
 const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
 
 const run = (command, args, options = {}) => {
@@ -78,6 +78,7 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const writingAiMode = process.env.WRITING_AI_MODE || '';
 const r2Buckets = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
   const pairs = [];
   if (bucket.bucket_name) pairs.push({ env: 'production', name: bucket.bucket_name });
@@ -89,6 +90,7 @@ const repoSlug = getRepoSlug();
 pushRecord('info', 'Workspace', cwd);
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
+pushRecord('info', 'Writing AI mode', writingAiMode || '(missing locally, expecting Pages binding)');
 pushRecord('info', 'R2 buckets', r2Buckets.length > 0 ? r2Buckets.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 

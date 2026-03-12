@@ -12,6 +12,7 @@ import {
   UserRole,
   WordData,
 } from '../../types';
+import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { formatDateKey, formatMonthKey, getTodayDateKey, shiftDateKey } from '../../utils/date';
 import { isDemoEmail } from '../../utils/demo';
 import { canAccessOfficialBook as canAccessOfficialBookForPlan, normalizeOfficialBookText } from '../../utils/bookAccess';
@@ -21,7 +22,6 @@ import type { AppEnv, DbUserRow } from './types';
 export const DAY_MS = 86400000;
 export const WORKSHEET_STATUSES: Array<StudentWorksheetSnapshot['words'][number]['status']> = ['graduated', 'review', 'learning'];
 export const FALLBACK_WORKSHEET_WORD_LIMIT = 40;
-export const MASTERY_INTERACTION_SOURCE: LearningHistory['interactionSource'] = 'STUDY';
 
 export interface DbBookRow {
   id: string;

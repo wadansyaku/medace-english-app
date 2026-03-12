@@ -543,6 +543,8 @@ const main = async () => {
     });
     assert(firstFinalize.submission.evaluations.length === 3, 'writing submission should persist evaluations from 3 providers');
     assert(firstFinalize.submission.ocrProvider === 'OPENAI', 'writing OCR should rerun with OPENAI when fallback confidence is low');
+    assert(firstFinalize.submission.ocrMeta?.mode === 'fixture', 'fixture mode should expose OCR provenance');
+    assert(firstFinalize.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'writing evaluations should expose provenance');
 
     const forbiddenStudentDetail = await orgStudent.request(`/api/writing/submissions/${firstFinalize.submission.id}`, { method: 'GET' });
     assert(forbiddenStudentDetail.status === 403, 'student should not see feedback before teacher approval');
@@ -588,6 +590,7 @@ const main = async () => {
       manualTranscript: 'I agree that students should use tablets in class because they can review lessons quickly and share ideas more easily. For example, they can check notes at home and ask better questions in class. However, teachers should give clear rules so students do not lose focus.',
     });
     assert(secondFinalize.submission.transcriptConfidence >= 0.9, 'manual transcript should produce high OCR confidence on the second attempt');
+    assert(secondFinalize.submission.ocrMeta?.notes === 'manual-transcript', 'manual transcripts should be labeled in OCR provenance');
 
     const secondQueue = await groupAdmin.get('/api/writing/review-queue?scope=QUEUE');
     const secondQueueItem = secondQueue.items.find((item) => item.assignmentId === issuedAssignment.id);

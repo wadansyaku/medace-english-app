@@ -12,6 +12,7 @@
     "test:api": "node scripts/run-api-integration-tests.mjs",
     "test:smoke": "playwright test --config=playwright.smoke.config.ts",
     "test:ios-simulator": "node scripts/run-ios-simulator-smoke.mjs",
+    "test:ios-simulator:doctor": "node scripts/run-ios-simulator-smoke.mjs --doctor",
     "typecheck": "tsc --noEmit",
     "cf:preview": "vite build && wrangler pages dev dist",
     "cf:doctor": "node scripts/cf-doctor.mjs",
@@ -29,15 +30,15 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "@playwright/test": "^1.54.2",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",
-    "vitest": "^3.2.4",
     "vite": "^6.2.0",
-    "wrangler": "^4.58.0"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.72.0"
   }
 }

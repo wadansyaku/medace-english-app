@@ -557,6 +557,15 @@ export const WRITING_AI_PROVIDER_LABELS: Record<WritingAiProvider, string> = {
   OPENAI: 'OpenAI',
 };
 
+export interface WritingAiExecutionProvenance {
+  mode: 'fixture' | 'live' | 'hybrid-fallback';
+  provider: WritingAiProvider;
+  requestedProvider?: WritingAiProvider;
+  fallbackReason?: string;
+  model?: string;
+  notes?: string;
+}
+
 export type WritingRubricKey = 'task' | 'organization' | 'vocabulary' | 'grammar';
 
 export const WRITING_RUBRIC_LABELS: Record<WritingRubricKey, string> = {
@@ -633,6 +642,7 @@ export interface WritingEvaluation {
   costMilliYen: number;
   latencyMs: number;
   isDefault: boolean;
+  provenance?: WritingAiExecutionProvenance;
 }
 
 export interface WritingTeacherReview {
@@ -658,6 +668,7 @@ export interface WritingSubmission {
   transcript: string;
   transcriptConfidence: number;
   ocrProvider?: WritingAiProvider;
+  ocrMeta?: WritingAiExecutionProvenance;
   processingState: 'UPLOADED' | 'OCR_DONE' | 'EVALUATED';
   submittedAt: number;
   assets: WritingSubmissionAsset[];

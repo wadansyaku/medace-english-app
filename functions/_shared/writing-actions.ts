@@ -15,6 +15,7 @@ import {
   OrganizationRole,
   SubscriptionPlan,
   UserRole,
+  type WritingAiExecutionProvenance,
   type WritingAiProvider,
   type WritingAssignment,
   type WritingAssignmentStatus,
@@ -41,6 +42,7 @@ import { readAll, readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
 import {
   generateWritingPrompt,
+  resolveWritingAiMode,
   runWritingEvaluations,
   runWritingOcr,
 } from './writing-ai';
@@ -94,6 +96,7 @@ interface DbWritingSubmissionRow {
   transcript: string | null;
   transcript_confidence: number;
   ocr_provider: string | null;
+  ocr_meta: string | null;
   selected_evaluation_id: string | null;
   processing_state: 'UPLOADED' | 'OCR_DONE' | 'EVALUATED';
   submitted_at: number;
@@ -131,6 +134,7 @@ interface DbWritingEvaluationRow {
   selection_score: number;
   cost_milli_yen: number;
   latency_ms: number;
+  raw_payload: string | null;
   is_default: number;
 }
 
@@ -193,6 +197,29 @@ const toAsset = (row: DbWritingAssetRow): WritingSubmissionAsset => ({
   assetUrl: buildAssetUrl(row.id),
 });
 
+const parseAiProvenance = (raw: string | null | undefined): WritingAiExecutionProvenance | undefined => {
+  if (!raw) return undefined;
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      provenance?: WritingAiExecutionProvenance;
+      provider?: WritingAiProvider;
+      fallback?: boolean;
+    };
+    if (parsed.provenance) return parsed.provenance;
+    if (parsed.provider) {
+      return {
+        mode: parsed.fallback ? 'fixture' : 'live',
+        provider: parsed.provider,
+      };
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+};
+
 const toEvaluation = (row: DbWritingEvaluationRow): WritingEvaluation => ({
   id: row.id,
   provider: row.provider,
@@ -211,6 +238,7 @@ const toEvaluation = (row: DbWritingEvaluationRow): WritingEvaluation => ({
   costMilliYen: Number(row.cost_milli_yen || 0),
   latencyMs: Number(row.latency_ms || 0),
   isDefault: Boolean(row.is_default),
+  provenance: parseAiProvenance(row.raw_payload),
 });
 
 const toTeacherReview = (row: DbWritingReviewRow): WritingTeacherReview => ({
@@ -229,7 +257,10 @@ const toTeacherReview = (row: DbWritingReviewRow): WritingTeacherReview => ({
 
 const toAssignment = (
   row: DbWritingAssignmentRow,
-  latestSubmission?: WritingSubmission,
+  options: {
+    latestSubmissionId?: string;
+    latestSubmission?: WritingSubmission;
+  } = {},
 ): WritingAssignment => ({
   id: row.id,
   organizationName: row.organization_name,
@@ -254,8 +285,8 @@ const toAssignment = (
   updatedAt: Number(row.updated_at || 0),
   lastSubmittedAt: Number(row.last_submitted_at || 0) || undefined,
   lastReturnedAt: Number(row.last_returned_at || 0) || undefined,
-  latestSubmissionId: latestSubmission?.id,
-  latestSubmission,
+  latestSubmissionId: options.latestSubmissionId || options.latestSubmission?.id,
+  latestSubmission: options.latestSubmission,
 });
 
 const readTemplate = async (env: AppEnv, templateId: string): Promise<WritingPromptTemplate> => {
@@ -311,9 +342,34 @@ const readLatestSubmissionRow = async (
    FROM writing_submissions
    WHERE assignment_id = ?
    ORDER BY submitted_at DESC
-   LIMIT 1`,
+  LIMIT 1`,
   assignmentId,
 );
+
+const readLatestSubmissionRowsForAssignments = async (
+  env: AppEnv,
+  assignmentIds: string[],
+): Promise<Map<string, DbWritingSubmissionRow>> => {
+  if (assignmentIds.length === 0) return new Map();
+
+  const placeholders = assignmentIds.map(() => '?').join(', ');
+  const rows = await readAll<DbWritingSubmissionRow>(
+    env,
+    `SELECT s.*
+     FROM writing_submissions s
+     JOIN (
+       SELECT assignment_id, MAX(submitted_at) AS submitted_at
+       FROM writing_submissions
+       WHERE assignment_id IN (${placeholders})
+       GROUP BY assignment_id
+     ) latest
+       ON latest.assignment_id = s.assignment_id
+      AND latest.submitted_at = s.submitted_at`,
+    ...assignmentIds,
+  );
+
+  return new Map(rows.map((row) => [row.assignment_id, row]));
+};
 
 const readSubmissionRow = async (env: AppEnv, submissionId: string): Promise<DbWritingSubmissionRow> => {
   const row = await readFirst<DbWritingSubmissionRow>(
@@ -344,7 +400,10 @@ const readSubmissionAssets = async (env: AppEnv, submissionId: string): Promise<
 const readSubmissionEvaluations = async (env: AppEnv, submissionId: string): Promise<WritingEvaluation[]> => {
   const rows = await readAll<DbWritingEvaluationRow>(
     env,
-    `SELECT *
+    `SELECT
+       id, submission_id, provider, overall_score, rubric_json, strengths_json, improvement_points_json,
+       sentence_corrections_json, corrected_draft, model_answer, confidence, transcript_alignment,
+       rubric_consistency, structure_score, selection_score, cost_milli_yen, latency_ms, raw_payload, is_default
      FROM writing_ai_evaluations
      WHERE submission_id = ?
      ORDER BY created_at ASC`,
@@ -391,6 +450,7 @@ const readSubmissionDetail = async (
     transcript: submissionRow.transcript || '',
     transcriptConfidence: Number(submissionRow.transcript_confidence || 0),
     ocrProvider: (submissionRow.ocr_provider as WritingAiProvider | null) || undefined,
+    ocrMeta: parseAiProvenance(submissionRow.ocr_meta),
     processingState: submissionRow.processing_state,
     submittedAt: Number(submissionRow.submitted_at || 0),
     assets,
@@ -400,7 +460,10 @@ const readSubmissionDetail = async (
   };
 
   return {
-    assignment: toAssignment(assignmentRow, submission),
+    assignment: toAssignment(assignmentRow, {
+      latestSubmissionId: submission.id,
+      latestSubmission: submission,
+    }),
     submission,
   };
 };
@@ -434,6 +497,30 @@ const ensureSubmissionViewAccess = async (
   ) {
     throw new HttpError(403, '講師確認後に返却された答案のみ閲覧できます。');
   }
+};
+
+const readAiAssetsForOcr = async (
+  env: AppEnv,
+  rows: DbWritingAssetRow[],
+): Promise<Array<{ fileName: string; mimeType: string; base64Data: string }>> => {
+  if (!env.WRITING_ASSETS) {
+    throw new HttpError(503, 'WRITING_ASSETS が設定されていません。');
+  }
+
+  const assets = [];
+  for (const row of rows) {
+    const object = await env.WRITING_ASSETS.get(row.r2_key);
+    if (!object) {
+      throw new HttpError(404, `OCR 用資産が見つかりません: ${row.file_name}`);
+    }
+    const bytes = await object.arrayBuffer();
+    assets.push({
+      fileName: row.file_name,
+      mimeType: row.mime_type,
+      base64Data: Buffer.from(bytes).toString('base64'),
+    });
+  }
+  return assets;
 };
 
 export const handleListWritingTemplates = async (
@@ -480,25 +567,29 @@ export const handleListWritingAssignments = async (
   );
 
   const assignments = await Promise.all(
-    rows
-      .filter((row) => visibleStudentIds.has(row.student_user_id))
-      .map(async (row) => {
-        const latestSubmissionRow = await readLatestSubmissionRow(env, row.id);
-        if (!latestSubmissionRow) return toAssignment(row);
-        const detail = await readSubmissionDetail(env, latestSubmissionRow.id);
+    rows.filter((row) => visibleStudentIds.has(row.student_user_id)),
+  );
+  const latestSubmissionRows = await readLatestSubmissionRowsForAssignments(
+    env,
+    assignments.map((row) => row.id),
+  );
+
+  return {
+    assignments: assignments
+      .map((row) => {
         if (user.role === UserRole.STUDENT && scope === 'organization') return null;
+        const latestSubmissionRow = latestSubmissionRows.get(row.id);
+        if (!latestSubmissionRow) return toAssignment(row);
         if (
           user.role === UserRole.STUDENT
-          && !detail.submission.teacherReview
-          && ![AssignmentStatus.RETURNED, AssignmentStatus.REVISION_REQUESTED, AssignmentStatus.COMPLETED].includes(detail.assignment.status)
+          && ![AssignmentStatus.RETURNED, AssignmentStatus.REVISION_REQUESTED, AssignmentStatus.COMPLETED].includes(row.status)
         ) {
           return toAssignment(row);
         }
-        return toAssignment(row, detail.submission);
-      }),
-  );
-
-  return { assignments: assignments.filter(Boolean) as WritingAssignment[] };
+        return toAssignment(row, { latestSubmissionId: latestSubmissionRow.id });
+      })
+      .filter(Boolean) as WritingAssignment[],
+  };
 };
 
 export const handleGenerateWritingAssignment = async (
@@ -732,15 +823,23 @@ export const handleFinalizeWritingSubmission = async (
   }
 
   const assignment = toAssignment(assignmentRow);
-  const ocrResult = await runWritingOcr(env, user, assignment, request.manualTranscript);
+  const aiMode = resolveWritingAiMode(env);
+  const ocrAssets = aiMode === 'fixture'
+    ? []
+    : await readAiAssetsForOcr(env, assetRows).catch((error) => {
+        if (aiMode === 'live') throw error;
+        console.warn('Falling back to fixture OCR because asset loading failed.', error);
+        return [];
+      });
+  const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript);
   const submissionId = crypto.randomUUID();
   const now = Date.now();
 
   await env.DB.prepare(`
     INSERT INTO writing_submissions (
       id, assignment_id, attempt_no, submission_source, submitted_by_user_id, transcript,
-      transcript_confidence, ocr_provider, processing_state, created_at, submitted_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EVALUATED', ?, ?, ?)
+      transcript_confidence, ocr_provider, ocr_meta, processing_state, created_at, submitted_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EVALUATED', ?, ?, ?)
   `).bind(
     submissionId,
     request.assignmentId,
@@ -750,6 +849,7 @@ export const handleFinalizeWritingSubmission = async (
     ocrResult.transcript,
     ocrResult.confidence,
     ocrResult.provider,
+    JSON.stringify({ provenance: ocrResult.provenance }),
     now,
     now,
     now,
@@ -801,7 +901,7 @@ export const handleFinalizeWritingSubmission = async (
       evaluation.costMilliYen,
       evaluation.latencyMs,
       assignmentRow.prompt_snapshot,
-      JSON.stringify({ provider: evaluation.provider, fallback: true }),
+      JSON.stringify({ provenance: evaluation.provenance }),
       evaluation.isDefault ? 1 : 0,
       now,
     ).run();

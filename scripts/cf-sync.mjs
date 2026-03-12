@@ -4,8 +4,8 @@ import { spawnSync } from 'node:child_process';
 
 const cwd = process.cwd();
 
-const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE'];
-const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD'];
+const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
+const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
 const OPTIONAL_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'];
 
 const run = (command, args, options = {}) => {
@@ -83,6 +83,7 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
 const r2Bindings = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
   const pairs = [];
   if (bucket.bucket_name) pairs.push({ env: 'production', name: bucket.bucket_name });
@@ -95,6 +96,7 @@ pushRecord('info', 'Workspace', cwd);
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
+pushRecord('info', 'Writing AI mode', writingAiMode);
 pushRecord('info', 'R2 buckets', r2Bindings.length > 0 ? r2Bindings.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 
 const ghAuth = run('gh', ['auth', 'status']);
@@ -107,6 +109,7 @@ if (githubReady && repoSlug) {
   const repoVariables = new Map([
     ['CLOUDFLARE_PAGES_PROJECT', pagesProject],
     ['CLOUDFLARE_D1_DATABASE', d1Database],
+    ['WRITING_AI_MODE', writingAiMode],
   ]);
 
   for (const [name, value] of repoVariables) {
@@ -217,7 +220,9 @@ if (cloudflareReady) {
         pushRecord('ok', `Pages ${label} secret ${name}`, 'already present');
         continue;
       }
-      const value = process.env[name] || '';
+      const value = name === 'WRITING_AI_MODE'
+        ? writingAiMode
+        : (process.env[name] || '');
       if (!value) {
         pushRecord('error', `Pages ${label} secret ${name}`, 'missing locally, cannot sync');
         continue;

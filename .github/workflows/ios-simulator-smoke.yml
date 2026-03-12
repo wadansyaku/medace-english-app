@@ -1,0 +1,62 @@
+name: iOS Simulator Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run mode
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - doctor
+      install_driver:
+        description: Install the Appium XCUITest driver before running smoke
+        required: false
+        default: true
+        type: boolean
+  schedule:
+    - cron: '0 18 * * *'
+  release:
+    types:
+      - prereleased
+
+jobs:
+  simulator-smoke:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Appium XCUITest driver
+        if: github.event_name == 'schedule' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke' && inputs.install_driver)
+        run: npx --yes appium driver install xcuitest
+
+      - name: Run iOS simulator smoke doctor
+        if: github.event_name == 'schedule' || github.event_name != 'workflow_dispatch' || inputs.mode == 'doctor'
+        run: npm run test:ios-simulator:doctor
+
+      - name: Run iOS simulator smoke
+        if: github.event_name == 'schedule' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'smoke')
+        run: npm run test:ios-simulator -- --install-driver
+
+      - name: Upload simulator artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-artifacts
+          path: |
+            output/simulator
+            test-results
+          if-no-files-found: ignore
