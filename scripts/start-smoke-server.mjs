@@ -34,10 +34,53 @@ const runCommand = (command, commandArgs, env = process.env) => new Promise((res
 
 let server;
 
-const cleanup = async () => {
-  if (server && !server.killed) {
-    server.kill('SIGTERM');
+const signalProcessTree = (child, signal) => {
+  if (!child?.pid) return;
+  child.kill(signal);
+};
+
+const stopServerProcess = async (child, graceMs = 2_000) => {
+  if (!child || child.exitCode !== null) {
+    return;
   }
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener('close', onClose);
+      resolve();
+    };
+    const onClose = () => finish();
+
+    child.once('close', onClose);
+
+    try {
+      signalProcessTree(child, 'SIGTERM');
+    } catch {
+      finish();
+      return;
+    }
+
+    const forceKillTimer = setTimeout(() => {
+      if (child.exitCode === null) {
+        try {
+          signalProcessTree(child, 'SIGKILL');
+        } catch {
+          // Ignore secondary termination failures.
+        }
+      }
+    }, graceMs);
+    forceKillTimer.unref?.();
+
+    const settleTimer = setTimeout(() => finish(), graceMs + 1_000);
+    settleTimer.unref?.();
+  });
+};
+
+const cleanup = async () => {
+  await stopServerProcess(server);
   await rm(persistDir, { recursive: true, force: true });
 };
 
@@ -81,7 +124,18 @@ try {
     persistDir,
   ], {
     cwd,
-    stdio: 'inherit',
+    env: {
+      ...process.env,
+      CI: '1',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  server.stdout?.on('data', (chunk) => {
+    process.stdout.write(chunk);
+  });
+  server.stderr?.on('data', (chunk) => {
+    process.stderr.write(chunk);
   });
 
   server.on('close', async (code) => {
