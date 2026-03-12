@@ -15,9 +15,10 @@ const readArg = (name, fallback) => {
 const port = readArg('port', process.env.PLAYWRIGHT_SMOKE_PORT || '41731');
 const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-smoke-'));
 
-const runCommand = (command, commandArgs) => new Promise((resolve, reject) => {
+const runCommand = (command, commandArgs, env = process.env) => new Promise((resolve, reject) => {
   const child = spawn(command, commandArgs, {
     cwd,
+    env,
     stdio: 'inherit',
   });
 
@@ -62,7 +63,10 @@ try {
     '--local',
     '--persist-to',
     persistDir,
-  ]);
+  ], {
+    ...process.env,
+    CI: '1',
+  });
 
   server = spawn('npx', [
     'wrangler',

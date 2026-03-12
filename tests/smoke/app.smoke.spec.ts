@@ -233,7 +233,8 @@ test.describe('student mobile ux', () => {
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    const primaryCta = page.getByRole('button', { name: /今日のクエストを開始|復習をもう1セットやる|学習できる教材がありません/ }).first();
+    await expect(page.getByTestId('demo-banner-toggle')).toBeVisible();
+    const primaryCta = page.getByTestId('student-hero-primary-cta');
     await expect(primaryCta).toBeVisible();
     const box = await primaryCta.boundingBox();
     expect(box).not.toBeNull();
@@ -325,6 +326,87 @@ test.describe('student mobile ux', () => {
     );
     await studentPage.getByTestId('writing-submit-upload').click();
     await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
+
+    await adminContext.close();
+    await studentContext.close();
+  });
+
+  test('business student can read returned feedback in a single mobile column', async ({ browser }) => {
+    const adminContext = await browser.newContext();
+    const studentContext = await browser.newContext({
+      viewport: mobileViewport,
+      userAgent: iphoneUserAgent,
+      hasTouch: true,
+      isMobile: true,
+    });
+    const adminPage = await adminContext.newPage();
+    const studentPage = await studentContext.newPage();
+
+    const openBusinessMenu = async (currentPage: Page) => {
+      await currentPage.goto('/');
+      await currentPage.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
+    };
+
+    await openBusinessMenu(adminPage);
+    await adminPage.getByTestId('demo-login-group-admin').click();
+    await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+    await adminPage.getByTestId('workspace-tab-writing').click();
+
+    await openBusinessMenu(studentPage);
+    await studentPage.getByTestId('demo-login-business-student').click();
+    await maybeCompleteOnboarding(studentPage);
+    await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+
+    await adminPage.reload();
+    await adminPage.getByTestId('workspace-tab-writing').click();
+
+    const demoStudentValue = await adminPage.getByTestId('writing-student-select').evaluate((element) => {
+      const select = element as HTMLSelectElement;
+      const option = Array.from(select.options).find((candidate) => candidate.text.includes('グループ生徒 Demo'));
+      return option?.value || '';
+    });
+    expect(demoStudentValue).not.toBe('');
+
+    await adminPage.getByTestId('writing-student-select').selectOption(demoStudentValue);
+    await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
+    await adminPage.getByTestId('writing-generate-submit').click();
+    await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
+    await adminPage.getByTestId('writing-issue-assignment').click();
+    await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
+
+    await studentPage.reload();
+    await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+    await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
+    await studentPage.getByTestId('writing-student-file-input').setInputFiles({
+      name: 'mobile-feedback.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from('mobile-feedback-attempt'),
+    });
+    await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
+    await studentPage.getByPlaceholder('OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。').fill(
+      'Students should use tablets because they can review lessons quickly and share information with classmates.',
+    );
+    await studentPage.getByTestId('writing-submit-upload').click();
+    await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
+
+    await adminPage.reload();
+    await adminPage.getByTestId('workspace-tab-writing').click();
+    await adminPage.getByRole('button', { name: '添削キュー' }).click();
+    await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
+    await adminPage.getByTestId('writing-review-public-comment').fill('理由のつながりが伝わっています。次は語彙の選び方も広げましょう。');
+    await adminPage.getByTestId('writing-approve-return').click();
+    await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
+
+    await studentPage.reload();
+    await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
+    await expect(studentPage.getByTestId('writing-feedback-mobile-view')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-improvements')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-transcript')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-assets')).toBeVisible();
 
     await adminContext.close();
     await studentContext.close();

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -99,10 +99,45 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const [reviewWords, setReviewWords] = useState<WordData[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [supports3D, setSupports3D] = useState(true);
+  const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const actionBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSupports3D(getSupports3D());
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isMobileViewport) {
+      setMobileShellHeight(null);
+      return undefined;
+    }
+
+    const calculate = () => {
+      if (typeof window === 'undefined') return;
+      const shell = shellRef.current;
+      const actionBar = actionBarRef.current;
+      if (!shell || !actionBar) return;
+
+      const shellTop = shell.getBoundingClientRect().top;
+      const actionHeight = actionBar.getBoundingClientRect().height;
+      const nextHeight = Math.max(320, Math.round(window.innerHeight - shellTop - actionHeight - 12));
+      setMobileShellHeight(nextHeight);
+    };
+
+    calculate();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(calculate) : null;
+    if (shellRef.current && observer) observer.observe(shellRef.current);
+    if (actionBarRef.current && observer) observer.observe(actionBarRef.current);
+    window.addEventListener('resize', calculate);
+    window.addEventListener('orientationchange', calculate);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', calculate);
+      window.removeEventListener('orientationchange', calculate);
+    };
+  }, [isEditing, isFlipped, isMobileViewport, showHints]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -425,21 +460,25 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     <section
       data-testid="study-card-front"
       aria-hidden={isFlipped}
-      className="study-card-face border border-slate-200 bg-white px-5 py-6 shadow-xl transition-shadow hover:shadow-2xl sm:px-8 sm:py-8"
+      className="study-card-face border border-slate-200 bg-white px-5 py-5 shadow-xl transition-shadow hover:shadow-2xl sm:px-8 sm:py-8"
       onClick={openBack}
     >
-      <div className="flex h-full flex-col items-center justify-center text-center">
-        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
-        <h2 className="mt-5 break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{currentWord.word}</h2>
-        <div className="mt-5 flex gap-3">
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
           <button
             onClick={(event) => speakText(event, currentWord.word)}
             className="rounded-full bg-orange-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
           >
-            <Volume2 className="h-6 w-6" />
+            <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
         </div>
-        <div className="mt-auto pt-8 text-xs font-medium text-slate-300">
+
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <h2 className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{currentWord.word}</h2>
+        </div>
+
+        <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-medium text-slate-400">
           カードか下のボタンで答えを確認
         </div>
       </div>
@@ -451,11 +490,11 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       aria-hidden={!isFlipped}
       className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-white shadow-xl sm:px-6 sm:py-5"
     >
-      <div className="flex h-full flex-col">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-start justify-between gap-3">
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-200">意味</div>
-            <div className="mt-2 text-lg font-black text-white/95">{currentWord.word}</div>
+            <div className="mt-2 text-base font-black text-white/95 sm:text-lg">{currentWord.word}</div>
           </div>
           {!isEditing ? (
             <button
@@ -473,7 +512,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           )}
         </div>
 
-        <div className="mt-4 rounded-[24px] border border-white/10 bg-white/8 px-4 py-4">
+        <div className="mt-3 shrink-0 rounded-[24px] border border-white/10 bg-white/8 px-4 py-4">
           {isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
               <input
@@ -489,11 +528,12 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
               />
             </div>
           ) : (
-            <p className="text-center text-2xl font-black leading-snug text-white sm:text-3xl">{currentWord.definition}</p>
+            <p className="text-center text-[1.35rem] font-black leading-snug text-white sm:text-3xl">{currentWord.definition}</p>
           )}
         </div>
 
-        <div className="mt-4 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
+          <div className="h-full overflow-y-auto pr-1 scrollbar-hide">
           {!showHints ? (
             <button
               type="button"
@@ -501,7 +541,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                 event.stopPropagation();
                 setShowHints(true);
               }}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/6 px-4 py-5 text-center text-white/78 transition-colors hover:bg-white/10"
+              className="flex min-h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/6 px-4 py-5 text-center text-white/78 transition-colors hover:bg-white/10"
             >
               <Sparkles className="h-5 w-5 text-medace-300" />
               <span className="text-sm font-bold">まだ難しいときだけヒントを見る</span>
@@ -575,13 +615,14 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </section>
   );
 
   return (
-    <div className="mx-auto max-w-3xl pb-24">
+    <div className="mx-auto max-w-3xl pb-20 md:pb-24">
       {showReportModal && (
         <MobileSheetDialog
           onClose={() => setShowReportModal(false)}
@@ -635,7 +676,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         </MobileSheetDialog>
       )}
 
-      <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
+      <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
         <button onClick={onBack} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
@@ -651,7 +692,11 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         </div>
       </div>
 
-      <div className="study-card-shell">
+      <div
+        ref={shellRef}
+        className="study-card-shell"
+        style={mobileShellHeight ? { height: mobileShellHeight, minHeight: mobileShellHeight } : undefined}
+      >
         <div className="study-card-3d">
           <div className={`study-card-inner ${isFlipped ? 'is-flipped' : ''} ${supports3D ? '' : 'instant-swap'}`}>
             {supports3D ? (
@@ -666,9 +711,15 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         </div>
       </div>
 
-      <MobileStickyActionBar className="safe-pad-bottom mt-4 border-t-0 bg-transparent px-0 pb-0 pt-4">
+      <MobileStickyActionBar
+        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4"
+      >
         {isFlipped && !isEditing ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <div
+            ref={actionBarRef}
+            data-testid="study-rating-actions"
+            className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300"
+          >
             {RATING_OPTIONS.map((option) => (
               <button
                 key={option.id}
@@ -683,7 +734,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
             ))}
           </div>
         ) : (
-          <div className="flex justify-center">
+          <div ref={actionBarRef} className="flex justify-center">
             <button
               data-testid="study-flip-button"
               onClick={openBack}

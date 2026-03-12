@@ -1,11 +1,12 @@
 
 import React from 'react';
-import { BookOpen, LogOut, Zap, Star, Trophy } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, LogOut, Zap } from 'lucide-react';
 import { UserRole, UserProfile, UserStudyMode, type WorkspaceSectionDefinition } from '../types';
 import { BRAND } from '../config/brand';
 import { getHomeViewForUser, getWorkspaceNavLabel, getWorkspaceRoleLabel } from '../config/access';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
 import useIsStandalone from '../hooks/useIsStandalone';
+import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -40,8 +41,8 @@ const Layout: React.FC<LayoutProps> = ({
   const isGameMode = (user?.studyMode || UserStudyMode.FOCUS) === UserStudyMode.GAME;
   const isDemoUser = isDemoEmail(user?.email);
   const isStandalone = useIsStandalone();
-  const isStudent = user?.role === UserRole.STUDENT;
-  const compactStudentShell = isStandalone && isStudent;
+  const compactStudentShell = useIsStudentMobileShell(user);
+  const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -51,6 +52,10 @@ const Layout: React.FC<LayoutProps> = ({
     };
   }, [isStandalone]);
 
+  React.useEffect(() => {
+    setShowDemoBannerDetails(!compactStudentShell);
+  }, [compactStudentShell, user?.email]);
+
   return (
     <div className="min-h-screen bg-medace-50/40 flex flex-col font-sans">
       {/* Header */}
@@ -59,43 +64,83 @@ const Layout: React.FC<LayoutProps> = ({
       }`}>
         {isDemoUser && (
           <div className="border-b border-amber-200/80 bg-[#fff4df]">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limited Demo Access</p>
-                <p className="mt-1 text-[0.95rem] font-medium leading-relaxed text-slate-700">
-                  体験用アカウントは <span className="font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</span> です。別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
-                </p>
+            {compactStudentShell ? (
+              <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Limited Demo Access</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      体験は <span className="font-black text-slate-950">{getDemoAccessWindowLabel()}</span> 限定です。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="demo-banner-toggle"
+                    onClick={() => setShowDemoBannerDetails((previous) => !previous)}
+                    className="inline-flex min-h-0 shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-800 transition-colors hover:bg-amber-50"
+                  >
+                    {showDemoBannerDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    {showDemoBannerDetails ? '閉じる' : '詳細'}
+                  </button>
+                </div>
+                {showDemoBannerDetails && (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
+                    別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
+                    {onResetDemo && (
+                      <button
+                        type="button"
+                        onClick={onResetDemo}
+                        className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-amber-300 bg-white px-4 py-2.5 text-sm font-black text-amber-800 transition-colors hover:bg-amber-50"
+                      >
+                        新しい体験を開始
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              {onResetDemo && (
-                <button
-                  type="button"
-                  onClick={onResetDemo}
-                  className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-2.5 text-[0.95rem] font-black text-amber-800 transition-colors hover:bg-amber-50"
-                >
-                  新しい体験を開始
-                </button>
-              )}
-            </div>
+            ) : (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limited Demo Access</p>
+                  <p className="mt-1 text-[0.95rem] font-medium leading-relaxed text-slate-700">
+                    体験用アカウントは <span className="font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</span> です。別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
+                  </p>
+                </div>
+                {onResetDemo && (
+                  <button
+                    type="button"
+                    onClick={onResetDemo}
+                    className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-2.5 text-[0.95rem] font-black text-amber-800 transition-colors hover:bg-amber-50"
+                  >
+                    新しい体験を開始
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between ${
-          compactStudentShell ? 'min-h-[68px] py-1.5' : 'min-h-[80px] py-2'
+          compactStudentShell ? 'min-h-[62px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
-            <div className="rounded-2xl bg-medace-300 p-3 shadow-lg shadow-medace-200/70">
-              <BookOpen className="text-medace-900 w-6 h-6" />
+            <div className={`bg-medace-300 shadow-lg shadow-medace-200/70 ${compactStudentShell ? 'rounded-2xl p-2.5' : 'rounded-2xl p-3'}`}>
+              <BookOpen className={`text-medace-900 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-[1.35rem] font-black tracking-tight text-medace-900">{BRAND.officialName}</h1>
-              <p className="text-xs text-medace-700/70 font-bold tracking-[0.14em]">{BRAND.productLabel}</p>
+            <div className={compactStudentShell ? 'block' : 'hidden sm:block'}>
+              <h1 className={`font-black tracking-tight text-medace-900 ${compactStudentShell ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
+                {compactStudentShell ? BRAND.productLabel : BRAND.officialName}
+              </h1>
+              <p className={`font-bold tracking-[0.14em] text-medace-700/70 ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
+                {compactStudentShell ? 'STUDENT MOBILE' : BRAND.productLabel}
+              </p>
             </div>
           </div>
 
           {user && (
-            <div className="flex items-center gap-4 flex-1 justify-end">
+            <div className={`flex items-center flex-1 justify-end ${compactStudentShell ? 'gap-2' : 'gap-4'}`}>
               
               {/* Gamification HUD */}
-              {user.role === UserRole.STUDENT && isGameMode && (
+              {user.role === UserRole.STUDENT && isGameMode && !compactStudentShell && (
                   <div className="flex items-center gap-3 md:gap-6 bg-white/90 px-4 py-2.5 rounded-full border border-medace-100 mr-2 shadow-sm">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
@@ -139,16 +184,18 @@ const Layout: React.FC<LayoutProps> = ({
               </nav>
 
               <div className="flex items-center gap-2">
-                <div className="text-right hidden lg:block">
+                <div className={`text-right ${compactStudentShell ? 'hidden' : 'hidden lg:block'}`}>
                   <p className="text-[0.95rem] font-bold text-medace-900">{user.displayName}</p>
                   <p className="text-xs font-bold tracking-[0.12em] uppercase text-medace-700/55">{workspaceLabel}</p>
                 </div>
                 <button 
                   onClick={onLogout}
-                  className="p-3 text-medace-700/45 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors border border-transparent hover:border-red-100"
+                  className={`text-medace-700/45 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors border border-transparent hover:border-red-100 ${
+                    compactStudentShell ? 'p-2.5' : 'p-3'
+                  }`}
                   title="ログアウト"
                 >
-                  <LogOut className="w-5 h-5" />
+                  <LogOut className={compactStudentShell ? 'h-[18px] w-[18px]' : 'w-5 h-5'} />
                 </button>
               </div>
             </div>
@@ -184,18 +231,24 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Main Content */}
       <main className={`flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${
-        compactStudentShell ? 'py-5 sm:py-8' : 'py-10'
+        compactStudentShell ? 'py-3 sm:py-8' : 'py-10'
       }`}>
         {children}
       </main>
 
       {/* Footer */}
       <footer className={`bg-white/85 backdrop-blur border-t border-medace-100 mt-auto ${
-        compactStudentShell ? 'safe-pad-bottom py-4' : 'py-6'
+        compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 text-center text-medace-800/45 text-[0.95rem] font-medium">
-          &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
-        </div>
+        {compactStudentShell ? (
+          <div className="max-w-7xl mx-auto px-4 text-center text-[11px] font-semibold tracking-[0.12em] text-medace-800/35 uppercase">
+            {BRAND.productLabel}
+          </div>
+        ) : (
+          <div className="max-w-7xl mx-auto px-4 text-center text-medace-800/45 text-[0.95rem] font-medium">
+            &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
+          </div>
+        )}
       </footer>
     </div>
   );

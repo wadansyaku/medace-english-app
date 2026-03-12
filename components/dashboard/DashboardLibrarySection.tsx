@@ -33,19 +33,19 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   onDelete,
   onSelect,
 }) => (
-  <div className="space-y-10">
+  <div className="space-y-7 md:space-y-10">
     <div className="min-h-[200px]">
-      <div className="mb-6 flex items-center justify-between">
-        <h3 className="border-l-4 border-purple-500 pl-3 text-xl font-bold text-slate-800">My単語帳</h3>
+      <div className="mb-4 flex items-center justify-between md:mb-6">
+        <h3 className="border-l-4 border-purple-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
         <button
           onClick={onOpenCreateModal}
-          className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-bold text-medace-600 transition-colors hover:bg-medace-50"
+          className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
         >
           <Plus className="h-4 w-4" /> 新規作成
         </button>
       </div>
       {myBooks.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
           {myBooks.map((book) => (
             <BookCard
               key={book.id}
@@ -69,10 +69,10 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
     </div>
 
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h3 className="border-l-4 border-medace-500 pl-3 text-xl font-bold text-slate-800">推奨コース</h3>
+      <div className="mb-4 flex items-center justify-between md:mb-6">
+        <h3 className="border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">推奨コース</h3>
       </div>
-      <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:mb-8 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
         {recommendedOfficialBooks.map((book) => (
           <BookCard
             key={book.id}
@@ -92,7 +92,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
         )}
       </div>
 
-      <div className="border-t border-slate-200 pt-6">
+      <div className="border-t border-slate-200 pt-5 md:pt-6">
         <button
           onClick={onToggleLibrary}
           className="group flex w-full items-center justify-between rounded-xl bg-slate-50 p-4 transition-colors hover:bg-slate-100"

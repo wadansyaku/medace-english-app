@@ -30,6 +30,7 @@ import {
 } from '../utils/displayPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
+import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
@@ -57,6 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   } = useDashboardData(user.uid);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const isMobileViewport = useIsMobileViewport();
+  const isStudentMobileShell = useIsStudentMobileShell(user);
 
   // Toggle State for Library
   const [showLibrary, setShowLibrary] = useState(false);
@@ -453,9 +455,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   }
   
   return (
-    <div data-testid="student-dashboard" className="relative flex flex-col gap-5 pb-24 animate-in fade-in duration-500 md:gap-8 md:pb-20">
+    <div
+      data-testid="student-dashboard"
+      className={`relative flex flex-col animate-in fade-in duration-500 md:gap-8 md:pb-20 ${
+        isStudentMobileShell ? 'gap-4 pb-20' : 'gap-5 pb-24'
+      }`}
+    >
         {pageNotice && (
-          <div className={`sticky top-[calc(0.75rem+var(--safe-top))] z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
+          <div className={`sticky z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
+            isStudentMobileShell ? 'top-[calc(0.35rem+var(--safe-top))]' : 'top-[calc(0.75rem+var(--safe-top))]'
+          } ${
             pageNotice.tone === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
               : 'border-red-200 bg-red-50 text-red-700'
@@ -594,6 +603,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           todayWordGoal={todayWordGoal}
           todayProgressPercent={todayProgressPercent}
           gameLeagueBadge={isGameMode ? userLeague : undefined}
+          isMobileCompact={isStudentMobileShell}
           onOpenSettings={() => setShowSettingsModal(true)}
           onStartQuest={() => onSelectBook('smart-session', 'study')}
           onOpenPlan={() => setShowPlanEditModal(true)}
@@ -762,7 +772,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
-      <div className="order-6 md:order-11">
+      <div className="order-11 md:order-11">
         <DashboardLibrarySection
           books={books}
           myBooks={myBooks}

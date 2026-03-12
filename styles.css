@@ -245,6 +245,7 @@
 
 .study-card-shell {
   position: relative;
+  height: min(66dvh, 38rem);
   min-height: min(66dvh, 38rem);
   perspective: 1600px;
   -webkit-perspective: 1600px;
@@ -253,12 +254,14 @@
 .study-card-3d {
   position: relative;
   height: 100%;
+  min-height: 100%;
 }
 
 .study-card-inner {
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 100%;
   transform-style: preserve-3d;
   -webkit-transform-style: preserve-3d;
   transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -296,6 +299,7 @@
 
 @media (max-width: 639px) {
   .study-card-shell {
+    height: min(62dvh, 34rem);
     min-height: min(62dvh, 34rem);
   }
 }

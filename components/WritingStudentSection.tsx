@@ -152,6 +152,10 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
   const [openingFeedbackId, setOpeningFeedbackId] = useState<string | null>(null);
   const [selectedEvaluationId, setSelectedEvaluationId] = useState('');
   const [mobileSubmitStep, setMobileSubmitStep] = useState(0);
+  const actionableAssignmentCount = useMemo(
+    () => assignments.filter((assignment) => canSubmit(assignment) || canOpenFeedback(assignment)).length,
+    [assignments],
+  );
 
   const refresh = async () => {
     setLoading(true);
@@ -347,6 +351,19 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
         </div>
       </div>
 
+      {isMobileViewport && (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">対応中</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{actionableAssignmentCount}</div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">課題数</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{assignments.length}</div>
+          </div>
+        </div>
+      )}
+
       {notice && (
         <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-bold ${
           notice.tone === 'success'
@@ -397,7 +414,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
 
                   <div className="mt-4 rounded-3xl border border-white bg-white px-4 py-4">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">次にやること</div>
-                    <div className="mt-2 text-sm leading-relaxed text-slate-700">{phase.description}</div>
+                    <div className="mt-2 text-[13px] leading-relaxed text-slate-700">{phase.description}</div>
                   </div>
 
                   <div className="mt-4 flex flex-col gap-3">
@@ -737,7 +754,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
 
           <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
             <div className="space-y-5">
-              <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+              <div className="grid gap-2 grid-cols-2 md:gap-3 md:grid-cols-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">状態</div>
                   <div className="mt-2 text-sm font-black text-slate-950">{WRITING_ASSIGNMENT_STATUS_LABELS[feedbackDetail.assignment.status]}</div>
@@ -758,7 +775,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+              <div data-testid="writing-feedback-comment" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">講師コメント</div>
                 <div className="mt-3 text-sm leading-relaxed text-slate-700">
                   {feedbackDetail.submission.teacherReview?.publicComment || '講師コメントはまだありません。'}
@@ -769,44 +786,39 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
                 {feedbackDetail.submission.evaluations.map((evaluation) => (
                   <button
                     key={evaluation.id}
+                    data-testid={`writing-feedback-provider-${evaluation.provider.toLowerCase()}`}
                     type="button"
                     onClick={() => setSelectedEvaluationId(evaluation.id)}
-                    className={`min-w-[170px] shrink-0 rounded-3xl border px-4 py-4 text-left ${
+                    className={`shrink-0 rounded-3xl border text-left ${
                       selectedEvaluationId === evaluation.id
                         ? 'border-medace-300 bg-medace-50/80'
                         : 'border-slate-200 bg-slate-50 hover:border-medace-200'
-                    }`}
+                    } ${isMobileViewport ? 'min-w-[138px] px-3.5 py-3.5' : 'min-w-[170px] px-4 py-4'}`}
                   >
                     <div className="text-sm font-bold text-slate-900">{WRITING_AI_PROVIDER_LABELS[evaluation.provider]}</div>
-                    <div className="mt-3 text-2xl font-black text-slate-950">{evaluation.overallScore} / 20</div>
+                    <div className={`font-black text-slate-950 ${isMobileViewport ? 'mt-2 text-xl' : 'mt-3 text-2xl'}`}>
+                      {evaluation.overallScore} / 20
+                    </div>
                   </button>
                 ))}
               </div>
 
               {selectedEvaluation && (
-                <div className={`grid gap-4 ${isMobileViewport ? 'grid-cols-1' : 'xl:grid-cols-[0.92fr_1.08fr]'}`}>
-                  <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                isMobileViewport ? (
+                  <div className="space-y-4" data-testid="writing-feedback-mobile-view">
+                    <div data-testid="writing-feedback-strengths" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">良かった点</div>
                       <ul className="mt-3 space-y-2 text-sm text-slate-700">
                         {selectedEvaluation.strengths.map((item) => <li key={item}>{item}</li>)}
                       </ul>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                    <div data-testid="writing-feedback-improvements" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">改善点</div>
                       <ul className="mt-3 space-y-2 text-sm text-slate-700">
                         {selectedEvaluation.improvementPoints.map((item) => <li key={item}>{item}</li>)}
                       </ul>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">提出文</div>
-                      <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                        {feedbackDetail.submission.transcript}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                    <div data-testid="writing-feedback-corrected" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">訂正文例</div>
                       <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-white bg-white px-4 py-4 text-sm leading-relaxed text-slate-700">
                         {selectedEvaluation.correctedDraft}
@@ -818,7 +830,13 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
                         {selectedEvaluation.modelAnswer}
                       </div>
                     </div>
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                    <div data-testid="writing-feedback-transcript" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">提出文</div>
+                      <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                        {feedbackDetail.submission.transcript}
+                      </div>
+                    </div>
+                    <div data-testid="writing-feedback-assets" className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
                       <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                         <MessageSquareText className="h-4 w-4" />
                         提出答案
@@ -830,7 +848,55 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
                       </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+                    <div className="space-y-4">
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">良かった点</div>
+                        <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                          {selectedEvaluation.strengths.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">改善点</div>
+                        <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                          {selectedEvaluation.improvementPoints.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">提出文</div>
+                        <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
+                          {feedbackDetail.submission.transcript}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">訂正文例</div>
+                        <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-white bg-white px-4 py-4 text-sm leading-relaxed text-slate-700">
+                          {selectedEvaluation.correctedDraft}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">模範例</div>
+                        <div className="mt-3 whitespace-pre-wrap rounded-2xl border border-white bg-white px-4 py-4 text-sm leading-relaxed text-slate-700">
+                          {selectedEvaluation.modelAnswer}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                          <MessageSquareText className="h-4 w-4" />
+                          提出答案
+                        </div>
+                        <div className="grid gap-3">
+                          {feedbackDetail.submission.assets.map((asset) => (
+                            <div key={asset.id}>{renderAsset(asset)}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
               )}
             </div>
           </div>

@@ -11,6 +11,7 @@
     "test:unit": "vitest run",
     "test:api": "node scripts/run-api-integration-tests.mjs",
     "test:smoke": "playwright test --config=playwright.smoke.config.ts",
+    "test:ios-simulator": "node scripts/run-ios-simulator-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "cf:preview": "vite build && wrangler pages dev dist",
     "cf:doctor": "node scripts/cf-doctor.mjs",
