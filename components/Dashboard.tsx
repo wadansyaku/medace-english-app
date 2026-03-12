@@ -1,14 +1,12 @@
 
-import React, { useEffect, useState } from 'react';
-import { BookCatalogSource, BookMetadata, type LearningPreference, UserProfile, UserGrade, EnglishLevel, LearningPreferenceIntensity, LEARNING_PREFERENCE_INTENSITY_LABELS, GRADE_LABELS, SubscriptionPlan, UserStudyMode } from '../types';
+import React, { useState } from 'react';
+import { UserProfile, UserGrade, EnglishLevel, GRADE_LABELS, SubscriptionPlan, UserStudyMode } from '../types';
 import { storage } from '../services/storage';
-import { extractVocabularyFromText, extractVocabularyFromMedia, generateLearningPlan, isAiUnavailableError } from '../services/gemini';
-import { BRAND } from '../config/brand';
+import { generateLearningPlan } from '../services/gemini';
 import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription';
 import { Loader2, BrainCircuit, Trash2, Medal, Crown, MessageSquareText } from 'lucide-react';
 import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
-import ModalOverlay from './ModalOverlay';
 import MotivationBoard from './MotivationBoard';
 import DashboardAccountSection from './dashboard/DashboardAccountSection';
 import DashboardHeroSection from './dashboard/DashboardHeroSection';
@@ -22,15 +20,10 @@ import WritingStudentSection from './WritingStudentSection';
 import MobileSheetDialog from './mobile/MobileSheetDialog';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { getTodayDateKey } from '../utils/date';
-import {
-  DisplayDensity,
-  DisplayFontSize,
-  getStoredDisplayPreferences,
-  saveDisplayPreferences,
-} from '../utils/displayPreferences';
 import { useDashboardData } from '../hooks/useDashboardData';
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
+import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 
 interface DashboardProps {
@@ -64,42 +57,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const [showLibrary, setShowLibrary] = useState(false);
   const [showProgressDetails, setShowProgressDetails] = useState(false);
   const [showAccountDetails, setShowAccountDetails] = useState(false);
-
-  // Modals
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'error'; message: string; } | null>(null);
-  const [pendingDeleteBook, setPendingDeleteBook] = useState<{ id: string; title: string } | null>(null);
-  
-  // Plan Edit Modal
-  const [showPlanEditModal, setShowPlanEditModal] = useState(false);
-  const [editDailyGoal, setEditDailyGoal] = useState(0);
-  const [selectedPlanBooks, setSelectedPlanBooks] = useState<string[]>([]);
-
-  // Create Modal State
-  const [createMode, setCreateMode] = useState<'TEXT' | 'FILE'>('TEXT');
-  const [rawText, setRawText] = useState('');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [newBookTitle, setNewBookTitle] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Profile Edit State
-  const [editName, setEditName] = useState(user.displayName);
-  const [editGrade, setEditGrade] = useState(user.grade || UserGrade.ADULT);
-  const [editStudyMode, setEditStudyMode] = useState(user.studyMode || UserStudyMode.FOCUS);
-  const [editTargetExam, setEditTargetExam] = useState('');
-  const [editTargetScore, setEditTargetScore] = useState('');
-  const [editExamDate, setEditExamDate] = useState('');
-  const [editWeeklyStudyDays, setEditWeeklyStudyDays] = useState(4);
-  const [editDailyStudyMinutes, setEditDailyStudyMinutes] = useState(20);
-  const [editWeakSkillFocus, setEditWeakSkillFocus] = useState('');
-  const [editMotivationNote, setEditMotivationNote] = useState('');
-  const [editIntensity, setEditIntensity] = useState<LearningPreferenceIntensity>(LearningPreferenceIntensity.BALANCED);
-  const [editDisplayFontSize, setEditDisplayFontSize] = useState<DisplayFontSize>('standard');
-  const [editDisplayDensity, setEditDisplayDensity] = useState<DisplayDensity>('standard');
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const books = snapshot?.officialBooks ?? [];
   const myBooks = snapshot?.myBooks ?? [];
   const progressMap = snapshot?.progressMap ?? {};
@@ -112,38 +69,77 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const coachNotifications = snapshot?.coachNotifications ?? [];
   const accountOverview = snapshot?.accountOverview ?? null;
   const learningPreference = snapshot?.learningPreference ?? null;
+  const controller = useStudentDashboardController({
+    user,
+    learningPlan,
+    learningPreference,
+    onUserUpdate,
+    refreshDashboard,
+    updateLearningPlan,
+    updateLearningPreference,
+    removeMyBook,
+  });
 
-  // Initialize edit state when modal opens or plan loads
-  useEffect(() => {
-    if (learningPlan) {
-      setEditDailyGoal(learningPlan.dailyWordGoal);
-      setSelectedPlanBooks(learningPlan.selectedBookIds);
-    }
-  }, [learningPlan, showPlanEditModal]);
-
-  useEffect(() => {
-    if (!showSettingsModal) return;
-    setEditName(user.displayName);
-    setEditGrade(user.grade || UserGrade.ADULT);
-    setEditStudyMode(user.studyMode || UserStudyMode.FOCUS);
-    setEditTargetExam(learningPreference?.targetExam || '');
-    setEditTargetScore(learningPreference?.targetScore || '');
-    setEditExamDate(learningPreference?.examDate || '');
-    setEditWeeklyStudyDays(learningPreference?.weeklyStudyDays || 4);
-    setEditDailyStudyMinutes(learningPreference?.dailyStudyMinutes || 20);
-    setEditWeakSkillFocus(learningPreference?.weakSkillFocus || '');
-    setEditMotivationNote(learningPreference?.motivationNote || '');
-    setEditIntensity(learningPreference?.intensity || LearningPreferenceIntensity.BALANCED);
-    const displayPreferences = getStoredDisplayPreferences(user.uid);
-    setEditDisplayFontSize(displayPreferences.fontSize);
-    setEditDisplayDensity(displayPreferences.density);
-  }, [showSettingsModal, user.displayName, user.grade, user.studyMode, learningPreference]);
-
-  useEffect(() => {
-    if (!pageNotice) return;
-    const timer = window.setTimeout(() => setPageNotice(null), 3600);
-    return () => window.clearTimeout(timer);
-  }, [pageNotice]);
+  const {
+    showCreateModal,
+    setShowCreateModal,
+    showSettingsModal,
+    setShowSettingsModal,
+    showOnboarding,
+    setShowOnboarding,
+    showPlanEditModal,
+    setShowPlanEditModal,
+    pageNotice,
+    setPageNotice,
+    pendingDeleteBook,
+    setPendingDeleteBook,
+    editDailyGoal,
+    setEditDailyGoal,
+    selectedPlanBooks,
+    togglePlanBook,
+    handleUpdatePlan,
+    createMode,
+    setCreateMode,
+    rawText,
+    setRawText,
+    uploadFile,
+    newBookTitle,
+    setNewBookTitle,
+    creating,
+    errorMsg,
+    handleFileChange,
+    handleCreatePhrasebook,
+    handleDeleteBook,
+    confirmDeleteBook,
+    editName,
+    setEditName,
+    editGrade,
+    setEditGrade,
+    editStudyMode,
+    setEditStudyMode,
+    editTargetExam,
+    setEditTargetExam,
+    editTargetScore,
+    setEditTargetScore,
+    editExamDate,
+    setEditExamDate,
+    editWeeklyStudyDays,
+    setEditWeeklyStudyDays,
+    editDailyStudyMinutes,
+    setEditDailyStudyMinutes,
+    editWeakSkillFocus,
+    setEditWeakSkillFocus,
+    editMotivationNote,
+    setEditMotivationNote,
+    editIntensity,
+    setEditIntensity,
+    editDisplayFontSize,
+    setEditDisplayFontSize,
+    editDisplayDensity,
+    setEditDisplayDensity,
+    isSavingProfile,
+    handleSaveProfile,
+  } = controller;
 
   if (showOnboarding) {
       return <Onboarding 
@@ -186,176 +182,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
       } finally {
           setGeneratingPlan(false);
-      }
-  };
-
-  const handleUpdatePlan = async () => {
-      if (!learningPlan) return;
-      try {
-          const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
-          await storage.saveLearningPlan(updated);
-          updateLearningPlan(updated);
-          setShowPlanEditModal(false);
-          setPageNotice({ tone: 'success', message: '学習プランを更新しました。' });
-      } catch (error) {
-          console.error(error);
-          setPageNotice({ tone: 'error', message: '学習プランの更新に失敗しました。' });
-      }
-  };
-
-  const togglePlanBook = (bookId: string) => {
-      if (selectedPlanBooks.includes(bookId)) {
-          setSelectedPlanBooks(prev => prev.filter(id => id !== bookId));
-      } else {
-          setSelectedPlanBooks(prev => [...prev, bookId]);
-      }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          setUploadFile(e.target.files[0]);
-      }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          reader.onload = () => {
-              const result = reader.result as string;
-              const base64 = result.split(',')[1];
-              resolve(base64);
-          };
-          reader.onerror = error => reject(error);
-      });
-  };
-
-  const handleCreatePhrasebook = async () => {
-    if (!newBookTitle) return;
-    if (createMode === 'TEXT' && !rawText) return;
-    if (createMode === 'FILE' && !uploadFile) return;
-
-    setCreating(true);
-    setErrorMsg(null);
-
-    try {
-        let result:
-          | Awaited<ReturnType<typeof extractVocabularyFromText>>
-          | Awaited<ReturnType<typeof extractVocabularyFromMedia>>;
-
-        if (createMode === 'TEXT') {
-            result = await extractVocabularyFromText(rawText);
-        } else if (createMode === 'FILE' && uploadFile) {
-            const mimeType = uploadFile.type;
-            if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
-                throw new Error("対応していないファイル形式です。");
-            }
-            const base64 = await fileToBase64(uploadFile);
-            result = await extractVocabularyFromMedia(base64, mimeType);
-        } else {
-            throw new Error("教材ソースを指定してください。");
-        }
-
-        if (!result || result.words.length === 0) {
-            throw new Error("単語を抽出できませんでした。");
-        }
-
-        const importResult = await storage.batchImportWords({
-          defaultBookName: newBookTitle,
-          source: {
-            kind: 'rows',
-            rows: result.words.map((item, index) => ({
-              bookName: newBookTitle,
-              number: index + 1,
-              word: item.word,
-              definition: item.definition,
-            })),
-          },
-          createdByUid: user.uid,
-          contextSummary: result.contextSummary,
-        });
-        
-        setRawText('');
-        setNewBookTitle('');
-        setUploadFile(null);
-        setShowCreateModal(false);
-        setPageNotice({
-          tone: 'success',
-          message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。`,
-        });
-        await refreshDashboard(); 
-
-    } catch (e: unknown) {
-        console.error(e);
-        const msg = e instanceof Error ? e.message : "作成に失敗しました。";
-        if (isAiUnavailableError(e)) {
-          setErrorMsg("AI教材化はまだ利用できません。Gemini 設定後に再試行してください。");
-        } else {
-          setErrorMsg(msg.includes('429') ? "AIの利用上限(RPM)に達しました。時間をおいてください。" : msg);
-        }
-    } finally {
-        setCreating(false);
-    }
-  };
-
-  const handleDeleteBook = async (e: React.MouseEvent, bookId: string, bookTitle: string) => {
-      e.stopPropagation();
-      e.preventDefault();
-      setPendingDeleteBook({ id: bookId, title: bookTitle });
-  };
-
-  const confirmDeleteBook = async () => {
-      if (!pendingDeleteBook) return;
-      try {
-          removeMyBook(pendingDeleteBook.id);
-          await storage.deleteBook(pendingDeleteBook.id);
-          setPageNotice({ tone: 'success', message: `単語帳「${pendingDeleteBook.title}」を削除しました。` });
-      } catch (err) {
-          setPageNotice({ tone: 'error', message: '削除に失敗しました。' });
-      } finally {
-          setPendingDeleteBook(null);
-          await refreshDashboard();
-      }
-  };
-
-  const handleSaveProfile = async () => {
-      setIsSavingProfile(true);
-      try {
-          const updatedUser = {
-            ...user,
-            displayName: editName.trim() || user.displayName,
-            grade: editGrade,
-            studyMode: editStudyMode,
-          };
-          const nextPreference: LearningPreference = {
-            userUid: user.uid,
-            targetExam: editTargetExam.trim(),
-            targetScore: editTargetScore.trim(),
-            examDate: editExamDate || '',
-            weeklyStudyDays: editWeeklyStudyDays,
-            dailyStudyMinutes: editDailyStudyMinutes,
-            weakSkillFocus: editWeakSkillFocus.trim(),
-            motivationNote: editMotivationNote.trim(),
-            intensity: editIntensity,
-            updatedAt: Date.now(),
-          };
-          await storage.saveLearningPreference(nextPreference);
-          await storage.updateSessionUser(updatedUser);
-          const refreshedUser = await storage.getSession();
-          const nextUser = refreshedUser || updatedUser;
-          saveDisplayPreferences(user.uid, {
-            fontSize: editDisplayFontSize,
-            density: editDisplayDensity,
-          });
-          updateLearningPreference(nextPreference);
-          onUserUpdate(nextUser);
-          setShowSettingsModal(false);
-          await refreshDashboard();
-          setPageNotice({ tone: 'success', message: 'プロフィールを更新しました。' });
-      } catch (e) {
-          setPageNotice({ tone: 'error', message: 'プロフィールの更新に失敗しました。' });
-      } finally {
-          setIsSavingProfile(false);
       }
   };
 

@@ -21,6 +21,7 @@ import type { AppEnv, DbUserRow } from './types';
 export const DAY_MS = 86400000;
 export const WORKSHEET_STATUSES: Array<StudentWorksheetSnapshot['words'][number]['status']> = ['graduated', 'review', 'learning'];
 export const FALLBACK_WORKSHEET_WORD_LIMIT = 40;
+export const MASTERY_INTERACTION_SOURCE: LearningHistory['interactionSource'] = 'STUDY';
 
 export interface DbBookRow {
   id: string;
@@ -114,6 +115,20 @@ const calculatePercentage = (learned: number, total: number): number => {
   if (pct === 0 && learned > 0) return 1;
   if (pct === 100 && learned < total) return 99;
   return pct;
+};
+
+const qualifyColumn = (column: string, tableAlias?: string): string => (
+  tableAlias ? `${tableAlias}.${column}` : column
+);
+
+export const getMasterySourceSql = (tableAlias?: string): string => (
+  `${qualifyColumn('interaction_source', tableAlias)} = '${MASTERY_INTERACTION_SOURCE}'`
+);
+
+export const getMasteryProgressSql = (tableAlias?: string): string => {
+  const attemptCount = qualifyColumn('attempt_count', tableAlias);
+  const intervalDays = qualifyColumn('interval_days', tableAlias);
+  return `(${getMasterySourceSql(tableAlias)} AND (${attemptCount} > 0 OR ${intervalDays} > 0))`;
 };
 
 export const createBookId = (bookName: string, ownerId?: string, uniqueSalt?: string): string => {
@@ -235,6 +250,7 @@ export const getVisibleDueCount = async (env: AppEnv, user: DbUserRow): Promise<
     `SELECT COUNT(*) AS count
      FROM learning_histories
      WHERE user_id = ? AND next_review_date <= ? AND status != 'graduated'
+       AND ${getMasterySourceSql()}
        AND book_id IN (${buildInClause(bookIds.length)})`,
     user.id,
     Date.now(),
@@ -294,7 +310,7 @@ export const getBookProgress = async (env: AppEnv, userId: string, bookId: strin
     env,
     `SELECT COUNT(*) AS learned
      FROM learning_histories
-     WHERE user_id = ? AND book_id = ? AND (attempt_count > 0 OR interval_days > 0)`,
+     WHERE user_id = ? AND book_id = ? AND ${getMasteryProgressSql()}`,
     userId,
     bookId,
   );

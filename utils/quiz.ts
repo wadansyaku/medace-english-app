@@ -35,12 +35,61 @@ export const resolveInteractionSource = (
   return undefined;
 };
 
+export const isStudyInteractionSource = (
+  source?: LearningInteractionSource | null,
+): source is 'STUDY' => source === 'STUDY';
+
+export const isMasteryHistoryRecord = (
+  history: Pick<LearningHistory, 'interactionSource'>,
+): boolean => isStudyInteractionSource(history.interactionSource);
+
+export const isMasteryProgressHistory = (
+  history: Pick<LearningHistory, 'interactionSource' | 'attemptCount' | 'interval'>,
+): boolean => isMasteryHistoryRecord(history) && (history.attemptCount > 0 || history.interval > 0);
+
+export const isDueMasteryHistory = (
+  history: Pick<LearningHistory, 'interactionSource' | 'status' | 'nextReviewDate'>,
+  now: number,
+): boolean => (
+  isStudyInteractionSource(history.interactionSource)
+  && history.status !== 'graduated'
+  && history.nextReviewDate <= now
+);
+
+export const buildQuizAttemptHistory = ({
+  existing,
+  wordId,
+  bookId,
+  correct,
+  responseTimeMs,
+  now = Date.now(),
+}: {
+  existing?: Partial<LearningHistory>;
+  wordId: string;
+  bookId: string;
+  correct: boolean;
+  responseTimeMs: number;
+  now?: number;
+}): LearningHistory => ({
+  wordId,
+  bookId,
+  status: (existing?.status || 'new') as LearningHistory['status'],
+  lastStudiedAt: now,
+  nextReviewDate: existing?.nextReviewDate || now,
+  interval: existing?.interval || 0,
+  easeFactor: existing?.easeFactor || 2.5,
+  correctCount: (existing?.correctCount || 0) + (correct ? 1 : 0),
+  attemptCount: (existing?.attemptCount || 0) + 1,
+  totalResponseTimeMs: (existing?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs)),
+  interactionSource: resolveInteractionSource(existing?.interactionSource, 'QUIZ') || 'QUIZ',
+});
+
 export const getStrictStudyWordIds = (
   histories: Array<Pick<LearningHistory, 'wordId' | 'bookId' | 'interactionSource'>>,
   bookId: string,
 ): string[] => Array.from(new Set(
   histories
-    .filter((history) => history.bookId === bookId && history.interactionSource === 'STUDY')
+    .filter((history) => history.bookId === bookId && isStudyInteractionSource(history.interactionSource))
     .map((history) => history.wordId),
 ));
 

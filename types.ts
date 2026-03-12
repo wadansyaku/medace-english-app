@@ -171,6 +171,7 @@ export interface LearningHistory {
   correctCount: number;
   attemptCount: number;
   totalResponseTimeMs: number;
+  // `STUDY` drives mastery-facing features. `QUIZ` contributes only to engagement analytics.
   interactionSource?: LearningInteractionSource;
 }
 

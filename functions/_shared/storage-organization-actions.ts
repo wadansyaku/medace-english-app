@@ -20,6 +20,7 @@ import {
   FALLBACK_WORKSHEET_WORD_LIMIT,
   WORKSHEET_STATUSES,
   canBypassInstructorAssignment,
+  getMasteryProgressSql,
   getUserSubscriptionPlan,
   readAll,
   readFirst,
@@ -56,7 +57,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        u.email AS email,
        u.subscription_plan AS subscription_plan,
        u.organization_name AS organization_name,
-       COALESCE(SUM(CASE WHEN h.attempt_count > 0 OR h.interval_days > 0 THEN 1 ELSE 0 END), 0) AS total_learned,
+       COALESCE(SUM(CASE WHEN ${getMasteryProgressSql('h')} THEN 1 ELSE 0 END), 0) AS total_learned,
        COALESCE(SUM(h.correct_count), 0) AS total_correct,
        COALESCE(SUM(h.attempt_count), 0) AS total_attempts,
        MAX(h.last_studied_at) AS last_active,
@@ -206,7 +207,7 @@ export const handleGetStudentWorksheetSnapshot = async (
      JOIN words w ON w.id = h.word_id
      JOIN books b ON b.id = h.book_id
      WHERE h.user_id = ?
-       AND (h.attempt_count > 0 OR h.interval_days > 0)
+       AND ${getMasteryProgressSql('h')}
      ORDER BY
        CASE h.status
          WHEN 'graduated' THEN 0

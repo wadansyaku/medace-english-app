@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { LearningHistory, WordData } from '../types';
 import {
+  buildQuizAttemptHistory,
   getActualQuizQuestionCount,
   getQuizCandidateWords,
   getStrictStudyWordIds,
+  isDueMasteryHistory,
+  isMasteryProgressHistory,
   normalizeQuizRange,
   resolveInteractionSource,
 } from '../utils/quiz';
@@ -116,5 +119,55 @@ describe('quiz utils', () => {
     expect(resolveInteractionSource(undefined, 'QUIZ')).toBe('QUIZ');
     expect(resolveInteractionSource('QUIZ', 'STUDY')).toBe('STUDY');
     expect(resolveInteractionSource('STUDY', 'QUIZ')).toBe('STUDY');
+  });
+
+  it('keeps quiz-only history out of mastery progress and due counts', () => {
+    const quizOnlyHistory = buildQuizAttemptHistory({
+      wordId: 'w2',
+      bookId: 'book-1',
+      correct: false,
+      responseTimeMs: 840,
+      now: 5_000,
+    });
+
+    expect(quizOnlyHistory.status).toBe('new');
+    expect(quizOnlyHistory.interactionSource).toBe('QUIZ');
+    expect(isMasteryProgressHistory(quizOnlyHistory)).toBe(false);
+    expect(isDueMasteryHistory(quizOnlyHistory, 5_000)).toBe(false);
+  });
+
+  it('preserves mastery fields when a studied word is answered in quiz mode', () => {
+    const existingStudyHistory: LearningHistory = {
+      wordId: 'w1',
+      bookId: 'book-1',
+      status: 'learning',
+      lastStudiedAt: 100,
+      nextReviewDate: 10_000,
+      interval: 3,
+      easeFactor: 2.65,
+      correctCount: 2,
+      attemptCount: 2,
+      totalResponseTimeMs: 2_300,
+      interactionSource: 'STUDY',
+    };
+
+    const updated = buildQuizAttemptHistory({
+      existing: existingStudyHistory,
+      wordId: existingStudyHistory.wordId,
+      bookId: existingStudyHistory.bookId,
+      correct: false,
+      responseTimeMs: 900,
+      now: 12_000,
+    });
+
+    expect(updated.status).toBe('learning');
+    expect(updated.nextReviewDate).toBe(10_000);
+    expect(updated.interval).toBe(3);
+    expect(updated.easeFactor).toBe(2.65);
+    expect(updated.attemptCount).toBe(3);
+    expect(updated.correctCount).toBe(2);
+    expect(updated.interactionSource).toBe('STUDY');
+    expect(isMasteryProgressHistory(updated)).toBe(true);
+    expect(isDueMasteryHistory(updated, 12_000)).toBe(true);
   });
 });

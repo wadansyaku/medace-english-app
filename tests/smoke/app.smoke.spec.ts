@@ -134,6 +134,26 @@ const getCurrentSessionUser = async (page: Page) => page.evaluate(async () => {
   return response.json() as Promise<{ uid: string; displayName: string; role: string; organizationRole?: string } | null>;
 });
 
+const storageAction = async <T,>(page: Page, action: string, payload?: Record<string, unknown>) => page.evaluate(async ({ nextAction, nextPayload }) => {
+  const response = await fetch('/api/storage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(nextPayload === undefined ? { action: nextAction } : { action: nextAction, payload: nextPayload }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`${nextAction} failed with status ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}, { nextAction: action, nextPayload: payload }) as Promise<T>;
+
 const completeSeededStudySession = async (page: Page, bookId: string) => {
   await page.getByTestId(`book-study-${bookId}`).click();
   await expect(page.getByTestId('study-card-front')).toBeVisible();
@@ -149,12 +169,26 @@ const completeSeededStudySession = async (page: Page, bookId: string) => {
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
 };
 
-const answerSeededQuizQuestion = async (page: Page) => {
+const answerSeededQuizQuestion = async (page: Page, correct = true) => {
   const promptText = await page.getByTestId('quiz-question-card').innerText();
-  const answer = promptText.includes('triage') ? 'トリアージ' : '安定させる';
+  const correctAnswer = promptText.includes('triage') ? 'トリアージ' : '安定させる';
 
   await page.getByTestId('quiz-show-options').click();
-  await page.getByRole('button', { name: answer }).click();
+  if (correct) {
+    await page.getByRole('button', { name: correctAnswer }).click();
+    return;
+  }
+
+  const optionLabels = await page.locator('[data-testid="quiz-running-view"] button').allTextContents();
+  const wrongAnswer = optionLabels
+    .map((label) => label.trim())
+    .find((label) => label && label !== correctAnswer);
+
+  if (!wrongAnswer) {
+    throw new Error('Could not find a wrong quiz answer option.');
+  }
+
+  await page.getByRole('button', { name: wrongAnswer }).click();
 };
 
 const findUnexpectedHorizontalOverflow = async (page: Page) => page.evaluate(() => {
@@ -571,6 +605,96 @@ test.describe('student mobile ux', () => {
 
     await expect(page.getByTestId('quiz-result-view')).toBeVisible();
     await expect(page.getByTestId('quiz-result-retry')).toBeVisible();
+  });
+
+  test('quiz-only mobile attempts do not inflate dashboard progress or due counts', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Quiz Semantics Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-quiz-${bookId}`).click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-setup-primary-cta').click();
+    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
+    await page.getByTestId('quiz-ready-start').click();
+    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+
+    await answerSeededQuizQuestion(page, false);
+    await expect(page.getByText(/第 2 問/)).toBeVisible();
+    await answerSeededQuizQuestion(page, false);
+
+    await expect(page.getByTestId('quiz-result-view')).toBeVisible();
+    await page.getByTestId('quiz-result-back-dashboard').click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const progress = await storageAction<{ learnedCount: number; percentage: number }>(page, 'getBookProgress', { bookId });
+    const dueCount = await storageAction<number>(page, 'getDueCount');
+    const masteryDist = await storageAction<{ total: number }>(page, 'getMasteryDistribution');
+    const studiedWordIds = await storageAction<string[]>(page, 'getStudiedWordIdsByBook', { bookId });
+
+    expect(progress.learnedCount).toBe(0);
+    expect(progress.percentage).toBe(0);
+    expect(dueCount).toBe(0);
+    expect(masteryDist.total).toBe(0);
+    expect(studiedWordIds).toEqual([]);
+  });
+
+  test('mobile quiz does not downgrade mastery for previously studied words', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('demo-login-student').click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Quiz Preserve Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await completeSeededStudySession(page, bookId);
+
+    const masteryBeforeQuiz = await storageAction<{
+      learning: number;
+      review: number;
+      total: number;
+    }>(page, 'getMasteryDistribution');
+    expect(masteryBeforeQuiz.learning).toBe(2);
+    expect(masteryBeforeQuiz.review).toBe(0);
+
+    await page.getByTestId(`book-quiz-${bookId}`).click();
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-setup-primary-cta').click();
+    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
+    await page.getByTestId('quiz-ready-start').click();
+    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+
+    await answerSeededQuizQuestion(page, false);
+    await expect(page.getByText(/第 2 問/)).toBeVisible();
+    await answerSeededQuizQuestion(page, false);
+
+    await expect(page.getByTestId('quiz-result-view')).toBeVisible();
+    await page.getByTestId('quiz-result-back-dashboard').click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const masteryAfterQuiz = await storageAction<{
+      learning: number;
+      review: number;
+      total: number;
+    }>(page, 'getMasteryDistribution');
+    const progressAfterQuiz = await storageAction<{ learnedCount: number }>(page, 'getBookProgress', { bookId });
+
+    expect(masteryAfterQuiz.total).toBe(2);
+    expect(masteryAfterQuiz.learning).toBe(2);
+    expect(masteryAfterQuiz.review).toBe(0);
+    expect(progressAfterQuiz.learnedCount).toBe(2);
   });
 
   test('student can back out from a running quiz with confirmation on mobile', async ({ page }) => {
