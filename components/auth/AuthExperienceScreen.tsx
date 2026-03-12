@@ -13,6 +13,7 @@ import {
 
 import { AUTH_COPY, BRAND } from '../../config/brand';
 import getClientRuntimeFlags from '../../config/runtime';
+import useIsMobileViewport from '../../hooks/useIsMobileViewport';
 import { getDemoAccessWindowLabel } from '../../utils/demo';
 import PublicMotivationPanel from '../PublicMotivationPanel';
 import PublicInfoPage from '../PublicInfoPage';
@@ -104,6 +105,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   onClosePublicInfo,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
+  const isMobileViewport = useIsMobileViewport();
   const businessDemoOptions = BUSINESS_DEMO_OPTIONS.filter((option) => (
     runtimeFlags.enableAdminDemo || option.role !== UserRole.ADMIN
   ));
@@ -119,16 +121,17 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
     );
   }
 
-  return (
-    <div className="mx-auto mt-6 max-w-6xl space-y-6 lg:mt-10">
-      <PublicMotivationPanel
-        snapshot={motivationSnapshot}
-        loading={motivationLoading}
-        error={motivationError}
-        compact
-      />
+  const motivationPanel = (
+    <PublicMotivationPanel
+      snapshot={motivationSnapshot}
+      loading={motivationLoading}
+      error={motivationError}
+      compact
+    />
+  );
 
-      <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
+  const authCard = (
+    <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
         <div className="grid lg:grid-cols-[1.04fr_0.96fr]">
           <div className="relative overflow-hidden bg-medace-500 p-9 text-white md:p-11">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.3),_transparent_34%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.16),_transparent_28%)]"></div>
@@ -148,6 +151,15 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                 <p className="mt-4 max-w-lg text-base leading-relaxed text-white/88 md:text-[1.05rem]">
                   {AUTH_COPY.body}
                 </p>
+                {isMobileViewport && (
+                  <button
+                    onClick={() => onDemoLogin(UserRole.STUDENT)}
+                    data-testid="demo-login-student"
+                    className="mt-5 w-full rounded-2xl bg-white py-4 text-base font-bold text-medace-700 shadow-sm transition-colors hover:bg-orange-50"
+                  >
+                    生徒としてすぐ試す
+                  </button>
+                )}
               </div>
 
               <div className="grid gap-3">
@@ -177,13 +189,15 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                     現在の導入 pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は段階導入前の対象外です。
                   </p>
                 )}
-                <button
-                  onClick={() => onDemoLogin(UserRole.STUDENT)}
-                  data-testid="demo-login-student"
-                  className="mt-4 w-full rounded-2xl bg-white py-4 text-base font-bold text-medace-700 shadow-sm transition-colors hover:bg-orange-50"
-                >
-                  生徒としてすぐ試す
-                </button>
+                {!isMobileViewport && (
+                  <button
+                    onClick={() => onDemoLogin(UserRole.STUDENT)}
+                    data-testid="demo-login-student"
+                    className="mt-4 w-full rounded-2xl bg-white py-4 text-base font-bold text-medace-700 shadow-sm transition-colors hover:bg-orange-50"
+                  >
+                    生徒としてすぐ試す
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -322,9 +336,11 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
             </div>
           </div>
         </div>
-      </div>
+    </div>
+  );
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+  const schoolDemoSection = (
+    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">School Demo</p>
@@ -375,7 +391,14 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
             学校・教室向けデモは公開本番では非表示です。講師・管理者アカウントは手動発行し、導入案内とセットで案内してください。
           </div>
         )}
-      </section>
+    </section>
+  );
+
+  return (
+    <div className="mx-auto mt-6 max-w-6xl space-y-6 lg:mt-10">
+      {isMobileViewport ? authCard : motivationPanel}
+      {isMobileViewport ? motivationPanel : authCard}
+      {schoolDemoSection}
     </div>
   );
 };

@@ -1,20 +1,13 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useMemo } from 'react';
 import { getSubscriptionPolicy } from '../config/subscription';
-import { storage } from '../services/storage';
-import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
 import {
   BusinessAdminWorkspaceView,
   OrganizationRole,
   StudentRiskLevel,
   SUBSCRIPTION_PLAN_LABELS,
-  type OrganizationDashboardSnapshot,
-  type StudentSummary,
   type UserProfile,
-  type WritingAssignment,
-  type WritingQueueItem,
 } from '../types';
 import {
-  AlertCircle,
   ArrowRight,
   BellRing,
   Building2,
@@ -24,6 +17,15 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { useBusinessAdminDashboardData } from '../hooks/useBusinessAdminDashboardData';
+import { useBusinessAdminDashboardController } from '../hooks/useBusinessAdminDashboardController';
+import { resolveStorageMode } from '../shared/storageMode';
+import {
+  getBusinessAdminWritingCounts,
+  getPlanCoverageRate,
+  sortInstructorsByAssignedLoad,
+} from '../utils/businessAdminDashboard';
+import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import WorkspaceMetricCard from './workspace/WorkspaceMetricCard';
 
 const OfficialCatalogAccessPanel = lazy(() => import('./OfficialCatalogAccessPanel'));
@@ -103,88 +105,19 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   activeView,
   onChangeView,
 }) => {
-  const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
-  const [writingAssignments, setWritingAssignments] = useState<WritingAssignment[]>([]);
-  const [writingQueue, setWritingQueue] = useState<WritingQueueItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [assignmentSavingUid, setAssignmentSavingUid] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [assignmentFilter, setAssignmentFilter] = useState<'ALL' | 'DANGER' | 'UNASSIGNED'>('ALL');
-  const [assignmentQuery, setAssignmentQuery] = useState('');
-  const [selectedStudentUid, setSelectedStudentUid] = useState<string | null>(null);
-
-  const loadSnapshot = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [nextSnapshot, assignmentResponse, queueResponse] = await Promise.all([
-        storage.getOrganizationDashboardSnapshot(),
-        listWritingAssignments('organization'),
-        listWritingReviewQueue('QUEUE'),
-      ]);
-      setSnapshot(nextSnapshot);
-      setWritingAssignments(assignmentResponse.assignments);
-      setWritingQueue(queueResponse.items);
-    } catch (loadError) {
-      console.error(loadError);
-      setError((loadError as Error).message || '組織ダッシュボードの取得に失敗しました。');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadSnapshot();
-  }, []);
-
-  const handleAssignmentChange = async (studentUid: string, instructorUid: string) => {
-    if (!snapshot) return;
-    setAssignmentSavingUid(studentUid);
-    setNotice(null);
-    try {
-      await storage.assignStudentInstructor(studentUid, instructorUid || null);
-      const instructorName = snapshot.instructors.find((instructor) => instructor.uid === instructorUid)?.displayName;
-      setNotice({
-        tone: 'success',
-        message: instructorUid
-          ? `担当講師を ${instructorName || '選択した講師'} に更新しました。`
-          : '担当講師の割当を解除しました。',
-      });
-      await loadSnapshot();
-    } catch (assignmentError) {
-      console.error(assignmentError);
-      setNotice({
-        tone: 'error',
-        message: (assignmentError as Error).message || '担当割当の更新に失敗しました。',
-      });
-    } finally {
-      setAssignmentSavingUid(null);
-    }
-  };
-
-  const filteredAssignments = useMemo(() => {
-    if (!snapshot) return [];
-    return snapshot.studentAssignments.filter((student) => {
-      if (assignmentFilter === 'DANGER' && student.riskLevel !== StudentRiskLevel.DANGER) return false;
-      if (assignmentFilter === 'UNASSIGNED' && student.assignedInstructorUid) return false;
-      if (assignmentQuery.trim()) {
-        const keyword = assignmentQuery.trim().toLowerCase();
-        return student.name.toLowerCase().includes(keyword) || student.email.toLowerCase().includes(keyword);
-      }
-      return true;
-    });
-  }, [assignmentFilter, assignmentQuery, snapshot]);
-
-  useEffect(() => {
-    if (filteredAssignments.length === 0) {
-      setSelectedStudentUid(null);
-      return;
-    }
-    if (!selectedStudentUid || !filteredAssignments.some((student) => student.uid === selectedStudentUid)) {
-      setSelectedStudentUid(filteredAssignments[0].uid);
-    }
-  }, [filteredAssignments, selectedStudentUid]);
+  const {
+    snapshot,
+    writingAssignments,
+    writingQueue,
+    loading,
+    error,
+    refresh,
+  } = useBusinessAdminDashboardData();
+  const controller = useBusinessAdminDashboardController({
+    snapshot,
+    refresh,
+  });
+  const storageMode = useMemo(() => resolveStorageMode(import.meta.env.VITE_STORAGE_MODE), []);
 
   if (loading) {
     return (
@@ -204,28 +137,34 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   }
 
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
-  const planCoverageRate = snapshot.totalStudents > 0
-    ? Math.round((snapshot.learningPlanCount / snapshot.totalStudents) * 100)
-    : 0;
-  const instructorLoad = [...snapshot.instructors].sort((left, right) => right.assignedStudentCount - left.assignedStudentCount);
-  const selectedAssignmentStudent = filteredAssignments.find((student) => student.uid === selectedStudentUid) || filteredAssignments[0] || null;
+  const planCoverageRate = getPlanCoverageRate(snapshot);
+  const instructorLoad = sortInstructorsByAssignedLoad(snapshot.instructors);
+  const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
   const recentEvents = snapshot.assignmentEvents.slice(0, 6);
-  const reviewReadyCount = writingQueue.length;
-  const revisionRequestedCount = writingAssignments.filter((assignment) => assignment.status === 'REVISION_REQUESTED').length;
-  const issuedCount = writingAssignments.filter((assignment) => assignment.status === 'ISSUED').length;
   const viewCopy = VIEW_COPY[activeView];
+  const isLocalMockData = storageMode.isLocalMockData;
+  const assignmentCoverageLabel = isLocalMockData ? '担当割当率 (参考)' : '担当割当率';
+  const assignmentCoverageDetail = isLocalMockData
+    ? 'ローカル擬似データのため参考値です'
+    : `未割当 ${snapshot.unassignedStudents}名`;
+  const reactivatedStudentsLabel = isLocalMockData ? '通知後再開 (参考)' : '通知後再開';
+  const reactivatedStudentsDetail = isLocalMockData
+    ? 'ローカル擬似データ上の参考値'
+    : '72時間以内に学習再開';
 
   return (
     <div data-testid="business-admin-dashboard" className="space-y-8 pb-12">
-      {notice && (
+      {controller.notice && (
         <div className={`rounded-[24px] border px-5 py-4 text-sm font-medium ${
-          notice.tone === 'success'
+          controller.notice.tone === 'success'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
             : 'border-red-200 bg-red-50 text-red-700'
         }`}>
-          {notice.message}
+          {controller.notice.message}
         </div>
       )}
+
+      {isLocalMockData && <B2BStorageModeBanner />}
 
       <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]"></div>
@@ -288,7 +227,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <WorkspaceMetricCard label="登録生徒" value={`${snapshot.totalStudents}名`} detail="組織内の学習対象生徒数" />
             <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="学習が止まりかけている生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail={`未割当 ${snapshot.unassignedStudents}名`} tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label={assignmentCoverageLabel} value={`${snapshot.assignmentCoverageRate}%`} detail={assignmentCoverageDetail} tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
             <WorkspaceMetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail={`${snapshot.learningPlanCount}名が設定済み`} tone="accent" />
           </div>
 
@@ -422,15 +361,15 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">配布済み</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{issuedCount}</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.issuedCount}</div>
                 </div>
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">添削待ち</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{reviewReadyCount}</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.reviewReadyCount}</div>
                 </div>
                 <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">再提出待ち</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{revisionRequestedCount}</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.revisionRequestedCount}</div>
                 </div>
               </div>
               <button
@@ -448,10 +387,10 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
       {activeView === BusinessAdminWorkspaceView.ASSIGNMENTS && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="割当対象" value={`${filteredAssignments.length}名`} detail="現在の条件に一致する生徒" />
+            <WorkspaceMetricCard label="割当対象" value={`${controller.filteredAssignments.length}名`} detail="現在の条件に一致する生徒" />
             <WorkspaceMetricCard label="未割当" value={`${snapshot.unassignedStudents}名`} detail="担当講師が決まっていない生徒" tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
             <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="リスク高の生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label="割当済み率" value={`${snapshot.assignmentCoverageRate}%`} detail="組織全体の割当進行" tone="accent" />
+            <WorkspaceMetricCard label={isLocalMockData ? '割当済み率 (参考)' : '割当済み率'} value={`${snapshot.assignmentCoverageRate}%`} detail={isLocalMockData ? 'ローカル擬似データのため参考値です' : '組織全体の割当進行'} tone="accent" />
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -469,8 +408,8 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => setAssignmentFilter(option.key as 'ALL' | 'DANGER' | 'UNASSIGNED')}
-                    className={`rounded-xl px-4 py-2 text-sm font-bold ${assignmentFilter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
+                    onClick={() => controller.setAssignmentFilter(option.key as 'ALL' | 'DANGER' | 'UNASSIGNED')}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.assignmentFilter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
                   >
                     {option.label}
                   </button>
@@ -480,8 +419,8 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
                   type="text"
-                  value={assignmentQuery}
-                  onChange={(event) => setAssignmentQuery(event.target.value)}
+                  value={controller.assignmentQuery}
+                  onChange={(event) => controller.setAssignmentQuery(event.target.value)}
                   placeholder="生徒名・メールで検索"
                   className="w-64 text-sm text-slate-700 outline-none"
                 />
@@ -498,16 +437,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                 <div>次アクション</div>
               </div>
               <div>
-                {filteredAssignments.length === 0 ? (
+                {controller.filteredAssignments.length === 0 ? (
                   <div className="px-6 py-16 text-center text-sm text-slate-500">該当する生徒はいません。</div>
                 ) : (
-                  filteredAssignments.map((student) => (
+                  controller.filteredAssignments.map((student) => (
                     <button
                       key={student.uid}
                       type="button"
-                      onClick={() => setSelectedStudentUid(student.uid)}
+                      onClick={() => controller.setSelectedStudentUid(student.uid)}
                       className={`grid w-full grid-cols-[0.72fr_1.14fr_0.88fr_1.1fr] gap-3 border-b border-slate-100 px-5 py-4 text-left transition-colors last:border-b-0 ${
-                        selectedAssignmentStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
+                        controller.selectedAssignmentStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
                       }`}
                     >
                       <div>
@@ -532,41 +471,41 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
 
             <section className="space-y-6">
               <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-                {selectedAssignmentStudent ? (
+                {controller.selectedAssignmentStudent ? (
                   <div className="space-y-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Detail</p>
-                        <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{selectedAssignmentStudent.name}</h3>
-                        <p className="mt-2 text-sm text-slate-500">{selectedAssignmentStudent.email}</p>
+                        <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{controller.selectedAssignmentStudent.name}</h3>
+                        <p className="mt-2 text-sm text-slate-500">{controller.selectedAssignmentStudent.email}</p>
                       </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(selectedAssignmentStudent.riskLevel)}`}>
-                        {riskLabel(selectedAssignmentStudent.riskLevel)}
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(controller.selectedAssignmentStudent.riskLevel)}`}>
+                        {riskLabel(controller.selectedAssignmentStudent.riskLevel)}
                       </span>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-3">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
-                        <div className="mt-2 text-xl font-black text-slate-950">{formatDays(selectedAssignmentStudent.lastActive)}</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{formatDays(controller.selectedAssignmentStudent.lastActive)}</div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>
-                        <div className="mt-2 text-xl font-black text-slate-950">{selectedAssignmentStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{controller.selectedAssignmentStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">習得語</div>
-                        <div className="mt-2 text-xl font-black text-slate-950">{selectedAssignmentStudent.totalLearned}</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">{controller.selectedAssignmentStudent.totalLearned}</div>
                       </div>
                     </div>
 
                     <div>
                       <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師を割り当てる</label>
                       <select
-                        data-testid={`assignment-select-${selectedAssignmentStudent.uid}`}
-                        value={selectedAssignmentStudent.assignedInstructorUid || ''}
-                        onChange={(event) => handleAssignmentChange(selectedAssignmentStudent.uid, event.target.value)}
-                        disabled={assignmentSavingUid === selectedAssignmentStudent.uid}
+                        data-testid={`assignment-select-${controller.selectedAssignmentStudent.uid}`}
+                        value={controller.selectedAssignmentStudent.assignedInstructorUid || ''}
+                        onChange={(event) => controller.handleAssignmentChange(controller.selectedAssignmentStudent.uid, event.target.value)}
+                        disabled={controller.assignmentSavingUid === controller.selectedAssignmentStudent.uid}
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100 disabled:opacity-60"
                       >
                         <option value="">未割当</option>
@@ -576,16 +515,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                           </option>
                         ))}
                       </select>
-                      {assignmentSavingUid === selectedAssignmentStudent.uid && (
+                      {controller.assignmentSavingUid === controller.selectedAssignmentStudent.uid && (
                         <div className="mt-2 text-xs font-medium text-slate-500">担当を更新しています...</div>
                       )}
                     </div>
 
-                    {selectedAssignmentStudent.riskReasons && selectedAssignmentStudent.riskReasons.length > 0 && (
+                    {controller.selectedAssignmentStudent.riskReasons && controller.selectedAssignmentStudent.riskReasons.length > 0 && (
                       <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">介入理由</div>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {selectedAssignmentStudent.riskReasons.map((reason) => (
+                          {controller.selectedAssignmentStudent.riskReasons.map((reason) => (
                             <span key={reason} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                               {reason}
                             </span>
@@ -594,10 +533,10 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       </div>
                     )}
 
-                    {selectedAssignmentStudent.recommendedAction && (
+                    {controller.selectedAssignmentStudent.recommendedAction && (
                       <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5 text-sm leading-relaxed text-medace-900">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">推奨アクション</div>
-                        <div className="mt-3">{selectedAssignmentStudent.recommendedAction}</div>
+                        <div className="mt-3">{controller.selectedAssignmentStudent.recommendedAction}</div>
                       </div>
                     )}
                   </div>
@@ -648,8 +587,8 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <WorkspaceMetricCard label="講師数" value={`${snapshot.totalInstructors}名`} detail="組織内で稼働中の講師" />
-            <WorkspaceMetricCard label="担当割当率" value={`${snapshot.assignmentCoverageRate}%`} detail="講師に明示的に割り当て済み" tone="accent" />
-            <WorkspaceMetricCard label="通知後再開" value={`${snapshot.reactivatedStudents7d}名`} detail="72時間以内に学習再開" tone="success" />
+            <WorkspaceMetricCard label={assignmentCoverageLabel} value={`${snapshot.assignmentCoverageRate}%`} detail={isLocalMockData ? 'ローカル擬似データのため参考値です' : '講師に明示的に割り当て済み'} tone="accent" />
+            <WorkspaceMetricCard label={reactivatedStudentsLabel} value={`${snapshot.reactivatedStudents7d}名`} detail={reactivatedStudentsDetail} tone="success" />
             <WorkspaceMetricCard label="7日通知" value={`${snapshot.notifications7d}件`} detail="組織全体のフォロー通知数" />
           </div>
 
@@ -701,10 +640,10 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
       {activeView === BusinessAdminWorkspaceView.WRITING && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="配布済み" value={`${issuedCount}件`} detail="まだ提出されていない課題" />
-            <WorkspaceMetricCard label="添削待ち" value={`${reviewReadyCount}件`} detail="講師確認待ちの提出" tone={reviewReadyCount > 0 ? 'warning' : 'success'} />
-            <WorkspaceMetricCard label="再提出待ち" value={`${revisionRequestedCount}件`} detail="返却後の再提出待ち" tone={revisionRequestedCount > 0 ? 'warning' : 'default'} />
-            <WorkspaceMetricCard label="完了済み" value={`${writingAssignments.filter((assignment) => assignment.status === 'COMPLETED').length}件`} detail="返却と完了まで終了" />
+            <WorkspaceMetricCard label="配布済み" value={`${writingCounts.issuedCount}件`} detail="まだ提出されていない課題" />
+            <WorkspaceMetricCard label="添削待ち" value={`${writingCounts.reviewReadyCount}件`} detail="講師確認待ちの提出" tone={writingCounts.reviewReadyCount > 0 ? 'warning' : 'success'} />
+            <WorkspaceMetricCard label="再提出待ち" value={`${writingCounts.revisionRequestedCount}件`} detail="返却後の再提出待ち" tone={writingCounts.revisionRequestedCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="完了済み" value={`${writingCounts.completedCount}件`} detail="返却と完了まで終了" />
           </div>
           <WritingOpsPanel user={user} />
         </div>

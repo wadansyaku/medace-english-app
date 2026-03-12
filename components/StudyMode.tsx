@@ -100,8 +100,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
+  const [isAdvancingCard, setIsAdvancingCard] = useState(false);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const actionBarRef = useRef<HTMLDivElement | null>(null);
+  const backFaceScrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSupports3D(getSupports3D());
@@ -264,6 +266,30 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     }
   }, [currentIndex, currentWord, isFinished, loading]);
 
+  const resetStudyScrollPosition = () => {
+    if (!isMobileViewport || typeof window === 'undefined') return;
+
+    const apply = () => {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      backFaceScrollRef.current?.scrollTo({ top: 0, behavior: 'auto' });
+    };
+
+    apply();
+    window.requestAnimationFrame(apply);
+    window.setTimeout(apply, 60);
+    window.setTimeout(apply, 220);
+  };
+
+  useLayoutEffect(() => {
+    if (!isMobileViewport || loading || isFinished) return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      resetStudyScrollPosition();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [currentIndex, isFinished, isMobileViewport, loading]);
+
   const resetCard = () => {
     setIsFlipped(false);
     setAiContext(null);
@@ -316,7 +342,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   };
 
   const handleRating = async (rating: number) => {
-    if (!currentWord) return;
+    if (!currentWord || isAdvancingCard) return;
     await storage.saveSRSHistory(
       user.uid,
       currentWord,
@@ -331,8 +357,13 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       ));
     }
     if (currentIndex < queue.length - 1) {
-      resetCard();
-      window.setTimeout(() => setCurrentIndex((previous) => previous + 1), supports3D ? 180 : 0);
+      setIsAdvancingCard(true);
+      window.setTimeout(() => {
+        resetCard();
+        setCurrentIndex((previous) => previous + 1);
+        setIsAdvancingCard(false);
+        resetStudyScrollPosition();
+      }, supports3D ? 180 : 0);
     } else {
       const baseXP = queue.length * 10;
       const currentStreak = user.stats?.currentStreak || 0;
@@ -369,7 +400,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   };
 
   const openBack = () => {
-    if (!isEditing) {
+    if (!isEditing && !isAdvancingCard) {
       setIsFlipped(true);
     }
   };
@@ -609,7 +640,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-          <div className="h-full overflow-y-auto pr-1 scrollbar-hide">
+          <div ref={backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
           {!showHints ? (
             <button
               type="button"
@@ -802,7 +833,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                 type="button"
                 data-testid={`study-rate-${option.id}`}
                 onClick={() => handleRating(option.id)}
-                className={`flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 ${option.className}`}
+                disabled={isAdvancingCard}
+                className={`flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 disabled:opacity-60 ${option.className}`}
               >
                 <span>{option.label}</span>
                 {option.icon}
@@ -814,9 +846,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
             <button
               data-testid="study-flip-button"
               onClick={openBack}
-              disabled={isEditing}
+              disabled={isEditing || isAdvancingCard}
               className={`flex min-h-12 items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
-                isEditing ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-white hover:bg-medace-700'
+                isEditing || isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-white hover:bg-medace-700'
               }`}
             >
               <RotateCw className="h-5 w-5" /> 答えを確認

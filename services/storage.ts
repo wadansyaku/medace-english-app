@@ -75,6 +75,7 @@ import {
   type OrganizationReadModelContext,
 } from './storage/organization-read-model';
 import { getCoachNotifications } from './storage/writing-read-model';
+import { resolveStorageMode } from '../shared/storageMode';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -629,7 +630,7 @@ class IndexedDBStorageService implements IStorageService {
   }
 }
 
-const USE_REMOTE_STORAGE = import.meta.env.VITE_STORAGE_MODE !== 'idb';
+const USE_REMOTE_STORAGE = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE).mode === 'cloudflare';
 
 export const storage: IStorageService = USE_REMOTE_STORAGE
     ? new CloudflareStorageService()

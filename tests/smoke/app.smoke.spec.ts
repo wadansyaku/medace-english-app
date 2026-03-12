@@ -419,6 +419,8 @@ test('group admin and business student can complete the writing workflow with on
   await adminPage.getByTestId('writing-review-public-comment').fill('構成が安定しました。次は語彙の幅も意識しましょう。');
   await adminPage.getByTestId('writing-approve-return').click();
   await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
+  await adminPage.getByRole('button', { name: '返却履歴' }).click();
+  await expect(adminPage.locator('[data-testid^="writing-review-item-"]').first()).toBeVisible();
 
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
@@ -436,6 +438,16 @@ test.describe('student mobile ux', () => {
     userAgent: iphoneUserAgent,
     hasTouch: true,
     isMobile: true,
+  });
+
+  test('public landing keeps demo CTA inside the first viewport on mobile', async ({ page }) => {
+    await page.goto('/');
+
+    const demoButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent);
+    await expect(demoButton).toBeVisible();
+    const box = await demoButton.boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
@@ -570,6 +582,31 @@ test.describe('student mobile ux', () => {
     const finishBox = await finishButton.boundingBox();
     expect(finishBox).not.toBeNull();
     expect((finishBox?.y ?? 1000) + (finishBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
+  test('study resets the next card to the top of the mobile viewport', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Scroll Reset Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByTestId('study-rate-3').click();
+    await expect(page.getByTestId('study-flip-button')).toBeVisible();
+    await expect(page.getByTestId('study-flip-button')).toBeEnabled();
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(4);
   });
 
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
@@ -913,11 +950,25 @@ test.describe('student mobile ux', () => {
     await studentPage.getByTestId(`writing-open-feedback-${generatedAssignment.id}`).click();
     await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
-    await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-improvements')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-transcript')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-assets')).toBeVisible();
+    await expect(studentPage.getByRole('button', { name: 'AI比較を開く' })).toBeVisible();
+    await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]')).toHaveCount(0);
+
+    const commentBox = await studentPage.getByTestId('writing-feedback-comment').boundingBox();
+    const improvementBox = await studentPage.getByTestId('writing-feedback-improvements').boundingBox();
+    const strengthsBox = await studentPage.getByTestId('writing-feedback-strengths').boundingBox();
+    expect(commentBox).not.toBeNull();
+    expect(improvementBox).not.toBeNull();
+    expect(strengthsBox).not.toBeNull();
+    expect((commentBox?.y ?? 1000)).toBeLessThan(improvementBox?.y ?? 0);
+    expect((improvementBox?.y ?? 1000)).toBeLessThan(strengthsBox?.y ?? 0);
+
+    await studentPage.getByRole('button', { name: 'AI比較を開く' }).click();
+    await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]').first()).toBeVisible();
 
     await adminContext.close();
     await studentContext.close();
