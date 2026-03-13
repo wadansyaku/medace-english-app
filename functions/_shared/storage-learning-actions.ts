@@ -3,6 +3,7 @@ import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { formatDateKey } from '../../utils/date';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
+import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
 import {
   AppEnv,
   DbUserRow,
@@ -12,6 +13,7 @@ import {
   assertBookReadAccess,
   defaultLearningPreference,
   getBookProgress,
+  getLastTokyoDateKeys,
   getMasterySourceSql,
   getVisibleDueCount,
   normalizeHistoryStatus,
@@ -125,6 +127,12 @@ export const handleSaveSrsHistory = async (
     totalResponseTimeMs,
     MASTERY_INTERACTION_SOURCE,
   ).run();
+
+  if (user.organization_name) {
+    await rebuildOrganizationKpiSnapshots(env, user.organization_name, {
+      dateKeys: getLastTokyoDateKeys(4),
+    });
+  }
 };
 
 export const handleRecordQuizAttempt = async (
@@ -232,6 +240,7 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM product_announcements'),
     env.DB.prepare('DELETE FROM commercial_requests'),
     env.DB.prepare('DELETE FROM student_instructor_assignment_events'),
+    env.DB.prepare('DELETE FROM organization_kpi_daily_snapshots'),
     env.DB.prepare('DELETE FROM word_reports'),
     env.DB.prepare('DELETE FROM learning_histories'),
     env.DB.prepare('DELETE FROM student_instructor_assignments'),
@@ -253,7 +262,6 @@ export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan:
       user_id, created_at, target_date, goal_description, daily_word_goal, selected_book_ids, status, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET
-      created_at = excluded.created_at,
       target_date = excluded.target_date,
       goal_description = excluded.goal_description,
       daily_word_goal = excluded.daily_word_goal,
@@ -270,6 +278,12 @@ export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan:
     plan.status,
     Date.now(),
   ).run();
+
+  if (user.organization_name) {
+    await rebuildOrganizationKpiSnapshots(env, user.organization_name, {
+      dateKeys: getLastTokyoDateKeys(1),
+    });
+  }
 };
 
 export const handleGetLearningPlan = async (env: AppEnv, user: DbUserRow): Promise<LearningPlan | null> => {

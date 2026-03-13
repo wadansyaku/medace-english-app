@@ -76,6 +76,7 @@ describe('buildOrganizationDashboardSnapshot', () => {
       assignmentEvents,
       reactivatedStudents7d: 2,
       notifiedStudents7d: 4,
+      trend: [],
       now: 2_000_000,
     });
 
@@ -85,6 +86,7 @@ describe('buildOrganizationDashboardSnapshot', () => {
     expect(snapshot.assignmentCoverageRate).toBe(67);
     expect(snapshot.unassignedStudents).toBe(1);
     expect(snapshot.reactivationRate7d).toBe(50);
+    expect(snapshot.planCoverageRate).toBe(67);
     expect(snapshot.studentAssignments.map((student) => student.name)).toEqual(['Alpha', 'Beta', 'Gamma']);
     expect(snapshot.atRiskStudentList.map((student) => student.name)).toEqual(['Beta', 'Alpha']);
     expect(snapshot.assignmentEvents).toHaveLength(1);

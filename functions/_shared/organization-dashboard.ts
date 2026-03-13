@@ -1,4 +1,14 @@
-import { AssignmentEvent, OrganizationDashboardSnapshot, OrganizationInstructorSummary, StudentRiskLevel, StudentSummary, SubscriptionPlan } from '../../types';
+import {
+  StudentRiskLevel,
+  SubscriptionPlan,
+} from '../../types';
+import type {
+  AssignmentEvent,
+  OrganizationDashboardSnapshot,
+  OrganizationInstructorSummary,
+  OrganizationKpiTrendPoint,
+  StudentSummary,
+} from '../../types';
 
 const DAY_MS = 86400000;
 
@@ -14,6 +24,7 @@ interface BuildOrganizationDashboardSnapshotInput {
   assignmentEvents: AssignmentEvent[];
   reactivatedStudents7d: number;
   notifiedStudents7d: number;
+  trend: OrganizationKpiTrendPoint[];
   now?: number;
 }
 
@@ -29,6 +40,7 @@ export const buildOrganizationDashboardSnapshot = ({
   assignmentEvents,
   reactivatedStudents7d,
   notifiedStudents7d,
+  trend,
   now = Date.now(),
 }: BuildOrganizationDashboardSnapshotInput): OrganizationDashboardSnapshot => {
   const assignedStudents = students.filter((student) => student.assignedInstructorUid).length;
@@ -53,10 +65,12 @@ export const buildOrganizationDashboardSnapshot = ({
       ? Math.round((reactivatedStudents7d / notifiedStudents7d) * 100)
       : 0,
     assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
+    planCoverageRate: students.length > 0 ? Math.round((learningPlanCount / students.length) * 100) : 0,
     unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
     instructors,
     atRiskStudentList,
     studentAssignments: [...students].sort((left, right) => left.name.localeCompare(right.name)),
     assignmentEvents,
+    trend,
   };
 };

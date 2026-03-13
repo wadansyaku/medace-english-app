@@ -13,6 +13,15 @@ const assert = (condition, message) => {
   }
 };
 
+const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const toTokyoDateKey = (value) => TOKYO_DATE_FORMATTER.format(new Date(value));
+
 const runCommand = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
     cwd,
@@ -49,6 +58,10 @@ const getSetCookieHeaders = (headers) => {
   const header = headers.get('set-cookie');
   return header ? [header] : [];
 };
+
+const findTrendPoint = (snapshot, dateKey) => (
+  (snapshot?.trend || []).find((point) => point.date === dateKey) || null
+);
 
 class SessionClient {
   constructor(baseUrl, name) {
@@ -472,7 +485,9 @@ const main = async () => {
       instructorUid: groupAdminUser.uid,
     });
 
+    const todayDateKey = toTokyoDateKey(Date.now());
     let orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    assert(Array.isArray(orgSnapshot.trend) && orgSnapshot.trend.length === 14, 'organization snapshot should expose a 14-day trend');
     const assignmentEvent = orgSnapshot.assignmentEvents.find((event) => (
       event.studentUid === orgStudentUser.uid && event.nextInstructorUid === groupAdminUser.uid
     ));
@@ -480,6 +495,33 @@ const main = async () => {
     const assignedStudent = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     assert(assignedStudent?.assignmentUpdatedAt, 'assigned student summary should include assignmentUpdatedAt');
     assert(orgSnapshot.assignmentCoverageRate > 0, 'organization snapshot should expose a non-zero assignment coverage rate');
+    const todayTrendAfterAssignment = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(todayTrendAfterAssignment?.assignedStudents >= 1, 'today trend should reflect assigned students after reassignment');
+
+    const planCountBeforeSave = orgSnapshot.learningPlanCount;
+    const todayPlanStudentsBeforeSave = todayTrendAfterAssignment?.planStudents || 0;
+
+    await orgStudent.storage('saveLearningPlan', {
+      plan: {
+        uid: orgStudentUser.uid,
+        createdAt: Date.now(),
+        targetDate: '2026-04-15',
+        goalDescription: '14日で基礎単語を安定させる',
+        dailyWordGoal: 15,
+        selectedBookIds: [orgBooks[0].id],
+        status: 'ACTIVE',
+      },
+    });
+
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const orgStudentAfterPlan = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
+    const todayTrendAfterPlan = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(orgStudentAfterPlan?.hasLearningPlan === true, 'saved learning plan should be reflected in the student summary');
+    assert(orgSnapshot.planCoverageRate >= 0, 'organization snapshot should expose a plan coverage rate');
+    assert((todayTrendAfterPlan?.planStudents || 0) >= todayPlanStudentsBeforeSave, 'today trend should keep or increase plan coverage after saving a plan');
+    if (!assignedStudent?.hasLearningPlan) {
+      assert(orgSnapshot.learningPlanCount > planCountBeforeSave, 'saving a plan should increase organization learning plan coverage for an unplanned student');
+    }
 
     const worksheetSnapshot = await groupAdmin.storage('getStudentWorksheetSnapshot', {
       studentUid: orgStudentUser.uid,
@@ -506,6 +548,11 @@ const main = async () => {
       usedAi: false,
     });
 
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const reactivated7dBeforeStudy = orgSnapshot.reactivatedStudents7d;
+    const todayTrendAfterNotification = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(todayTrendAfterNotification?.notifications >= 1, 'today trend should reflect recent notifications');
+
     const reviewBook = orgBooks.find((book) => book.title === 'Starter 120') || orgBooks[0];
     assert(reviewBook, 'business student did not receive any visible books');
     const reviewWords = await orgStudent.storage('getWordsByBook', { bookId: reviewBook.id });
@@ -516,6 +563,12 @@ const main = async () => {
       rating: 3,
       responseTimeMs: 1200,
     });
+
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const todayTrendAfterStudy = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
+    assert(orgSnapshot.reactivatedStudents7d >= reactivated7dBeforeStudy, 'study should keep or increase 7-day reactivation counts');
+    assert((todayTrendAfterStudy?.reactivatedStudents || 0) >= (todayTrendAfterNotification?.reactivatedStudents || 0), 'today trend should keep or increase reactivation counts after study');
 
     const masteryBeforeQuiz = await orgStudent.storage('getMasteryDistribution');
     assert(masteryBeforeQuiz.total === 1, 'study history should create exactly one mastery row');
@@ -562,9 +615,12 @@ const main = async () => {
     );
 
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const todayTrendAfterQuizOnly = findTrendPoint(orgSnapshot, todayDateKey);
     assert(orgSnapshot.notifications7d >= 1, 'organization snapshot should count recent notifications');
     assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
     assert(orgSnapshot.reactivationRate7d >= 1, 'organization snapshot should report a non-zero reactivation rate');
+    assert((todayTrendAfterQuizOnly?.reactivatedStudents || 0) === (todayTrendAfterStudy?.reactivatedStudents || 0), 'quiz-only activity must not increase trend reactivation counts');
+    assert((todayTrendAfterQuizOnly?.activeStudents || 0) === (todayTrendAfterStudy?.activeStudents || 0), 'quiz-only activity must not increase trend active counts');
     const orgStudentSummaryAfterQuiz = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     assert(orgStudentSummaryAfterQuiz?.totalLearned === 1, 'organization totalLearned should ignore quiz-only rows');
 

@@ -161,8 +161,8 @@ export const getAllStudentsProgress = async (
 
   const allStudents: StudentSummary[] = [
     { uid: 'student-free-1', name: '鈴木 健太', email: 'kenta@medace.com', totalLearned: 150, totalAttempts: 300, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.85, subscriptionPlan: SubscriptionPlan.TOC_FREE, hasLearningPlan: true, riskReasons: ['直近7日で安定して学習'], recommendedAction: '称賛して現状維持' },
-    { uid: 'student-biz-1', name: '黒田 颯太', email: 'sota@demo-school.jp', totalLearned: 96, totalAttempts: 130, lastActive: Date.now() - 86400000, riskLevel: StudentRiskLevel.WARNING, accuracy: 0.76, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 昨日の復習を10語だけ戻しましょう。', hasLearningPlan: true, riskReasons: ['1日学習が空いている', '復習を先に戻したい段階'], recommendedAction: '復習10語の再開を促す' },
-    { uid: 'student-biz-2', name: '田中 陽葵', email: 'hina@demo-school.jp', totalLearned: 45, totalAttempts: 60, lastActive: Date.now() - 86400000 * 4, riskLevel: StudentRiskLevel.DANGER, accuracy: 0.60, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 2日空いたので、まずは10語だけ復習しましょう。', hasLearningPlan: false, riskReasons: ['3日以上学習が停止', '正答率が60%台', '学習プラン未設定'], recommendedAction: '担当講師が短い再開タスクを指定' },
+    { uid: 'student-biz-1', name: '黒田 颯太', email: 'sota@demo-school.jp', totalLearned: 96, totalAttempts: 130, lastActive: Date.now() - 86400000, riskLevel: StudentRiskLevel.WARNING, accuracy: 0.76, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 昨日の復習を10語だけ戻しましょう。', hasLearningPlan: true, hasReactivatedSinceNotification: true, lastReactivatedAt: Date.now() - 43200000, riskReasons: ['1日学習が空いている', '復習を先に戻したい段階'], recommendedAction: '復習10語の再開を促す' },
+    { uid: 'student-biz-2', name: '田中 陽葵', email: 'hina@demo-school.jp', totalLearned: 45, totalAttempts: 60, lastActive: Date.now() - 86400000 * 4, riskLevel: StudentRiskLevel.DANGER, accuracy: 0.60, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 2日空いたので、まずは10語だけ復習しましょう。', hasLearningPlan: false, hasReactivatedSinceNotification: false, riskReasons: ['3日以上学習が停止', '正答率が60%台', '学習プラン未設定'], recommendedAction: '担当講師が短い再開タスクを指定' },
     { uid: 'student-biz-3', name: '森 結月', email: 'yuzuki@demo-school.jp', totalLearned: 188, totalAttempts: 240, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.88, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', hasLearningPlan: true, riskReasons: ['高い正答率で安定'], recommendedAction: '次の教材へ拡張' },
   ];
 
@@ -268,6 +268,7 @@ export const getOrganizationDashboardSnapshot = async (
     reactivatedStudents7d: Math.max(0, students.length - 2),
     reactivationRate7d: students.length > 0 ? Math.round((Math.max(0, students.length - 2) / students.length) * 100) : 0,
     assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
+    planCoverageRate: students.length > 0 ? Math.round((Math.max(1, students.length - 1) / students.length) * 100) : 0,
     unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
     instructors,
     atRiskStudentList: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE),
@@ -286,5 +287,6 @@ export const getOrganizationDashboardSnapshot = async (
         createdAt: Date.now() - 2 * 3600_000,
       },
     ],
+    trend: [],
   };
 };

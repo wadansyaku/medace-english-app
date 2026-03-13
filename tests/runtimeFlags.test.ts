@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveRuntimeFlags } from '../shared/runtimeFlags';
 
 describe('resolveRuntimeFlags', () => {
-  it('locks down admin, business demo, and destructive actions on production hosts by default', () => {
+  it('locks down admin, business demo, destructive actions, and online-only blocking on production hosts by default', () => {
     const flags = resolveRuntimeFlags({
       hostname: 'medace-english-app.pages.dev',
     });
@@ -11,7 +11,7 @@ describe('resolveRuntimeFlags', () => {
     expect(flags.enableAdminDemo).toBe(false);
     expect(flags.enablePublicBusinessDemo).toBe(false);
     expect(flags.enableDestructiveAdminActions).toBe(false);
-    expect(flags.appOnlineOnly).toBe(true);
+    expect(flags.appOnlineOnly).toBe(false);
   });
 
   it('enables demos and destructive admin actions on preview hosts by default', () => {

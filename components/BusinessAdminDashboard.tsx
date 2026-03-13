@@ -9,6 +9,7 @@ import {
 } from '../types';
 import {
   ArrowRight,
+  BarChart3,
   BellRing,
   Building2,
   CheckCircle2,
@@ -22,7 +23,6 @@ import { useBusinessAdminDashboardController } from '../hooks/useBusinessAdminDa
 import { resolveStorageMode } from '../shared/storageMode';
 import {
   getBusinessAdminWritingCounts,
-  getPlanCoverageRate,
   sortInstructorsByAssignedLoad,
 } from '../utils/businessAdminDashboard';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
@@ -64,6 +64,12 @@ const formatDateTime = (timestamp: number): string =>
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+
+const formatTrendDate = (dateKey: string): string =>
+  new Date(`${dateKey}T00:00:00+09:00`).toLocaleDateString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
   });
 
 const VIEW_COPY: Record<BusinessAdminWorkspaceView, { eyebrow: string; title: string; body: string }> = {
@@ -137,12 +143,13 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   }
 
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
-  const planCoverageRate = getPlanCoverageRate(snapshot);
+  const planCoverageRate = snapshot.planCoverageRate;
   const instructorLoad = sortInstructorsByAssignedLoad(snapshot.instructors);
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
   const recentEvents = snapshot.assignmentEvents.slice(0, 6);
   const viewCopy = VIEW_COPY[activeView];
   const isLocalMockData = storageMode.isLocalMockData;
+  const latestTrendPoint = snapshot.trend[snapshot.trend.length - 1];
   const assignmentCoverageLabel = isLocalMockData ? '担当割当率 (参考)' : '担当割当率';
   const assignmentCoverageDetail = isLocalMockData
     ? 'ローカル擬似データのため参考値です'
@@ -230,6 +237,77 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
             <WorkspaceMetricCard label={assignmentCoverageLabel} value={`${snapshot.assignmentCoverageRate}%`} detail={assignmentCoverageDetail} tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
             <WorkspaceMetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail={`${snapshot.learningPlanCount}名が設定済み`} tone="accent" />
           </div>
+
+          {!isLocalMockData && (
+            <section data-testid="organization-kpi-trend-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <BarChart3 className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">KPI Trend</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">直近14日間の推移</h3>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                {[
+                  {
+                    testId: 'organization-kpi-trend-assignment',
+                    label: '割当率',
+                    value: `${snapshot.assignmentCoverageRate}%`,
+                    detail: latestTrendPoint ? `${latestTrendPoint.assignedStudents}/${latestTrendPoint.totalStudents}名が割当済み` : '直近14日を集計',
+                    tone: 'bg-medace-500',
+                    borderTone: 'border-medace-100 bg-medace-50/60',
+                    textTone: 'text-medace-900',
+                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.assignmentCoverageRate })),
+                  },
+                  {
+                    testId: 'organization-kpi-trend-plan',
+                    label: 'プラン浸透率',
+                    value: `${snapshot.planCoverageRate}%`,
+                    detail: latestTrendPoint ? `${latestTrendPoint.planStudents}/${latestTrendPoint.totalStudents}名が設定済み` : '直近14日を集計',
+                    tone: 'bg-sky-500',
+                    borderTone: 'border-sky-100 bg-sky-50/60',
+                    textTone: 'text-sky-900',
+                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.planCoverageRate })),
+                  },
+                  {
+                    testId: 'organization-kpi-trend-reactivation',
+                    label: '通知後再開率',
+                    value: `${snapshot.reactivationRate7d}%`,
+                    detail: latestTrendPoint ? `${latestTrendPoint.reactivatedStudents}/${latestTrendPoint.notifiedStudents}名が72時間以内に再開` : '通知日ベースで集計',
+                    tone: 'bg-emerald-500',
+                    borderTone: 'border-emerald-100 bg-emerald-50/70',
+                    textTone: 'text-emerald-900',
+                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.reactivationRate })),
+                  },
+                ].map((card) => (
+                  <div key={card.testId} data-testid={card.testId} className={`rounded-3xl border px-5 py-5 ${card.borderTone}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{card.label}</div>
+                        <div className={`mt-2 text-3xl font-black ${card.textTone}`}>{card.value}</div>
+                      </div>
+                      <div className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-xs font-bold text-slate-500">14日</div>
+                    </div>
+                    <div className="mt-3 text-sm text-slate-600">{card.detail}</div>
+                    <div className="mt-5 grid h-28 grid-cols-14 items-end gap-1.5">
+                      {card.series.map((point, index) => (
+                        <div key={`${card.testId}-${point.date}`} className="flex h-full flex-col items-center justify-end gap-2">
+                          <div
+                            className={`w-full rounded-full ${card.tone}`}
+                            style={{ height: `${point.value > 0 ? Math.max(10, Math.round(point.value * 0.9)) : 6}px` }}
+                            title={`${formatTrendDate(point.date)} ${point.value}%`}
+                          />
+                          <span className="text-[10px] font-medium text-slate-400">
+                            {index % 4 === 0 || index === card.series.length - 1 ? formatTrendDate(point.date) : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className="grid gap-6 xl:grid-cols-2">
             <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -484,10 +562,32 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       </span>
                     </div>
 
-                    <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
                         <div className="mt-2 text-xl font-black text-slate-950">{formatDays(controller.selectedAssignmentStudent.lastActive)}</div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終通知時刻</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.lastNotificationAt
+                            ? formatDateTime(controller.selectedAssignmentStudent.lastNotificationAt)
+                            : '未送信'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">通知後再開</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.hasReactivatedSinceNotification ? '再開済み' : '未再開'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当更新時刻</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.assignmentUpdatedAt
+                            ? formatDateTime(controller.selectedAssignmentStudent.assignmentUpdatedAt)
+                            : '未設定'}
+                        </div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>

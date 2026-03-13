@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle } from 'lucide-react';
 
 const B2BStorageModeBanner: React.FC = () => (
-  <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+  <div data-testid="b2b-storage-mode-banner" className="rounded-[24px] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
     <div className="flex items-start gap-3">
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
       <div>

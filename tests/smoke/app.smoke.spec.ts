@@ -325,6 +325,7 @@ test('group admin can open the organization dashboard and update an assignment',
   await page.getByTestId('demo-login-group-admin').click();
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('organization-kpi-trend-section')).toBeVisible();
   await page.getByTestId('workspace-tab-assignments').click();
   const assignmentSelect = page.locator('[data-testid^="assignment-select-"]').first();
   await assignmentSelect.selectOption({ index: 1 });
@@ -352,6 +353,71 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
 
   await page.getByTestId('notification-send-submit').click();
   await expect(page.getByText(/フォロー通知を保存しました。/)).toBeVisible();
+});
+
+test('admin reload sees organization KPI changes after notification and study', async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const instructorContext = await browser.newContext();
+  const studentContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const adminPage = await adminContext.newPage();
+  const instructorPage = await instructorContext.newPage();
+  const studentPage = await studentContext.newPage();
+
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  await openBusinessPreview(instructorPage);
+  await instructorPage.getByTestId('demo-login-instructor').click();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentPage);
+  await studentPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  const instructorUser = await getCurrentSessionUser(instructorPage);
+  const businessStudent = await getCurrentSessionUser(studentPage);
+  expect(instructorUser?.uid).toBeTruthy();
+  expect(businessStudent?.uid).toBeTruthy();
+
+  await storageAction(adminPage, 'assignStudentInstructor', {
+    studentUid: businessStudent?.uid,
+    instructorUid: instructorUser?.uid,
+  });
+
+  const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const beforeTodayTrend = beforeSnapshot.trend[beforeSnapshot.trend.length - 1];
+
+  await storageAction(instructorPage, 'sendInstructorNotification', {
+    studentUid: businessStudent?.uid,
+    message: '5語だけでも今日中に見直しましょう。',
+    triggerReason: 'smoke-test',
+    usedAi: false,
+  });
+
+  const importResult = await seedPhrasebook(studentPage, 'Smoke KPI Drill');
+  const bookId = importResult.importedBookIds?.[0];
+  expect(bookId).toBeTruthy();
+  if (!bookId) {
+    throw new Error('Smoke KPI Drill did not return an imported book id.');
+  }
+  await completeSeededStudySession(studentPage, bookId);
+
+  await adminPage.reload();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const afterTodayTrend = afterSnapshot.trend[afterSnapshot.trend.length - 1];
+  const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string; hasReactivatedSinceNotification?: boolean }) => student.uid === businessStudent?.uid);
+
+  expect(afterSnapshot.reactivatedStudents7d).toBeGreaterThanOrEqual(beforeSnapshot.reactivatedStudents7d);
+  expect(afterTodayTrend?.reactivatedStudents || 0).toBeGreaterThanOrEqual(beforeTodayTrend?.reactivatedStudents || 0);
+  expect(studentAfter?.hasReactivatedSinceNotification).toBeTruthy();
+
+  await adminContext.close();
+  await instructorContext.close();
+  await studentContext.close();
 });
 
 test('group admin and business student can complete the writing workflow with one revision', async ({ browser }) => {
@@ -444,6 +510,15 @@ test('group admin and business student can complete the writing workflow with on
 
   await adminContext.close();
   await studentContext.close();
+});
+
+test('idb mode keeps the B2B warning banner and hides KPI trend cards', async ({ page }) => {
+  await openBusinessPreview(page);
+  await page.getByTestId('demo-login-group-admin').click();
+
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('b2b-storage-mode-banner')).toBeVisible();
+  await expect(page.getByTestId('organization-kpi-trend-section')).toHaveCount(0);
 });
 
 test('student can submit an upgrade request and admin can approve it with a one-time major announcement', async ({ browser }) => {

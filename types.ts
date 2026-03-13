@@ -280,6 +280,8 @@ export interface StudentSummary {
   assignedInstructorName?: string;
   assignmentUpdatedAt?: number;
   hasLearningPlan?: boolean;
+  hasReactivatedSinceNotification?: boolean;
+  lastReactivatedAt?: number;
   riskReasons?: string[];
   recommendedAction?: string;
 }
@@ -557,6 +559,20 @@ export interface OrganizationInstructorSummary {
   assignedStudentCount: number;
 }
 
+export interface OrganizationKpiTrendPoint {
+  date: string;
+  totalStudents: number;
+  assignedStudents: number;
+  planStudents: number;
+  activeStudents: number;
+  notifications: number;
+  notifiedStudents: number;
+  reactivatedStudents: number;
+  assignmentCoverageRate: number;
+  planCoverageRate: number;
+  reactivationRate: number;
+}
+
 export interface OrganizationDashboardSnapshot {
   organizationName: string;
   subscriptionPlan: SubscriptionPlan;
@@ -570,11 +586,13 @@ export interface OrganizationDashboardSnapshot {
   reactivatedStudents7d: number;
   reactivationRate7d: number;
   assignmentCoverageRate: number;
+  planCoverageRate: number;
   unassignedStudents: number;
   instructors: OrganizationInstructorSummary[];
   atRiskStudentList: StudentSummary[];
   studentAssignments: StudentSummary[];
   assignmentEvents: AssignmentEvent[];
+  trend: OrganizationKpiTrendPoint[];
 }
 
 export enum InstructorWorkspaceView {
