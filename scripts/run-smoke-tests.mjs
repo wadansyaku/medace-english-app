@@ -28,11 +28,20 @@ const runCommand = (command, args, env) => new Promise((resolve) => {
 const suites = [
   {
     name: 'core',
-    args: ['--grep-invert', 'writing'],
+    args: ['--grep-invert', 'writing|idb mode'],
+    env: {},
   },
   {
     name: 'writing',
     args: ['--grep', 'writing'],
+    env: {},
+  },
+  {
+    name: 'idb',
+    args: ['--grep', 'idb mode'],
+    env: {
+      VITE_STORAGE_MODE: 'idb',
+    },
   },
 ];
 
@@ -50,6 +59,7 @@ for (const suite of suites) {
     ['playwright', 'test', '--config=playwright.smoke.config.ts', ...suite.args, ...extraArgs],
     {
       ...baseEnv,
+      ...(suite.env || {}),
       PLAYWRIGHT_SMOKE_PORT: String(port),
       PLAYWRIGHT_OUTPUT_DIR: outputDir,
       PLAYWRIGHT_TRACE_MODE: baseEnv.PLAYWRIGHT_TRACE_MODE || 'off',

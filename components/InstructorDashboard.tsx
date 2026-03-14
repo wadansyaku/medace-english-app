@@ -1,18 +1,12 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { generateInstructorFollowUp } from '../services/gemini';
-import { storage } from '../services/storage';
-import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
+import React, { Suspense, lazy, useMemo } from 'react';
 import {
   InstructorWorkspaceView,
   StudentRiskLevel,
   SUBSCRIPTION_PLAN_LABELS,
   type StudentSummary,
   type UserProfile,
-  type WritingAssignment,
-  type WritingQueueItem,
 } from '../types';
 import {
-  AlertCircle,
   ArrowRight,
   Bell,
   CheckCircle2,
@@ -26,6 +20,11 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
+import { useInstructorDashboardData } from '../hooks/useInstructorDashboardData';
+import { useInstructorDashboardController } from '../hooks/useInstructorDashboardController';
+import { resolveStorageMode } from '../shared/storageMode';
+import { getBusinessAdminWritingCounts } from '../utils/businessAdminDashboard';
+import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import WorkspaceMetricCard from './workspace/WorkspaceMetricCard';
 
 const OfficialCatalogAccessPanel = lazy(() => import('./OfficialCatalogAccessPanel'));
@@ -67,23 +66,6 @@ const getRiskLabel = (risk: StudentRiskLevel) => {
     default:
       return '安定';
   }
-};
-
-const buildFallbackMessage = (student: StudentSummary, instructorName: string): string => {
-  const days = student.lastActive > 0 ? Math.floor((Date.now() - student.lastActive) / (1000 * 60 * 60 * 24)) : 0;
-  if (student.riskLevel === StudentRiskLevel.DANGER) {
-    return `${instructorName}より: ${student.name}さん、${days}日ほど学習が空いているので、今日はまず10語だけ復習して流れを戻しましょう。短時間で大丈夫です。`;
-  }
-  if (student.riskLevel === StudentRiskLevel.WARNING) {
-    return `${instructorName}より: ${student.name}さん、このまま少しずつ続ければ安定します。今日は前回の復習を15分だけ進めてみましょう。`;
-  }
-  return `${instructorName}より: ${student.name}さん、良いペースです。次回も同じリズムで続けて、定着を一段上げていきましょう。`;
-};
-
-const getTriggerReason = (student: StudentSummary): string => {
-  if (student.riskLevel === StudentRiskLevel.DANGER) return '離脱リスクフォロー';
-  if (student.riskLevel === StudentRiskLevel.WARNING) return '学習再開フォロー';
-  return '継続称賛フォロー';
 };
 
 const formatDateTime = (timestamp: number): string =>
@@ -143,154 +125,20 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   activeView,
   onChangeView,
 }) => {
-  const [students, setStudents] = useState<StudentSummary[]>([]);
-  const [writingAssignments, setWritingAssignments] = useState<WritingAssignment[]>([]);
-  const [writingQueue, setWritingQueue] = useState<WritingQueueItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'ALL' | 'DANGER' | 'WARNING'>('ALL');
-  const [query, setQuery] = useState('');
-  const [focusedStudentUid, setFocusedStudentUid] = useState<string | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<StudentSummary | null>(null);
-  const [messageDraft, setMessageDraft] = useState('');
-  const [customInstruction, setCustomInstruction] = useState('');
-  const [drafting, setDrafting] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [usedAi, setUsedAi] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [studentRows, assignmentResponse, queueResponse] = await Promise.all([
-        storage.getAllStudentsProgress(),
-        listWritingAssignments('organization'),
-        listWritingReviewQueue('QUEUE'),
-      ]);
-      setStudents(studentRows);
-      setWritingAssignments(assignmentResponse.assignments);
-      setWritingQueue(queueResponse.items);
-    } catch (loadError) {
-      console.error(loadError);
-      setError((loadError as Error).message || '生徒データの取得に失敗しました。');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void fetchData();
-  }, []);
-
-  const sortedStudents = useMemo(() => {
-    const riskWeight = (riskLevel: StudentRiskLevel): number => {
-      if (riskLevel === StudentRiskLevel.DANGER) return 0;
-      if (riskLevel === StudentRiskLevel.WARNING) return 1;
-      return 2;
-    };
-
-    return [...students].sort((left, right) => {
-      const riskDiff = riskWeight(left.riskLevel) - riskWeight(right.riskLevel);
-      if (riskDiff !== 0) return riskDiff;
-      return (left.lastActive || 0) - (right.lastActive || 0);
-    });
-  }, [students]);
-
-  const filteredStudents = useMemo(() => sortedStudents.filter((student) => {
-    if (filter === 'DANGER' && student.riskLevel !== StudentRiskLevel.DANGER) return false;
-    if (filter === 'WARNING' && student.riskLevel === StudentRiskLevel.SAFE) return false;
-    if (query.trim()) {
-      const keyword = query.trim().toLowerCase();
-      return student.name.toLowerCase().includes(keyword) || student.email.toLowerCase().includes(keyword);
-    }
-    return true;
-  }), [filter, query, sortedStudents]);
-
-  useEffect(() => {
-    if (filteredStudents.length === 0) {
-      setFocusedStudentUid(null);
-      return;
-    }
-    if (!focusedStudentUid || !filteredStudents.some((student) => student.uid === focusedStudentUid)) {
-      setFocusedStudentUid(filteredStudents[0].uid);
-    }
-  }, [filteredStudents, focusedStudentUid]);
-
-  const focusedStudent = filteredStudents.find((student) => student.uid === focusedStudentUid) || filteredStudents[0] || null;
-  const atRiskCount = students.filter((student) => student.riskLevel === StudentRiskLevel.DANGER).length;
-  const notificationTodayCount = students.filter((student) => student.lastNotificationAt && Date.now() - student.lastNotificationAt < 86400000).length;
-  const revisionRequestedCount = writingAssignments.filter((assignment) => assignment.status === 'REVISION_REQUESTED').length;
-  const reviewReadyCount = writingQueue.length;
-  const unassignedVisibleCount = students.filter((student) => !student.assignedInstructorUid).length;
-  const topPriorityStudents = sortedStudents.slice(0, 5);
-  const latestWritingQueue = writingQueue.slice(0, 3);
-
-  const openComposer = (student: StudentSummary) => {
-    setSelectedStudent(student);
-    setMessageDraft(buildFallbackMessage(student, user.displayName));
-    setCustomInstruction('');
-    setUsedAi(false);
-  };
-
-  const closeComposer = () => {
-    setSelectedStudent(null);
-    setMessageDraft('');
-    setCustomInstruction('');
-    setUsedAi(false);
-  };
-
-  const handleGenerateDraft = async () => {
-    if (!selectedStudent) return;
-    setDrafting(true);
-    try {
-      const daysSinceActive = selectedStudent.lastActive > 0
-        ? Math.max(0, Math.floor((Date.now() - selectedStudent.lastActive) / (1000 * 60 * 60 * 24)))
-        : 0;
-      const draft = await generateInstructorFollowUp({
-        instructorName: user.displayName,
-        studentName: selectedStudent.name,
-        riskLevel: selectedStudent.riskLevel,
-        daysSinceActive,
-        totalLearned: selectedStudent.totalLearned,
-        currentLevel: undefined,
-        customInstruction,
-      });
-      if (draft?.message) {
-        setMessageDraft(draft.message);
-        setUsedAi(true);
-      } else {
-        setMessageDraft(buildFallbackMessage(selectedStudent, user.displayName));
-        setUsedAi(false);
-      }
-    } catch (draftError) {
-      console.error(draftError);
-      setNotice((draftError as Error).message || 'AI下書きの生成に失敗しました。');
-    } finally {
-      setDrafting(false);
-    }
-  };
-
-  const handleSendNotification = async () => {
-    if (!selectedStudent || !messageDraft.trim()) return;
-    setSending(true);
-    try {
-      await storage.sendInstructorNotification(
-        selectedStudent.uid,
-        messageDraft.trim(),
-        getTriggerReason(selectedStudent),
-        usedAi,
-      );
-      setNotice(`${selectedStudent.name}さんへ講師名入りのフォロー通知を保存しました。`);
-      closeComposer();
-      await fetchData();
-    } catch (sendError) {
-      console.error(sendError);
-      setNotice((sendError as Error).message || 'フォロー通知の保存に失敗しました。');
-    } finally {
-      setSending(false);
-    }
-  };
+  const {
+    students,
+    writingAssignments,
+    writingQueue,
+    loading,
+    error,
+    refresh,
+  } = useInstructorDashboardData();
+  const controller = useInstructorDashboardController({
+    students,
+    user,
+    refresh,
+  });
+  const storageMode = useMemo(() => resolveStorageMode(import.meta.env.VITE_STORAGE_MODE), []);
 
   if (loading) {
     return <div className="p-10 text-center text-slate-500">生徒データを分析中...</div>;
@@ -304,43 +152,52 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     );
   }
 
+  const atRiskCount = students.filter((student) => student.riskLevel === StudentRiskLevel.DANGER).length;
+  const notificationTodayCount = students.filter((student) => (
+    student.lastNotificationAt && Date.now() - student.lastNotificationAt < 86400000
+  )).length;
+  const unassignedVisibleCount = students.filter((student) => !student.assignedInstructorUid).length;
+  const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
+  const topPriorityStudents = controller.sortedStudents.slice(0, 5);
+  const latestWritingQueue = writingQueue.slice(0, 3);
   const viewCopy = VIEW_COPY[activeView];
+  const isLocalMockData = storageMode.isLocalMockData;
 
   return (
     <div data-testid="instructor-dashboard" className="space-y-8 animate-in fade-in pb-12">
-      {selectedStudent && (
+      {controller.selectedStudent && (
         <div data-testid="notification-composer" className="fixed inset-0 z-50 flex items-center justify-center bg-medace-900/35 p-4 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl md:p-8">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Follow-up Message</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{selectedStudent.name}さんへの通知</h3>
+                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{controller.selectedStudent.name}さんへの通知</h3>
                 <p className="mt-2 text-sm text-slate-500">
                   生徒には <span className="font-bold text-slate-700">{user.displayName}</span> 名義で自然な日本語の通知が表示されます。
                 </p>
               </div>
-              <button type="button" onClick={closeComposer} className="text-sm font-bold text-slate-400 hover:text-slate-600">
+              <button type="button" onClick={controller.closeComposer} className="text-sm font-bold text-slate-400 hover:text-slate-600">
                 閉じる
               </button>
             </div>
 
             <div className="mt-6 grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                <span className={`rounded-full border px-2.5 py-1 ${getRiskStyle(selectedStudent.riskLevel)}`}>
-                  {getRiskLabel(selectedStudent.riskLevel)}
+                <span className={`rounded-full border px-2.5 py-1 ${getRiskStyle(controller.selectedStudent.riskLevel)}`}>
+                  {getRiskLabel(controller.selectedStudent.riskLevel)}
                 </span>
-                {selectedStudent.subscriptionPlan && (
-                  <span className={`rounded-full border px-2.5 py-1 ${getPlanStyle(selectedStudent.subscriptionPlan)}`}>
-                    {SUBSCRIPTION_PLAN_LABELS[selectedStudent.subscriptionPlan]}
+                {controller.selectedStudent.subscriptionPlan && (
+                  <span className={`rounded-full border px-2.5 py-1 ${getPlanStyle(controller.selectedStudent.subscriptionPlan)}`}>
+                    {SUBSCRIPTION_PLAN_LABELS[controller.selectedStudent.subscriptionPlan]}
                   </span>
                 )}
                 <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-500">
-                  {formatDaysSinceActive(selectedStudent.lastActive)}
+                  {formatDaysSinceActive(controller.selectedStudent.lastActive)}
                 </span>
               </div>
-              {selectedStudent.riskReasons && selectedStudent.riskReasons.length > 0 && (
+              {controller.selectedStudent.riskReasons && controller.selectedStudent.riskReasons.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {selectedStudent.riskReasons.map((reason) => (
+                  {controller.selectedStudent.riskReasons.map((reason) => (
                     <span key={reason} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                       {reason}
                     </span>
@@ -351,19 +208,19 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <label className="mb-2 block text-xs font-bold uppercase text-slate-500">AIへの補足</label>
                 <input
                   type="text"
-                  value={customInstruction}
-                  onChange={(event) => setCustomInstruction(event.target.value)}
+                  value={controller.customInstruction}
+                  onChange={(event) => controller.setCustomInstruction(event.target.value)}
                   className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
                   placeholder="例: 次の模試までに復習を再開してほしい"
                 />
               </div>
               <button
                 type="button"
-                onClick={handleGenerateDraft}
-                disabled={drafting}
+                onClick={controller.handleGenerateDraft}
+                disabled={controller.drafting}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-medace-200 bg-white px-4 py-3 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50 disabled:opacity-60"
               >
-                {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {controller.drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 AIで下書きを作る
               </button>
             </div>
@@ -372,8 +229,8 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <label className="mb-2 block text-xs font-bold uppercase text-slate-500">通知文</label>
               <textarea
                 data-testid="notification-message-draft"
-                value={messageDraft}
-                onChange={(event) => setMessageDraft(event.target.value)}
+                value={controller.messageDraft}
+                onChange={(event) => controller.setMessageDraft(event.target.value)}
                 rows={8}
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
               />
@@ -382,7 +239,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={closeComposer}
+                onClick={controller.closeComposer}
                 className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50"
               >
                 キャンセル
@@ -390,11 +247,11 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <button
                 type="button"
                 data-testid="notification-send-submit"
-                onClick={handleSendNotification}
-                disabled={sending || !messageDraft.trim()}
+                onClick={controller.handleSendNotification}
+                disabled={controller.sending || !controller.messageDraft.trim()}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:opacity-60"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {controller.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 通知を保存する
               </button>
             </div>
@@ -402,11 +259,13 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         </div>
       )}
 
-      {notice && (
+      {controller.notice && (
         <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
-          {notice}
+          {controller.notice}
         </div>
       )}
+
+      {isLocalMockData && <B2BStorageModeBanner />}
 
       <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)]">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]"></div>
@@ -467,7 +326,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <WorkspaceMetricCard label="要フォロー人数" value={`${atRiskCount}名`} detail="最優先で声かけしたい生徒" tone={atRiskCount > 0 ? 'danger' : 'success'} />
             <WorkspaceMetricCard label="今日送る通知" value={`${notificationTodayCount}件`} detail="過去24時間の講師フォロー通知" tone="accent" />
-            <WorkspaceMetricCard label="再提出待ち作文" value={`${revisionRequestedCount}件`} detail="生徒の再提出待ちになっている課題" tone={revisionRequestedCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="再提出待ち作文" value={`${writingCounts.revisionRequestedCount}件`} detail="生徒の再提出待ちになっている課題" tone={writingCounts.revisionRequestedCount > 0 ? 'warning' : 'default'} />
             <WorkspaceMetricCard label="未割当生徒" value={`${unassignedVisibleCount}名`} detail="担当講師がまだ付いていない生徒" tone={unassignedVisibleCount > 0 ? 'warning' : 'default'} />
           </div>
 
@@ -506,7 +365,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <button
                         type="button"
                         data-testid={`send-notification-${student.uid}`}
-                        onClick={() => openComposer(student)}
+                        onClick={() => controller.openComposer(student)}
                         className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
                       >
                         <Bell className="h-4 w-4" />
@@ -530,12 +389,12 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-medace-100 bg-medace-50 px-4 py-4">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">添削キュー</div>
-                    <div className="mt-2 text-2xl font-black text-slate-950">{reviewReadyCount}</div>
+                    <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.reviewReadyCount}</div>
                     <div className="mt-1 text-sm text-slate-600">講師確認待ちの提出</div>
                   </div>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">再提出待ち</div>
-                    <div className="mt-2 text-2xl font-black text-slate-950">{revisionRequestedCount}</div>
+                    <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.revisionRequestedCount}</div>
                     <div className="mt-1 text-sm text-slate-600">返却後の再提出待ち</div>
                   </div>
                 </div>
@@ -597,7 +456,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       {activeView === InstructorWorkspaceView.STUDENTS && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="対象生徒" value={`${filteredStudents.length}名`} detail="現在のフィルタ条件に一致" />
+            <WorkspaceMetricCard label="対象生徒" value={`${controller.filteredStudents.length}名`} detail="現在のフィルタ条件に一致" />
             <WorkspaceMetricCard label="要フォロー" value={`${atRiskCount}名`} detail="最優先の声かけ対象" tone={atRiskCount > 0 ? 'danger' : 'success'} />
             <WorkspaceMetricCard label="プラン未設定" value={`${students.filter((student) => !student.hasLearningPlan).length}名`} detail="学習プランの確認が必要" tone="warning" />
             <WorkspaceMetricCard label="未割当" value={`${unassignedVisibleCount}名`} detail="担当講師が決まっていない生徒" tone={unassignedVisibleCount > 0 ? 'warning' : 'default'} />
@@ -618,8 +477,8 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => setFilter(option.key as 'ALL' | 'DANGER' | 'WARNING')}
-                    className={`rounded-xl px-4 py-2 text-sm font-bold ${filter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
+                    onClick={() => controller.setFilter(option.key as 'ALL' | 'DANGER' | 'WARNING')}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.filter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
                   >
                     {option.label}
                   </button>
@@ -629,8 +488,8 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <Search className="h-4 w-4 text-slate-400" />
                 <input
                   type="text"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  value={controller.query}
+                  onChange={(event) => controller.setQuery(event.target.value)}
                   placeholder="生徒名・メールで検索"
                   className="w-64 text-sm text-slate-700 outline-none"
                 />
@@ -647,16 +506,16 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 <div>次アクション</div>
               </div>
               <div data-testid="instructor-students-list">
-                {filteredStudents.length === 0 ? (
+                {controller.filteredStudents.length === 0 ? (
                   <div className="px-6 py-16 text-center text-sm text-slate-500">該当する生徒はいません。</div>
                 ) : (
-                  filteredStudents.map((student) => (
+                  controller.filteredStudents.map((student) => (
                     <button
                       key={student.uid}
                       type="button"
-                      onClick={() => setFocusedStudentUid(student.uid)}
+                      onClick={() => controller.setFocusedStudentUid(student.uid)}
                       className={`grid w-full grid-cols-[0.72fr_1.2fr_0.88fr_1.2fr] gap-3 border-b border-slate-100 px-5 py-4 text-left transition-colors last:border-b-0 ${
-                        focusedStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
+                        controller.focusedStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
                       }`}
                     >
                       <div>
@@ -680,21 +539,21 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             </section>
 
             <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-              {focusedStudent ? (
+              {controller.focusedStudent ? (
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Student Detail</p>
-                      <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{focusedStudent.name}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-slate-500">{focusedStudent.email}</p>
+                      <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{controller.focusedStudent.name}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-slate-500">{controller.focusedStudent.email}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(focusedStudent.riskLevel)}`}>
-                        {getRiskLabel(focusedStudent.riskLevel)}
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(controller.focusedStudent.riskLevel)}`}>
+                        {getRiskLabel(controller.focusedStudent.riskLevel)}
                       </span>
-                      {focusedStudent.subscriptionPlan && (
-                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getPlanStyle(focusedStudent.subscriptionPlan)}`}>
-                          {SUBSCRIPTION_PLAN_LABELS[focusedStudent.subscriptionPlan]}
+                      {controller.focusedStudent.subscriptionPlan && (
+                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getPlanStyle(controller.focusedStudent.subscriptionPlan)}`}>
+                          {SUBSCRIPTION_PLAN_LABELS[controller.focusedStudent.subscriptionPlan]}
                         </span>
                       )}
                     </div>
@@ -703,23 +562,23 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <div className="grid gap-3 md:grid-cols-3">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
-                      <div className="mt-2 text-xl font-black text-slate-950">{formatDaysSinceActive(focusedStudent.lastActive)}</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">{formatDaysSinceActive(controller.focusedStudent.lastActive)}</div>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>
-                      <div className="mt-2 text-xl font-black text-slate-950">{focusedStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">{controller.focusedStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師</div>
-                      <div className="mt-2 text-sm font-black text-slate-950">{focusedStudent.assignedInstructorName || '未割当'}</div>
+                      <div className="mt-2 text-sm font-black text-slate-950">{controller.focusedStudent.assignedInstructorName || '未割当'}</div>
                     </div>
                   </div>
 
-                  {focusedStudent.riskReasons && focusedStudent.riskReasons.length > 0 && (
+                  {controller.focusedStudent.riskReasons && controller.focusedStudent.riskReasons.length > 0 && (
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">介入理由</div>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {focusedStudent.riskReasons.map((reason) => (
+                        {controller.focusedStudent.riskReasons.map((reason) => (
                           <span key={reason} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
                             {reason}
                           </span>
@@ -730,16 +589,16 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
                   <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">次にやること</div>
-                    <div className="mt-3 text-sm leading-relaxed text-medace-900">{getNextActionText(focusedStudent)}</div>
+                    <div className="mt-3 text-sm leading-relaxed text-medace-900">{getNextActionText(controller.focusedStudent)}</div>
                   </div>
 
-                  {focusedStudent.lastNotificationMessage ? (
+                  {controller.focusedStudent.lastNotificationMessage ? (
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最新フォロー</div>
-                        <div className="text-xs text-slate-400">{focusedStudent.lastNotificationAt ? formatDateTime(focusedStudent.lastNotificationAt) : ''}</div>
+                        <div className="text-xs text-slate-400">{controller.focusedStudent.lastNotificationAt ? formatDateTime(controller.focusedStudent.lastNotificationAt) : ''}</div>
                       </div>
-                      <div className="mt-3 text-sm leading-relaxed text-slate-700">{focusedStudent.lastNotificationMessage}</div>
+                      <div className="mt-3 text-sm leading-relaxed text-slate-700">{controller.focusedStudent.lastNotificationMessage}</div>
                     </div>
                   ) : (
                     <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
@@ -750,8 +609,8 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   <div className="flex flex-wrap gap-3">
                     <button
                       type="button"
-                      data-testid={`send-notification-${focusedStudent.uid}`}
-                      onClick={() => openComposer(focusedStudent)}
+                      data-testid={`send-notification-${controller.focusedStudent.uid}`}
+                      onClick={() => controller.openComposer(controller.focusedStudent)}
                       className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
                     >
                       <Bell className="h-4 w-4" />
@@ -780,10 +639,10 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       {activeView === InstructorWorkspaceView.WRITING && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="添削キュー" value={`${reviewReadyCount}件`} detail="講師確認待ちの提出" tone={reviewReadyCount > 0 ? 'warning' : 'success'} />
-            <WorkspaceMetricCard label="再提出待ち" value={`${revisionRequestedCount}件`} detail="返却後の再提出待ち課題" tone={revisionRequestedCount > 0 ? 'warning' : 'default'} />
-            <WorkspaceMetricCard label="配布済み課題" value={`${writingAssignments.filter((assignment) => assignment.status === 'ISSUED').length}件`} detail="まだ提出されていない課題" />
-            <WorkspaceMetricCard label="完了済み" value={`${writingAssignments.filter((assignment) => assignment.status === 'COMPLETED').length}件`} detail="返却と完了まで終えた課題" />
+            <WorkspaceMetricCard label="添削キュー" value={`${writingCounts.reviewReadyCount}件`} detail="講師確認待ちの提出" tone={writingCounts.reviewReadyCount > 0 ? 'warning' : 'success'} />
+            <WorkspaceMetricCard label="再提出待ち" value={`${writingCounts.revisionRequestedCount}件`} detail="返却後の再提出待ち課題" tone={writingCounts.revisionRequestedCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="配布済み課題" value={`${writingCounts.issuedCount}件`} detail="まだ提出されていない課題" />
+            <WorkspaceMetricCard label="完了済み" value={`${writingCounts.completedCount}件`} detail="返却と完了まで終えた課題" />
           </div>
           <WritingOpsPanel user={user} />
         </div>

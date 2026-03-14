@@ -79,8 +79,13 @@ jobs:
             echo "Failed to parse deployment URL from wrangler output." >&2
             exit 1
           fi
+          branch_alias="$(printf '%s' "$PREVIEW_BRANCH" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9-]+#-#g; s#-+#-#g; s#^-##; s#-$##')"
+          alias_url="$deployment_url"
+          if [ -n "$branch_alias" ]; then
+            alias_url="https://${branch_alias}.${CF_PAGES_PROJECT}.pages.dev"
+          fi
           echo "deployment-url=$deployment_url" >> "$GITHUB_OUTPUT"
-          echo "pages-deployment-alias-url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "branch-alias-url=$alias_url" >> "$GITHUB_OUTPUT"
 
       - name: Inspect preview Pages secrets
         id: preview-secrets
@@ -94,17 +99,27 @@ jobs:
           if [ -z "$names" ]; then
             names="(none)"
           fi
-          missing=""
-          for required in ADMIN_DEMO_PASSWORD GEMINI_API_KEY WRITING_AI_MODE; do
+          missing_required=""
+          for required in ADMIN_DEMO_PASSWORD WRITING_AI_MODE; do
             if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$required"; then
-              missing="${missing}${missing:+,}$required"
+              missing_required="${missing_required}${missing_required:+,}$required"
             fi
           done
-          if [ -z "$missing" ]; then
-            missing="(none)"
+          if [ -z "$missing_required" ]; then
+            missing_required="(none)"
+          fi
+          missing_optional=""
+          for optional in GEMINI_API_KEY OPENAI_API_KEY; do
+            if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$optional"; then
+              missing_optional="${missing_optional}${missing_optional:+,}$optional"
+            fi
+          done
+          if [ -z "$missing_optional" ]; then
+            missing_optional="(none)"
           fi
           echo "names=$names" >> "$GITHUB_OUTPUT"
-          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+          echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"
+          echo "missing-optional=$missing_optional" >> "$GITHUB_OUTPUT"
 
       - name: Summarize preview deployment
         run: |
@@ -112,14 +127,15 @@ jobs:
             echo "## Preview Deployment"
             echo
             echo "- Branch: \`${{ env.PREVIEW_BRANCH }}\`"
+            echo "- Branch Alias URL: ${{ steps.deploy.outputs['branch-alias-url'] }}"
             echo "- Deployment URL: ${{ steps.deploy.outputs['deployment-url'] }}"
-            echo "- Alias URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
             echo "- Verification: typecheck + unit tests + API integration tests + cf:doctor"
             echo "- Preview Secrets: \`${{ steps.preview-secrets.outputs.names }}\`"
-            echo "- Missing Preview Secrets: \`${{ steps.preview-secrets.outputs.missing }}\`"
+            echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"
+            echo "- Missing Optional Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-optional'] }}\`"
             echo "- Note: preview deploys do not run remote D1 migrations."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -128,9 +144,10 @@ jobs:
         uses: actions/github-script@v8
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs['deployment-url'] }}
-          ALIAS_URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}
+          ALIAS_URL: ${{ steps.deploy.outputs['branch-alias-url'] }}
           PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs.names }}
-          MISSING_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs.missing }}
+          MISSING_REQUIRED_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs['missing-required'] }}
+          MISSING_OPTIONAL_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs['missing-optional'] }}
           CF_PAGES_PROJECT: ${{ env.CF_PAGES_PROJECT }}
           CF_D1_DATABASE: ${{ env.CF_D1_DATABASE }}
           PREVIEW_BRANCH: ${{ env.PREVIEW_BRANCH }}
@@ -145,13 +162,14 @@ jobs:
               '## Cloudflare Preview',
               '',
               `- Branch: \`${process.env.PREVIEW_BRANCH}\``,
+              `- Branch Alias URL: ${process.env.ALIAS_URL || process.env.DEPLOYMENT_URL}`,
               `- Deployment URL: ${process.env.DEPLOYMENT_URL}`,
-              `- Alias URL: ${process.env.ALIAS_URL || process.env.DEPLOYMENT_URL}`,
               `- Pages Project: \`${process.env.CF_PAGES_PROJECT}\``,
               `- D1 Database: \`${process.env.CF_D1_DATABASE}\``,
               `- Writing AI Mode: \`${process.env.WRITING_AI_MODE}\``,
               `- Preview Secrets: \`${process.env.PREVIEW_SECRETS || '(none)'}\``,
-              `- Missing Preview Secrets: \`${process.env.MISSING_PREVIEW_SECRETS || '(none)'}\``,
+              `- Missing Required Preview Secrets: \`${process.env.MISSING_REQUIRED_PREVIEW_SECRETS || '(none)'}\``,
+              `- Missing Optional Preview Secrets: \`${process.env.MISSING_OPTIONAL_PREVIEW_SECRETS || '(none)'}\``,
               '- Verification: typecheck + unit tests + API integration tests + cf:doctor',
               '- Note: preview deploys do not run remote D1 migrations.',
             ].join('\n');

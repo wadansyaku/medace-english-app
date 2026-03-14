@@ -35,6 +35,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
           onChange={(event) => onPasswordChange(event.target.value)}
           className="ui-input"
           autoFocus
+          data-testid="admin-demo-password"
         />
       </label>
       {authError && (
@@ -52,6 +53,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
         </button>
         <button
           type="submit"
+          data-testid="admin-demo-submit"
           className="flex-1 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
         >
           デモを開く

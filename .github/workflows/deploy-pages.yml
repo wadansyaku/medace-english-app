@@ -79,8 +79,9 @@ jobs:
             echo "Failed to parse deployment URL from wrangler output." >&2
             exit 1
           fi
+          project_url="https://${CF_PAGES_PROJECT}.pages.dev"
           echo "deployment-url=$deployment_url" >> "$GITHUB_OUTPUT"
-          echo "pages-deployment-alias-url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "project-url=$project_url" >> "$GITHUB_OUTPUT"
 
       - name: Inspect production Pages secrets
         id: production-secrets
@@ -94,17 +95,27 @@ jobs:
           if [ -z "$names" ]; then
             names="(none)"
           fi
-          missing=""
-          for required in ADMIN_DEMO_PASSWORD GEMINI_API_KEY WRITING_AI_MODE; do
+          missing_required=""
+          for required in ADMIN_DEMO_PASSWORD WRITING_AI_MODE; do
             if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$required"; then
-              missing="${missing}${missing:+,}$required"
+              missing_required="${missing_required}${missing_required:+,}$required"
             fi
           done
-          if [ -z "$missing" ]; then
-            missing="(none)"
+          if [ -z "$missing_required" ]; then
+            missing_required="(none)"
+          fi
+          missing_optional=""
+          for optional in GEMINI_API_KEY OPENAI_API_KEY; do
+            if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$optional"; then
+              missing_optional="${missing_optional}${missing_optional:+,}$optional"
+            fi
+          done
+          if [ -z "$missing_optional" ]; then
+            missing_optional="(none)"
           fi
           echo "names=$names" >> "$GITHUB_OUTPUT"
-          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+          echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"
+          echo "missing-optional=$missing_optional" >> "$GITHUB_OUTPUT"
 
       - name: Summarize production deployment
         run: |
@@ -112,13 +123,14 @@ jobs:
             echo "## Production Deployment"
             echo
             echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Project URL: ${{ steps.deploy.outputs['project-url'] }}"
             echo "- Deployment URL: ${{ steps.deploy.outputs['deployment-url'] }}"
-            echo "- Alias URL: ${{ steps.deploy.outputs['pages-deployment-alias-url'] || steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
             echo "- Verification: typecheck + unit tests + API integration tests + cf:doctor"
             echo "- Production Secrets: \`${{ steps.production-secrets.outputs.names }}\`"
-            echo "- Missing Production Secrets: \`${{ steps.production-secrets.outputs.missing }}\`"
+            echo "- Missing Required Production Secrets: \`${{ steps.production-secrets.outputs['missing-required'] }}\`"
+            echo "- Missing Optional Production Secrets: \`${{ steps.production-secrets.outputs['missing-optional'] }}\`"
             echo "- Schema: remote D1 migrations applied before deploy"
           } >> "$GITHUB_STEP_SUMMARY"

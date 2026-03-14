@@ -64,9 +64,9 @@ export const MOBILE_FLOW_WRITING = {
   transcriptPlaceholder: 'OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。',
   feedbackSectionOrder: [
     'writing-feedback-comment',
-    'writing-feedback-strengths',
     'writing-feedback-improvements',
     'writing-feedback-corrected',
+    'writing-feedback-strengths',
     'writing-feedback-transcript',
     'writing-feedback-assets',
   ],

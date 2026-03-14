@@ -17,6 +17,76 @@ export const ORGANIZATION_ROLE_LABELS: Record<OrganizationRole, string> = {
   [OrganizationRole.STUDENT]: 'グループ生徒',
 };
 
+export enum CommercialWorkspaceRole {
+  STUDENT = 'STUDENT',
+  INSTRUCTOR = 'INSTRUCTOR',
+  GROUP_ADMIN = 'GROUP_ADMIN',
+}
+
+export const COMMERCIAL_WORKSPACE_ROLE_LABELS: Record<CommercialWorkspaceRole, string> = {
+  [CommercialWorkspaceRole.STUDENT]: '生徒',
+  [CommercialWorkspaceRole.INSTRUCTOR]: '講師',
+  [CommercialWorkspaceRole.GROUP_ADMIN]: '学校管理者',
+};
+
+export enum CommercialRequestKind {
+  PERSONAL_UPGRADE = 'PERSONAL_UPGRADE',
+  BUSINESS_TRIAL = 'BUSINESS_TRIAL',
+  BUSINESS_ROLE_CONVERSION = 'BUSINESS_ROLE_CONVERSION',
+}
+
+export const COMMERCIAL_REQUEST_KIND_LABELS: Record<CommercialRequestKind, string> = {
+  [CommercialRequestKind.PERSONAL_UPGRADE]: 'パーソナルプラン相談',
+  [CommercialRequestKind.BUSINESS_TRIAL]: '学校・教室向け導入相談',
+  [CommercialRequestKind.BUSINESS_ROLE_CONVERSION]: 'ビジネスアカウント切替相談',
+};
+
+export enum CommercialRequestStatus {
+  OPEN = 'OPEN',
+  CONTACTED = 'CONTACTED',
+  APPROVED = 'APPROVED',
+  PROVISIONED = 'PROVISIONED',
+  DECLINED = 'DECLINED',
+  CANCELLED = 'CANCELLED',
+}
+
+export const COMMERCIAL_REQUEST_STATUS_LABELS: Record<CommercialRequestStatus, string> = {
+  [CommercialRequestStatus.OPEN]: '受付済み',
+  [CommercialRequestStatus.CONTACTED]: '連絡済み',
+  [CommercialRequestStatus.APPROVED]: '承認済み',
+  [CommercialRequestStatus.PROVISIONED]: '反映済み',
+  [CommercialRequestStatus.DECLINED]: '見送り',
+  [CommercialRequestStatus.CANCELLED]: '取消',
+};
+
+export enum AnnouncementSeverity {
+  INFO = 'INFO',
+  UPDATE = 'UPDATE',
+  MAJOR = 'MAJOR',
+  CRITICAL = 'CRITICAL',
+}
+
+export const ANNOUNCEMENT_SEVERITY_LABELS: Record<AnnouncementSeverity, string> = {
+  [AnnouncementSeverity.INFO]: 'お知らせ',
+  [AnnouncementSeverity.UPDATE]: 'アップデート',
+  [AnnouncementSeverity.MAJOR]: '重要アップデート',
+  [AnnouncementSeverity.CRITICAL]: '重要なお知らせ',
+};
+
+export enum AnnouncementAudienceRole {
+  STUDENT = 'STUDENT',
+  INSTRUCTOR = 'INSTRUCTOR',
+  GROUP_ADMIN = 'GROUP_ADMIN',
+  ADMIN = 'ADMIN',
+}
+
+export const ANNOUNCEMENT_AUDIENCE_ROLE_LABELS: Record<AnnouncementAudienceRole, string> = {
+  [AnnouncementAudienceRole.STUDENT]: '生徒',
+  [AnnouncementAudienceRole.INSTRUCTOR]: '講師',
+  [AnnouncementAudienceRole.GROUP_ADMIN]: '学校管理者',
+  [AnnouncementAudienceRole.ADMIN]: 'サービス管理者',
+};
+
 export enum UserGrade {
   JHS1 = 'JHS1',
   JHS2 = 'JHS2',
@@ -210,6 +280,8 @@ export interface StudentSummary {
   assignedInstructorName?: string;
   assignmentUpdatedAt?: number;
   hasLearningPlan?: boolean;
+  hasReactivatedSinceNotification?: boolean;
+  lastReactivatedAt?: number;
   riskReasons?: string[];
   recommendedAction?: string;
 }
@@ -337,6 +409,60 @@ export interface AccountOverview {
   aiUsage: AiUsageSummary;
 }
 
+export interface CommercialRequest {
+  id: number;
+  kind: CommercialRequestKind;
+  status: CommercialRequestStatus;
+  contactName: string;
+  contactEmail: string;
+  organizationName?: string;
+  requestedWorkspaceRole?: CommercialWorkspaceRole;
+  seatEstimate?: string;
+  message: string;
+  source: string;
+  requestedByUid?: string;
+  linkedUserUid?: string;
+  targetSubscriptionPlan?: SubscriptionPlan;
+  targetOrganizationName?: string;
+  targetOrganizationRole?: OrganizationRole;
+  resolutionNote?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AnnouncementReceipt {
+  announcementId: string;
+  userUid: string;
+  seenAt?: number;
+  acknowledgedAt?: number;
+  updatedAt: number;
+}
+
+export interface ProductAnnouncement {
+  id: string;
+  title: string;
+  body: string;
+  severity: AnnouncementSeverity;
+  subscriptionPlans: SubscriptionPlan[];
+  audienceRoles: AnnouncementAudienceRole[];
+  startsAt?: number;
+  endsAt?: number;
+  publishedAt: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductAnnouncementWithReceipt extends ProductAnnouncement {
+  receipt?: AnnouncementReceipt;
+}
+
+export interface ProductAnnouncementFeed {
+  announcements: ProductAnnouncementWithReceipt[];
+  highestPriorityModal: ProductAnnouncementWithReceipt | null;
+  stickyBanner: ProductAnnouncementWithReceipt | null;
+  unreadCount: number;
+}
+
 export interface DashboardSnapshot {
   dueCount: number;
   officialBooks: BookMetadata[];
@@ -350,6 +476,7 @@ export interface DashboardSnapshot {
   motivationSnapshot: MotivationSnapshot;
   coachNotifications: InstructorNotification[];
   accountOverview: AccountOverview;
+  commercialRequests: CommercialRequest[];
 }
 
 export interface AdminOverviewStats {
@@ -432,6 +559,20 @@ export interface OrganizationInstructorSummary {
   assignedStudentCount: number;
 }
 
+export interface OrganizationKpiTrendPoint {
+  date: string;
+  totalStudents: number;
+  assignedStudents: number;
+  planStudents: number;
+  activeStudents: number;
+  notifications: number;
+  notifiedStudents: number;
+  reactivatedStudents: number;
+  assignmentCoverageRate: number;
+  planCoverageRate: number;
+  reactivationRate: number;
+}
+
 export interface OrganizationDashboardSnapshot {
   organizationName: string;
   subscriptionPlan: SubscriptionPlan;
@@ -445,11 +586,13 @@ export interface OrganizationDashboardSnapshot {
   reactivatedStudents7d: number;
   reactivationRate7d: number;
   assignmentCoverageRate: number;
+  planCoverageRate: number;
   unassignedStudents: number;
   instructors: OrganizationInstructorSummary[];
   atRiskStudentList: StudentSummary[];
   studentAssignments: StudentSummary[];
   assignmentEvents: AssignmentEvent[];
+  trend: OrganizationKpiTrendPoint[];
 }
 
 export enum InstructorWorkspaceView {

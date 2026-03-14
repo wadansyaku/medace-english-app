@@ -14,6 +14,19 @@ import {
   handleUpdateWordCache,
 } from './storage-book-actions';
 import {
+  handleCreateCommercialRequest,
+  handleGetCommercialRequestStatus,
+  handleListCommercialRequests,
+  handleUpdateCommercialRequest,
+} from './commercial-actions';
+import {
+  handleAcknowledgeAnnouncement,
+  handleListProductAnnouncements,
+  handleListProductAnnouncementsAdmin,
+  handleMarkAnnouncementSeen,
+  handleUpsertProductAnnouncement,
+} from './announcement-actions';
+import {
   handleGetAccountOverview,
   handleGetAdminDashboardSnapshot,
   handleGetDashboardSnapshot,
@@ -161,6 +174,39 @@ export const handleStorageAction = async (
       return handleGetMasteryDistribution(env, user.id);
     case 'getActivityLogs':
       return handleGetActivityLogs(env, user.id);
+    case 'getCommercialRequestStatus':
+      return handleGetCommercialRequestStatus(env, user);
+    case 'submitCommercialRequest':
+      return handleCreateCommercialRequest(
+        env,
+        payload as unknown as StorageActionRequest<'submitCommercialRequest'>['payload'],
+        user,
+      );
+    case 'listProductAnnouncements':
+      return handleListProductAnnouncements(env, user);
+    case 'markAnnouncementSeen':
+      return handleMarkAnnouncementSeen(env, user, String(payload.announcementId || ''));
+    case 'acknowledgeAnnouncement':
+      return handleAcknowledgeAnnouncement(env, user, String(payload.announcementId || ''));
+    case 'listCommercialRequests':
+      requireRole(user, [UserRole.ADMIN]);
+      return handleListCommercialRequests(env);
+    case 'updateCommercialRequest':
+      requireRole(user, [UserRole.ADMIN]);
+      return handleUpdateCommercialRequest(
+        env,
+        payload as unknown as StorageActionRequest<'updateCommercialRequest'>['payload'],
+      );
+    case 'listProductAnnouncementsAdmin':
+      requireRole(user, [UserRole.ADMIN]);
+      return handleListProductAnnouncementsAdmin(env);
+    case 'upsertProductAnnouncement':
+      requireRole(user, [UserRole.ADMIN]);
+      return handleUpsertProductAnnouncement(
+        env,
+        user,
+        payload as unknown as StorageActionRequest<'upsertProductAnnouncement'>['payload'],
+      );
     default:
       throw new HttpError(404, `未対応のストレージ操作です: ${String(action)}`);
   }

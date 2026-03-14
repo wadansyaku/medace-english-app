@@ -13,6 +13,15 @@ const assert = (condition, message) => {
   }
 };
 
+const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const toTokyoDateKey = (value) => TOKYO_DATE_FORMATTER.format(new Date(value));
+
 const runCommand = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
     cwd,
@@ -49,6 +58,10 @@ const getSetCookieHeaders = (headers) => {
   const header = headers.get('set-cookie');
   return header ? [header] : [];
 };
+
+const findTrendPoint = (snapshot, dateKey) => (
+  (snapshot?.trend || []).find((point) => point.date === dateKey) || null
+);
 
 class SessionClient {
   constructor(baseUrl, name) {
@@ -322,6 +335,7 @@ const main = async () => {
     assert(typeof publicMotivation.updatedAt === 'number', 'public motivation endpoint should include an updatedAt timestamp');
 
     const admin = new SessionClient(baseUrl, 'admin');
+    const publicClient = new SessionClient(baseUrl, 'public');
     const freeStudent = new SessionClient(baseUrl, 'free-student');
     const orgStudent = new SessionClient(baseUrl, 'org-student');
     const groupAdmin = new SessionClient(baseUrl, 'group-admin');
@@ -342,6 +356,72 @@ const main = async () => {
     const orgStudentUser = await orgStudent.demoLogin('STUDENT', 'STUDENT');
     const groupAdminUser = await groupAdmin.demoLogin('INSTRUCTOR', 'GROUP_ADMIN');
     await instructor.demoLogin('INSTRUCTOR');
+
+    const publicCommercialEmail = 'phase4-public@example.jp';
+    const anonymousBusinessTrial = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_TRIAL',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'GROUP_ADMIN',
+        seatEstimate: '31-100名',
+        message: '学校導入の初回相談をしたいです。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousBusinessTrial.status === 200, 'anonymous commercial request should be accepted');
+
+    const anonymousRoleConversion = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_ROLE_CONVERSION',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'INSTRUCTOR',
+        seatEstimate: '31-100名',
+        message: '講師アカウントの切り替え相談です。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousRoleConversion.status === 200, 'second anonymous commercial request should be accepted when the kind differs');
+
+    await executeLocalSql(
+      persistDir,
+      `UPDATE commercial_requests
+          SET status = 'CANCELLED'
+        WHERE normalized_contact_email = '${publicCommercialEmail}'
+          AND kind = 'BUSINESS_TRIAL'`,
+    );
+
+    const anonymousBusinessTrialRetry = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'BUSINESS_TRIAL',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        organizationName: 'Phase 4 Academy',
+        requestedWorkspaceRole: 'GROUP_ADMIN',
+        seatEstimate: '31-100名',
+        message: '導入相談を再送します。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousBusinessTrialRetry.status === 200, 'anonymous commercial request should allow a retry after the open request is closed');
+
+    const anonymousRateLimited = await publicClient.request('/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'PERSONAL_UPGRADE',
+        contactName: 'Phase 4 Public Contact',
+        contactEmail: publicCommercialEmail,
+        message: '短時間送信のレート制限を確認します。',
+        source: 'PUBLIC_GUIDE',
+      }),
+    });
+    assert(anonymousRateLimited.status === 429, 'anonymous commercial request should enforce a short-term rate limit');
 
     const orgBooks = await orgStudent.storage('getBooks');
     const orgBookTitles = orgBooks.map((book) => book.title);
@@ -379,6 +459,21 @@ const main = async () => {
       'other students should not see another user\'s phrasebook',
     );
 
+    const freeStudentCommercialRequest = await freeStudent.storage('submitCommercialRequest', {
+      kind: 'PERSONAL_UPGRADE',
+      contactName: freeStudentUser.displayName,
+      contactEmail: freeStudentUser.email,
+      message: '広告なしの個人利用と学校導入の違いを相談したいです。',
+      source: 'DASHBOARD_ACCOUNT',
+    });
+    assert(freeStudentCommercialRequest.status === 'OPEN', 'logged-in student commercial request should start as OPEN');
+
+    const freeStudentCommercialStatus = await freeStudent.storage('getCommercialRequestStatus');
+    assert(
+      freeStudentCommercialStatus.some((request) => request.id === freeStudentCommercialRequest.id),
+      'logged-in student should see their submitted commercial request status',
+    );
+
     const crossOrgAssignment = await groupAdmin.storageRaw('assignStudentInstructor', {
       studentUid: freeStudentUser.uid,
       instructorUid: groupAdminUser.uid,
@@ -390,7 +485,9 @@ const main = async () => {
       instructorUid: groupAdminUser.uid,
     });
 
+    const todayDateKey = toTokyoDateKey(Date.now());
     let orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    assert(Array.isArray(orgSnapshot.trend) && orgSnapshot.trend.length === 14, 'organization snapshot should expose a 14-day trend');
     const assignmentEvent = orgSnapshot.assignmentEvents.find((event) => (
       event.studentUid === orgStudentUser.uid && event.nextInstructorUid === groupAdminUser.uid
     ));
@@ -398,6 +495,33 @@ const main = async () => {
     const assignedStudent = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     assert(assignedStudent?.assignmentUpdatedAt, 'assigned student summary should include assignmentUpdatedAt');
     assert(orgSnapshot.assignmentCoverageRate > 0, 'organization snapshot should expose a non-zero assignment coverage rate');
+    const todayTrendAfterAssignment = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(todayTrendAfterAssignment?.assignedStudents >= 1, 'today trend should reflect assigned students after reassignment');
+
+    const planCountBeforeSave = orgSnapshot.learningPlanCount;
+    const todayPlanStudentsBeforeSave = todayTrendAfterAssignment?.planStudents || 0;
+
+    await orgStudent.storage('saveLearningPlan', {
+      plan: {
+        uid: orgStudentUser.uid,
+        createdAt: Date.now(),
+        targetDate: '2026-04-15',
+        goalDescription: '14日で基礎単語を安定させる',
+        dailyWordGoal: 15,
+        selectedBookIds: [orgBooks[0].id],
+        status: 'ACTIVE',
+      },
+    });
+
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const orgStudentAfterPlan = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
+    const todayTrendAfterPlan = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(orgStudentAfterPlan?.hasLearningPlan === true, 'saved learning plan should be reflected in the student summary');
+    assert(orgSnapshot.planCoverageRate >= 0, 'organization snapshot should expose a plan coverage rate');
+    assert((todayTrendAfterPlan?.planStudents || 0) >= todayPlanStudentsBeforeSave, 'today trend should keep or increase plan coverage after saving a plan');
+    if (!assignedStudent?.hasLearningPlan) {
+      assert(orgSnapshot.learningPlanCount > planCountBeforeSave, 'saving a plan should increase organization learning plan coverage for an unplanned student');
+    }
 
     const worksheetSnapshot = await groupAdmin.storage('getStudentWorksheetSnapshot', {
       studentUid: orgStudentUser.uid,
@@ -424,6 +548,11 @@ const main = async () => {
       usedAi: false,
     });
 
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const reactivated7dBeforeStudy = orgSnapshot.reactivatedStudents7d;
+    const todayTrendAfterNotification = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(todayTrendAfterNotification?.notifications >= 1, 'today trend should reflect recent notifications');
+
     const reviewBook = orgBooks.find((book) => book.title === 'Starter 120') || orgBooks[0];
     assert(reviewBook, 'business student did not receive any visible books');
     const reviewWords = await orgStudent.storage('getWordsByBook', { bookId: reviewBook.id });
@@ -434,6 +563,12 @@ const main = async () => {
       rating: 3,
       responseTimeMs: 1200,
     });
+
+    orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const todayTrendAfterStudy = findTrendPoint(orgSnapshot, todayDateKey);
+    assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
+    assert(orgSnapshot.reactivatedStudents7d >= reactivated7dBeforeStudy, 'study should keep or increase 7-day reactivation counts');
+    assert((todayTrendAfterStudy?.reactivatedStudents || 0) >= (todayTrendAfterNotification?.reactivatedStudents || 0), 'today trend should keep or increase reactivation counts after study');
 
     const masteryBeforeQuiz = await orgStudent.storage('getMasteryDistribution');
     assert(masteryBeforeQuiz.total === 1, 'study history should create exactly one mastery row');
@@ -480,9 +615,12 @@ const main = async () => {
     );
 
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    const todayTrendAfterQuizOnly = findTrendPoint(orgSnapshot, todayDateKey);
     assert(orgSnapshot.notifications7d >= 1, 'organization snapshot should count recent notifications');
     assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
     assert(orgSnapshot.reactivationRate7d >= 1, 'organization snapshot should report a non-zero reactivation rate');
+    assert((todayTrendAfterQuizOnly?.reactivatedStudents || 0) === (todayTrendAfterStudy?.reactivatedStudents || 0), 'quiz-only activity must not increase trend reactivation counts');
+    assert((todayTrendAfterQuizOnly?.activeStudents || 0) === (todayTrendAfterStudy?.activeStudents || 0), 'quiz-only activity must not increase trend active counts');
     const orgStudentSummaryAfterQuiz = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     assert(orgStudentSummaryAfterQuiz?.totalLearned === 1, 'organization totalLearned should ignore quiz-only rows');
 
@@ -611,6 +749,89 @@ const main = async () => {
 
     const printableFeedback = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}/printable-feedback`);
     assert(printableFeedback.html.includes('自由英作文返却'), 'printable feedback should contain the feedback HTML');
+
+    const futureAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: '翌週公開の案内',
+      body: 'まだ表示されない future announcement です。',
+      severity: 'UPDATE',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+      startsAt: Date.now() + 60 * 60 * 1000,
+    });
+    const hiddenAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      !hiddenAnnouncementFeed.announcements.some((announcement) => announcement.id === futureAnnouncement.id),
+      'future announcement should stay hidden before its publish window starts',
+    );
+
+    const majorAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: 'Phase 4 major update',
+      body: '学校導線とお知らせ機能を更新しました。',
+      severity: 'MAJOR',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+    });
+    const majorAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      majorAnnouncementFeed.highestPriorityModal?.id === majorAnnouncement.id,
+      'MAJOR announcement should appear as the highest-priority modal for an unseen target user',
+    );
+    await freeStudent.storage('markAnnouncementSeen', { announcementId: majorAnnouncement.id });
+    const seenMajorFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      seenMajorFeed.highestPriorityModal?.id !== majorAnnouncement.id,
+      'seen MAJOR announcement should not reopen the modal',
+    );
+
+    const criticalAnnouncement = await admin.storage('upsertProductAnnouncement', {
+      title: 'Phase 4 critical notice',
+      body: '重大なお知らせの確認導線を有効化しました。',
+      severity: 'CRITICAL',
+      subscriptionPlans: ['TOC_FREE'],
+      audienceRoles: ['STUDENT'],
+    });
+    const criticalAnnouncementFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      criticalAnnouncementFeed.highestPriorityModal?.id === criticalAnnouncement.id,
+      'CRITICAL announcement should take over the modal slot',
+    );
+    assert(
+      criticalAnnouncementFeed.stickyBanner?.id === criticalAnnouncement.id,
+      'CRITICAL announcement should also appear in the sticky banner',
+    );
+    await freeStudent.storage('acknowledgeAnnouncement', { announcementId: criticalAnnouncement.id });
+    const acknowledgedCriticalFeed = await freeStudent.storage('listProductAnnouncements');
+    assert(
+      acknowledgedCriticalFeed.highestPriorityModal?.id !== criticalAnnouncement.id,
+      'acknowledged CRITICAL announcement should not reopen the modal',
+    );
+    assert(
+      acknowledgedCriticalFeed.stickyBanner?.id !== criticalAnnouncement.id,
+      'acknowledged CRITICAL announcement should clear the sticky banner',
+    );
+
+    const adminCommercialQueue = await admin.storage('listCommercialRequests');
+    assert(
+      adminCommercialQueue.some((request) => request.id === freeStudentCommercialRequest.id),
+      'admin should be able to see the logged-in user commercial request',
+    );
+
+    const provisionedCommercialRequest = await admin.storage('updateCommercialRequest', {
+      id: freeStudentCommercialRequest.id,
+      status: 'PROVISIONED',
+      resolutionNote: '導入案内を送付し、組織アカウントへ反映しました。',
+      linkedUserUid: freeStudentUser.uid,
+      targetSubscriptionPlan: 'TOB_FREE',
+      targetOrganizationName: 'Phase 4 Integration Academy',
+      targetOrganizationRole: 'GROUP_ADMIN',
+    });
+    assert(provisionedCommercialRequest.status === 'PROVISIONED', 'admin should be able to provision a commercial request');
+
+    const provisionedSession = await freeStudent.get('/api/session');
+    assert(provisionedSession.subscriptionPlan === 'TOB_FREE', 'provisioned user should receive the target subscription plan');
+    assert(provisionedSession.organizationName === 'Phase 4 Integration Academy', 'provisioned user should receive the target organization name');
+    assert(provisionedSession.organizationRole === 'GROUP_ADMIN', 'provisioned user should receive the target organization role');
+    assert(provisionedSession.role === 'INSTRUCTOR', 'GROUP_ADMIN provisioning should elevate the user to instructor role');
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');
     assert(groupAdminReset.status === 403, 'group admin should not be allowed to reset all data');

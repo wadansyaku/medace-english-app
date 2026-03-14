@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { AlertTriangle, ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
 import getClientRuntimeFlags from '../config/runtime';
 import { getSubscriptionPolicy } from '../config/subscription';
-import { type PublicMotivationSnapshot, SubscriptionPlan } from '../types';
+import { CommercialRequestKind, type PublicMotivationSnapshot, SubscriptionPlan, type OrganizationRole, UserRole } from '../types';
 import PublicMotivationPanel from './PublicMotivationPanel';
+import BusinessRolePreviewSection from './commercial/BusinessRolePreviewSection';
+import CommercialRequestForm from './commercial/CommercialRequestForm';
+import { submitPublicCommercialRequest } from '../services/commercial';
 
 interface PublicInfoPageProps {
   onBack: () => void;
   motivationSnapshot: PublicMotivationSnapshot | null;
   motivationLoading: boolean;
   motivationError: string | null;
+  onDemoLogin: (role: UserRole, organizationRole?: OrganizationRole) => void;
 }
 
 const PLAN_PREVIEWS = [
@@ -41,8 +45,10 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   motivationSnapshot,
   motivationLoading,
   motivationError,
+  onDemoLogin,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
+  const requestSectionRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <div className="mx-auto mt-6 max-w-5xl space-y-6">
@@ -112,6 +118,13 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         </div>
 
         <div className="space-y-8 p-6 md:p-8">
+          <BusinessRolePreviewSection
+            enableLiveDemo={runtimeFlags.enablePublicBusinessDemo}
+            enableAdminDemo={runtimeFlags.enableAdminDemo}
+            onOpenGuide={() => requestSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            onDemoLogin={onDemoLogin}
+          />
+
           <section>
             <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Plan Overview</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">料金体系の考え方</h2>
@@ -129,6 +142,18 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
               ))}
             </div>
           </section>
+
+          <div ref={requestSectionRef}>
+            <CommercialRequestForm
+              title="学校・教室向け導入を相談する"
+              description="公開画面からそのまま相談を送れます。学校・教室導入、講師/管理者アカウントの案内、無料トライアルの相談をまとめて受け付けます。"
+              source="PUBLIC_GUIDE"
+              submitLabel="導入相談を送る"
+              availableKinds={[CommercialRequestKind.BUSINESS_TRIAL, CommercialRequestKind.BUSINESS_ROLE_CONVERSION]}
+              defaultKind={CommercialRequestKind.BUSINESS_TRIAL}
+              onSubmit={submitPublicCommercialRequest}
+            />
+          </div>
         </div>
       </div>
     </div>

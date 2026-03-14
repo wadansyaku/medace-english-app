@@ -5,6 +5,7 @@ import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
 import MotivationBoard from './MotivationBoard';
 import DashboardAccountSection from './dashboard/DashboardAccountSection';
+import DashboardAnnouncementSection from './dashboard/DashboardAnnouncementSection';
 import DashboardCoachSection from './dashboard/DashboardCoachSection';
 import DashboardDeleteBookDialog from './dashboard/DashboardDeleteBookDialog';
 import DashboardHeroSection from './dashboard/DashboardHeroSection';
@@ -16,10 +17,12 @@ import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
 import PlanEditorModal from './dashboard/PlanEditorModal';
 import WritingStudentSection from './WritingStudentSection';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useAnnouncementFeed } from '../hooks/useAnnouncementFeed';
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
+import { storage } from '../services/storage';
 
 interface DashboardProps {
   user: UserProfile;
@@ -39,6 +42,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
   const viewModel = useStudentDashboardViewModel({ user, snapshot });
+  const announcementFeed = useAnnouncementFeed(Boolean(user));
   const controller = useStudentDashboardController({
     user,
     learningPlan: viewModel.learningPlan,
@@ -189,6 +193,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
       <DashboardSettingsModal
         open={showSettingsModal}
+        user={user}
         accountOverview={viewModel.accountOverview}
         currentEnglishLevel={user.englishLevel}
         editName={editName}
@@ -224,6 +229,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         onEditIntensity={setEditIntensity}
         onEditDisplayFontSize={setEditDisplayFontSize}
         onEditDisplayDensity={setEditDisplayDensity}
+        commercialRequests={viewModel.commercialRequests}
+        announcementFeed={announcementFeed.feed}
+        onSubmitCommercialRequest={async (payload) => {
+          await storage.submitCommercialRequest(payload);
+          await refreshDashboard();
+        }}
       />
 
       <PhrasebookCreateModal
@@ -308,8 +319,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
+      <div className="order-5 md:order-4">
+        <DashboardAnnouncementSection feed={announcementFeed.feed} />
+      </div>
+
       {viewModel.isGameMode && viewModel.hasStudyBooks && (
-        <div className="order-5 md:order-4">
+        <div className="order-6 md:order-5">
           <StudyCompanion
             user={user}
             dueCount={viewModel.dueCount}
@@ -323,7 +338,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </div>
       )}
 
-      <div className="order-6 md:order-11">
+      <div className="order-7 md:order-11">
         <DashboardLibrarySection
           books={viewModel.books}
           myBooks={viewModel.myBooks}
@@ -338,7 +353,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
-      <div className="order-7 md:order-10">
+      <div className="order-8 md:order-10">
         <DashboardProgressSection
           open={showProgressDetails}
           activityLogs={viewModel.activityLogs}
@@ -359,17 +374,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       </div>
 
       {viewModel.motivationSnapshot && (
-        <div className="order-8 md:order-5">
+        <div className="order-9 md:order-6">
           <MotivationBoard snapshot={viewModel.motivationSnapshot} isCompact={isStudentMobileShell} />
         </div>
       )}
 
       {viewModel.canShowAccountDetails && (
-        <div className="order-9 md:order-9">
+        <div className="order-10 md:order-9">
           <DashboardAccountSection
             open={showAccountDetails}
             user={user}
             accountOverview={viewModel.accountOverview}
+            commercialRequests={viewModel.commercialRequests}
             aiBudgetPercent={viewModel.aiBudgetPercent}
             aiUsageLabel={viewModel.aiUsageLabel}
             aiUsageCopy={viewModel.aiUsageCopy}
@@ -377,6 +393,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             coachNotificationCount={viewModel.coachNotifications.length}
             showAdSlots={viewModel.showAdSlots}
             isCompact={isStudentMobileShell}
+            onSubmitCommercialRequest={async (payload) => {
+              await storage.submitCommercialRequest(payload);
+              await refreshDashboard();
+            }}
             onToggle={() => setShowAccountDetails((previous) => !previous)}
           />
         </div>

@@ -2,6 +2,8 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  CommercialRequest,
+  CommercialRequestStatus,
   BookAccessScope,
   BookCatalogSource,
   BookMetadata,
@@ -13,8 +15,11 @@ import {
   MasteryDistribution,
   OrganizationDashboardSnapshot,
   OrganizationRole,
+  ProductAnnouncement,
+  ProductAnnouncementFeed,
   StudentSummary,
   StudentWorksheetSnapshot,
+  SubscriptionPlan,
   UserProfile,
   UserRole,
   WordData,
@@ -24,11 +29,18 @@ import {
   CatalogImportRequest,
   CatalogImportRow,
   CatalogImportResult,
+  CommercialRequestPayload,
+  CommercialRequestUpdatePayload,
+  ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
+import { buildAnnouncementFeed, getEffectiveAudienceRole, isAnnouncementVisibleToUser } from '../shared/announcements';
+import { hasDuplicateOpenRequest } from '../shared/commercial';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
 import {
   defaultLearningPreference,
+  IDB_MOCK_COMMERCIAL_REQUESTS,
+  IDB_MOCK_PRODUCT_ANNOUNCEMENTS,
   isBookOwnedByUser,
 } from './storage/mockData';
 import {
@@ -52,9 +64,13 @@ import {
 import {
   getObjectStore,
   initStorageDb,
+  readAllStoreRecords,
   readStoreRecord,
   requestToPromise,
   STORES,
+  type StoredAnnouncementReceiptRecord,
+  type StoredCommercialRequestRecord,
+  type StoredProductAnnouncementRecord,
   waitForTransaction,
 } from './storage/idb-support';
 import {
@@ -75,6 +91,7 @@ import {
   type OrganizationReadModelContext,
 } from './storage/organization-read-model';
 import { getCoachNotifications } from './storage/writing-read-model';
+import { resolveStorageMode } from '../shared/storageMode';
 
 export interface IStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
@@ -123,6 +140,15 @@ export interface IStorageService {
   getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]>;
   getMasteryDistribution(uid: string): Promise<MasteryDistribution>;
   getActivityLogs(uid: string): Promise<ActivityLog[]>;
+  getCommercialRequestStatus(): Promise<CommercialRequest[]>;
+  submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest>;
+  listProductAnnouncements(): Promise<ProductAnnouncementFeed>;
+  markAnnouncementSeen(announcementId: string): Promise<void>;
+  acknowledgeAnnouncement(announcementId: string): Promise<void>;
+  listCommercialRequests(): Promise<CommercialRequest[]>;
+  updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest>;
+  listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]>;
+  upsertProductAnnouncement(payload: ProductAnnouncementUpsertPayload): Promise<ProductAnnouncement>;
 }
 
 const slugifySegment = (value: string): string => value
@@ -234,6 +260,15 @@ const normalizeCatalogImportRows = (
   };
 };
 
+const mergeRecordsById = <T extends { id: string | number }>(seed: T[], stored: T[]): T[] => {
+  const merged = new Map<string, T>();
+  seed.forEach((record) => merged.set(String(record.id), record));
+  stored.forEach((record) => merged.set(String(record.id), record));
+  return [...merged.values()];
+};
+
+const buildAnnouncementReceiptId = (announcementId: string, userUid: string): string => `${announcementId}:${userUid}`;
+
 class IndexedDBStorageService implements IStorageService {
   private dbPromise: Promise<IDBDatabase>;
 
@@ -283,6 +318,31 @@ class IndexedDBStorageService implements IStorageService {
       getBooks: this.getBooks.bind(this),
       getWordsByBook: this.getWordsByBook.bind(this),
     };
+  }
+
+  private async getStoredCommercialRequests(): Promise<CommercialRequest[]> {
+    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS);
+    const stored = await readAllStoreRecords<StoredCommercialRequestRecord>(store);
+    return mergeRecordsById(IDB_MOCK_COMMERCIAL_REQUESTS, stored)
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  private async getStoredAnnouncements(): Promise<ProductAnnouncement[]> {
+    const store = await this.getStore(STORES.PRODUCT_ANNOUNCEMENTS);
+    const stored = await readAllStoreRecords<StoredProductAnnouncementRecord>(store);
+    return mergeRecordsById(IDB_MOCK_PRODUCT_ANNOUNCEMENTS, stored)
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+  }
+
+  private async getStoredAnnouncementReceipts(userUid: string): Promise<StoredAnnouncementReceiptRecord[]> {
+    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS);
+    const receipts = await readAllStoreRecords<StoredAnnouncementReceiptRecord>(store);
+    return receipts.filter((receipt) => receipt.userUid === userUid);
+  }
+
+  private async getNextCommercialRequestId(): Promise<number> {
+    const requests = await this.getStoredCommercialRequests();
+    return requests.reduce((maxId, request) => Math.max(maxId, Number(request.id || 0)), 100) + 1;
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
@@ -554,7 +614,18 @@ class IndexedDBStorageService implements IStorageService {
   async resetAllData(): Promise<void> {
     const db = await this.dbPromise;
     const tx = db.transaction(
-      [STORES.BOOKS, STORES.WORDS, STORES.HISTORY, STORES.SESSION, STORES.PLANS, STORES.PREFERENCES, STORES.ASSIGNMENTS],
+      [
+        STORES.BOOKS,
+        STORES.WORDS,
+        STORES.HISTORY,
+        STORES.SESSION,
+        STORES.PLANS,
+        STORES.PREFERENCES,
+        STORES.ASSIGNMENTS,
+        STORES.COMMERCIAL_REQUESTS,
+        STORES.PRODUCT_ANNOUNCEMENTS,
+        STORES.ANNOUNCEMENT_RECEIPTS,
+      ],
       'readwrite',
     );
     tx.objectStore(STORES.BOOKS).clear();
@@ -564,6 +635,9 @@ class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.PLANS).clear();
     tx.objectStore(STORES.PREFERENCES).clear();
     tx.objectStore(STORES.ASSIGNMENTS).clear();
+    tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
+    tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();
+    tx.objectStore(STORES.ANNOUNCEMENT_RECEIPTS).clear();
     await waitForTransaction(tx);
   }
 
@@ -605,7 +679,12 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   async getDashboardSnapshot(uid: string): Promise<DashboardSnapshot> {
-    return getDashboardSnapshotReadModel(this.getDashboardReadModelContext(), uid);
+    const snapshot = await getDashboardSnapshotReadModel(this.getDashboardReadModelContext(), uid);
+    const commercialRequests = await this.getCommercialRequestStatus();
+    return {
+      ...snapshot,
+      commercialRequests,
+    };
   }
 
   async getAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot> {
@@ -627,9 +706,174 @@ class IndexedDBStorageService implements IStorageService {
   async getActivityLogs(uid: string): Promise<ActivityLog[]> {
     return getActivityLogsReadModel(this.getDashboardReadModelContext(), uid);
   }
+
+  async getCommercialRequestStatus(): Promise<CommercialRequest[]> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) return [];
+    const normalizedEmail = sessionUser.email.trim().toLowerCase();
+    const requests = await this.getStoredCommercialRequests();
+    return requests.filter((request) => (
+      request.requestedByUid === sessionUser.uid
+      || request.contactEmail.trim().toLowerCase() === normalizedEmail
+    ));
+  }
+
+  async submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) {
+      throw new Error('ログイン後に申請してください。');
+    }
+
+    const existing = await this.getStoredCommercialRequests();
+    if (hasDuplicateOpenRequest(existing, payload.contactEmail, payload.kind, sessionUser.uid)) {
+      throw new Error('進行中の申請があるため、新しい申請は作成できません。');
+    }
+
+    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS, 'readwrite');
+    const nextRequest: CommercialRequest = {
+      id: await this.getNextCommercialRequestId(),
+      kind: payload.kind,
+      status: CommercialRequestStatus.OPEN,
+      contactName: payload.contactName.trim(),
+      contactEmail: payload.contactEmail.trim().toLowerCase(),
+      organizationName: payload.organizationName?.trim() || undefined,
+      requestedWorkspaceRole: payload.requestedWorkspaceRole,
+      seatEstimate: payload.seatEstimate?.trim() || undefined,
+      message: payload.message.trim(),
+      source: payload.source,
+      requestedByUid: sessionUser.uid,
+      linkedUserUid: sessionUser.uid,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await requestToPromise(store.put(nextRequest));
+    return nextRequest;
+  }
+
+  async listProductAnnouncements(): Promise<ProductAnnouncementFeed> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) {
+      return buildAnnouncementFeed([]);
+    }
+    const announcements = await this.getStoredAnnouncements();
+    const receipts = await this.getStoredAnnouncementReceipts(sessionUser.uid);
+    const receiptMap = new Map(receipts.map((receipt) => [receipt.announcementId, receipt]));
+    const effectiveRole = getEffectiveAudienceRole(sessionUser);
+    const visible = announcements
+      .map((announcement) => ({
+        ...announcement,
+        receipt: receiptMap.get(announcement.id),
+      }))
+      .filter((announcement) => isAnnouncementVisibleToUser(announcement, sessionUser.subscriptionPlan, effectiveRole));
+    return buildAnnouncementFeed(visible);
+  }
+
+  async markAnnouncementSeen(announcementId: string): Promise<void> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) return;
+    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
+    const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
+    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(store, receiptId);
+    const nextSeenAt = current?.seenAt || Date.now();
+    await requestToPromise(store.put({
+      id: receiptId,
+      announcementId,
+      userUid: sessionUser.uid,
+      seenAt: nextSeenAt,
+      acknowledgedAt: current?.acknowledgedAt,
+      updatedAt: Date.now(),
+    }));
+  }
+
+  async acknowledgeAnnouncement(announcementId: string): Promise<void> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) return;
+    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
+    const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
+    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(store, receiptId);
+    const now = Date.now();
+    await requestToPromise(store.put({
+      id: receiptId,
+      announcementId,
+      userUid: sessionUser.uid,
+      seenAt: current?.seenAt || now,
+      acknowledgedAt: now,
+      updatedAt: now,
+    }));
+  }
+
+  async listCommercialRequests(): Promise<CommercialRequest[]> {
+    return this.getStoredCommercialRequests();
+  }
+
+  async updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest> {
+    const requests = await this.getStoredCommercialRequests();
+    const current = requests.find((request) => request.id === payload.id);
+    if (!current) {
+      throw new Error('申請が見つかりません。');
+    }
+
+    const nextRequest: CommercialRequest = {
+      ...current,
+      status: payload.status,
+      resolutionNote: payload.resolutionNote || current.resolutionNote,
+      linkedUserUid: payload.linkedUserUid || current.linkedUserUid,
+      targetSubscriptionPlan: payload.targetSubscriptionPlan || current.targetSubscriptionPlan,
+      targetOrganizationName: payload.targetOrganizationName || current.targetOrganizationName,
+      targetOrganizationRole: payload.targetOrganizationRole || current.targetOrganizationRole,
+      updatedAt: Date.now(),
+    };
+
+    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS, 'readwrite');
+    await requestToPromise(store.put(nextRequest));
+
+    const sessionUser = await this.getSession();
+    if (
+      payload.status === CommercialRequestStatus.PROVISIONED
+      && sessionUser
+      && nextRequest.linkedUserUid === sessionUser.uid
+    ) {
+      const nextUserRole = nextRequest.targetOrganizationRole === OrganizationRole.GROUP_ADMIN
+        || nextRequest.targetOrganizationRole === OrganizationRole.INSTRUCTOR
+        ? UserRole.INSTRUCTOR
+        : UserRole.STUDENT;
+      await this.updateSessionUser({
+        ...sessionUser,
+        role: nextUserRole,
+        subscriptionPlan: nextRequest.targetSubscriptionPlan || sessionUser.subscriptionPlan || SubscriptionPlan.TOC_FREE,
+        organizationName: nextRequest.targetOrganizationName,
+        organizationRole: nextRequest.targetOrganizationRole,
+      });
+    }
+
+    return nextRequest;
+  }
+
+  async listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]> {
+    return this.getStoredAnnouncements();
+  }
+
+  async upsertProductAnnouncement(payload: ProductAnnouncementUpsertPayload): Promise<ProductAnnouncement> {
+    const store = await this.getStore(STORES.PRODUCT_ANNOUNCEMENTS, 'readwrite');
+    const nextAnnouncement: ProductAnnouncement = {
+      id: payload.id || `local-announcement-${Date.now().toString(36)}`,
+      title: payload.title.trim(),
+      body: payload.body.trim(),
+      severity: payload.severity,
+      subscriptionPlans: payload.subscriptionPlans,
+      audienceRoles: payload.audienceRoles,
+      startsAt: payload.startsAt,
+      endsAt: payload.endsAt,
+      publishedAt: Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    await requestToPromise(store.put(nextAnnouncement));
+    return nextAnnouncement;
+  }
 }
 
-const USE_REMOTE_STORAGE = import.meta.env.VITE_STORAGE_MODE !== 'idb';
+const USE_REMOTE_STORAGE = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE).mode === 'cloudflare';
 
 export const storage: IStorageService = USE_REMOTE_STORAGE
     ? new CloudflareStorageService()

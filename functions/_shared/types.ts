@@ -33,4 +33,6 @@ export interface DbUserRow {
   stats_level: number | null;
   stats_current_streak: number | null;
   stats_last_login_date: string | null;
+  created_at: number;
+  updated_at: number;
 }

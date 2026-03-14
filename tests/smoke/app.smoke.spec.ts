@@ -139,6 +139,19 @@ const getCurrentSessionUser = async (page: Page) => page.evaluate(async () => {
   return response.json() as Promise<{ uid: string; displayName: string; role: string; organizationRole?: string } | null>;
 });
 
+const openBusinessPreview = async (page: Page) => {
+  await page.goto('/');
+  await page.getByTestId('business-role-preview-section').scrollIntoViewIfNeeded();
+};
+
+const loginAdminDemo = async (page: Page) => {
+  await openBusinessPreview(page);
+  await page.getByTestId('demo-login-admin').click();
+  await expect(page.getByTestId('admin-demo-password')).toBeVisible();
+  await page.getByTestId('admin-demo-password').fill('admin');
+  await page.getByTestId('admin-demo-submit').click();
+};
+
 const storageAction = async <T,>(page: Page, action: string, payload?: Record<string, unknown>) => page.evaluate(async ({ nextAction, nextPayload }) => {
   const response = await fetch('/api/storage', {
     method: 'POST',
@@ -252,6 +265,16 @@ test('public guide updates the URL and browser back returns to login', async ({ 
   await expect(page.getByRole('heading', { name: '学習を再開する' })).toBeVisible();
 });
 
+test('public guide keeps the business role previews visible', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'アプリの説明・料金を見る' }).click();
+  await expect(page).toHaveURL(/\/public$/);
+  await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+  await expect(page.getByTestId('business-role-preview-instructor')).toBeVisible();
+  await expect(page.getByTestId('business-role-preview-admin')).toBeVisible();
+});
+
 test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
 
@@ -298,12 +321,11 @@ test('study routes survive reload and finish back on the dashboard path', async 
 });
 
 test('group admin can open the organization dashboard and update an assignment', async ({ page }) => {
-  await page.goto('/');
-
-  await page.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
+  await openBusinessPreview(page);
   await page.getByTestId('demo-login-group-admin').click();
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('organization-kpi-trend-section')).toBeVisible();
   await page.getByTestId('workspace-tab-assignments').click();
   const assignmentSelect = page.locator('[data-testid^="assignment-select-"]').first();
   await assignmentSelect.selectOption({ index: 1 });
@@ -313,9 +335,7 @@ test('group admin can open the organization dashboard and update an assignment',
 });
 
 test('instructor can keep and send a fallback follow-up draft after an AI attempt', async ({ page }) => {
-  await page.goto('/');
-
-  await page.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
+  await openBusinessPreview(page);
   await page.getByTestId('demo-login-instructor').click();
 
   await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
@@ -335,24 +355,86 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   await expect(page.getByText(/フォロー通知を保存しました。/)).toBeVisible();
 });
 
+test('admin reload sees organization KPI changes after notification and study', async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const instructorContext = await browser.newContext();
+  const studentContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const adminPage = await adminContext.newPage();
+  const instructorPage = await instructorContext.newPage();
+  const studentPage = await studentContext.newPage();
+
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  await openBusinessPreview(instructorPage);
+  await instructorPage.getByTestId('demo-login-instructor').click();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentPage);
+  await studentPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  const instructorUser = await getCurrentSessionUser(instructorPage);
+  const businessStudent = await getCurrentSessionUser(studentPage);
+  expect(instructorUser?.uid).toBeTruthy();
+  expect(businessStudent?.uid).toBeTruthy();
+
+  await storageAction(adminPage, 'assignStudentInstructor', {
+    studentUid: businessStudent?.uid,
+    instructorUid: instructorUser?.uid,
+  });
+
+  const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const beforeTodayTrend = beforeSnapshot.trend[beforeSnapshot.trend.length - 1];
+
+  await storageAction(instructorPage, 'sendInstructorNotification', {
+    studentUid: businessStudent?.uid,
+    message: '5語だけでも今日中に見直しましょう。',
+    triggerReason: 'smoke-test',
+    usedAi: false,
+  });
+
+  const importResult = await seedPhrasebook(studentPage, 'Smoke KPI Drill');
+  const bookId = importResult.importedBookIds?.[0];
+  expect(bookId).toBeTruthy();
+  if (!bookId) {
+    throw new Error('Smoke KPI Drill did not return an imported book id.');
+  }
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+  await completeSeededStudySession(studentPage, bookId);
+
+  await adminPage.reload();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const afterTodayTrend = afterSnapshot.trend[afterSnapshot.trend.length - 1];
+  const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string; hasReactivatedSinceNotification?: boolean }) => student.uid === businessStudent?.uid);
+
+  expect(afterSnapshot.reactivatedStudents7d).toBeGreaterThanOrEqual(beforeSnapshot.reactivatedStudents7d);
+  expect(afterTodayTrend?.reactivatedStudents || 0).toBeGreaterThanOrEqual(beforeTodayTrend?.reactivatedStudents || 0);
+  expect(studentAfter?.hasReactivatedSinceNotification).toBeTruthy();
+
+  await adminContext.close();
+  await instructorContext.close();
+  await studentContext.close();
+});
+
 test('group admin and business student can complete the writing workflow with one revision', async ({ browser }) => {
   const adminContext = await browser.newContext();
   const studentContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   const studentPage = await studentContext.newPage();
 
-  const openBusinessMenu = async (currentPage: Page) => {
-    await currentPage.goto('/');
-    await currentPage.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
-  };
-
-  await openBusinessMenu(adminPage);
+  await openBusinessPreview(adminPage);
   await adminPage.getByTestId('demo-login-group-admin').click();
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
   await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
-  await openBusinessMenu(studentPage);
+  await openBusinessPreview(studentPage);
   await studentPage.getByTestId('demo-login-business-student').click();
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
@@ -419,6 +501,8 @@ test('group admin and business student can complete the writing workflow with on
   await adminPage.getByTestId('writing-review-public-comment').fill('構成が安定しました。次は語彙の幅も意識しましょう。');
   await adminPage.getByTestId('writing-approve-return').click();
   await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
+  await adminPage.getByRole('button', { name: '返却履歴' }).click();
+  await expect(adminPage.locator('[data-testid^="writing-review-item-"]').first()).toBeVisible();
 
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
@@ -430,12 +514,106 @@ test('group admin and business student can complete the writing workflow with on
   await studentContext.close();
 });
 
+test('idb mode keeps the B2B warning banner and hides KPI trend cards', async ({ page }) => {
+  await openBusinessPreview(page);
+  await page.getByTestId('demo-login-group-admin').click();
+
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('b2b-storage-mode-banner')).toBeVisible();
+  await expect(page.getByTestId('organization-kpi-trend-section')).toHaveCount(0);
+});
+
+test('student can submit an upgrade request and admin can approve it with a one-time major announcement', async ({ browser }) => {
+  const studentContext = await browser.newContext();
+  const adminContext = await browser.newContext();
+  const studentPage = await studentContext.newPage();
+  const adminPage = await adminContext.newPage();
+  const announcementTitle = 'Phase 4 smoke announcement';
+  const announcementBody = '導入相談の動線とお知らせ表示を追加しました。';
+
+  await studentPage.goto('/');
+  await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  await studentPage.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+  await expect(studentPage.getByTestId('commercial-upgrade-panel')).toBeVisible();
+  await studentPage.locator('[data-testid="commercial-request-form"] textarea').fill('学校・教室向けの導入相談と上位プランの違いを知りたいです。');
+  await studentPage.getByTestId('commercial-request-submit').click();
+  await expect(studentPage.getByTestId('commercial-request-status-list')).toBeVisible();
+  await expect(studentPage.getByTestId('commercial-request-status-list')).toContainText('受付済み');
+
+  await loginAdminDemo(adminPage);
+  await expect(adminPage.getByRole('button', { name: '導入・お知らせ' })).toBeVisible();
+  await adminPage.getByRole('button', { name: '導入・お知らせ' }).click();
+  const requestItem = adminPage.locator('[data-testid^="admin-commercial-request-"]').first();
+  await expect(requestItem).toBeVisible();
+  await requestItem.click();
+  await adminPage.getByRole('button', { name: '承認済み' }).click();
+  await expect(requestItem).toContainText('承認済み');
+
+  await adminPage.getByTestId('admin-announcement-title').fill(announcementTitle);
+  await adminPage.getByTestId('admin-announcement-body').fill(announcementBody);
+  await adminPage.getByTestId('admin-announcement-severity').selectOption('MAJOR');
+  await adminPage.getByTestId('admin-announcement-submit').click();
+  await expect(adminPage.getByText(announcementTitle)).toBeVisible();
+
+  const smokeAnnouncement = (await storageAction<Array<{ id: string; title: string; }>>(adminPage, 'listProductAnnouncementsAdmin'))
+    .find((announcement) => announcement.title === announcementTitle);
+  expect(smokeAnnouncement?.id).toBeTruthy();
+
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('announcement-modal')).toBeVisible();
+  await expect(studentPage.getByTestId('announcement-modal')).toContainText(announcementTitle);
+  await studentPage.getByRole('button', { name: '閉じる' }).click();
+  await expect(studentPage.getByTestId('announcement-modal')).toHaveCount(0);
+  await expect(studentPage.getByTestId('dashboard-announcement-section')).toContainText(announcementTitle);
+
+  await storageAction(adminPage, 'upsertProductAnnouncement', {
+    id: smokeAnnouncement!.id,
+    title: announcementTitle,
+    body: announcementBody,
+    severity: 'MAJOR',
+    subscriptionPlans: ['TOC_FREE'],
+    audienceRoles: ['STUDENT'],
+    endsAt: Date.now() - 60_000,
+  });
+
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('announcement-modal')).toHaveCount(0);
+  await studentPage.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+  await expect(studentPage.getByTestId('commercial-request-status-list')).toContainText('承認済み');
+
+  await adminContext.close();
+  await studentContext.close();
+});
+
 test.describe('student mobile ux', () => {
   test.use({
     viewport: mobileViewport,
     userAgent: iphoneUserAgent,
     hasTouch: true,
     isMobile: true,
+  });
+
+  test('public landing keeps demo CTA inside the first viewport on mobile', async ({ page }) => {
+    await page.goto('/');
+
+    const demoButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent);
+    await expect(demoButton).toBeVisible();
+    const box = await demoButton.boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
+  test('public landing keeps the school guide CTA inside the first viewport on mobile', async ({ page }) => {
+    await page.goto('/');
+
+    const guideButton = page.getByTestId('open-business-guide-mobile');
+    await expect(guideButton).toBeVisible();
+    const box = await guideButton.boundingBox();
+    expect(box).not.toBeNull();
+    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
@@ -570,6 +748,31 @@ test.describe('student mobile ux', () => {
     const finishBox = await finishButton.boundingBox();
     expect(finishBox).not.toBeNull();
     expect((finishBox?.y ?? 1000) + (finishBox?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
+  test('study resets the next card to the top of the mobile viewport', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    const importResult = await seedPhrasebook(page, 'Mobile Scroll Reset Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.getByTestId('study-rate-3').click();
+    await expect(page.getByTestId('study-flip-button')).toBeVisible();
+    await expect(page.getByTestId('study-flip-button')).toBeEnabled();
+    await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(4);
   });
 
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
@@ -782,17 +985,12 @@ test.describe('student mobile ux', () => {
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
 
-    const openBusinessMenu = async (currentPage: Page) => {
-      await currentPage.goto('/');
-      await currentPage.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
-    };
-
-    await openBusinessMenu(adminPage);
+    await openBusinessPreview(adminPage);
     await adminPage.getByTestId('demo-login-group-admin').click();
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    await openBusinessMenu(studentPage);
+    await openBusinessPreview(studentPage);
     await studentPage.getByTestId('demo-login-business-student').click();
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
@@ -848,17 +1046,12 @@ test.describe('student mobile ux', () => {
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
 
-    const openBusinessMenu = async (currentPage: Page) => {
-      await currentPage.goto('/');
-      await currentPage.getByRole('button', { name: '学校・先生向けの体験メニュー' }).click();
-    };
-
-    await openBusinessMenu(adminPage);
+    await openBusinessPreview(adminPage);
     await adminPage.getByTestId('demo-login-group-admin').click();
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    await openBusinessMenu(studentPage);
+    await openBusinessPreview(studentPage);
     await studentPage.getByTestId('demo-login-business-student').click();
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
@@ -913,11 +1106,25 @@ test.describe('student mobile ux', () => {
     await studentPage.getByTestId(`writing-open-feedback-${generatedAssignment.id}`).click();
     await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
-    await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-improvements')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-strengths')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-transcript')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-assets')).toBeVisible();
+    await expect(studentPage.getByRole('button', { name: 'AI比較を開く' })).toBeVisible();
+    await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]')).toHaveCount(0);
+
+    const commentBox = await studentPage.getByTestId('writing-feedback-comment').boundingBox();
+    const improvementBox = await studentPage.getByTestId('writing-feedback-improvements').boundingBox();
+    const strengthsBox = await studentPage.getByTestId('writing-feedback-strengths').boundingBox();
+    expect(commentBox).not.toBeNull();
+    expect(improvementBox).not.toBeNull();
+    expect(strengthsBox).not.toBeNull();
+    expect((commentBox?.y ?? 1000)).toBeLessThan(improvementBox?.y ?? 0);
+    expect((improvementBox?.y ?? 1000)).toBeLessThan(strengthsBox?.y ?? 0);
+
+    await studentPage.getByRole('button', { name: 'AI比較を開く' }).click();
+    await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]').first()).toBeVisible();
 
     await adminContext.close();
     await studentContext.close();

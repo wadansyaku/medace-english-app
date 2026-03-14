@@ -1,4 +1,4 @@
-import { AuthRequest, DemoLoginRequest, EmailAuthRequest, StorageAction, StorageActionRequest } from '../../contracts/storage';
+import { AuthRequest, CommercialRequestPayload, DemoLoginRequest, EmailAuthRequest, StorageAction, StorageActionRequest } from '../../contracts/storage';
 import { EnglishLevel, OrganizationRole, UserGrade, UserRole, UserStudyMode } from '../../types';
 import { clearSession, createSession, createUser, ensureDemoUser, findUserByEmail, mapUserRowToProfile, requireUser, verifyPassword, hashPassword } from '../_shared/auth';
 import {
@@ -8,6 +8,7 @@ import {
   recordAuthFailure,
 } from '../_shared/auth-rate-limit';
 import { handleAiAction } from '../_shared/ai-actions';
+import { handleCreateCommercialRequest } from '../_shared/commercial-actions';
 import { handleError, HttpError, json, noContent, readJson } from '../_shared/http';
 import getServerRuntimeFlags from '../_shared/runtime';
 import { handleGetPublicMotivationSnapshot } from '../_shared/storage-dashboard-actions';
@@ -197,6 +198,11 @@ export const onRequest = async (context: { request: Request; env: AppEnv; }): Pr
 
     if (pathname === 'public/motivation' && request.method === 'GET') {
       return createJsonResponse(await handleGetPublicMotivationSnapshot(env));
+    }
+
+    if (pathname === 'public/commercial-request' && request.method === 'POST') {
+      const body = await readJson<CommercialRequestPayload>(request);
+      return createJsonResponse(await handleCreateCommercialRequest(env, body));
     }
 
     if (pathname === 'profile' && request.method === 'POST') {

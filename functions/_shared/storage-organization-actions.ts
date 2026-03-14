@@ -13,6 +13,11 @@ import {
 } from '../../types';
 import { requireOrganizationRole } from './auth';
 import { buildOrganizationDashboardSnapshot } from './organization-dashboard';
+import {
+  ORGANIZATION_KPI_REACTIVATION_WINDOW_MS,
+  rebuildOrganizationKpiSnapshots,
+  toOrganizationKpiTrendPoints,
+} from './organization-kpi';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
 import {
@@ -21,6 +26,7 @@ import {
   WORKSHEET_STATUSES,
   canBypassInstructorAssignment,
   getMasteryProgressSql,
+  getMasterySourceSql,
   getUserSubscriptionPlan,
   readAll,
   readFirst,
@@ -45,6 +51,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
     last_active: number | null;
     last_notification_at: number | null;
     last_notification_message: string | null;
+    last_reactivated_at: number | null;
     assigned_instructor_uid: string | null;
     assigned_instructor_name: string | null;
     assignment_updated_at: number | null;
@@ -60,7 +67,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        COALESCE(SUM(CASE WHEN ${getMasteryProgressSql('h')} THEN 1 ELSE 0 END), 0) AS total_learned,
        COALESCE(SUM(h.correct_count), 0) AS total_correct,
        COALESCE(SUM(h.attempt_count), 0) AS total_attempts,
-       MAX(h.last_studied_at) AS last_active,
+       MAX(CASE WHEN ${getMasterySourceSql('h')} THEN h.last_studied_at ELSE NULL END) AS last_active,
        (
          SELECT n.created_at
          FROM instructor_notifications n
@@ -75,6 +82,21 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
          ORDER BY n.created_at DESC
          LIMIT 1
        ) AS last_notification_message,
+       (
+         SELECT MIN(h2.last_studied_at)
+         FROM instructor_notifications n
+         JOIN learning_histories h2
+           ON h2.user_id = n.student_user_id
+          AND h2.interaction_source = 'STUDY'
+          AND h2.last_studied_at >= n.created_at
+          AND h2.last_studied_at <= n.created_at + ?
+         WHERE n.student_user_id = u.id
+           AND n.created_at = (
+             SELECT MAX(n2.created_at)
+             FROM instructor_notifications n2
+             WHERE n2.student_user_id = u.id
+           )
+       ) AS last_reactivated_at,
        assign.instructor_user_id AS assigned_instructor_uid,
        assigned.display_name AS assigned_instructor_name,
        assign.updated_at AS assignment_updated_at,
@@ -95,8 +117,10 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        u.organization_name,
        assign.instructor_user_id,
        assigned.display_name,
-       has_learning_plan
+       assign.updated_at,
+       lp.user_id
      ORDER BY last_active DESC, name ASC`,
+    ORGANIZATION_KPI_REACTIVATION_WINDOW_MS,
     UserRole.STUDENT,
     organizationName,
     organizationName,
@@ -142,6 +166,8 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
       organizationName: row.organization_name || undefined,
       lastNotificationAt: Number(row.last_notification_at || 0) || undefined,
       lastNotificationMessage: row.last_notification_message || undefined,
+      hasReactivatedSinceNotification: Number(row.last_reactivated_at || 0) > 0,
+      lastReactivatedAt: Number(row.last_reactivated_at || 0) || undefined,
       assignedInstructorUid: row.assigned_instructor_uid || undefined,
       assignedInstructorName: row.assigned_instructor_name || undefined,
       assignmentUpdatedAt: Number(row.assignment_updated_at || 0) || undefined,
@@ -331,8 +357,9 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
     throw new HttpError(403, '組織情報が設定されていません。');
   }
 
-  const students = await handleGetAllStudentsProgress(env, user);
-  const [memberCountRow, instructorCountRow, learningPlanCountRow, notifications7dRow, instructorRows, reactivationStats, assignmentEvents] = await Promise.all([
+  const [students, kpiSeries, memberCountRow, instructorCountRow, instructorRows, assignmentEvents] = await Promise.all([
+    handleGetAllStudentsProgress(env, user),
+    rebuildOrganizationKpiSnapshots(env, organizationName),
     readFirst<{ count: number }>(
       env,
       `SELECT COUNT(*) AS count
@@ -349,24 +376,6 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
          AND email NOT GLOB 'demo_*@medace.app'`,
       UserRole.INSTRUCTOR,
       organizationName,
-    ),
-    readFirst<{ count: number }>(
-      env,
-      `SELECT COUNT(*) AS count
-       FROM learning_plans lp
-       JOIN users u ON u.id = lp.user_id
-       WHERE u.role = ? AND u.organization_name = ?`,
-      UserRole.STUDENT,
-      organizationName,
-    ),
-    readFirst<{ count: number }>(
-      env,
-      `SELECT COUNT(*) AS count
-       FROM instructor_notifications n
-       JOIN users s ON s.id = n.student_user_id
-       WHERE s.organization_name = ? AND n.created_at >= ?`,
-      organizationName,
-      Date.now() - 7 * DAY_MS,
     ),
     readAll<{
       uid: string;
@@ -416,29 +425,6 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
       organizationName,
       OrganizationRole.GROUP_ADMIN,
     ),
-    readFirst<{ notified_student_count: number; reactivated_student_count: number }>(
-      env,
-      `SELECT
-         COUNT(DISTINCT n.student_user_id) AS notified_student_count,
-         COUNT(
-           DISTINCT CASE
-             WHEN EXISTS (
-               SELECT 1
-               FROM learning_histories h
-               WHERE h.user_id = n.student_user_id
-                 AND h.last_studied_at >= n.created_at
-                 AND h.last_studied_at <= n.created_at + ?
-             ) THEN n.student_user_id
-             ELSE NULL
-           END
-         ) AS reactivated_student_count
-       FROM instructor_notifications n
-       JOIN users s ON s.id = n.student_user_id
-       WHERE s.organization_name = ? AND n.created_at >= ?`,
-      3 * DAY_MS,
-      organizationName,
-      Date.now() - 7 * DAY_MS,
-    ),
     readAll<DbAssignmentEventRow>(
       env,
       `SELECT
@@ -463,6 +449,8 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
       organizationName,
     ),
   ]);
+  const trend = toOrganizationKpiTrendPoints(kpiSeries.dailySnapshots);
+  const latestSnapshot = kpiSeries.dailySnapshots[kpiSeries.dailySnapshots.length - 1];
 
   const instructors: OrganizationInstructorSummary[] = instructorRows.map((row) => ({
     uid: row.uid,
@@ -474,8 +462,6 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
     assignedStudentCount: Number(row.assigned_student_count || 0),
   }));
 
-  const reactivatedStudents7d = Number(reactivationStats?.reactivated_student_count || 0);
-  const notifiedStudents7d = Number(reactivationStats?.notified_student_count || 0);
   const mappedAssignmentEvents = assignmentEvents.map((event): AssignmentEvent => ({
     id: event.id,
     studentUid: event.student_uid,
@@ -494,13 +480,14 @@ export const handleGetOrganizationDashboardSnapshot = async (env: AppEnv, user: 
     subscriptionPlan: getUserSubscriptionPlan(user),
     totalMembers: Number(memberCountRow?.count || 0),
     totalInstructors: Number(instructorCountRow?.count || 0),
-    learningPlanCount: Number(learningPlanCountRow?.count || 0),
-    notifications7d: Number(notifications7dRow?.count || 0),
+    learningPlanCount: Number(latestSnapshot?.planStudents || 0),
+    notifications7d: kpiSeries.summary7d.notifications7d,
     instructors,
     students,
     assignmentEvents: mappedAssignmentEvents,
-    reactivatedStudents7d,
-    notifiedStudents7d,
+    reactivatedStudents7d: kpiSeries.summary7d.reactivatedStudents7d,
+    notifiedStudents7d: kpiSeries.summary7d.notifiedStudents7d,
+    trend,
   });
 };
 
@@ -552,6 +539,12 @@ export const handleSendInstructorNotification = async (
     usedAi ? 1 : 0,
     Date.now(),
   ).run();
+
+  if (student.organization_name) {
+    await rebuildOrganizationKpiSnapshots(env, student.organization_name, {
+      dateKeys: [toTokyoDateKey(Date.now())],
+    });
+  }
 };
 
 export const handleGetCoachNotifications = async (env: AppEnv, userId: string): Promise<InstructorNotification[]> => {
@@ -678,4 +671,10 @@ export const handleAssignStudentInstructor = async (
     currentUser.id,
     Date.now(),
   ).run();
+
+  if (student.organization_name) {
+    await rebuildOrganizationKpiSnapshots(env, student.organization_name, {
+      dateKeys: [toTokyoDateKey(Date.now())],
+    });
+  }
 };

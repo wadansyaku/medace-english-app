@@ -6,8 +6,10 @@ import { extractVocabularyFromText, isAiUnavailableError } from '../services/gem
 import { BookAccessScope, BookCatalogSource } from '../types';
 import { BRAND } from '../config/brand';
 import { useAdminDashboardSnapshot } from '../hooks/useAdminDashboardSnapshot';
+import { useAdminCommercialOps } from '../hooks/useAdminCommercialOps';
 import { AlertTriangle, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import ModalOverlay from './ModalOverlay';
+import AdminCommercialOpsView from './admin/AdminCommercialOpsView';
 import AdminContentImportView from './admin/AdminContentImportView';
 import AdminDashboardView from './admin/AdminDashboardView';
 
@@ -30,7 +32,7 @@ const appendImportSummary = (
 };
 
 const AdminPanel: React.FC = () => {
-  const [panelView, setPanelView] = useState<'dashboard' | 'content'>('dashboard');
+  const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial'>('dashboard');
   const [mode, setMode] = useState<'csv' | 'ai'>('ai');
   const {
     snapshot,
@@ -38,6 +40,15 @@ const AdminPanel: React.FC = () => {
     error: dashboardError,
     refresh: fetchDashboard,
   } = useAdminDashboardSnapshot();
+  const {
+    requests,
+    announcements,
+    loading: commercialLoading,
+    error: commercialError,
+    refresh: refreshCommercialOps,
+    updateRequest,
+    upsertAnnouncement,
+  } = useAdminCommercialOps();
 
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState('');
@@ -262,15 +273,27 @@ const AdminPanel: React.FC = () => {
             >
               教材運用
             </button>
+            <button
+              onClick={() => setPanelView('commercial')}
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'commercial' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
+            >
+              導入・お知らせ
+            </button>
           </div>
 
           <button
             type="button"
-            onClick={fetchDashboard}
-            disabled={dashboardLoading}
+            onClick={() => {
+              if (panelView === 'commercial') {
+                void refreshCommercialOps();
+                return;
+              }
+              void fetchDashboard();
+            }}
+            disabled={dashboardLoading || commercialLoading}
             className="inline-flex items-center gap-2 rounded-2xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-800 shadow-sm transition-colors hover:bg-medace-50 disabled:opacity-50"
           >
-            {dashboardLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {dashboardLoading || commercialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             最新化
           </button>
         </div>
@@ -283,6 +306,15 @@ const AdminPanel: React.FC = () => {
           error={dashboardError}
           headline={headline}
           subcopy={subcopy}
+        />
+      ) : panelView === 'commercial' ? (
+        <AdminCommercialOpsView
+          requests={requests}
+          announcements={announcements}
+          loading={commercialLoading}
+          error={commercialError}
+          onUpdateRequest={updateRequest}
+          onUpsertAnnouncement={upsertAnnouncement}
         />
       ) : (
         contentOps
