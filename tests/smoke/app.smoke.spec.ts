@@ -402,6 +402,8 @@ test('admin reload sees organization KPI changes after notification and study', 
   if (!bookId) {
     throw new Error('Smoke KPI Drill did not return an imported book id.');
   }
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
   await completeSeededStudySession(studentPage, bookId);
 
   await adminPage.reload();
