@@ -8,7 +8,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage';
 
@@ -114,17 +114,17 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async getDailySessionWords(uid: string, limit: number): Promise<WordData[]> {
+  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
     return this.callStorage({
       action: 'getDailySessionWords',
-      payload: { limit },
+      payload: { limit, taskIntent },
     });
   }
 
-  async getBookSession(uid: string, bookId: string, limit: number): Promise<WordData[]> {
+  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
     return this.callStorage({
       action: 'getBookSession',
-      payload: { bookId, limit },
+      payload: { bookId, limit, taskIntent },
     });
   }
 
@@ -132,10 +132,17 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage({ action: 'getDueCount' });
   }
 
-  async saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs = 0): Promise<void> {
+  async saveSRSHistory(
+    uid: string,
+    word: WordData,
+    rating: number,
+    responseTimeMs = 0,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
+  ): Promise<void> {
     await this.callStorage({
       action: 'saveSRSHistory',
-      payload: { word, rating, responseTimeMs },
+      payload: { word, rating, responseTimeMs, missionAssignmentId, taskIntentType },
     });
   }
 
@@ -146,10 +153,12 @@ export class CloudflareStorageService implements IStorageService {
     correct: boolean,
     questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
     responseTimeMs = 0,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
   ): Promise<void> {
     await this.callStorage({
       action: 'recordQuizAttempt',
-      payload: { wordId, bookId, correct, questionMode, responseTimeMs },
+      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType },
     });
   }
 

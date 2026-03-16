@@ -1,25 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildNavigationPath, parseNavigationPath } from '../hooks/useAppNavigation';
+import { buildTaskQueryString, createDefaultTaskIntentFromRoute, getTaskRouteBookId } from '../shared/learningTask';
 
 describe('app navigation paths', () => {
   it('parses top-level and book detail routes', () => {
     expect(parseNavigationPath('/public')).toEqual({
       currentView: 'publicInfo',
       returnView: 'dashboard',
-      selectedBook: null,
+      selectedTask: null,
     });
 
     expect(parseNavigationPath('/study/book-1')).toEqual({
       currentView: 'study',
       returnView: 'dashboard',
-      selectedBook: { bookId: 'book-1' },
+      selectedTask: createDefaultTaskIntentFromRoute('book-1', 'study'),
     });
 
     expect(parseNavigationPath('/quiz/book-2')).toEqual({
       currentView: 'quiz',
       returnView: 'dashboard',
-      selectedBook: { bookId: 'book-2' },
+      selectedTask: createDefaultTaskIntentFromRoute('book-2', 'quiz'),
     });
   });
 
@@ -27,13 +28,14 @@ describe('app navigation paths', () => {
     expect(buildNavigationPath({
       currentView: 'dashboard',
       returnView: 'dashboard',
-      selectedBook: null,
+      selectedTask: null,
     })).toBe('/dashboard');
 
+    const task = createDefaultTaskIntentFromRoute('starter 120', 'study');
     expect(buildNavigationPath({
       currentView: 'study',
       returnView: 'dashboard',
-      selectedBook: { bookId: 'starter 120' },
-    })).toBe('/study/starter%20120');
+      selectedTask: task,
+    })).toBe(`/study/${encodeURIComponent(getTaskRouteBookId(task))}${buildTaskQueryString(task)}`);
   });
 });

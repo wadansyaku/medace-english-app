@@ -11,6 +11,8 @@ import {
   DashboardSnapshot,
   LearningTrack,
   InterventionKind,
+  LearningTaskIntent,
+  LearningTaskIntentType,
   LeaderboardEntry,
   LearningPlan,
   LearningPreference,
@@ -131,11 +133,18 @@ export interface IStorageService {
   
   updateWordCache(wordId: string, sentence: string, translation: string): Promise<void>;
   
-  getDailySessionWords(uid: string, limit: number): Promise<WordData[]>;
-  getBookSession(uid: string, bookId: string, limit: number): Promise<WordData[]>;
+  getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
+  getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
   getDueCount(uid: string): Promise<number>;
   
-  saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs?: number): Promise<void>;
+  saveSRSHistory(
+    uid: string,
+    word: WordData,
+    rating: number,
+    responseTimeMs?: number,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
+  ): Promise<void>;
   recordQuizAttempt(
     uid: string,
     wordId: string,
@@ -143,6 +152,8 @@ export interface IStorageService {
     correct: boolean,
     questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
     responseTimeMs?: number,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
   ): Promise<void>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
@@ -622,20 +633,35 @@ class IndexedDBStorageService implements IStorageService {
     });
   }
 
-  async getDailySessionWords(uid: string, limit: number): Promise<WordData[]> {
-    return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit);
+  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+    return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit, taskIntent);
   }
 
-  async getBookSession(uid: string, bookId: string, limit: number): Promise<WordData[]> {
-    return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit);
+  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+    return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit, taskIntent);
   }
 
   async getDueCount(uid: string): Promise<number> {
     return getDueCountFromHistory(this.getLearningHistoryContext(), uid);
   }
 
-  async saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs = 0): Promise<void> {
-    return saveSrsHistoryFromHistory(this.getLearningHistoryContext(), uid, word, rating, responseTimeMs);
+  async saveSRSHistory(
+    uid: string,
+    word: WordData,
+    rating: number,
+    responseTimeMs = 0,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
+  ): Promise<void> {
+    return saveSrsHistoryFromHistory(
+      this.getLearningHistoryContext(),
+      uid,
+      word,
+      rating,
+      responseTimeMs,
+      missionAssignmentId,
+      taskIntentType,
+    );
   }
 
   async recordQuizAttempt(
@@ -645,6 +671,8 @@ class IndexedDBStorageService implements IStorageService {
     correct: boolean,
     questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
     responseTimeMs = 0,
+    missionAssignmentId?: string,
+    taskIntentType?: LearningTaskIntentType,
   ): Promise<void> {
     return recordQuizAttemptFromHistory(
       this.getLearningHistoryContext(),
@@ -654,6 +682,8 @@ class IndexedDBStorageService implements IStorageService {
       correct,
       questionMode,
       responseTimeMs,
+      missionAssignmentId,
+      taskIntentType,
     );
   }
 

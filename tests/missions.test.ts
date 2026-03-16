@@ -49,6 +49,45 @@ describe('missions', () => {
     expect(segment).toBe('IMMEDIATE');
   });
 
+  it('routes quiz blockers to OPEN_QUIZ instead of generic study', () => {
+    const progress = buildMissionProgress({
+      assignedAt: 1_000,
+      startedAt: 2_000,
+      dueAt: 10_000,
+      newWordsCompleted: 20,
+      newWordsTarget: 20,
+      reviewWordsCompleted: 10,
+      reviewWordsTarget: 10,
+      quizCompletedCount: 0,
+      quizTargetCount: 1,
+      writingRequired: false,
+      writingCompleted: false,
+      now: 5_000,
+    });
+
+    expect(progress.nextActionType).toBe(MissionNextActionType.OPEN_QUIZ);
+    expect(progress.nextActionLabel).toBe('確認クイズを始める');
+  });
+
+  it('starts fresh missions with new words before review-only work', () => {
+    const progress = buildMissionProgress({
+      assignedAt: 1_000,
+      dueAt: 10_000,
+      newWordsCompleted: 0,
+      newWordsTarget: 8,
+      reviewWordsCompleted: 0,
+      reviewWordsTarget: 4,
+      quizCompletedCount: 0,
+      quizTargetCount: 1,
+      writingRequired: false,
+      writingCompleted: false,
+      now: 5_000,
+    });
+
+    expect(progress.nextActionType).toBe(MissionNextActionType.OPEN_STUDY);
+    expect(progress.nextActionLabel).toBe('新出を8語進める');
+  });
+
   it('aggregates track completion, started rate, and overdue recovery rate from mission assignments', () => {
     const assignments: MissionAssignment[] = [
       {

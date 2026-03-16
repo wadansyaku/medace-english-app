@@ -8,6 +8,7 @@ import {
   RECOMMENDED_ACTION_TYPE_LABELS,
   RecommendedActionType,
   UserGrade,
+  type LearningTaskIntent,
   type UserProfile,
 } from '../types';
 import Onboarding from './Onboarding';
@@ -35,15 +36,21 @@ import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
 import { storage } from '../services/storage';
-import { WEAKNESS_FOCUS_SESSION_ID } from '../shared/studySession';
+import {
+  createCoachTaskIntent,
+  createMissionTaskIntent,
+  createTodayFocusTaskIntent,
+  createWeaknessTaskIntent,
+} from '../shared/learningTask';
 
 interface DashboardProps {
   user: UserProfile;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
+  onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, onUserUpdate }) => {
   const {
     snapshot,
     loading,
@@ -158,6 +165,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       )
     : null;
   const primaryMission = viewModel.primaryMission;
+  const topWeakness = viewModel.weaknessProfile?.topWeaknesses[0] || null;
+  const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
+  const weaknessTaskIntent = React.useMemo(() => createWeaknessTaskIntent(topWeakness), [topWeakness]);
+  const missionTaskIntent = React.useMemo(
+    () => (primaryMission?.nextTaskIntent || (primaryMission ? createMissionTaskIntent(primaryMission) : null)),
+    [primaryMission],
+  );
+  const coachTaskIntent = React.useMemo(() => (
+    createCoachTaskIntent({
+      recommendedActionType: coachActionType,
+      hasLearningPlan: Boolean(viewModel.learningPlan),
+    })
+  ), [coachActionType, viewModel.learningPlan]);
   const mobileAnchorStyle = isStudentMobileShell
     ? { scrollMarginTop: 'calc(5.5rem + var(--safe-top))' }
     : undefined;
@@ -242,7 +262,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     if (primaryMission?.assignmentId) {
       try {
         await storage.updateMissionProgress(primaryMission.assignmentId, MissionProgressEventType.OPENED);
-        await refreshDashboard();
       } catch (missionError) {
         console.error(missionError);
       }
@@ -263,7 +282,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       setShowCreateModal(true);
       return;
     }
-    onSelectBook('smart-session', 'study');
+    if (missionTaskIntent) {
+      onStartTask(missionTaskIntent);
+      return;
+    }
+    setShowPlanEditModal(true);
   };
 
   return (
@@ -394,7 +417,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           onOpenSettings={() => setShowSettingsModal(true)}
           onStartQuest={() => {
             if (viewModel.hasStudyBooks) {
-              onSelectBook('smart-session', 'study');
+              onStartTask(todayTaskIntent);
             } else {
               setShowCreateModal(true);
             }
@@ -414,7 +437,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
           weaknessProfile={viewModel.weaknessProfile}
           onStartFocusQuest={() => {
             if (viewModel.hasStudyBooks) {
-              onSelectBook(WEAKNESS_FOCUS_SESSION_ID, 'study');
+              onStartTask(weaknessTaskIntent);
               return;
             }
             setShowCreateModal(true);
@@ -460,22 +483,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             latestNotification={viewModel.latestCoachNotification}
             notifications={viewModel.coachNotifications}
             isCompact={isStudentMobileShell}
-            primaryActionLabel={primaryMission
-              ? primaryMission.nextActionLabel
-              : coachActionType
-                ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
-                : null}
-            onPrimaryAction={primaryMission
-              ? handlePrimaryMissionAction
-              : coachActionType
-                ? () => {
-                    if (coachActionType === RecommendedActionType.OPEN_PLAN) {
-                      setShowPlanEditModal(true);
-                      return;
-                    }
-                    onSelectBook('smart-session', 'study');
+            primaryActionLabel={coachTaskIntent?.label || (coachActionType
+              ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
+              : null)}
+            onPrimaryAction={coachActionType
+              ? () => {
+                  if (coachActionType === RecommendedActionType.OPEN_PLAN) {
+                    setShowPlanEditModal(true);
+                    return;
                   }
-                : null}
+                  if (coachTaskIntent) {
+                    onStartTask(coachTaskIntent);
+                  }
+                }
+              : null}
           />
         </div>
       )}
@@ -515,7 +536,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             dailyGoal={viewModel.todayWordGoal}
             weeklyGoal={viewModel.weeklyGoal}
             stabilizedWords={viewModel.stabilizedWords}
-            onStartQuest={() => onSelectBook('smart-session', 'study')}
+            onStartQuest={() => onStartTask(todayTaskIntent)}
           />
         </div>
       )}

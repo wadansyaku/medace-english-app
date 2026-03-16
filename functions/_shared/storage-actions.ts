@@ -105,9 +105,15 @@ export const handleStorageAction = async (
         String(payload.translation || ''),
       );
     case 'getDailySessionWords':
-      return handleGetDailySessionWords(env, user, payload.limit);
+      return handleGetDailySessionWords(env, user, payload.limit, payload.taskIntent as StorageActionRequest<'getDailySessionWords'>['payload']['taskIntent']);
     case 'getBookSession':
-      return handleGetBookSession(env, user, String(payload.bookId || ''), payload.limit);
+      return handleGetBookSession(
+        env,
+        user,
+        String(payload.bookId || ''),
+        payload.limit,
+        payload.taskIntent as StorageActionRequest<'getBookSession'>['payload']['taskIntent'],
+      );
     case 'getDashboardSnapshot':
       return handleGetDashboardSnapshot(env, user);
     case 'getAdminDashboardSnapshot':
@@ -128,6 +134,8 @@ export const handleStorageAction = async (
         payload.word as unknown as StorageActionRequest<'saveSRSHistory'>['payload']['word'],
         Number(payload.rating || 0),
         Number(payload.responseTimeMs || 0),
+        typeof payload.missionAssignmentId === 'string' ? payload.missionAssignmentId : undefined,
+        payload.taskIntentType as StorageActionRequest<'saveSRSHistory'>['payload']['taskIntentType'],
       );
     case 'recordQuizAttempt':
       return handleRecordQuizAttempt(
@@ -138,6 +146,8 @@ export const handleStorageAction = async (
         Boolean(payload.correct),
         String(payload.questionMode || '') as 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
         Number(payload.responseTimeMs || 0),
+        typeof payload.missionAssignmentId === 'string' ? payload.missionAssignmentId : undefined,
+        payload.taskIntentType as StorageActionRequest<'recordQuizAttempt'>['payload']['taskIntentType'],
       );
     case 'getStudiedWordIdsByBook':
       return handleGetStudiedWordIdsByBook(env, user, String(payload.bookId || ''));

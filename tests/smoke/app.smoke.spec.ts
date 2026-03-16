@@ -37,33 +37,47 @@ const maybeCompleteOnboarding = async (page: Page) => {
   }
 };
 
-const seedPhrasebook = async (page: Page, title: string) => page.evaluate(async (bookTitle) => {
-  const response = await fetch('/api/storage', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      action: 'batchImportWords',
-      payload: {
-        defaultBookName: bookTitle,
-        source: {
-          kind: 'rows',
-          rows: [
-            { bookName: bookTitle, number: 1, word: 'triage', definition: 'トリアージ' },
-            { bookName: bookTitle, number: 2, word: 'stabilize', definition: '安定させる' },
-          ],
-        },
-      },
-    }),
-  });
+const seedPhrasebook = async (page: Page, title: string, timeoutMs = 10_000) => {
+  const startedAt = Date.now();
 
-  if (!response.ok) {
-    throw new Error(`batchImportWords failed with status ${response.status}`);
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async (bookTitle) => {
+      const response = await fetch('/api/storage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'batchImportWords',
+          payload: {
+            defaultBookName: bookTitle,
+            source: {
+              kind: 'rows',
+              rows: [
+                { bookName: bookTitle, number: 1, word: 'triage', definition: 'トリアージ' },
+                { bookName: bookTitle, number: 2, word: 'stabilize', definition: '安定させる' },
+              ],
+            },
+          },
+        }),
+      });
+
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, title);
+
+    if (result.ok) {
+      return JSON.parse(result.text);
+    }
+    if (result.status !== 401) {
+      throw new Error(`batchImportWords failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
   }
 
-  return response.json();
-}, title);
+  throw new Error(`batchImportWords failed with status 401 after ${timeoutMs}ms`);
+};
 
 const seedLeveledPhrasebooks = async (
   page: Page,
@@ -71,42 +85,57 @@ const seedLeveledPhrasebooks = async (
     levels?: number[];
     wordsPerLevel?: number;
   },
-) => page.evaluate(async ({ levels, wordsPerLevel }) => {
-  const targetLevels = Array.isArray(levels) && levels.length > 0 ? levels : [1, 2, 3, 4];
-  const count = Number.isFinite(wordsPerLevel) && Number(wordsPerLevel) > 0 ? Number(wordsPerLevel) : 10;
-  const rows = targetLevels.flatMap((level) => Array.from({ length: count }, (_, index) => ({
-    bookName: `レベル${level}`,
-    number: index + 1,
-    word: `level${level}_word_${index + 1}`,
-    definition: `レベル${level}の意味${index + 1}`,
-  })));
+) => {
+  const payload = {
+    levels: options?.levels ?? [1, 2, 3, 4],
+    wordsPerLevel: options?.wordsPerLevel ?? 10,
+  };
+  const startedAt = Date.now();
 
-  const response = await fetch('/api/storage', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      action: 'batchImportWords',
-      payload: {
-        defaultBookName: 'レベル教材',
-        source: {
-          kind: 'rows',
-          rows,
+  while (Date.now() - startedAt < 10_000) {
+    const result = await page.evaluate(async ({ levels, wordsPerLevel }) => {
+      const targetLevels = Array.isArray(levels) && levels.length > 0 ? levels : [1, 2, 3, 4];
+      const count = Number.isFinite(wordsPerLevel) && Number(wordsPerLevel) > 0 ? Number(wordsPerLevel) : 10;
+      const rows = targetLevels.flatMap((level) => Array.from({ length: count }, (_, index) => ({
+        bookName: `レベル${level}`,
+        number: index + 1,
+        word: `level${level}_word_${index + 1}`,
+        definition: `レベル${level}の意味${index + 1}`,
+      })));
+
+      const response = await fetch('/api/storage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      },
-    }),
-  });
+        body: JSON.stringify({
+          action: 'batchImportWords',
+          payload: {
+            defaultBookName: 'レベル教材',
+            source: {
+              kind: 'rows',
+              rows,
+            },
+          },
+        }),
+      });
 
-  if (!response.ok) {
-    throw new Error(`batchImportWords failed with status ${response.status}`);
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, payload);
+
+    if (result.ok) {
+      return JSON.parse(result.text);
+    }
+    if (result.status !== 401) {
+      throw new Error(`batchImportWords failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
   }
 
-  return response.json();
-}, {
-  levels: options?.levels ?? [1, 2, 3, 4],
-  wordsPerLevel: options?.wordsPerLevel ?? 10,
-});
+  throw new Error('batchImportWords failed with status 401 after 10000ms');
+};
 
 const getLatestWritingAssignmentForStudentUid = async (
   page: Page,
@@ -174,34 +203,84 @@ const waitForWritingAssignment = async (
   throw new Error(`Assignment ${assignmentId} did not reach [${expectedStatuses.join(', ')}] within ${timeoutMs}ms`);
 };
 
-const getCurrentSessionUser = async (page: Page) => page.evaluate(async () => {
-  const response = await fetch('/api/session');
-  if (!response.ok) {
-    throw new Error(`session fetch failed with status ${response.status}`);
-  }
-  return response.json() as Promise<{
-    uid: string;
-    displayName: string;
-    role: string;
-    organizationId?: string;
-    organizationName?: string;
-    organizationRole?: string;
-  } | null>;
-});
+const getCurrentSessionUser = async (page: Page, timeoutMs = 10_000) => {
+  const startedAt = Date.now();
 
-const updateSessionProfile = async (page: Page, user: { grade?: string; englishLevel?: string; studyMode?: string }) => page.evaluate(async (nextUser) => {
-  const response = await fetch('/api/profile', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ user: nextUser }),
-  });
-  if (!response.ok) {
-    throw new Error(`profile update failed with status ${response.status}`);
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async () => {
+      const response = await fetch('/api/session');
+      if (response.status === 204) {
+        return { ok: true, session: null, empty: true } as const;
+      }
+      if (!response.ok) {
+        return { ok: false, status: response.status } as const;
+      }
+
+      const text = await response.text();
+      if (!text.trim()) {
+        return { ok: true, session: null, empty: true } as const;
+      }
+
+      return {
+        ok: true,
+        session: JSON.parse(text) as {
+          uid: string;
+          displayName: string;
+          role: string;
+          organizationId?: string;
+          organizationName?: string;
+          organizationRole?: string;
+        } | null,
+        empty: false,
+      } as const;
+    });
+
+    if (!result.ok) {
+      throw new Error(`session fetch failed with status ${result.status}`);
+    }
+    if (result.session || !result.empty) {
+      return result.session;
+    }
+
+    await page.waitForTimeout(250);
   }
-  return response.json();
-}, user);
+
+  return null;
+};
+
+const updateSessionProfile = async (
+  page: Page,
+  user: { grade?: string; englishLevel?: string; studyMode?: string },
+  timeoutMs = 10_000,
+) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async (nextUser) => {
+      const response = await fetch('/api/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user: nextUser }),
+      });
+
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, user);
+
+    if (result.ok) {
+      return result.text ? JSON.parse(result.text) : null;
+    }
+    if (result.status !== 401) {
+      throw new Error(`profile update failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(`profile update failed with status 401 after ${timeoutMs}ms`);
+};
 
 const getBookBandIndex = (title?: string) => {
   if (!title) return null;
@@ -230,25 +309,43 @@ const loginAdminDemo = async (page: Page) => {
   await page.getByTestId('admin-demo-submit').click();
 };
 
-const storageAction = async <T,>(page: Page, action: string, payload?: Record<string, unknown>) => page.evaluate(async ({ nextAction, nextPayload }) => {
-  const response = await fetch('/api/storage', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(nextPayload === undefined ? { action: nextAction } : { action: nextAction, payload: nextPayload }),
-  });
+const storageAction = async <T,>(
+  page: Page,
+  action: string,
+  payload?: Record<string, unknown>,
+  timeoutMs = 10_000,
+) => {
+  const startedAt = Date.now();
 
-  if (!response.ok) {
-    throw new Error(`${nextAction} failed with status ${response.status}`);
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async ({ nextAction, nextPayload }) => {
+      const response = await fetch('/api/storage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(nextPayload === undefined ? { action: nextAction } : { action: nextAction, payload: nextPayload }),
+      });
+
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, { nextAction: action, nextPayload: payload });
+
+    if (result.ok) {
+      if (!result.text.trim()) {
+        return null as T;
+      }
+      return JSON.parse(result.text) as T;
+    }
+    if (result.status !== 401) {
+      throw new Error(`${action} failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
   }
 
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
-}, { nextAction: action, nextPayload: payload }) as Promise<T>;
+  throw new Error(`${action} failed with status 401 after ${timeoutMs}ms`);
+};
 
 const completeSeededStudySession = async (page: Page, bookId: string) => {
   await page.getByTestId(`book-study-${bookId}`).click();
@@ -282,16 +379,32 @@ const completeCoachCtaStudySession = async (page: Page) => {
 
 const completeMissionCtaStudySession = async (page: Page) => {
   await page.getByTestId('dashboard-mission-primary-cta').click();
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
-  for (let index = 0; index < 2; index += 1) {
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
+  const studyCard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront);
+  const quizRunningView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
+
+  await Promise.race([
+    studyCard.waitFor({ state: 'visible', timeout: 10000 }).catch(() => null),
+    quizRunningView.waitFor({ state: 'visible', timeout: 10000 }).catch(() => null),
+  ]);
+
+  if (await studyCard.isVisible().catch(() => false)) {
+    for (let index = 0; index < 2; index += 1) {
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
+    }
+
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+    return;
   }
 
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
-  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
+  await expect(quizRunningView).toBeVisible();
+  await answerSeededQuizQuestion(page);
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizResultView)).toBeVisible();
+  await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.quizResultBack }).click();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 };
 

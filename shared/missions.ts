@@ -18,6 +18,7 @@ import {
   WeeklyMissionStatus as WeeklyMissionStatusEnum,
 } from '../types';
 import { getBookProgressionIndex, getTargetBookProgressionIndex } from './bookProgression';
+import { createMissionTaskIntent } from './learningTask';
 import { formatDateKey, shiftDateKey } from '../utils/date';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
@@ -299,6 +300,11 @@ export const buildMissionProgress = ({
   if (reviewWordsCompleted < safeReviewTarget) blockers.push(`復習 ${Math.max(safeReviewTarget - reviewWordsCompleted, 0)}語`);
   if (quizCompletedCount < safeQuizTarget) blockers.push('確認クイズ');
   if (writingRequired && !writingCompleted) blockers.push('英作文');
+  const shouldStartWithNewWords = (
+    newWordsCompleted === 0
+    && reviewWordsCompleted === 0
+    && safeNewTarget > 0
+  );
 
   let nextActionType = MissionNextActionType.OPEN_STUDY;
   let nextActionLabel = 'ミッションを再開';
@@ -307,11 +313,14 @@ export const buildMissionProgress = ({
   } else if (writingRequired && !writingCompleted) {
     nextActionType = MissionNextActionType.OPEN_WRITING;
     nextActionLabel = '英作文課題を提出する';
+  } else if (shouldStartWithNewWords) {
+    nextActionLabel = `新出を${Math.max(safeNewTarget - newWordsCompleted, 1)}語進める`;
   } else if (reviewWordsCompleted < safeReviewTarget) {
     nextActionLabel = `復習を${Math.max(safeReviewTarget - reviewWordsCompleted, 1)}語進める`;
   } else if (newWordsCompleted < safeNewTarget) {
     nextActionLabel = `新出を${Math.max(safeNewTarget - newWordsCompleted, 1)}語進める`;
   } else if (quizCompletedCount < safeQuizTarget) {
+    nextActionType = MissionNextActionType.OPEN_QUIZ;
     nextActionLabel = '確認クイズを始める';
   } else if (blockers.length === 0) {
     nextActionType = MissionNextActionType.OPEN_PLAN;
@@ -380,4 +389,19 @@ export const toPrimaryMissionSnapshot = ({
   writingPromptTitle,
   isSuggested,
   ...progress,
+  nextTaskIntent: createMissionTaskIntent({
+    assignmentId,
+    missionId,
+    track,
+    title,
+    rationale,
+    dueAt,
+    dueDate: formatDateKey(dueAt),
+    sourceBookId,
+    sourceBookTitle,
+    writingAssignmentId,
+    writingPromptTitle,
+    isSuggested,
+    ...progress,
+  }),
 });

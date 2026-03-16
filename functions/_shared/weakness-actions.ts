@@ -1,4 +1,5 @@
 import {
+  type LearningTaskIntentType,
   type StudentWeaknessProfile,
   type UserGrade,
   type WeaknessSignalSummary,
@@ -34,6 +35,7 @@ interface DbWeaknessEventRow {
   interval_days_before: number | null;
   book_progression_band: number | null;
   mission_assignment_id: string | null;
+  task_intent_type: LearningTaskIntentType | null;
 }
 
 interface DbWeaknessSignalRow {
@@ -63,6 +65,7 @@ const mapEventRow = (row: DbWeaknessEventRow): WeaknessInteractionEvent => ({
   intervalDaysBefore: row.interval_days_before === null ? undefined : Number(row.interval_days_before),
   bookProgressionBand: row.book_progression_band === null ? undefined : Number(row.book_progression_band),
   missionAssignmentId: row.mission_assignment_id || undefined,
+  taskIntentType: row.task_intent_type || undefined,
 });
 
 const mapSignalRow = (row: DbWeaknessSignalRow): WeaknessSignalSummary => {
@@ -131,8 +134,9 @@ export const appendLearningInteractionEvent = async (
       response_time_ms,
       interval_days_before,
       book_progression_band,
-      mission_assignment_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      mission_assignment_id,
+      task_intent_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     event.userId,
     event.wordId,
@@ -146,6 +150,7 @@ export const appendLearningInteractionEvent = async (
     typeof event.intervalDaysBefore === 'number' ? event.intervalDaysBefore : null,
     typeof event.bookProgressionBand === 'number' ? event.bookProgressionBand : null,
     event.missionAssignmentId || null,
+    event.taskIntentType || null,
   ).run();
 };
 

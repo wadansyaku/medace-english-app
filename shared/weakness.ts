@@ -1,6 +1,7 @@
 import {
   InterventionKind,
   LearningInteractionSource,
+  type LearningTaskIntentType,
   RecommendedActionType,
   type LearningHistory,
   type StudentWeaknessProfile,
@@ -28,6 +29,7 @@ export interface WeaknessInteractionEvent {
   intervalDaysBefore?: number;
   bookProgressionBand?: number | null;
   missionAssignmentId?: string;
+  taskIntentType?: LearningTaskIntentType;
 }
 
 export const WEAKNESS_WINDOW_MS = 30 * 86400000;
@@ -97,9 +99,15 @@ export const getWeaknessRecommendedActionType = (dimension: WeaknessDimension): 
 );
 
 export const getWeaknessNextActionLabel = (dimension: WeaknessDimension): string => (
-  getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
-    ? '今日のプランに戻る'
-    : '復習を10語始める'
+  dimension === WeaknessDimensionEnum.MEANING_RECALL
+    ? '意味から英語クイズを始める'
+    : dimension === WeaknessDimensionEnum.MEANING_RECOGNITION
+      ? '英語から意味クイズを始める'
+      : dimension === WeaknessDimensionEnum.SPELLING_RECALL
+        ? 'スペリングクイズを始める'
+        : getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
+          ? '今日のプランに戻る'
+          : '復習を10語始める'
 );
 
 export const getWeaknessTargetQuestionModes = (dimension: WeaknessDimension): Array<'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT'> => {

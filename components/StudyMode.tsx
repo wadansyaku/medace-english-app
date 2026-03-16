@@ -16,7 +16,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { EnglishLevel, type UserProfile, type WordData } from '../types';
+import { EnglishLevel, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
 import { storage } from '../services/storage';
 import { type GeneratedContext, generateGeminiSentence, generateWordImage } from '../services/gemini';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
@@ -28,6 +28,7 @@ import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 interface StudyModeProps {
   user: UserProfile;
   bookId: string;
+  taskIntent?: LearningTaskIntent | null;
   onBack: () => void;
   onSessionComplete: (user: UserProfile) => void;
 }
@@ -66,7 +67,7 @@ const getSupports3D = (): boolean => {
   return !reducedMotion && supports3D;
 };
 
-const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionComplete }) => {
+const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete }) => {
   const isMobileViewport = useIsMobileViewport();
   const [queue, setQueue] = useState<WordData[]>([]);
   const [sessionWordCount, setSessionWordCount] = useState(0);
@@ -167,10 +168,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         let data: WordData[] = [];
         const smartSession = getSmartSessionConfig(bookId);
         if (smartSession) {
-          data = await storage.getDailySessionWords(user.uid, smartSession.limit);
+          data = await storage.getDailySessionWords(user.uid, taskIntent?.limit || smartSession.limit, taskIntent || undefined);
           setIsBookOwner(false);
         } else {
-          data = await storage.getBookSession(user.uid, bookId, 10);
+          data = await storage.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined);
           const books = await storage.getBooks();
           const currentBook = books.find((book) => book.id === bookId);
           if (currentBook) {
@@ -193,7 +194,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       }
     };
     void loadWords();
-  }, [bookId, user.uid]);
+  }, [bookId, taskIntent, user.uid]);
 
   useEffect(() => {
     if (queue.length === 0 || !showHints) return;
@@ -360,6 +361,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       currentWord,
       rating,
       Math.max(0, Date.now() - cardStartedAtRef.current),
+      taskIntent?.missionAssignmentId,
+      taskIntent?.intentType,
     );
     if (rating <= 1) {
       setReviewWords((previous) => (
@@ -826,9 +829,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
-          {isSmartSessionBookId(bookId) && (
+          {(isSmartSessionBookId(bookId) || taskIntent) && (
             <span className="flex items-center gap-1 rounded bg-medace-100 px-2 py-1 text-xs font-bold text-medace-700">
-              <Zap className="h-3 w-3" /> {getSmartSessionConfig(bookId)?.badgeLabel}
+              <Zap className="h-3 w-3" /> {taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel}
             </span>
           )}
           <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">

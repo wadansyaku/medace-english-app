@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-import type { UserProfile } from '../types';
+import type { LearningTaskIntent, UserProfile } from '../types';
 import QuizExitConfirmDialog from './quiz/QuizExitConfirmDialog';
 import QuizHeader from './quiz/QuizHeader';
 import QuizReadyView from './quiz/QuizReadyView';
@@ -13,15 +13,17 @@ import { useQuizModeController } from '../hooks/useQuizModeController';
 interface QuizModeProps {
   user: UserProfile;
   bookId: string;
+  taskIntent?: LearningTaskIntent | null;
   onBack: () => void;
 }
 
 const QuizMode: React.FC<QuizModeProps> = ({
   user,
   bookId,
+  taskIntent,
   onBack,
 }) => {
-  const controller = useQuizModeController({ user, bookId });
+  const controller = useQuizModeController({ user, bookId, taskIntent });
 
   const handleHeaderBack = () => {
     if (controller.screen === 'SETUP') {

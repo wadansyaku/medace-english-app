@@ -1,7 +1,7 @@
 
 import React, { Suspense, lazy, useState } from 'react';
 import Layout from './components/Layout';
-import { OrganizationRole, UserRole, UserProfile } from './types';
+import { OrganizationRole, UserRole, UserProfile, type LearningTaskIntent } from './types';
 import { BusinessAdminWorkspaceView, InstructorWorkspaceView } from './types';
 import { isGroupAdmin } from './config/access';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from './config/workspace';
@@ -12,6 +12,7 @@ import AnnouncementOverlay from './components/announcements/AnnouncementOverlay'
 import { getHomeAppRoute, isHomeAppRoute, type HomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
+import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudyMode = lazy(() => import('./components/StudyMode'));
@@ -25,7 +26,7 @@ const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
   const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
   const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
-  const { currentView, selectedBook } = navigationState;
+  const { currentView, selectedTask } = navigationState;
   const {
     user,
     setCurrentUser,
@@ -46,7 +47,14 @@ const App: React.FC = () => {
   const announcementFeed = useAnnouncementFeed(Boolean(user));
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
-    dispatchNavigation({ type: 'open-book', bookId, mode });
+    dispatchNavigation({
+      type: 'open-task',
+      task: createTaskIntentFromBookSelection(bookId, mode),
+    });
+  };
+
+  const handleTaskSelect = (task: LearningTaskIntent) => {
+    dispatchNavigation({ type: 'open-task', task });
   };
 
   const handleSessionComplete = (updatedUser: UserProfile) => {
@@ -91,21 +99,30 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setCurrentUser} />;
+        return (
+          <Dashboard
+            user={user}
+            onSelectBook={handleBookSelect}
+            onStartTask={handleTaskSelect}
+            onUserUpdate={setCurrentUser}
+          />
+        );
       case 'study':
-        return selectedBook ? (
+        return selectedTask ? (
           <StudyMode 
             user={user} 
-            bookId={selectedBook.bookId} 
+            bookId={getTaskRouteBookId(selectedTask)}
+            taskIntent={selectedTask}
             onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
             onSessionComplete={handleSessionComplete}
           />
         ) : null;
       case 'quiz':
-        return selectedBook ? (
+        return selectedTask ? (
           <QuizMode 
             user={user} 
-            bookId={selectedBook.bookId} 
+            bookId={getTaskRouteBookId(selectedTask)}
+            taskIntent={selectedTask}
             onBack={() => dispatchNavigation({ type: 'finish-book-view' })} 
           />
         ) : null;
@@ -118,7 +135,14 @@ const App: React.FC = () => {
             : <InstructorDashboard user={user} onSelectBook={handleBookSelect} activeView={instructorWorkspaceView} onChangeView={setInstructorWorkspaceView} />)
           : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
       default:
-        return <Dashboard user={user} onSelectBook={handleBookSelect} onUserUpdate={setCurrentUser} />;
+        return (
+          <Dashboard
+            user={user}
+            onSelectBook={handleBookSelect}
+            onStartTask={handleTaskSelect}
+            onUserUpdate={setCurrentUser}
+          />
+        );
     }
   };
 

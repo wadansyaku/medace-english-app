@@ -26,7 +26,7 @@ const shouldPreserveCurrentRoute = (
       return navigationState.currentView === nextHomeView;
     case 'study':
     case 'quiz':
-      return Boolean(navigationState.selectedBook?.bookId);
+      return Boolean(navigationState.selectedTask);
     default:
       return false;
   }

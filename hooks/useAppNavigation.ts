@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { getHomeViewForUser } from '../config/access';
-import type { UserProfile } from '../types';
+import type { LearningTaskIntent, UserProfile } from '../types';
+import {
+  buildTaskQueryString,
+  createDefaultTaskIntentFromRoute,
+  getTaskRouteBookId,
+  parseTaskIntentFromSearch,
+} from '../shared/learningTask';
 
 export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
@@ -10,13 +16,13 @@ export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 export interface AppNavigationState {
   currentView: AppRoute;
   returnView: HomeAppRoute;
-  selectedBook: { bookId: string } | null;
+  selectedTask: LearningTaskIntent | null;
 }
 
 export type AppNavigationAction =
   | { type: 'reset'; historyMode?: NavigationHistoryMode }
   | { type: 'go-home'; view: HomeAppRoute; historyMode?: NavigationHistoryMode }
-  | { type: 'open-book'; bookId: string; mode: Extract<AppRoute, 'study' | 'quiz'>; historyMode?: NavigationHistoryMode }
+  | { type: 'open-task'; task: LearningTaskIntent; historyMode?: NavigationHistoryMode }
   | { type: 'finish-book-view'; historyMode?: NavigationHistoryMode }
   | { type: 'open-public-info'; historyMode?: NavigationHistoryMode }
   | { type: 'close-public-info'; historyMode?: NavigationHistoryMode }
@@ -25,7 +31,7 @@ export type AppNavigationAction =
 const initialNavigationState: AppNavigationState = {
   currentView: 'login',
   returnView: 'dashboard',
-  selectedBook: null,
+  selectedTask: null,
 };
 
 const normalizePathname = (pathname: string): string => {
@@ -37,7 +43,7 @@ const normalizePathname = (pathname: string): string => {
 const buildHomeState = (view: HomeAppRoute): AppNavigationState => ({
   currentView: view,
   returnView: view,
-  selectedBook: null,
+  selectedTask: null,
 });
 
 export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
@@ -49,10 +55,11 @@ export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
   return view === 'admin' || view === 'instructor' ? view : 'dashboard';
 };
 
-export const parseNavigationPath = (pathname: string): AppNavigationState => {
+export const parseNavigationPath = (pathname: string, search = ''): AppNavigationState => {
   const normalizedPath = normalizePathname(pathname);
   const segments = normalizedPath.split('/').filter(Boolean);
   const [root, bookId] = segments;
+  const taskFromSearch = parseTaskIntentFromSearch(search);
 
   if (normalizedPath === '/public') {
     return {
@@ -66,18 +73,20 @@ export const parseNavigationPath = (pathname: string): AppNavigationState => {
   if (normalizedPath === '/admin') return buildHomeState('admin');
 
   if (root === 'study' && bookId) {
+    const decodedBookId = decodeURIComponent(bookId);
     return {
       currentView: 'study',
       returnView: 'dashboard',
-      selectedBook: { bookId: decodeURIComponent(bookId) },
+      selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'study'),
     };
   }
 
   if (root === 'quiz' && bookId) {
+    const decodedBookId = decodeURIComponent(bookId);
     return {
       currentView: 'quiz',
       returnView: 'dashboard',
-      selectedBook: { bookId: decodeURIComponent(bookId) },
+      selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'quiz'),
     };
   }
 
@@ -95,9 +104,13 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
     case 'admin':
       return '/admin';
     case 'study':
-      return state.selectedBook ? `/study/${encodeURIComponent(state.selectedBook.bookId)}` : '/dashboard';
+      return state.selectedTask
+        ? `/study/${encodeURIComponent(getTaskRouteBookId(state.selectedTask))}${buildTaskQueryString(state.selectedTask)}`
+        : '/dashboard';
     case 'quiz':
-      return state.selectedBook ? `/quiz/${encodeURIComponent(state.selectedBook.bookId)}` : '/dashboard';
+      return state.selectedTask
+        ? `/quiz/${encodeURIComponent(getTaskRouteBookId(state.selectedTask))}${buildTaskQueryString(state.selectedTask)}`
+        : '/dashboard';
     case 'login':
     default:
       return '/';
@@ -128,19 +141,19 @@ const navigationReducer = (
       return {
         currentView: action.view,
         returnView: action.view,
-        selectedBook: null,
+        selectedTask: null,
       };
-    case 'open-book':
+    case 'open-task':
       return {
-        currentView: action.mode,
+        currentView: action.task.mode,
         returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
-        selectedBook: { bookId: action.bookId },
+        selectedTask: action.task,
       };
     case 'finish-book-view':
       return {
         ...state,
         currentView: state.returnView,
-        selectedBook: null,
+        selectedTask: null,
       };
     case 'open-public-info':
       return {
@@ -163,7 +176,9 @@ export const useAppNavigation = () => {
   const [navigationState, baseDispatchNavigation] = useReducer(
     navigationReducer,
     initialNavigationState,
-    () => (typeof window === 'undefined' ? initialNavigationState : parseNavigationPath(window.location.pathname)),
+    () => (typeof window === 'undefined'
+      ? initialNavigationState
+      : parseNavigationPath(window.location.pathname, window.location.search)),
   );
   const pendingHistoryModeRef = useRef<NavigationHistoryMode>('replace');
   const hasBoundHistoryRef = useRef(false);
@@ -177,7 +192,7 @@ export const useAppNavigation = () => {
     if (typeof window === 'undefined') return;
 
     const nextPath = buildNavigationPath(navigationState);
-    const currentPath = normalizePathname(window.location.pathname);
+    const currentPath = `${normalizePathname(window.location.pathname)}${window.location.search}`;
     const historyMode = hasBoundHistoryRef.current ? pendingHistoryModeRef.current : 'replace';
 
     hasBoundHistoryRef.current = true;
@@ -200,7 +215,7 @@ export const useAppNavigation = () => {
       pendingHistoryModeRef.current = 'none';
       baseDispatchNavigation({
         type: 'sync-from-location',
-        state: parseNavigationPath(window.location.pathname),
+        state: parseNavigationPath(window.location.pathname, window.location.search),
       });
     };
 

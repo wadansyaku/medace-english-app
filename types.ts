@@ -354,6 +354,40 @@ export interface WeaknessSignalSummary {
   updatedAt: number;
 }
 
+export type TaskSelectionPolicy =
+  | 'DUE_FIRST'
+  | 'WEAKNESS_FOCUS'
+  | 'BOOK_DEFAULT'
+  | 'BOOK_REVIEW_ONLY'
+  | 'BOOK_NEW_ONLY';
+
+export type LearningTaskMode = 'study' | 'quiz';
+
+export enum LearningTaskIntentType {
+  TODAY_FOCUS = 'TODAY_FOCUS',
+  WEAKNESS_STUDY = 'WEAKNESS_STUDY',
+  WEAKNESS_QUIZ = 'WEAKNESS_QUIZ',
+  MISSION_REVIEW = 'MISSION_REVIEW',
+  MISSION_NEW = 'MISSION_NEW',
+  MISSION_QUIZ = 'MISSION_QUIZ',
+  COACH_REVIEW = 'COACH_REVIEW',
+  BOOK_STUDY = 'BOOK_STUDY',
+  BOOK_QUIZ = 'BOOK_QUIZ',
+}
+
+export interface LearningTaskIntent {
+  mode: LearningTaskMode;
+  intentType: LearningTaskIntentType;
+  label: string;
+  selectionPolicy: TaskSelectionPolicy;
+  limit: number;
+  bookId?: string;
+  missionAssignmentId?: string;
+  targetQuestionModes?: WorksheetQuestionMode[];
+  targetBandIndex?: number;
+  autoStart?: boolean;
+}
+
 export interface StudentWeaknessProfile {
   signals: WeaknessSignalSummary[];
   topWeaknesses: WeaknessSignalSummary[];
@@ -393,6 +427,7 @@ export const WEEKLY_MISSION_STATUS_LABELS: Record<WeeklyMissionStatus, string> =
 
 export enum MissionNextActionType {
   OPEN_STUDY = 'OPEN_STUDY',
+  OPEN_QUIZ = 'OPEN_QUIZ',
   OPEN_WRITING = 'OPEN_WRITING',
   OPEN_PLAN = 'OPEN_PLAN',
 }
@@ -473,6 +508,7 @@ export interface PrimaryMissionSnapshot extends MissionProgressSummary {
   writingAssignmentId?: string;
   writingPromptTitle?: string;
   isSuggested: boolean;
+  nextTaskIntent?: LearningTaskIntent;
 }
 
 export interface MissionTrackCompletionSummary {

@@ -2,6 +2,8 @@ import type {
   BookMetadata,
   BookProgress,
   LearningHistory,
+  LearningTaskIntent,
+  LearningTaskIntentType,
   MasteryDistribution,
   StudentWeaknessProfile,
   UserProfile,
@@ -103,11 +105,13 @@ export const buildBookSessionWords = ({
   histories,
   limit,
   now,
+  selectionPolicy = 'BOOK_DEFAULT',
 }: {
   words: WordData[];
   histories: LearningHistory[];
   limit: number;
   now: number;
+  selectionPolicy?: LearningTaskIntent['selectionPolicy'];
 }): WordData[] => {
   const historyMap = new Map<string, LearningHistory>();
   histories.forEach((history) => {
@@ -132,7 +136,20 @@ export const buildBookSessionWords = ({
     else ahead.push(word);
   });
 
+  if (selectionPolicy === 'BOOK_NEW_ONLY') {
+    return newWords.slice(0, limit);
+  }
+
   let session = [...due];
+  if (selectionPolicy === 'BOOK_REVIEW_ONLY') {
+    ahead.sort((left, right) => {
+      const leftHistory = historyMap.get(left.id);
+      const rightHistory = historyMap.get(right.id);
+      return (leftHistory?.nextReviewDate || 0) - (rightHistory?.nextReviewDate || 0);
+    });
+    return [...session, ...ahead.slice(0, Math.max(0, limit - session.length))];
+  }
+
   if (session.length < limit) {
     session = [...session, ...newWords.slice(0, limit - session.length)];
   }
@@ -152,6 +169,7 @@ export const getDailySessionWords = async (
   context: LearningHistoryContext,
   uid: string,
   limit: number,
+  taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const historyStore = await context.getStore(STORES.HISTORY);
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
@@ -217,9 +235,17 @@ export const getDailySessionWords = async (
     const bookBandsById = Object.fromEntries(
       books.map((book) => [book.id, getBookProgressionIndex(book)]),
     );
+    const targetedWords = typeof taskIntent?.targetBandIndex === 'number'
+      ? allWords.filter((word) => {
+        const band = bookBandsById[word.bookId];
+        return studiedWordIds.has(word.id)
+          ? false
+          : band === null || band === undefined || band >= taskIntent.targetBandIndex! - 1;
+      })
+      : allWords.filter((word) => !studiedWordIds.has(word.id));
     const rankedNewWords = rankWeaknessFocusedWords({
       uid,
-      words: allWords.filter((word) => !studiedWordIds.has(word.id)),
+      words: targetedWords,
       weaknessProfile,
       grade: sessionUser?.grade,
       level: sessionUser?.englishLevel,
@@ -323,6 +349,7 @@ export const getBookSession = async (
   uid: string,
   bookId: string,
   limit: number,
+  taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const words = await context.getWordsByBook(bookId);
   const historyStore = await context.getStore(STORES.HISTORY);
@@ -332,6 +359,7 @@ export const getBookSession = async (
     histories: getUserLearningHistories(records, uid).filter((history) => history.bookId === bookId),
     limit,
     now: Date.now(),
+    selectionPolicy: taskIntent?.selectionPolicy,
   });
 };
 
@@ -347,6 +375,8 @@ export const saveSrsHistory = async (
   word: WordData,
   rating: number,
   responseTimeMs = 0,
+  missionAssignmentId?: string,
+  taskIntentType?: LearningTaskIntentType,
 ): Promise<void> => {
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, word.id);
@@ -405,7 +435,8 @@ export const saveSrsHistory = async (
     rating,
     responseTimeMs,
     intervalDaysBefore,
-    missionAssignmentId: resolveMissionAssignmentId(uid, word.bookId),
+    missionAssignmentId: missionAssignmentId || resolveMissionAssignmentId(uid, word.bookId),
+    taskIntentType,
   });
   await rebuildWeaknessSignals(context, uid);
 };
@@ -418,6 +449,8 @@ export const recordQuizAttempt = async (
   correct: boolean,
   questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
   responseTimeMs = 0,
+  missionAssignmentId?: string,
+  taskIntentType?: LearningTaskIntentType,
 ): Promise<void> => {
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, wordId);
@@ -444,7 +477,8 @@ export const recordQuizAttempt = async (
     correct,
     responseTimeMs,
     intervalDaysBefore: existing?.data?.interval || 0,
-    missionAssignmentId: resolveMissionAssignmentId(uid, bookId),
+    missionAssignmentId: missionAssignmentId || resolveMissionAssignmentId(uid, bookId),
+    taskIntentType,
   });
   await rebuildWeaknessSignals(context, uid);
 };

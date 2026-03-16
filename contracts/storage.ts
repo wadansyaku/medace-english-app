@@ -15,6 +15,8 @@ import {
   DashboardSnapshot,
   InterventionKind,
   LearningTrack,
+  LearningTaskIntent,
+  LearningTaskIntentType,
   LeaderboardEntry,
   LearningPlan,
   LearningPreference,
@@ -157,11 +159,11 @@ export interface StorageActionMap {
     response: null;
   };
   getDailySessionWords: {
-    payload: { limit: number };
+    payload: { limit: number; taskIntent?: LearningTaskIntent };
     response: WordData[];
   };
   getBookSession: {
-    payload: { bookId: string; limit: number };
+    payload: { bookId: string; limit: number; taskIntent?: LearningTaskIntent };
     response: WordData[];
   };
   getDashboardSnapshot: {
@@ -185,7 +187,13 @@ export interface StorageActionMap {
     response: number;
   };
   saveSRSHistory: {
-    payload: { word: WordData; rating: number; responseTimeMs: number };
+    payload: {
+      word: WordData;
+      rating: number;
+      responseTimeMs: number;
+      missionAssignmentId?: string;
+      taskIntentType?: LearningTaskIntentType;
+    };
     response: null;
   };
   recordQuizAttempt: {
@@ -195,6 +203,8 @@ export interface StorageActionMap {
       correct: boolean;
       questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
       responseTimeMs: number;
+      missionAssignmentId?: string;
+      taskIntentType?: LearningTaskIntentType;
     };
     response: null;
   };

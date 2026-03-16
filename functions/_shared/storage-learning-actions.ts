@@ -1,4 +1,4 @@
-import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, UserProfile } from '../../types';
+import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, type LearningTaskIntentType, UserProfile } from '../../types';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
@@ -78,6 +78,8 @@ export const handleSaveSrsHistory = async (
   word: { id: string; bookId: string; },
   rating: number,
   responseTimeMs = 0,
+  missionAssignmentId?: string,
+  taskIntentType?: LearningTaskIntentType,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, word.bookId);
   const now = Date.now();
@@ -147,9 +149,11 @@ export const handleSaveSrsHistory = async (
     readMissionAssignmentsByStudent(env, [user.id]),
   ]);
   const missionAssignment = missionAssignments.get(user.id);
-  const missionAssignmentId = !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === word.bookId
-    ? missionAssignment?.id
-    : undefined;
+  const effectiveMissionAssignmentId = missionAssignmentId || (
+    !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === word.bookId
+      ? missionAssignment?.id
+      : undefined
+  );
   await appendLearningInteractionEvent(env, {
     userId: user.id,
     wordId: word.id,
@@ -161,13 +165,15 @@ export const handleSaveSrsHistory = async (
     responseTimeMs,
     intervalDaysBefore: existing?.interval_days || 0,
     bookProgressionBand,
-    missionAssignmentId,
+    missionAssignmentId: effectiveMissionAssignmentId,
+    taskIntentType,
   });
   await rebuildWeaknessSignalsForUser(env, user.id, user);
 
   await touchWeeklyMissionProgressFromStudy(env, user, {
     wordId: word.id,
     bookId: word.bookId,
+    assignmentId: effectiveMissionAssignmentId,
     existingWasStudy: Boolean(existing?.interaction_source === MASTERY_INTERACTION_SOURCE),
     studiedAt: now,
   });
@@ -183,6 +189,8 @@ export const handleRecordQuizAttempt = async (
   correct: boolean,
   questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
   responseTimeMs = 0,
+  missionAssignmentId?: string,
+  taskIntentType?: LearningTaskIntentType,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, bookId);
   const now = Date.now();
@@ -252,9 +260,11 @@ export const handleRecordQuizAttempt = async (
     readMissionAssignmentsByStudent(env, [user.id]),
   ]);
   const missionAssignment = missionAssignments.get(user.id);
-  const missionAssignmentId = !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === bookId
-    ? missionAssignment?.id
-    : undefined;
+  const effectiveMissionAssignmentId = missionAssignmentId || (
+    !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === bookId
+      ? missionAssignment?.id
+      : undefined
+  );
   await appendLearningInteractionEvent(env, {
     userId: user.id,
     wordId,
@@ -266,12 +276,14 @@ export const handleRecordQuizAttempt = async (
     responseTimeMs,
     intervalDaysBefore: existing?.interval_days || 0,
     bookProgressionBand,
-    missionAssignmentId,
+    missionAssignmentId: effectiveMissionAssignmentId,
+    taskIntentType,
   });
   await rebuildWeaknessSignalsForUser(env, user.id, user);
 
   await touchWeeklyMissionProgressFromQuiz(env, user, {
     bookId,
+    assignmentId: effectiveMissionAssignmentId,
     dateKey: formatDateKey(nextHistory.lastStudiedAt),
     attemptedAt: nextHistory.lastStudiedAt,
   });

@@ -1,5 +1,5 @@
 import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
-import { BookAccessScope, BookCatalogSource, BookMetadata, type EnglishLevel, type UserGrade, UserRole, WordData } from '../../types';
+import { BookAccessScope, BookCatalogSource, BookMetadata, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
@@ -252,7 +252,12 @@ export const handleUpdateWordCache = async (
   `).bind(sentence, translation, Date.now(), wordId).run();
 };
 
-export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, limitInput: unknown): Promise<WordData[]> => {
+export const handleGetDailySessionWords = async (
+  env: AppEnv,
+  user: DbUserRow,
+  limitInput: unknown,
+  taskIntent?: LearningTaskIntent,
+): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
   const visibleBookRows = await readVisibleBookRows(env, user);
   const visibleBookIds = visibleBookRows.map((row) => row.id);
@@ -335,14 +340,23 @@ export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, l
     Math.max(limit - dueRows.length, 20) * 6,
   );
   const weaknessProfile = await readWeaknessProfile(env, user.id);
+  const bookBandsById = Object.fromEntries(visibleBookRows.map((row) => [row.id, getBookProgressionIndex(toBookMetadata(row))]));
+  const targetedNewWords = typeof taskIntent?.targetBandIndex === 'number'
+    ? newRows
+      .filter((row) => {
+        const band = bookBandsById[row.book_id];
+        return band === null || band === undefined || band >= taskIntent.targetBandIndex! - 1;
+      })
+      .map(toWordData)
+    : newRows.map(toWordData);
   const rankedNewWords = rankWeaknessFocusedWords({
     uid: user.id,
-    words: newRows.map(toWordData),
+    words: targetedNewWords,
     weaknessProfile,
     grade: (user.grade as UserGrade | null) || undefined,
     level: (user.english_level as EnglishLevel | null) || undefined,
     dateKey: formatDateKey(Date.now()),
-    bookBandsById: Object.fromEntries(visibleBookRows.map((row) => [row.id, getBookProgressionIndex(toBookMetadata(row))])),
+    bookBandsById,
   });
 
   return [...dueRows.map(toWordData), ...rankedNewWords.slice(0, limit - dueRows.length)];
@@ -353,9 +367,31 @@ export const handleGetBookSession = async (
   user: DbUserRow,
   bookId: string,
   limitInput: unknown,
+  taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
   await assertBookReadAccess(env, user, bookId);
+  const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
+
+  if (selectionPolicy === 'BOOK_NEW_ONLY') {
+    const newRows = await readAll<DbWordRow>(
+      env,
+      `SELECT w.*
+       FROM words w
+       WHERE w.book_id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM learning_histories h
+           WHERE h.user_id = ? AND h.word_id = w.id
+             AND ${getMasterySourceSql('h')}
+         )
+       ORDER BY w.word_number ASC
+       LIMIT ?`,
+      bookId,
+      user.id,
+      limit,
+    );
+    return newRows.map(toWordData);
+  }
 
   const dueRows = await readAll<DbWordRow>(
     env,
@@ -373,6 +409,25 @@ export const handleGetBookSession = async (
   );
 
   const result = [...dueRows];
+  if (selectionPolicy === 'BOOK_REVIEW_ONLY' && result.length < limit) {
+    const aheadRows = await readAll<DbWordRow>(
+      env,
+      `SELECT w.*
+       FROM learning_histories h
+       JOIN words w ON w.id = h.word_id
+       WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date > ?
+         AND ${getMasterySourceSql('h')}
+       ORDER BY h.next_review_date ASC
+       LIMIT ?`,
+      user.id,
+      bookId,
+      Date.now(),
+      limit - result.length,
+    );
+    result.push(...aheadRows);
+    return result.map(toWordData);
+  }
+
   if (result.length < limit) {
     const newRows = await readAll<DbWordRow>(
       env,

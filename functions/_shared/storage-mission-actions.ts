@@ -536,17 +536,20 @@ export const touchWeeklyMissionProgressFromStudy = async (
   {
     wordId,
     bookId,
+    assignmentId,
     existingWasStudy,
     studiedAt = Date.now(),
   }: {
     wordId: string;
     bookId: string;
+    assignmentId?: string;
     existingWasStudy: boolean;
     studiedAt?: number;
   },
 ): Promise<void> => {
   const assignments = await readActiveMissionProgressRowsForStudent(env, user.id);
   for (const row of assignments) {
+    if (assignmentId && row.assignment_id !== assignmentId) continue;
     if (row.book_id && row.book_id !== bookId) continue;
     const nextNewWordIds = parseStringArray(row.new_word_ids_json);
     const nextReviewWordIds = parseStringArray(row.review_word_ids_json);
@@ -569,16 +572,19 @@ export const touchWeeklyMissionProgressFromQuiz = async (
   user: DbUserRow,
   {
     bookId,
+    assignmentId,
     dateKey,
     attemptedAt = Date.now(),
   }: {
     bookId: string;
+    assignmentId?: string;
     dateKey: string;
     attemptedAt?: number;
   },
 ): Promise<void> => {
   const assignments = await readActiveMissionProgressRowsForStudent(env, user.id);
   for (const row of assignments) {
+    if (assignmentId && row.assignment_id !== assignmentId) continue;
     if (row.book_id && row.book_id !== bookId) continue;
     const nextNewWordIds = parseStringArray(row.new_word_ids_json);
     const nextReviewWordIds = parseStringArray(row.review_word_ids_json);

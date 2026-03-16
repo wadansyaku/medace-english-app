@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { storage } from '../services/storage';
 import type {
+  LearningTaskIntent,
   QuizSessionConfig,
   UserProfile,
   WordData,
@@ -23,18 +24,27 @@ import {
   buildQuizLoadingMessage,
   createDefaultQuizConfig,
 } from '../config/quizFlow';
+import { isSmartSessionBookId } from '../shared/studySession';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
 
 interface UseQuizModeControllerParams {
   user: UserProfile;
   bookId: string;
+  taskIntent?: LearningTaskIntent | null;
 }
 
 export const useQuizModeController = ({
   user,
   bookId,
+  taskIntent,
 }: UseQuizModeControllerParams) => {
+  const toPresetQuestionCount = (value: number): QuizSessionConfig['questionCount'] => {
+    if (value <= 5) return 5;
+    if (value <= 10) return 10;
+    return 20;
+  };
+
   const [screen, setScreen] = useState<QuizScreen>('SETUP');
   const [setupConfig, setSetupConfig] = useState<QuizSessionConfig>(createDefaultQuizConfig(1, 1));
   const [activeConfig, setActiveConfig] = useState<QuizSessionConfig | null>(null);
@@ -130,6 +140,27 @@ export const useQuizModeController = ({
     resetAttemptState();
   };
 
+  const startQuizWithWords = (config: QuizSessionConfig, candidateWords: WordData[]) => {
+    const actualQuestionCount = getActualQuizQuestionCount(config.questionCount, candidateWords.length);
+    if (actualQuestionCount === 0) {
+      setActiveConfig(null);
+      setScreen('SETUP');
+      return;
+    }
+
+    const nextQuestions = generateWorksheetQuestions(
+      toWorksheetSourceWords(candidateWords),
+      config.questionMode,
+      actualQuestionCount,
+    );
+
+    setActiveConfig(config);
+    setShowExitConfirm(false);
+    resetAttemptState();
+    setQuestions(nextQuestions);
+    setScreen('RUNNING');
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -137,9 +168,18 @@ export const useQuizModeController = ({
       try {
         setLoading(true);
         setLoadingMessage(buildQuizLoadingMessage('EN_TO_JA'));
+        const autoStart = Boolean(taskIntent?.autoStart);
         const [nextWords, nextStudiedWordIds] = await Promise.all([
-          storage.getWordsByBook(bookId),
-          storage.getStudiedWordIdsByBook(user.uid, bookId).catch(() => []),
+          autoStart
+            ? (
+              isSmartSessionBookId(bookId)
+                ? storage.getDailySessionWords(user.uid, taskIntent?.limit || 10, taskIntent || undefined)
+                : storage.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined)
+            )
+            : storage.getWordsByBook(bookId),
+          isSmartSessionBookId(bookId)
+            ? Promise.resolve<string[]>([])
+            : storage.getStudiedWordIdsByBook(user.uid, bookId).catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -149,8 +189,23 @@ export const useQuizModeController = ({
 
         setAllWords(sortedWords);
         setStudiedWordIds(nextStudiedWordIds);
-        setSetupConfig(createDefaultQuizConfig(nextMin, nextMax));
-        resetToSetup();
+        const defaultConfig = createDefaultQuizConfig(nextMin, nextMax);
+        const presetConfig: QuizSessionConfig = autoStart
+          ? {
+            ...defaultConfig,
+            questionMode: taskIntent?.targetQuestionModes?.[0] || defaultConfig.questionMode,
+            questionCount: toPresetQuestionCount(
+              Math.min(taskIntent?.limit || defaultConfig.questionCount, Math.max(sortedWords.length, 1)),
+            ),
+          }
+          : defaultConfig;
+        setSetupConfig(presetConfig);
+
+        if (autoStart) {
+          startQuizWithWords(presetConfig, sortedWords);
+        } else {
+          resetToSetup();
+        }
       } catch (error) {
         console.error('Quiz Load Error', error);
         if (!cancelled) {
@@ -171,7 +226,7 @@ export const useQuizModeController = ({
     return () => {
       cancelled = true;
     };
-  }, [bookId, user.uid]);
+  }, [bookId, taskIntent, user.uid]);
 
   useEffect(() => {
     setLoadingMessage(buildQuizLoadingMessage(setupConfig.questionMode));
@@ -230,17 +285,7 @@ export const useQuizModeController = ({
       return;
     }
 
-    const nextQuestions = generateWorksheetQuestions(
-      toWorksheetSourceWords(candidateWords),
-      normalizedConfig.questionMode,
-      actualQuestionCount,
-    );
-
-    setActiveConfig(normalizedConfig);
-    setShowExitConfirm(false);
-    resetAttemptState();
-    setQuestions(nextQuestions);
-    setScreen('RUNNING');
+    startQuizWithWords(normalizedConfig, candidateWords);
   };
 
   const goToReady = () => {
@@ -264,6 +309,8 @@ export const useQuizModeController = ({
         correct,
         question.mode,
         responseTimeMs,
+        taskIntent?.missionAssignmentId,
+        taskIntent?.intentType,
       );
     } catch (error) {
       console.error('Quiz attempt save failed', error);
