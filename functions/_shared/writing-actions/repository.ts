@@ -65,7 +65,7 @@ export const readAssignmentRow = async (env: AppEnv, assignmentId: string): Prom
 
 export const readAssignmentRowsForScope = async (
   env: AppEnv,
-  organizationName: string,
+  organizationId: string,
   includeAllStudents: boolean,
   studentId: string,
 ): Promise<DbWritingAssignmentRow[]> => readAll(
@@ -84,17 +84,17 @@ export const readAssignmentRowsForScope = async (
    FROM writing_assignments a
    JOIN users instructor ON instructor.id = a.instructor_user_id
    JOIN users student ON student.id = a.student_user_id
-   WHERE a.organization_name = ?
+   WHERE a.organization_id = ?
      AND (? = 1 OR a.student_user_id = ?)
    ORDER BY a.updated_at DESC`,
-  organizationName,
+  organizationId,
   includeAllStudents ? 1 : 0,
   studentId,
 );
 
 export const readReviewQueueAssignmentRows = async (
   env: AppEnv,
-  organizationName: string,
+  organizationId: string,
   statuses: WritingAssignmentStatus[],
 ): Promise<DbWritingAssignmentRow[]> => {
   const placeholders = statuses.map(() => '?').join(', ');
@@ -107,10 +107,10 @@ export const readReviewQueueAssignmentRows = async (
      FROM writing_assignments a
      JOIN users instructor ON instructor.id = a.instructor_user_id
      JOIN users student ON student.id = a.student_user_id
-     WHERE a.organization_name = ?
+     WHERE a.organization_id = ?
        AND a.status IN (${placeholders})
      ORDER BY COALESCE(a.last_submitted_at, a.updated_at) DESC`,
-    organizationName,
+    organizationId,
     ...statuses,
   );
 };

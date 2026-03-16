@@ -1,6 +1,14 @@
 import { StudentRiskLevel, type StudentSummary } from '../types';
+import { getInstructorQueueSegment, type InstructorQueueSegment } from '../shared/retention';
 
-export type InstructorStudentFilter = 'ALL' | 'DANGER' | 'WARNING';
+export type InstructorStudentFilter = InstructorQueueSegment;
+
+const queueWeight = (student: StudentSummary, now = Date.now()): number => {
+  const segment = getInstructorQueueSegment(student, now);
+  if (segment === 'IMMEDIATE') return 0;
+  if (segment === 'WAITING') return 1;
+  return 2;
+};
 
 const riskWeight = (riskLevel: StudentRiskLevel): number => {
   if (riskLevel === StudentRiskLevel.DANGER) return 0;
@@ -16,8 +24,23 @@ const matchesStudentKeyword = (student: StudentSummary, query: string): boolean 
 };
 
 export const sortStudentsByPriority = (students: StudentSummary[]): StudentSummary[] => [...students].sort((left, right) => {
+  const queueDiff = queueWeight(left) - queueWeight(right);
+  if (queueDiff !== 0) return queueDiff;
+
+  if (left.needsFollowUpNow !== right.needsFollowUpNow) {
+    return Number(Boolean(right.needsFollowUpNow)) - Number(Boolean(left.needsFollowUpNow));
+  }
+
+  if (left.latestInterventionOutcome !== right.latestInterventionOutcome) {
+    return Number(Boolean(right.latestInterventionOutcome === 'EXPIRED')) - Number(Boolean(left.latestInterventionOutcome === 'EXPIRED'));
+  }
+
   const riskDiff = riskWeight(left.riskLevel) - riskWeight(right.riskLevel);
   if (riskDiff !== 0) return riskDiff;
+
+  const interventionDiff = (left.latestInterventionAt || 0) - (right.latestInterventionAt || 0);
+  if (queueWeight(left) === 1 && interventionDiff !== 0) return interventionDiff;
+  if (queueWeight(left) === 2 && interventionDiff !== 0) return -interventionDiff;
 
   const activeDiff = (left.lastActive || 0) - (right.lastActive || 0);
   if (activeDiff !== 0) return activeDiff;
@@ -30,8 +53,7 @@ export const filterStudentsForInstructorView = (
   filter: InstructorStudentFilter,
   query: string,
 ): StudentSummary[] => students.filter((student) => {
-  if (filter === 'DANGER' && student.riskLevel !== StudentRiskLevel.DANGER) return false;
-  if (filter === 'WARNING' && student.riskLevel === StudentRiskLevel.SAFE) return false;
+  if (getInstructorQueueSegment(student) !== filter) return false;
   return matchesStudentKeyword(student, query);
 });
 

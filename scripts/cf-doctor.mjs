@@ -29,6 +29,8 @@ const run = (command, args, options = {}) => {
   };
 };
 
+const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
+
 const parseJsonc = (source) => source
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
@@ -54,6 +56,74 @@ const parsePagesSecretNames = (output) => output
   .map((line) => line.match(/^\s*-\s([^:]+):/))
   .filter(Boolean)
   .map((match) => match[1]);
+
+const parseWranglerTableRows = (output) => output
+  .split('\n')
+  .map((line) => line.trimEnd())
+  .filter((line) => line.includes('│'))
+  .map((line) => line.split('│').map((part) => part.trim()).filter(Boolean))
+  .filter((columns) => columns.length > 1);
+
+const normalizeTableHeader = (value) => value.trim().toLowerCase();
+
+const readPagesProjectColumn = (output, projectName, columnName) => {
+  const rows = parseWranglerTableRows(output);
+  const headers = rows.find((columns) => columns.some((column) => normalizeTableHeader(column) === 'project name'));
+  if (!headers) return null;
+
+  const projectNameIndex = headers.findIndex((column) => normalizeTableHeader(column) === 'project name');
+  const targetColumnIndex = headers.findIndex((column) => normalizeTableHeader(column) === normalizeTableHeader(columnName));
+  if (projectNameIndex < 0 || targetColumnIndex < 0) return null;
+
+  const row = rows.find((columns) => columns[projectNameIndex] === projectName);
+  return row?.[targetColumnIndex] || null;
+};
+
+const getCloudflareApiCredentials = (fallbackAccountId = '') => {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN || '';
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || fallbackAccountId || '';
+  if (!apiToken || !accountId) return null;
+  return { apiToken, accountId };
+};
+
+const readErrorMessage = (payload, fallback) => {
+  if (payload?.errors?.length) {
+    return payload.errors.map((error) => error.message || JSON.stringify(error)).join('; ');
+  }
+  return fallback;
+};
+
+const fetchCloudflareApi = async (apiPath, init = {}, fallbackAccountId = '') => {
+  const credentials = getCloudflareApiCredentials(fallbackAccountId);
+  if (!credentials) {
+    throw new Error('CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID が未設定です。');
+  }
+
+  const response = await fetch(`${CLOUDFLARE_API_BASE}/accounts/${credentials.accountId}${apiPath}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${credentials.apiToken}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok || (payload && payload.success === false)) {
+    throw new Error(readErrorMessage(payload, text || `HTTP ${response.status}`));
+  }
+  return payload?.result ?? null;
+};
+
+const isPagesGitAutoDeployDisabled = (sourceConfig) => (
+  Boolean(
+    sourceConfig
+    && sourceConfig.deployments_enabled === false
+    && sourceConfig.production_deployments_enabled === false
+    && sourceConfig.preview_deployment_setting === 'none'
+  )
+);
 
 const records = [];
 const pushRecord = (status, label, detail) => {
@@ -103,6 +173,10 @@ const ghAuth = run('gh', ['auth', 'status']);
 const wranglerAuth = run('npx', ['wrangler', 'whoami']);
 const githubReady = recordCommand('GitHub auth', ghAuth, 'authenticated');
 const cloudflareReady = recordCommand('Cloudflare auth', wranglerAuth, 'authenticated');
+const detectedAccountId = ((output) => {
+  const match = output.match(/\b([a-f0-9]{32})\b/i);
+  return match?.[1] || '';
+})(wranglerAuth.stdout);
 
 if (githubReady && repoSlug) {
   const ghSecrets = run('gh', ['secret', 'list', '--repo', repoSlug]);
@@ -152,6 +226,26 @@ if (cloudflareReady) {
       `Pages project ${pagesProject}`,
       pagesProjects.stdout.includes(pagesProject) ? 'present' : 'missing'
     );
+    const gitProvider = readPagesProjectColumn(pagesProjects.stdout, pagesProject, 'Git Provider');
+    if (gitProvider?.toLowerCase() === 'yes') {
+      try {
+        const sourceConfig = await fetchCloudflareApi(`/pages/projects/${pagesProject}`, {}, detectedAccountId)
+          .then((project) => project?.source?.config || null);
+        pushRecord(
+          isPagesGitAutoDeployDisabled(sourceConfig) ? 'ok' : 'warn',
+          `Pages project ${pagesProject} Git auto-deploy`,
+          isPagesGitAutoDeployDisabled(sourceConfig)
+            ? 'Git integration remains linked, but automatic production/preview deploys are disabled'
+            : 'native Git auto-deploy is still enabled; disable Cloudflare Git auto-deploy if GitHub Actions is the canonical deploy path',
+        );
+      } catch (error) {
+        pushRecord(
+          'warn',
+          `Pages project ${pagesProject} Git integration`,
+          `Git provider is linked, but auto-deploy state could not be verified: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
     const gitMirrorProject = `${pagesProject}-git`;
     if (pagesProjects.stdout.includes(gitMirrorProject)) {
       pushRecord(

@@ -11,6 +11,7 @@ const tokyoMs = (dateTime: string): number => Date.parse(`${dateTime}+09:00`);
 describe('organization KPI aggregation', () => {
   it('does not count quiz-only activity as active or reactivated', () => {
     const series = buildOrganizationKpiSeries({
+      organizationId: 'org_demo_academy',
       organizationName: 'Steady Study Demo Academy',
       dateKeys: ['2026-03-12', '2026-03-13'],
       students: [
@@ -75,6 +76,7 @@ describe('organization KPI aggregation', () => {
     const trend = toOrganizationKpiTrendPoints(
       [
         {
+          organizationId: 'org_demo_academy',
           organizationName: 'Steady Study Demo Academy',
           snapshotDate: '2026-03-12',
           totalStudents: 0,
@@ -84,6 +86,9 @@ describe('organization KPI aggregation', () => {
           notifications: 0,
           notifiedStudents: 0,
           reactivatedStudents: 0,
+          students4PlusDaysActive: 0,
+          atRiskStudents: 0,
+          followedUpAtRiskStudents: 0,
         },
       ],
       ['2026-03-11', '2026-03-12', '2026-03-13'],
@@ -96,12 +101,46 @@ describe('organization KPI aggregation', () => {
       assignmentCoverageRate: 0,
       planCoverageRate: 0,
       reactivationRate: 0,
+      weeklyContinuityRate: 0,
+      followUpCoverageRate48h: 0,
     });
     expect(trend[1].reactivationRate).toBe(0);
     expect(trend[2]).toMatchObject({
       date: '2026-03-13',
       notifications: 0,
       reactivatedStudents: 0,
+    });
+  });
+
+  it('tracks weekly continuity and 48-hour follow-up coverage in trend points', () => {
+    const series = buildOrganizationKpiSeries({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      dateKeys: ['2026-03-13'],
+      students: [
+        { uid: 'student-1', createdAt: tokyoMs('2026-03-01T09:00:00') },
+      ],
+      plans: [],
+      currentAssignments: [],
+      assignmentEvents: [],
+      studyEvents: [
+        { studentUid: 'student-1', studiedAt: tokyoMs('2026-03-07T09:00:00'), interactionSource: 'STUDY' },
+        { studentUid: 'student-1', studiedAt: tokyoMs('2026-03-08T09:00:00'), interactionSource: 'STUDY' },
+        { studentUid: 'student-1', studiedAt: tokyoMs('2026-03-09T09:00:00'), interactionSource: 'STUDY' },
+        { studentUid: 'student-1', studiedAt: tokyoMs('2026-03-10T09:00:00'), interactionSource: 'STUDY' },
+      ],
+      notifications: [
+        { studentUid: 'student-1', createdAt: tokyoMs('2026-03-12T10:00:00') },
+      ],
+    });
+
+    const [point] = toOrganizationKpiTrendPoints(series.dailySnapshots, ['2026-03-13']);
+    expect(point).toMatchObject({
+      students4PlusDaysActive: 1,
+      atRiskStudents: 1,
+      followedUpAtRiskStudents: 1,
+      weeklyContinuityRate: 100,
+      followUpCoverageRate48h: 100,
     });
   });
 });

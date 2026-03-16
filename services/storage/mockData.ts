@@ -19,6 +19,11 @@ import {
 import { getTodayDateKey } from '../../utils/date';
 import { buildDemoEmail, getDemoDisplayName } from '../../utils/demo';
 
+export const IDB_MOCK_ORGANIZATION_IDS = {
+  DEMO_ACADEMY: 'org_demo_academy',
+  HQ: 'org_steady_study_hq',
+} as const;
+
 export const IDB_MOCK_USERS: UserProfile[] = [
   {
     uid: 'mock-student-free-001',
@@ -39,6 +44,7 @@ export const IDB_MOCK_USERS: UserProfile[] = [
     grade: UserGrade.JHS3,
     englishLevel: EnglishLevel.B1,
     subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
     organizationName: 'Steady Study Demo Academy',
     stats: { xp: 820, level: 8, currentStreak: 3, lastLoginDate: '2023-10-27' },
   },
@@ -49,6 +55,7 @@ export const IDB_MOCK_USERS: UserProfile[] = [
     organizationRole: OrganizationRole.INSTRUCTOR,
     email: 'oak@medace.com',
     subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
     organizationName: 'Steady Study Demo Academy',
   },
   {
@@ -58,6 +65,7 @@ export const IDB_MOCK_USERS: UserProfile[] = [
     organizationRole: OrganizationRole.GROUP_ADMIN,
     email: 'manager@medace-demo.jp',
     subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
     organizationName: 'Steady Study Demo Academy',
   },
   {
@@ -66,6 +74,7 @@ export const IDB_MOCK_USERS: UserProfile[] = [
     role: UserRole.ADMIN,
     email: 'admin@medace.com',
     subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    organizationId: IDB_MOCK_ORGANIZATION_IDS.HQ,
     organizationName: 'Steady Study HQ',
   },
 ];
@@ -147,6 +156,12 @@ export const createEphemeralDemoUser = (role: UserRole, organizationRole?: Organ
       ? 'Steady Study HQ'
       : organizationRole
         ? 'Steady Study Demo Academy'
+        : undefined,
+  organizationId:
+    role === UserRole.ADMIN
+      ? IDB_MOCK_ORGANIZATION_IDS.HQ
+      : organizationRole
+        ? IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY
         : undefined,
   needsOnboarding: role === UserRole.STUDENT,
   stats: {

@@ -28,6 +28,7 @@ export interface DbWritingTemplateRow {
 
 export interface DbWritingAssignmentLikeRow {
   id: string;
+  organization_id: string | null;
   organization_name: string;
   instructor_user_id: string;
   student_user_id: string;
@@ -230,6 +231,7 @@ export const toAssignment = (
   } = {},
 ): WritingAssignment => ({
   id: row.id,
+  organizationId: row.organization_id || '',
   organizationName: row.organization_name,
   instructorUid: row.instructor_user_id,
   instructorName: row.instructor_name,

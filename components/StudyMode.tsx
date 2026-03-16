@@ -19,6 +19,8 @@ import {
 import { EnglishLevel, type UserProfile, type WordData } from '../types';
 import { storage } from '../services/storage';
 import { type GeneratedContext, generateGeminiSentence, generateWordImage } from '../services/gemini';
+import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
+import { buildWeaknessSessionSummary } from '../shared/weakness';
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import MobileSheetDialog from './mobile/MobileSheetDialog';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
@@ -67,6 +69,7 @@ const getSupports3D = (): boolean => {
 const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionComplete }) => {
   const isMobileViewport = useIsMobileViewport();
   const [queue, setQueue] = useState<WordData[]>([]);
+  const [sessionWordCount, setSessionWordCount] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -97,6 +100,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
   const [leveledUp, setLeveledUp] = useState(false);
   const [updatedUser, setUpdatedUser] = useState<UserProfile | null>(null);
   const [reviewWords, setReviewWords] = useState<WordData[]>([]);
+  const [weaknessSummary, setWeaknessSummary] = useState(buildWeaknessSessionSummary(null));
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
@@ -161,8 +165,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     const loadWords = async () => {
       try {
         let data: WordData[] = [];
-        if (bookId === 'smart-session') {
-          data = await storage.getDailySessionWords(user.uid, 20);
+        const smartSession = getSmartSessionConfig(bookId);
+        if (smartSession) {
+          data = await storage.getDailySessionWords(user.uid, smartSession.limit);
           setIsBookOwner(false);
         } else {
           data = await storage.getBookSession(user.uid, bookId, 10);
@@ -180,6 +185,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           }
         }
         setQueue(data);
+        setSessionWordCount(data.length);
       } catch (err) {
         console.error(err);
       } finally {
@@ -300,6 +306,12 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
     setIsEditing(false);
   };
 
+  const closeBack = () => {
+    if (!isEditing && !isAdvancingCard) {
+      setIsFlipped(false);
+    }
+  };
+
   const handleExit = () => {
     onSessionComplete(updatedUser || user);
   };
@@ -356,7 +368,12 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           : [...previous, currentWord]
       ));
     }
-    if (currentIndex < queue.length - 1) {
+    const shouldRequeueInSession = rating === 0;
+    if (shouldRequeueInSession) {
+      setQueue((previous) => [...previous, currentWord]);
+    }
+
+    if (currentIndex < queue.length - 1 || shouldRequeueInSession) {
       setIsAdvancingCard(true);
       window.setTimeout(() => {
         resetCard();
@@ -365,12 +382,18 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
         resetStudyScrollPosition();
       }, supports3D ? 180 : 0);
     } else {
-      const baseXP = queue.length * 10;
+      const baseXP = sessionWordCount * 10;
       const currentStreak = user.stats?.currentStreak || 0;
       const bonusMultiplier = Math.min(currentStreak, 10) * 0.1;
       const bonusXP = Math.round(baseXP * bonusMultiplier);
       const totalXP = baseXP + bonusXP;
       const result = await storage.addXP(user, totalXP);
+      try {
+        const snapshot = await storage.getDashboardSnapshot(user.uid);
+        setWeaknessSummary(buildWeaknessSessionSummary(snapshot.weaknessProfile));
+      } catch {
+        setWeaknessSummary(buildWeaknessSessionSummary(null));
+      }
       setEarnedXP(baseXP);
       setStreakBonusXP(bonusXP);
       setLeveledUp(result.leveledUp);
@@ -441,7 +464,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                 </div>
                 <h2 className="text-[1.7rem] font-black tracking-tight text-slate-950">クエスト完了！</h2>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  {queue.length}語を進めました。次に直すところだけ見れば十分です。
+                  {sessionWordCount}語を進めました。次に直すところだけ見れば十分です。
                 </p>
                 <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
                   +{earnedXP + streakBonusXP} XP
@@ -462,6 +485,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                   <div className="mt-1 text-sm leading-relaxed text-slate-600">
                     最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。
                   </div>
+                </div>
+                <div className="rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                  <div className="text-sm font-bold text-slate-900">今日の弱点フォーカス</div>
+                  <div className="mt-1 text-sm leading-relaxed text-slate-600">{weaknessSummary}</div>
                 </div>
               </div>
             </section>
@@ -511,7 +538,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
               <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
             </div>
             <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
-            <p className="mt-2 text-sm text-slate-500">{queue.length}語を進めました。次に直すところだけ見れば十分です。</p>
+            <p className="mt-2 text-sm text-slate-500">{sessionWordCount}語を進めました。次に直すところだけ見れば十分です。</p>
             <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
               +{earnedXP + streakBonusXP} XP {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
             </div>
@@ -549,6 +576,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                 <div className="rounded-2xl bg-white px-4 py-4">
                   <div className="font-bold text-slate-900">明日の入り方</div>
                   <div className="mt-1 leading-relaxed">最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。</div>
+                </div>
+                <div className="rounded-2xl bg-white px-4 py-4">
+                  <div className="font-bold text-slate-900">今日の弱点フォーカス</div>
+                  <div className="mt-1 leading-relaxed">{weaknessSummary}</div>
                 </div>
               </div>
             </div>
@@ -596,6 +627,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
       data-testid="study-card-back"
       aria-hidden={!isFlipped}
       className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-white shadow-xl sm:px-6 sm:py-5"
+      onClick={closeBack}
     >
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-start justify-between gap-3">
@@ -689,7 +721,13 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                     {showTranslation ? (
                       <p className="animate-in fade-in border-t border-white/10 pt-2 text-xs text-white/70 sm:text-sm">{aiContext.japanese}</p>
                     ) : (
-                      <button onClick={() => setShowTranslation(true)} className="mx-auto flex items-center justify-center gap-1 text-xs text-white/65 transition-colors hover:text-white">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setShowTranslation(true);
+                        }}
+                        className="mx-auto flex items-center justify-center gap-1 text-xs text-white/65 transition-colors hover:text-white"
+                      >
                         <Languages className="h-3 w-3" /> 訳を表示
                       </button>
                     )}
@@ -788,9 +826,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
-          {bookId === 'smart-session' && (
+          {isSmartSessionBookId(bookId) && (
             <span className="flex items-center gap-1 rounded bg-medace-100 px-2 py-1 text-xs font-bold text-medace-700">
-              <Zap className="h-3 w-3" /> デイリークエスト
+              <Zap className="h-3 w-3" /> {getSmartSessionConfig(bookId)?.badgeLabel}
             </span>
           )}
           <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">
@@ -832,7 +870,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, onBack, onSessionCo
                 key={option.id}
                 type="button"
                 data-testid={`study-rate-${option.id}`}
-                onClick={() => handleRating(option.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleRating(option.id);
+                }}
                 disabled={isAdvancingCard}
                 className={`flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 disabled:opacity-60 ${option.className}`}
               >

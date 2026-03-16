@@ -1,6 +1,15 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { GRADE_LABELS, UserGrade, type UserProfile } from '../types';
+import {
+  GRADE_LABELS,
+  InterventionKind,
+  MissionNextActionType,
+  MissionProgressEventType,
+  RECOMMENDED_ACTION_TYPE_LABELS,
+  RecommendedActionType,
+  UserGrade,
+  type UserProfile,
+} from '../types';
 import Onboarding from './Onboarding';
 import StudyCompanion from './StudyCompanion';
 import MotivationBoard from './MotivationBoard';
@@ -10,9 +19,12 @@ import DashboardCoachSection from './dashboard/DashboardCoachSection';
 import DashboardDeleteBookDialog from './dashboard/DashboardDeleteBookDialog';
 import DashboardHeroSection from './dashboard/DashboardHeroSection';
 import DashboardLibrarySection from './dashboard/DashboardLibrarySection';
+import DashboardMobileQuickNav from './dashboard/DashboardMobileQuickNav';
+import DashboardMissionSection from './dashboard/DashboardMissionSection';
 import DashboardPlanSection from './dashboard/DashboardPlanSection';
 import DashboardProgressSection from './dashboard/DashboardProgressSection';
 import DashboardSettingsModal from './dashboard/DashboardSettingsModal';
+import DashboardWeaknessSection from './dashboard/DashboardWeaknessSection';
 import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
 import PlanEditorModal from './dashboard/PlanEditorModal';
 import WritingStudentSection from './WritingStudentSection';
@@ -23,6 +35,7 @@ import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
 import { storage } from '../services/storage';
+import { WEAKNESS_FOCUS_SESSION_ID } from '../shared/studySession';
 
 interface DashboardProps {
   user: UserProfile;
@@ -124,6 +137,77 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
     handleSaveProfile,
   } = controller;
 
+  const heroSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const weaknessSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const missionSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const writingSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const coachSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const planSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const librarySectionRef = React.useRef<HTMLDivElement | null>(null);
+  const [activeQuickNavId, setActiveQuickNavId] = React.useState('today');
+  const coachActionType = viewModel.latestCoachNotification
+    ? (
+        viewModel.latestCoachNotification.recommendedActionType
+        || (
+          viewModel.latestCoachNotification.interventionKind === InterventionKind.PLAN_NUDGE
+            ? RecommendedActionType.OPEN_PLAN
+            : viewModel.learningPlan
+              ? RecommendedActionType.OPEN_PLAN
+              : RecommendedActionType.START_REVIEW
+        )
+      )
+    : null;
+  const primaryMission = viewModel.primaryMission;
+  const mobileAnchorStyle = isStudentMobileShell
+    ? { scrollMarginTop: 'calc(5.5rem + var(--safe-top))' }
+    : undefined;
+  const taskQuickNavTarget = React.useMemo(() => (
+    primaryMission
+      ? { id: 'task', label: '課題', kind: 'mission' as const, ref: missionSectionRef }
+      : viewModel.canShowWritingSection
+        ? { id: 'task', label: '作文', kind: 'writing' as const, ref: writingSectionRef }
+        : viewModel.latestCoachNotification
+          ? { id: 'task', label: '講師', kind: 'coach' as const, ref: coachSectionRef }
+          : { id: 'task', label: 'プラン', kind: 'plan' as const, ref: planSectionRef }
+  ), [primaryMission, viewModel.canShowWritingSection, viewModel.latestCoachNotification]);
+
+  const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  const mobileQuickNavItems = React.useMemo(() => ([
+    { id: 'today', label: '今日', kind: 'today' as const, ref: heroSectionRef },
+    { id: 'weakness', label: '苦手', kind: 'weakness' as const, ref: weaknessSectionRef },
+    taskQuickNavTarget,
+    { id: 'library', label: '教材', kind: 'library' as const, ref: librarySectionRef },
+  ]), [taskQuickNavTarget]);
+
+  React.useEffect(() => {
+    if (!isStudentMobileShell || typeof window === 'undefined') return undefined;
+
+    const updateActiveQuickNav = () => {
+      const threshold = 132;
+      let nextActiveId = mobileQuickNavItems[0]?.id || 'today';
+
+      mobileQuickNavItems.forEach((item) => {
+        const top = item.ref.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+        if (top <= threshold) {
+          nextActiveId = item.id;
+        }
+      });
+
+      setActiveQuickNavId((previous) => (previous === nextActiveId ? previous : nextActiveId));
+    };
+
+    updateActiveQuickNav();
+    window.addEventListener('scroll', updateActiveQuickNav, { passive: true });
+    window.addEventListener('resize', updateActiveQuickNav);
+    return () => {
+      window.removeEventListener('scroll', updateActiveQuickNav);
+      window.removeEventListener('resize', updateActiveQuickNav);
+    };
+  }, [isStudentMobileShell, mobileQuickNavItems]);
+
   if (showOnboarding) {
     return (
       <Onboarding
@@ -154,11 +238,39 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
 
   const canUseSelectedCreateMode = createMode === 'TEXT' ? viewModel.canCreateFromText : viewModel.canCreateFromFile;
 
+  const handlePrimaryMissionAction = async () => {
+    if (primaryMission?.assignmentId) {
+      try {
+        await storage.updateMissionProgress(primaryMission.assignmentId, MissionProgressEventType.OPENED);
+        await refreshDashboard();
+      } catch (missionError) {
+        console.error(missionError);
+      }
+    }
+
+    if (primaryMission?.nextActionType === MissionNextActionType.OPEN_PLAN) {
+      setShowPlanEditModal(true);
+      return;
+    }
+    if (primaryMission?.nextActionType === MissionNextActionType.OPEN_WRITING) {
+      const writingSection = document.querySelector('[data-testid="writing-student-section"]');
+      if (writingSection instanceof HTMLElement) {
+        writingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+    if (!viewModel.hasStudyBooks) {
+      setShowCreateModal(true);
+      return;
+    }
+    onSelectBook('smart-session', 'study');
+  };
+
   return (
     <div
       data-testid="student-dashboard"
       className={`relative flex flex-col animate-in fade-in duration-500 md:gap-8 md:pb-20 ${
-        isStudentMobileShell ? 'gap-4 pb-20' : 'gap-5 pb-24'
+        isStudentMobileShell ? 'gap-4 pb-28' : 'gap-5 pb-24'
       }`}
     >
       {pageNotice && (
@@ -255,7 +367,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         onCreate={handleCreatePhrasebook}
       />
 
-      <div className="order-1">
+      <div
+        ref={heroSectionRef}
+        data-testid="dashboard-hero-section"
+        className="order-1"
+        style={mobileAnchorStyle}
+      >
         <DashboardHeroSection
           grade={user.grade || UserGrade.ADULT}
           englishLevel={user.englishLevel}
@@ -287,23 +404,88 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
+      <div
+        ref={weaknessSectionRef}
+        data-testid="dashboard-weakness-anchor"
+        className="order-2 md:order-2"
+        style={mobileAnchorStyle}
+      >
+        <DashboardWeaknessSection
+          weaknessProfile={viewModel.weaknessProfile}
+          onStartFocusQuest={() => {
+            if (viewModel.hasStudyBooks) {
+              onSelectBook(WEAKNESS_FOCUS_SESSION_ID, 'study');
+              return;
+            }
+            setShowCreateModal(true);
+          }}
+          onOpenPlan={() => setShowPlanEditModal(true)}
+        />
+      </div>
+
+      {primaryMission && (
+        <div
+          ref={missionSectionRef}
+          data-testid="dashboard-mission-anchor"
+          className="order-3 md:order-3"
+          style={mobileAnchorStyle}
+        >
+          <DashboardMissionSection
+            mission={primaryMission}
+            isCompact={isStudentMobileShell}
+            onPrimaryAction={handlePrimaryMissionAction}
+          />
+        </div>
+      )}
+
       {viewModel.canShowWritingSection && (
-        <div className="order-2 md:order-6">
+        <div
+          ref={writingSectionRef}
+          data-testid="dashboard-writing-anchor"
+          className="order-4 md:order-6"
+          style={mobileAnchorStyle}
+        >
           <WritingStudentSection user={user} />
         </div>
       )}
 
       {viewModel.latestCoachNotification && (
-        <div className="order-3 md:order-2">
+        <div
+          ref={coachSectionRef}
+          data-testid="dashboard-coach-anchor"
+          className="order-5 md:order-4"
+          style={mobileAnchorStyle}
+        >
           <DashboardCoachSection
             latestNotification={viewModel.latestCoachNotification}
             notifications={viewModel.coachNotifications}
             isCompact={isStudentMobileShell}
+            primaryActionLabel={primaryMission
+              ? primaryMission.nextActionLabel
+              : coachActionType
+                ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
+                : null}
+            onPrimaryAction={primaryMission
+              ? handlePrimaryMissionAction
+              : coachActionType
+                ? () => {
+                    if (coachActionType === RecommendedActionType.OPEN_PLAN) {
+                      setShowPlanEditModal(true);
+                      return;
+                    }
+                    onSelectBook('smart-session', 'study');
+                  }
+                : null}
           />
         </div>
       )}
 
-      <div className="order-4 md:order-3">
+      <div
+        ref={planSectionRef}
+        data-testid="dashboard-plan-anchor"
+        className="order-5 md:order-4"
+        style={mobileAnchorStyle}
+      >
         <DashboardPlanSection
           learningPlan={viewModel.learningPlan}
           learningPreference={viewModel.learningPreference}
@@ -319,12 +501,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
-      <div className="order-5 md:order-4">
+      <div className="order-6 md:order-5">
         <DashboardAnnouncementSection feed={announcementFeed.feed} />
       </div>
 
       {viewModel.isGameMode && viewModel.hasStudyBooks && (
-        <div className="order-6 md:order-5">
+        <div className="order-7 md:order-7">
           <StudyCompanion
             user={user}
             dueCount={viewModel.dueCount}
@@ -338,7 +520,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         </div>
       )}
 
-      <div className="order-7 md:order-11">
+      <div
+        ref={librarySectionRef}
+        data-testid="dashboard-library-section"
+        className="order-8 md:order-11"
+        style={mobileAnchorStyle}
+      >
         <DashboardLibrarySection
           books={viewModel.books}
           myBooks={viewModel.myBooks}
@@ -353,7 +540,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
         />
       </div>
 
-      <div className="order-8 md:order-10">
+      <div className="order-9 md:order-10">
         <DashboardProgressSection
           open={showProgressDetails}
           activityLogs={viewModel.activityLogs}
@@ -374,13 +561,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
       </div>
 
       {viewModel.motivationSnapshot && (
-        <div className="order-9 md:order-6">
+        <div className="order-10 md:order-8">
           <MotivationBoard snapshot={viewModel.motivationSnapshot} isCompact={isStudentMobileShell} />
         </div>
       )}
 
       {viewModel.canShowAccountDetails && (
-        <div className="order-10 md:order-9">
+        <div className="order-11 md:order-9">
           <DashboardAccountSection
             open={showAccountDetails}
             user={user}
@@ -400,6 +587,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onUserUpdate 
             onToggle={() => setShowAccountDetails((previous) => !previous)}
           />
         </div>
+      )}
+
+      {isStudentMobileShell && (
+        <DashboardMobileQuickNav
+          items={mobileQuickNavItems.map((item) => ({
+            id: item.id,
+            label: item.label,
+            kind: item.kind,
+            active: activeQuickNavId === item.id,
+            onClick: () => scrollToSection(item.ref),
+          }))}
+        />
       )}
     </div>
   );

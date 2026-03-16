@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Verify D1 migrations locally
         run: npm run db:migrate:verify
 
@@ -55,6 +58,9 @@ jobs:
 
       - name: API integration tests
         run: npm run test:api
+
+      - name: Browser smoke tests
+        run: npm run test:smoke
 
       - name: Verify GitHub and Cloudflare configuration
         env:
@@ -132,7 +138,8 @@ jobs:
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: typecheck + unit tests + API integration tests + cf:doctor"
+            echo "- Verification: typecheck + unit tests + API integration tests + browser smoke + cf:doctor"
+            echo "- Smoke: \`passed\`"
             echo "- Preview Secrets: \`${{ steps.preview-secrets.outputs.names }}\`"
             echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"
             echo "- Missing Optional Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-optional'] }}\`"
@@ -167,10 +174,11 @@ jobs:
               `- Pages Project: \`${process.env.CF_PAGES_PROJECT}\``,
               `- D1 Database: \`${process.env.CF_D1_DATABASE}\``,
               `- Writing AI Mode: \`${process.env.WRITING_AI_MODE}\``,
+              '- Smoke: `passed`',
               `- Preview Secrets: \`${process.env.PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Required Preview Secrets: \`${process.env.MISSING_REQUIRED_PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Optional Preview Secrets: \`${process.env.MISSING_OPTIONAL_PREVIEW_SECRETS || '(none)'}\``,
-              '- Verification: typecheck + unit tests + API integration tests + cf:doctor',
+              '- Verification: typecheck + unit tests + API integration tests + browser smoke + cf:doctor',
               '- Note: preview deploys do not run remote D1 migrations.',
             ].join('\n');
 

@@ -1,17 +1,25 @@
 import React from 'react';
-import { MessageSquareText } from 'lucide-react';
-import type { InstructorNotification } from '../../types';
+import { ArrowRight, MessageSquareText } from 'lucide-react';
+import {
+  INTERVENTION_KIND_LABELS,
+  INTERVENTION_OUTCOME_LABELS,
+  type InstructorNotification,
+} from '../../types';
 
 export interface DashboardCoachSectionProps {
   latestNotification: InstructorNotification;
   notifications: InstructorNotification[];
   isCompact?: boolean;
+  primaryActionLabel?: string | null;
+  onPrimaryAction?: (() => void) | null;
 }
 
 const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
   latestNotification,
   notifications,
   isCompact = false,
+  primaryActionLabel,
+  onPrimaryAction,
 }) => {
   const history = notifications.slice(1, 4);
 
@@ -43,7 +51,28 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
               {latestNotification.usedAi ? 'AI下書き' : '手動'}
             </div>
           </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600">
+              {INTERVENTION_KIND_LABELS[latestNotification.interventionKind]}
+            </span>
+            {latestNotification.interventionOutcome && (
+              <span className="rounded-full border border-medace-100 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
+                {INTERVENTION_OUTCOME_LABELS[latestNotification.interventionOutcome]}
+              </span>
+            )}
+          </div>
           <p className="mt-3 text-sm leading-relaxed text-slate-700">{latestNotification.message}</p>
+          {primaryActionLabel && onPrimaryAction && (
+            <button
+              type="button"
+              data-testid="coach-follow-up-cta"
+              onClick={onPrimaryAction}
+              className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800"
+            >
+              {primaryActionLabel}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
           <div className="mt-4 text-xs text-slate-400">
             {new Date(latestNotification.createdAt).toLocaleString('ja-JP')}
           </div>

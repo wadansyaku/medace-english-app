@@ -1,5 +1,6 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
 import { buildMasteryDistribution } from '../../shared/learningHistory';
+import { toPrimaryMissionSnapshot } from '../../shared/missions';
 import {
   AccountOverview,
   AdminAiActionSummary,
@@ -13,19 +14,24 @@ import {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
+  InterventionKind,
   LeaderboardEntry,
   MasteryDistribution,
   MotivationScopeStats,
   MotivationSnapshot,
   PublicMotivationSnapshot,
+  RecommendedActionType,
   StudentRiskLevel,
   SubscriptionPlan,
   UserRole,
 } from '../../types';
 import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
+import { readActiveOrganizationContextForUser } from './organization-memberships';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
+import { buildSuggestedPrimaryMission, readMissionAssignmentsByStudent } from './storage-mission-actions';
 import { handleGetAllStudentsProgress, handleGetCoachNotifications } from './storage-organization-actions';
+import { readWeaknessProfile } from './weakness-actions';
 import type { AppEnv, DbUserRow } from './types';
 import {
   canAccessOfficialBook,
@@ -220,6 +226,8 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
       trigger_reason: string;
       delivery_channel: 'IN_APP';
       used_ai: number;
+      intervention_kind: string | null;
+      recommended_action_type: string | null;
       created_at: number;
     }>(
       env,
@@ -233,6 +241,8 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
          n.trigger_reason,
          n.delivery_channel,
          n.used_ai,
+         n.intervention_kind,
+         n.recommended_action_type,
          n.created_at
        FROM instructor_notifications n
        JOIN users s ON s.id = n.student_user_id
@@ -353,6 +363,8 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     triggerReason: row.trigger_reason,
     deliveryChannel: row.delivery_channel,
     usedAi: Boolean(row.used_ai),
+    interventionKind: (row.intervention_kind as InterventionKind | null) || InterventionKind.MANUAL_OTHER,
+    recommendedActionType: (row.recommended_action_type as RecommendedActionType | null) || undefined,
     createdAt: row.created_at,
   }));
 
@@ -484,11 +496,12 @@ export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Pro
 };
 
 export const handleGetAccountOverview = async (env: AppEnv, user: DbUserRow): Promise<AccountOverview> => {
-  const plan = getSubscriptionPolicy(getUserSubscriptionPlan(user));
+  const activeOrganizationContext = await readActiveOrganizationContextForUser(env, user.id);
+  const plan = getSubscriptionPolicy(activeOrganizationContext?.subscriptionPlan || getUserSubscriptionPlan(user));
   return {
     subscriptionPlan: plan.plan,
-    organizationRole: getUserOrganizationRole(user),
-    organizationName: user.organization_name || undefined,
+    organizationRole: activeOrganizationContext?.organizationRole || getUserOrganizationRole(user),
+    organizationName: activeOrganizationContext?.organizationName || user.organization_name || undefined,
     priceLabel: plan.priceLabel,
     pricingNote: plan.pricingNote,
     audienceLabel: plan.audienceLabel,
@@ -535,7 +548,8 @@ export const handleGetMasteryDistribution = async (env: AppEnv, userId: string):
 };
 
 export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow): Promise<MotivationSnapshot> => {
-  const [personalTotals, globalTotals, globalRegisteredRow] = await Promise.all([
+  const [activeOrganizationContext, personalTotals, globalTotals, globalRegisteredRow] = await Promise.all([
+    readActiveOrganizationContextForUser(env, user.id),
     readMotivationTotals(
       env,
       `SELECT
@@ -574,7 +588,7 @@ export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow):
     ),
   ];
 
-  if (user.organization_name) {
+  if (activeOrganizationContext) {
     const [groupTotals, groupRegisteredRow] = await Promise.all([
       readMotivationTotals(
         env,
@@ -584,15 +598,23 @@ export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow):
            COALESCE(SUM(h.total_response_time_ms), 0) AS total_response_time_ms
          FROM learning_histories h
          JOIN users u ON u.id = h.user_id
-         WHERE u.role = ? AND u.organization_name = ?`,
+         JOIN organization_memberships m
+           ON m.user_id = u.id
+          AND m.status = 'ACTIVE'
+         WHERE u.role = ? AND m.organization_id = ?`,
         UserRole.STUDENT,
-        user.organization_name,
+        activeOrganizationContext.organizationId,
       ),
       readFirst<{ count: number }>(
         env,
-        'SELECT COUNT(*) AS count FROM users WHERE role = ? AND organization_name = ?',
+        `SELECT COUNT(*) AS count
+         FROM users u
+         JOIN organization_memberships m
+           ON m.user_id = u.id
+          AND m.status = 'ACTIVE'
+         WHERE u.role = ? AND m.organization_id = ?`,
         UserRole.STUDENT,
-        user.organization_name,
+        activeOrganizationContext.organizationId,
       ),
     ]);
 
@@ -600,7 +622,7 @@ export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow):
       createMotivationScope(
         'GROUP',
         'グループ内',
-        `${user.organization_name} の学習者全体です。`,
+        `${activeOrganizationContext.organizationName || '所属組織'} の学習者全体です。`,
         groupTotals,
         Math.max(1, Number(groupRegisteredRow?.count || 0)),
       ),
@@ -694,11 +716,12 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
   officialBooks.sort((left, right) => (left.isPriority === right.isPriority ? left.title.localeCompare(right.title) : left.isPriority ? -1 : 1));
   myBooks.sort((left, right) => right.id.localeCompare(left.id));
 
-  const [progressResults, dueCount, learningPlan, learningPreference, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview, commercialRequests] = await Promise.all([
+  const [progressResults, dueCount, learningPlan, learningPreference, weaknessProfile, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview, commercialRequests, missionAssignments] = await Promise.all([
     Promise.all([...officialBooks, ...myBooks].map((book) => getBookProgress(env, user.id, book.id))),
     getVisibleDueCount(env, user),
     handleGetLearningPlan(env, user),
     handleGetLearningPreference(env, user),
+    readWeaknessProfile(env, user.id),
     handleGetLeaderboard(env, user.id),
     handleGetMasteryDistribution(env, user.id),
     handleGetActivityLogs(env, user.id),
@@ -706,12 +729,54 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     handleGetCoachNotifications(env, user.id),
     handleGetAccountOverview(env, user),
     handleGetCommercialRequestStatus(env, user),
+    user.role === UserRole.STUDENT
+      ? readMissionAssignmentsByStudent(env, [user.id])
+      : Promise.resolve(new Map()),
   ]);
 
   const progressMap: Record<string, BookProgress> = {};
   progressResults.forEach((progress) => {
     progressMap[progress.bookId] = progress;
   });
+
+  const assignedMission = missionAssignments.get(user.id);
+  const primaryMission = assignedMission
+    ? toPrimaryMissionSnapshot({
+        assignmentId: assignedMission.id,
+        track: assignedMission.mission.learningTrack,
+        title: assignedMission.mission.title,
+        rationale: assignedMission.mission.rationale,
+        dueAt: assignedMission.mission.dueAt,
+        sourceBookId: assignedMission.mission.bookId,
+        sourceBookTitle: assignedMission.mission.bookTitle,
+        writingAssignmentId: assignedMission.mission.writingAssignmentId,
+        writingPromptTitle: assignedMission.mission.writingPromptTitle,
+        isSuggested: false,
+        progress: assignedMission.progress,
+      })
+    : (user.role === UserRole.STUDENT
+      ? buildSuggestedPrimaryMission({
+          user,
+          books: allBooks,
+          learningPlan: learningPlan
+            ? {
+                dailyWordGoal: learningPlan.dailyWordGoal,
+                selectedBookIds: learningPlan.selectedBookIds,
+              }
+            : null,
+          learningPreference: learningPreference
+            ? {
+                targetExam: learningPreference.targetExam,
+                targetScore: learningPreference.targetScore,
+                weeklyStudyDays: learningPreference.weeklyStudyDays,
+                dailyStudyMinutes: learningPreference.dailyStudyMinutes,
+                weakSkillFocus: learningPreference.weakSkillFocus,
+                examDate: learningPreference.examDate,
+                intensity: learningPreference.intensity,
+              }
+            : null,
+        })
+      : null);
 
   return {
     dueCount,
@@ -720,11 +785,13 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     progressMap,
     learningPlan,
     learningPreference,
+    weaknessProfile,
     leaderboard,
     masteryDist,
     activityLogs,
     motivationSnapshot,
     coachNotifications,
+    primaryMission,
     accountOverview,
     commercialRequests,
   };

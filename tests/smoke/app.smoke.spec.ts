@@ -65,6 +65,49 @@ const seedPhrasebook = async (page: Page, title: string) => page.evaluate(async 
   return response.json();
 }, title);
 
+const seedLeveledPhrasebooks = async (
+  page: Page,
+  options?: {
+    levels?: number[];
+    wordsPerLevel?: number;
+  },
+) => page.evaluate(async ({ levels, wordsPerLevel }) => {
+  const targetLevels = Array.isArray(levels) && levels.length > 0 ? levels : [1, 2, 3, 4];
+  const count = Number.isFinite(wordsPerLevel) && Number(wordsPerLevel) > 0 ? Number(wordsPerLevel) : 10;
+  const rows = targetLevels.flatMap((level) => Array.from({ length: count }, (_, index) => ({
+    bookName: `レベル${level}`,
+    number: index + 1,
+    word: `level${level}_word_${index + 1}`,
+    definition: `レベル${level}の意味${index + 1}`,
+  })));
+
+  const response = await fetch('/api/storage', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'batchImportWords',
+      payload: {
+        defaultBookName: 'レベル教材',
+        source: {
+          kind: 'rows',
+          rows,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`batchImportWords failed with status ${response.status}`);
+  }
+
+  return response.json();
+}, {
+  levels: options?.levels ?? [1, 2, 3, 4],
+  wordsPerLevel: options?.wordsPerLevel ?? 10,
+});
+
 const getLatestWritingAssignmentForStudentUid = async (
   page: Page,
   scope: 'all' | 'mine',
@@ -136,8 +179,43 @@ const getCurrentSessionUser = async (page: Page) => page.evaluate(async () => {
   if (!response.ok) {
     throw new Error(`session fetch failed with status ${response.status}`);
   }
-  return response.json() as Promise<{ uid: string; displayName: string; role: string; organizationRole?: string } | null>;
+  return response.json() as Promise<{
+    uid: string;
+    displayName: string;
+    role: string;
+    organizationId?: string;
+    organizationName?: string;
+    organizationRole?: string;
+  } | null>;
 });
+
+const updateSessionProfile = async (page: Page, user: { grade?: string; englishLevel?: string; studyMode?: string }) => page.evaluate(async (nextUser) => {
+  const response = await fetch('/api/profile', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user: nextUser }),
+  });
+  if (!response.ok) {
+    throw new Error(`profile update failed with status ${response.status}`);
+  }
+  return response.json();
+}, user);
+
+const getBookBandIndex = (title?: string) => {
+  if (!title) return null;
+  const normalized = title.replace(/\s+/g, '');
+  const levelMatch = normalized.match(/レベル([1-6])/);
+  if (levelMatch) return Number(levelMatch[1]);
+  if (normalized.includes('中1')) return 1;
+  if (normalized.includes('中2')) return 2;
+  if (normalized.includes('中3')) return 3;
+  if (normalized.includes('高1')) return 4;
+  if (normalized.includes('高2')) return 5;
+  if (normalized.includes('高3')) return 6;
+  return null;
+};
 
 const openBusinessPreview = async (page: Page) => {
   await page.goto('/');
@@ -187,17 +265,48 @@ const completeSeededStudySession = async (page: Page, bookId: string) => {
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 };
 
+const completeCoachCtaStudySession = async (page: Page) => {
+  await page.getByTestId('coach-follow-up-cta').click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
+  }
+
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+};
+
+const completeMissionCtaStudySession = async (page: Page) => {
+  await page.getByTestId('dashboard-mission-primary-cta').click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
+  }
+
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+};
+
 const answerSeededQuizQuestion = async (page: Page, correct = true) => {
   const promptText = await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizQuestionCard).innerText();
   const correctAnswer = promptText.includes('triage') ? 'トリアージ' : '安定させる';
+  const runningView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
 
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizShowOptions).click();
   if (correct) {
-    await page.getByRole('button', { name: correctAnswer }).click();
+    await runningView.getByRole('button', { name: correctAnswer, exact: true }).click();
     return;
   }
 
-  const optionLabels = await page.locator(`[data-testid="${MOBILE_FLOW_TEST_IDS.quizRunningView}"] button`).allTextContents();
+  const optionLabels = await runningView.locator('button').allTextContents();
   const wrongAnswer = optionLabels
     .map((label) => label.trim())
     .find((label) => label && label !== correctAnswer);
@@ -334,25 +443,105 @@ test('group admin can open the organization dashboard and update an assignment',
   await expect(page.getByTestId('assignment-history-section')).toContainText('変更者');
 });
 
-test('instructor can keep and send a fallback follow-up draft after an AI attempt', async ({ page }) => {
-  await openBusinessPreview(page);
-  await page.getByTestId('demo-login-instructor').click();
+test('group admin can open settings and organization rename survives reload across business roles', async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const instructorContext = await browser.newContext();
+  const studentContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const adminPage = await adminContext.newPage();
+  const instructorPage = await instructorContext.newPage();
+  const studentPage = await studentContext.newPage();
+  const renamedOrganization = 'Smoke Rename Academy';
 
-  await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
-  await page.getByTestId('workspace-tab-students').click();
-  await page.locator('[data-testid^="send-notification-"]').first().click();
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  await adminPage.getByTestId('workspace-tab-settings').click();
+  await expect(adminPage.getByTestId('organization-members-section')).toBeVisible();
+  await expect(adminPage.getByTestId('organization-audit-section')).toBeVisible();
 
-  await expect(page.getByTestId('notification-composer')).toBeVisible();
-  const draftField = page.getByTestId('notification-message-draft');
+  await openBusinessPreview(instructorPage);
+  await instructorPage.getByTestId('demo-login-instructor').click();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentPage);
+  await studentPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  await adminPage.getByTestId('organization-settings-name-input').fill(renamedOrganization);
+  await adminPage.getByTestId('organization-settings-save').click();
+  await expect(adminPage.getByText('組織表示名を更新しました。')).toBeVisible();
+
+  await adminPage.reload();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  await adminPage.getByTestId('workspace-tab-settings').click();
+  await expect(adminPage.getByTestId('organization-settings-name-input')).toHaveValue(renamedOrganization);
+
+  await instructorPage.reload();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+  const instructorSession = await getCurrentSessionUser(instructorPage);
+  expect(instructorSession?.organizationName).toBe(renamedOrganization);
+
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+  const studentSession = await getCurrentSessionUser(studentPage);
+  expect(studentSession?.organizationName).toBe(renamedOrganization);
+
+  await adminContext.close();
+  await instructorContext.close();
+  await studentContext.close();
+});
+
+test('instructor can keep and send a fallback follow-up draft after an AI attempt', async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const instructorContext = await browser.newContext();
+  const studentContext = await browser.newContext();
+  const adminPage = await adminContext.newPage();
+  const instructorPage = await instructorContext.newPage();
+  const studentPage = await studentContext.newPage();
+
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  await openBusinessPreview(instructorPage);
+  await instructorPage.getByTestId('demo-login-instructor').click();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentPage);
+  await studentPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  const instructorUser = await getCurrentSessionUser(instructorPage);
+  const studentUser = await getCurrentSessionUser(studentPage);
+  expect(instructorUser?.uid).toBeTruthy();
+  expect(studentUser?.uid).toBeTruthy();
+  await storageAction(adminPage, 'assignStudentInstructor', {
+    studentUid: studentUser!.uid,
+    instructorUid: instructorUser!.uid,
+  });
+
+  await instructorPage.reload();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+  await instructorPage.getByTestId('workspace-tab-students').click();
+  await instructorPage.locator('[data-testid^="send-notification-"]').first().click();
+
+  await expect(instructorPage.getByTestId('notification-composer')).toBeVisible();
+  const draftField = instructorPage.getByTestId('notification-message-draft');
   await expect(draftField).not.toHaveValue('');
 
-  const aiDraftButton = page.getByRole('button', { name: 'AIで下書きを作る' });
+  const aiDraftButton = instructorPage.getByRole('button', { name: 'AIで下書きを作る' });
   await aiDraftButton.click();
   await expect(aiDraftButton).toBeEnabled();
   await expect(draftField).not.toHaveValue('');
 
-  await page.getByTestId('notification-send-submit').click();
-  await expect(page.getByText(/フォロー通知を保存しました。/)).toBeVisible();
+  await instructorPage.getByTestId('notification-send-submit').click();
+  await expect(instructorPage.getByText(/フォロー通知を保存しました。/)).toBeVisible();
+
+  await adminContext.close();
+  await instructorContext.close();
+  await studentContext.close();
 });
 
 test('admin reload sees organization KPI changes after notification and study', async ({ browser }) => {
@@ -394,17 +583,18 @@ test('admin reload sees organization KPI changes after notification and study', 
     message: '5語だけでも今日中に見直しましょう。',
     triggerReason: 'smoke-test',
     usedAi: false,
+    interventionKind: 'REVIEW_RESTART',
   });
 
   const importResult = await seedPhrasebook(studentPage, 'Smoke KPI Drill');
-  const bookId = importResult.importedBookIds?.[0];
-  expect(bookId).toBeTruthy();
-  if (!bookId) {
+  expect(importResult.importedBookIds?.[0]).toBeTruthy();
+  if (!importResult.importedBookIds?.[0]) {
     throw new Error('Smoke KPI Drill did not return an imported book id.');
   }
   await studentPage.reload();
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
-  await completeSeededStudySession(studentPage, bookId);
+  await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeVisible();
+  await completeCoachCtaStudySession(studentPage);
 
   await adminPage.reload();
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
@@ -419,6 +609,67 @@ test('admin reload sees organization KPI changes after notification and study', 
 
   await adminContext.close();
   await instructorContext.close();
+  await studentContext.close();
+});
+
+test('group admin can issue a weekly mission and student can restart it from the dashboard', async ({ browser }) => {
+  const adminContext = await browser.newContext();
+  const studentContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const adminPage = await adminContext.newPage();
+  const studentPage = await studentContext.newPage();
+
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentPage);
+  await studentPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentPage);
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+  const businessStudent = await getCurrentSessionUser(studentPage);
+  expect(businessStudent?.uid).toBeTruthy();
+  const importResult = await seedPhrasebook(studentPage, 'Smoke Mission Drill');
+  expect(importResult.importedBookIds?.[0]).toBeTruthy();
+  if (!importResult.importedBookIds?.[0]) {
+    throw new Error('Smoke Mission Drill did not return an imported book id.');
+  }
+
+  const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const weeklyMission = await storageAction<any>(adminPage, 'createWeeklyMission', {
+    learningTrack: 'EIKEN_2',
+    title: 'Smoke Weekly Mission',
+    rationale: 'smoke mission distribution',
+    bookId: importResult.importedBookIds[0],
+    bookTitle: 'Smoke Mission Drill',
+    newWordsTarget: 8,
+    reviewWordsTarget: 4,
+    quizTargetCount: 1,
+  });
+  await storageAction(adminPage, 'assignWeeklyMission', {
+    missionId: weeklyMission.id,
+    studentUid: businessStudent?.uid,
+  });
+
+  await studentPage.reload();
+  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+  await expect(studentPage.getByTestId('dashboard-mission-section')).toBeVisible();
+  await expect(studentPage.getByText('Smoke Weekly Mission')).toBeVisible();
+
+  await completeMissionCtaStudySession(studentPage);
+
+  await adminPage.reload();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+  const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string; primaryMissionStatus?: string; primaryMissionCompletionRate?: number }) => (
+    student.uid === businessStudent?.uid
+  ));
+
+  expect(afterSnapshot.missionStartedRate).toBeGreaterThanOrEqual(beforeSnapshot.missionStartedRate);
+  expect(studentAfter?.primaryMissionStatus).not.toBe('ASSIGNED');
+  expect(studentAfter?.primaryMissionCompletionRate || 0).toBeGreaterThan(0);
+
+  await adminContext.close();
   await studentContext.close();
 });
 
@@ -630,6 +881,34 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
   });
 
+  test('student dashboard quick nav jumps between today and the library on mobile', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+    await seedPhrasebook(page, 'Mobile Quick Nav Drill');
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByTestId('dashboard-quicknav-library').click();
+
+    await expect.poll(async () => {
+      const box = await page.getByTestId('dashboard-library-section').boundingBox();
+      return box?.y ?? 9999;
+    }).toBeLessThanOrEqual(220);
+    await expect(page.getByTestId('dashboard-quicknav-library')).toHaveAttribute('aria-pressed', 'true');
+
+    await page.getByTestId('dashboard-quicknav-today').click();
+    await expect.poll(async () => {
+      const box = await page.getByTestId('dashboard-hero-section').boundingBox();
+      return box?.y ?? 9999;
+    }).toBeLessThanOrEqual(220);
+    await expect(page.getByTestId('dashboard-quicknav-today')).toHaveAttribute('aria-pressed', 'true');
+  });
+
   test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
@@ -775,7 +1054,7 @@ test.describe('student mobile ux', () => {
     await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(4);
   });
 
-  test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
+test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
@@ -792,12 +1071,75 @@ test.describe('student mobile ux', () => {
     await studyButton.scrollIntoViewIfNeeded();
     await studyButton.click();
 
-    await expect(page.getByTestId('study-card-front')).toBeVisible();
-    await expect(page.getByTestId('study-flip-button')).toBeVisible();
-    await page.getByTestId('study-flip-button').click();
-    await expect(page.getByTestId('study-rate-0')).toBeVisible();
-    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+  await expect(page.getByTestId('study-card-front')).toBeVisible();
+  await expect(page.getByTestId('study-flip-button')).toBeVisible();
+  await page.getByTestId('study-flip-button').click();
+  await expect(page.getByTestId('study-rate-0')).toBeVisible();
+  await expect(page.getByTestId('study-rate-3')).toBeVisible();
+  await page.getByTestId('study-card-back').click({ position: { x: 20, y: 20 } });
+  await expect(page.getByTestId('study-flip-button')).toBeVisible();
+});
+
+test('cold-start smart session respects a higher diagnosed band before any study history exists', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+  await seedLeveledPhrasebooks(page, {
+    levels: [1, 2, 3, 4],
+    wordsPerLevel: 10,
   });
+
+  await updateSessionProfile(page, {
+    grade: 'JHS2',
+    englishLevel: 'B2',
+  });
+  await page.reload();
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+  const books = await storageAction<Array<{ id: string; title: string }>>(page, 'getBooks');
+  const words = await storageAction<Array<{ id: string; bookId: string }>>(page, 'getDailySessionWords', { limit: 10 });
+  const bandByBookId = new Map(books.map((book) => [book.id, getBookBandIndex(book.title)]));
+  const selectedBands = words
+    .map((word) => bandByBookId.get(word.bookId) || null)
+    .filter((band): band is number => band !== null);
+
+  expect(selectedBands.length).toBeGreaterThan(0);
+  expect(selectedBands.filter((band) => band === 3).length).toBeGreaterThanOrEqual(5);
+  expect(selectedBands.slice(0, 5).every((band) => band === 1)).toBeFalsy();
+});
+
+test('student weakness focus card populates after the first smart-session on mobile', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+  await seedLeveledPhrasebooks(page, {
+    levels: [1, 2, 3, 4],
+    wordsPerLevel: 10,
+  });
+  await page.reload();
+  await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
+  await expect(page.getByTestId('dashboard-weakness-section')).toContainText('まだ苦手分析は育成中');
+
+  await page.getByTestId('weakness-focus-cta').click();
+  await expect(page.getByTestId('study-card-front')).toBeVisible();
+
+  for (let index = 0; index < 10; index += 1) {
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+    await page.getByTestId('study-rate-3').click();
+  }
+
+  await expect(page.getByTestId('study-finish-exit')).toBeVisible();
+  await page.getByTestId('study-finish-exit').click();
+
+  await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
+  await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('まだ苦手分析は育成中');
+  await expect(page.getByTestId('dashboard-weakness-section')).toContainText('今日はここを先に整える');
+});
 
   test('student quiz shows an empty learned-only state before any study ratings on mobile', async ({ page }) => {
     await page.goto('/');

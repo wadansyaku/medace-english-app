@@ -1,8 +1,13 @@
 import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
-import { BookAccessScope, BookCatalogSource, BookMetadata, UserRole, WordData } from '../../types';
+import { BookAccessScope, BookCatalogSource, BookMetadata, type EnglishLevel, type UserGrade, UserRole, WordData } from '../../types';
+import { getBookProgressionIndex } from '../../shared/bookProgression';
+import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
+import { formatDateKey } from '../../utils/date';
 import { normalizeCatalogImport } from './catalog-import';
 import { HttpError } from './http';
+import { readWeaknessProfile } from './weakness-actions';
 import {
   AppEnv,
   DbUserRow,
@@ -14,7 +19,6 @@ import {
   createBookId,
   ensurePositiveLimit,
   getMasterySourceSql,
-  getVisibleBookIds,
   readAll,
   readFirst,
   readVisibleBookRows,
@@ -250,8 +254,49 @@ export const handleUpdateWordCache = async (
 
 export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, limitInput: unknown): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
-  const visibleBookIds = await getVisibleBookIds(env, user);
+  const visibleBookRows = await readVisibleBookRows(env, user);
+  const visibleBookIds = visibleBookRows.map((row) => row.id);
   if (visibleBookIds.length === 0) return [];
+
+  const coldStartMasteryCount = await readFirst<{ count: number }>(
+    env,
+    `SELECT COUNT(*) AS count
+     FROM learning_histories
+     WHERE user_id = ? AND ${getMasterySourceSql()}`,
+    user.id,
+  );
+
+  if (Number(coldStartMasteryCount?.count || 0) === 0) {
+    const allVisibleRows = await readAll<DbWordRow>(
+      env,
+      `SELECT w.*
+       FROM words w
+       WHERE w.book_id IN (${buildInClause(visibleBookIds.length)})
+       ORDER BY w.book_id ASC, w.word_number ASC`,
+      ...visibleBookIds,
+    );
+
+    const selection = selectColdStartSessionWords({
+      uid: user.id,
+      limit,
+      grade: (user.grade as UserGrade | null) || undefined,
+      level: (user.english_level as EnglishLevel | null) || undefined,
+      books: visibleBookRows.map(toBookMetadata),
+      words: allVisibleRows.map(toWordData),
+    });
+
+    if (selection.selectedWords.length >= limit) {
+      return selection.selectedWords;
+    }
+
+    const selectedIds = new Set(selection.selectedWords.map((word) => word.id));
+    const fallbackWords = allVisibleRows
+      .map(toWordData)
+      .filter((word) => !selectedIds.has(word.id))
+      .slice(0, Math.max(0, limit - selection.selectedWords.length));
+
+    return [...selection.selectedWords, ...fallbackWords];
+  }
 
   const dueRows = await readAll<DbWordRow>(
     env,
@@ -287,10 +332,20 @@ export const handleGetDailySessionWords = async (env: AppEnv, user: DbUserRow, l
      LIMIT ?`,
     user.id,
     ...visibleBookIds,
-    limit - dueRows.length,
+    Math.max(limit - dueRows.length, 20) * 6,
   );
+  const weaknessProfile = await readWeaknessProfile(env, user.id);
+  const rankedNewWords = rankWeaknessFocusedWords({
+    uid: user.id,
+    words: newRows.map(toWordData),
+    weaknessProfile,
+    grade: (user.grade as UserGrade | null) || undefined,
+    level: (user.english_level as EnglishLevel | null) || undefined,
+    dateKey: formatDateKey(Date.now()),
+    bookBandsById: Object.fromEntries(visibleBookRows.map((row) => [row.id, getBookProgressionIndex(toBookMetadata(row))])),
+  });
 
-  return [...dueRows, ...newRows].map(toWordData);
+  return [...dueRows.map(toWordData), ...rankedNewWords.slice(0, limit - dueRows.length)];
 };
 
 export const handleGetBookSession = async (

@@ -262,6 +262,7 @@ export const useQuizModeController = ({
         question.wordId,
         question.bookId,
         correct,
+        question.mode,
         responseTimeMs,
       );
     } catch (error) {

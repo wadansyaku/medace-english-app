@@ -124,6 +124,10 @@ const qualifyColumn = (column: string, tableAlias?: string): string => (
   tableAlias ? `${tableAlias}.${column}` : column
 );
 
+export const toTokyoDateKeySql = (column: string): string => (
+  `strftime('%Y-%m-%d', (${column} / 1000), 'unixepoch', '+9 hours')`
+);
+
 export const getMasterySourceSql = (tableAlias?: string): string => (
   `${qualifyColumn('interaction_source', tableAlias)} = '${MASTERY_INTERACTION_SOURCE}'`
 );
@@ -215,18 +219,9 @@ export const getUserSubscriptionPlan = (user: DbUserRow): SubscriptionPlan => (
 );
 
 export const getUserOrganizationRole = (user: DbUserRow): OrganizationRole | undefined => {
-  if (user.organization_role) {
-    return user.organization_role as OrganizationRole;
-  }
-
-  const plan = getUserSubscriptionPlan(user);
-  if (!user.organization_name || (plan !== SubscriptionPlan.TOB_FREE && plan !== SubscriptionPlan.TOB_PAID)) {
-    return undefined;
-  }
-
-  if (user.role === UserRole.INSTRUCTOR) return OrganizationRole.INSTRUCTOR;
-  if (user.role === UserRole.STUDENT) return OrganizationRole.STUDENT;
-  return undefined;
+  return user.organization_role
+    ? user.organization_role as OrganizationRole
+    : undefined;
 };
 
 export const canBypassInstructorAssignment = (user: Pick<DbUserRow, 'role' | 'organization_role' | 'email'>): boolean => {

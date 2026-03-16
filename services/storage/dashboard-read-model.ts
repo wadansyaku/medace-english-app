@@ -34,6 +34,7 @@ import {
 } from './idb-support';
 import {
   getMasteryDistributionFromHistoryRecords,
+  getWeaknessProfile,
   getUserLearningHistories,
 } from './learning-history';
 
@@ -208,6 +209,7 @@ export const getDashboardSnapshot = async (
     dueCount,
     learningPlan,
     learningPreference,
+    weaknessProfile,
     leaderboard,
     masteryDist,
     activityLogs,
@@ -217,6 +219,7 @@ export const getDashboardSnapshot = async (
     context.getDueCount(uid),
     context.getLearningPlan(uid),
     context.getLearningPreference(uid),
+    getWeaknessProfile(context, uid),
     getLeaderboard(context, uid),
     getMasteryDistribution(context, uid),
     getActivityLogs(context, uid),
@@ -231,11 +234,13 @@ export const getDashboardSnapshot = async (
     progressMap,
     learningPlan,
     learningPreference,
+    weaknessProfile,
     leaderboard,
     masteryDist,
     activityLogs,
     motivationSnapshot,
     coachNotifications,
+    primaryMission: null,
     accountOverview: {
       subscriptionPlan: sessionUser?.subscriptionPlan || SubscriptionPlan.TOC_FREE,
       organizationRole: sessionUser?.organizationRole,

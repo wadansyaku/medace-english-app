@@ -1,13 +1,15 @@
 import {
   StudentRiskLevel,
   type OrganizationDashboardSnapshot,
+  type OrganizationInstructorBacklogSummary,
   type OrganizationInstructorSummary,
   type StudentSummary,
   type WritingAssignment,
   type WritingQueueItem,
 } from '../types';
+import { getInstructorQueueSegment } from '../shared/retention';
 
-export type AssignmentFilter = 'ALL' | 'DANGER' | 'UNASSIGNED';
+export type AssignmentFilter = 'ALL' | 'IMMEDIATE' | 'UNASSIGNED_AT_RISK';
 
 export interface BusinessAdminWritingCounts {
   completedCount: number;
@@ -28,10 +30,21 @@ export const filterAssignmentStudents = (
   filter: AssignmentFilter,
   query: string,
 ): StudentSummary[] => students.filter((student) => {
-  if (filter === 'DANGER' && student.riskLevel !== StudentRiskLevel.DANGER) return false;
-  if (filter === 'UNASSIGNED' && student.assignedInstructorUid) return false;
+  if (filter === 'IMMEDIATE' && getInstructorQueueSegment(student) !== 'IMMEDIATE') return false;
+  if (filter === 'UNASSIGNED_AT_RISK' && (student.assignedInstructorUid || student.riskLevel === StudentRiskLevel.SAFE)) return false;
   return matchesStudentKeyword(student, query);
 });
+
+export const sortAssignmentStudentsByPriority = (
+  students: StudentSummary[],
+): StudentSummary[] => [...students].sort((left, right) => (
+  Number(Boolean(right.needsFollowUpNow)) - Number(Boolean(left.needsFollowUpNow))
+  || Number(Boolean(!right.assignedInstructorUid)) - Number(Boolean(!left.assignedInstructorUid))
+  || Number(Boolean(getInstructorQueueSegment(right) === 'IMMEDIATE')) - Number(Boolean(getInstructorQueueSegment(left) === 'IMMEDIATE'))
+  || Number(Boolean(right.latestInterventionOutcome === 'EXPIRED')) - Number(Boolean(left.latestInterventionOutcome === 'EXPIRED'))
+  || ((left.lastActive || 0) - (right.lastActive || 0))
+  || left.name.localeCompare(right.name, 'ja')
+));
 
 export const resolveSelectedAssignmentStudentUid = (
   students: StudentSummary[],
@@ -60,6 +73,15 @@ export const sortInstructorsByAssignedLoad = (
   }
   return left.displayName.localeCompare(right.displayName, 'ja');
 });
+
+export const sortInstructorBacklogByLoad = (
+  instructors: OrganizationInstructorBacklogSummary[],
+): OrganizationInstructorBacklogSummary[] => [...instructors].sort((left, right) => (
+  right.immediateCount - left.immediateCount
+  || right.backlogCount - left.backlogCount
+  || right.assignedStudentCount - left.assignedStudentCount
+  || left.displayName.localeCompare(right.displayName, 'ja')
+));
 
 export const getPlanCoverageRate = (
   snapshot: Pick<OrganizationDashboardSnapshot, 'totalStudents' | 'learningPlanCount'>,

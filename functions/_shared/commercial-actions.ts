@@ -13,6 +13,13 @@ import {
 } from '../../types';
 import { hasDuplicateOpenRequest, normalizeCommercialEmail } from '../../shared/commercial';
 import { HttpError } from './http';
+import {
+  appendOrganizationAuditLog,
+  clearActiveOrganizationMembership,
+  getUserRoleForOrganizationRole,
+  resolveOrCreateOrganization,
+  upsertActiveOrganizationMembership,
+} from './organization-memberships';
 import { readAll, readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
 
@@ -30,6 +37,7 @@ interface DbCommercialRequestRow {
   requested_by_user_id: string | null;
   linked_user_id: string | null;
   target_subscription_plan: string | null;
+  target_organization_id: string | null;
   target_organization_name: string | null;
   target_organization_role: string | null;
   resolution_note: string | null;
@@ -57,6 +65,7 @@ const createCommercialRequestFromRow = (row: DbCommercialRequestRow): Commercial
   requestedByUid: row.requested_by_user_id || undefined,
   linkedUserUid: row.linked_user_id || undefined,
   targetSubscriptionPlan: row.target_subscription_plan as SubscriptionPlan | undefined,
+  targetOrganizationId: row.target_organization_id || undefined,
   targetOrganizationName: row.target_organization_name || undefined,
   targetOrganizationRole: row.target_organization_role as OrganizationRole | undefined,
   resolutionNote: row.resolution_note || undefined,
@@ -140,6 +149,7 @@ const assertCommercialRequestRateLimit = async (
 
 const maybeProvisionLinkedUser = async (
   env: AppEnv,
+  actorUser: DbUserRow,
   payload: CommercialRequestUpdatePayload,
   now: number,
 ): Promise<void> => {
@@ -157,34 +167,57 @@ const maybeProvisionLinkedUser = async (
   }
 
   const nextPlan = payload.targetSubscriptionPlan || targetUser.subscription_plan as SubscriptionPlan || SubscriptionPlan.TOC_FREE;
-  const nextOrganizationRole = payload.targetOrganizationRole || null;
-  const nextOrganizationName = nextPlan === SubscriptionPlan.TOB_FREE || nextPlan === SubscriptionPlan.TOB_PAID
-    ? (payload.targetOrganizationName || targetUser.organization_name || null)
-    : null;
-  const nextRole = nextOrganizationRole === OrganizationRole.GROUP_ADMIN || nextOrganizationRole === OrganizationRole.INSTRUCTOR
-    ? UserRole.INSTRUCTOR
-    : nextOrganizationRole === OrganizationRole.STUDENT
-      ? UserRole.STUDENT
-      : (nextPlan === SubscriptionPlan.TOC_PAID || nextPlan === SubscriptionPlan.TOC_FREE)
-        ? UserRole.STUDENT
-        : targetUser.role as UserRole;
+  const nextOrganizationRole = payload.targetOrganizationRole
+    || (targetUser.organization_role as OrganizationRole | null)
+    || (targetUser.role === UserRole.INSTRUCTOR ? OrganizationRole.INSTRUCTOR : OrganizationRole.STUDENT);
+  const isBusinessPlan = nextPlan === SubscriptionPlan.TOB_FREE || nextPlan === SubscriptionPlan.TOB_PAID;
+
+  if (!isBusinessPlan) {
+    await clearActiveOrganizationMembership(env, {
+      userId: payload.linkedUserUid,
+      subscriptionPlan: nextPlan,
+      userRole: UserRole.STUDENT,
+    });
+    return;
+  }
+
+  const organization = await resolveOrCreateOrganization(env, {
+    targetOrganizationId: payload.targetOrganizationId,
+    targetOrganizationName: payload.targetOrganizationName || targetUser.organization_name || undefined,
+    subscriptionPlan: nextPlan,
+  });
+
+  await upsertActiveOrganizationMembership(env, {
+    userId: payload.linkedUserUid,
+    organizationId: organization.id,
+    organizationRole: nextOrganizationRole,
+    subscriptionPlan: nextPlan,
+  });
 
   await env.DB.prepare(`
     UPDATE users
        SET role = ?,
            subscription_plan = ?,
-           organization_name = ?,
-           organization_role = ?,
            updated_at = ?
      WHERE id = ?
   `).bind(
-    nextRole,
+    getUserRoleForOrganizationRole(nextOrganizationRole),
     nextPlan,
-    nextOrganizationName,
-    nextOrganizationRole,
     now,
     payload.linkedUserUid,
   ).run();
+
+  await appendOrganizationAuditLog(env, {
+    organizationId: organization.id,
+    actorUserId: actorUser.id,
+    actionType: 'COMMERCIAL_PROVISIONED',
+    targetType: 'USER',
+    targetId: payload.linkedUserUid,
+    payload: {
+      subscriptionPlan: nextPlan,
+      organizationRole: nextOrganizationRole,
+    },
+  });
 };
 
 export const handleCreateCommercialRequest = async (
@@ -270,6 +303,7 @@ export const handleListCommercialRequests = async (
 
 export const handleUpdateCommercialRequest = async (
   env: AppEnv,
+  user: DbUserRow,
   payload: CommercialRequestUpdatePayload,
 ): Promise<CommercialRequest> => {
   const now = Date.now();
@@ -286,7 +320,7 @@ export const handleUpdateCommercialRequest = async (
     throw new HttpError(404, '申請が見つかりません。');
   }
 
-  await maybeProvisionLinkedUser(env, payload, now);
+  await maybeProvisionLinkedUser(env, user, payload, now);
 
   await env.DB.prepare(`
     UPDATE commercial_requests
@@ -294,6 +328,7 @@ export const handleUpdateCommercialRequest = async (
            resolution_note = ?,
            linked_user_id = COALESCE(?, linked_user_id),
            target_subscription_plan = ?,
+           target_organization_id = ?,
            target_organization_name = ?,
            target_organization_role = ?,
            updated_at = ?
@@ -303,6 +338,7 @@ export const handleUpdateCommercialRequest = async (
     payload.resolutionNote || null,
     payload.linkedUserUid || null,
     payload.targetSubscriptionPlan || null,
+    payload.targetOrganizationId || null,
     payload.targetOrganizationName || null,
     payload.targetOrganizationRole || null,
     now,

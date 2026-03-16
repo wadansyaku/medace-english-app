@@ -26,6 +26,7 @@ export interface DbUserRow {
   grade: string | null;
   english_level: string | null;
   subscription_plan: string | null;
+  organization_id: string | null;
   organization_name: string | null;
   organization_role: string | null;
   study_mode: string | null;

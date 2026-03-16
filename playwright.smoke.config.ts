@@ -1,10 +1,12 @@
 import { defineConfig } from '@playwright/test';
 
+const externalBaseURL = process.env.PLAYWRIGHT_BASE_URL;
 const port = Number(process.env.PLAYWRIGHT_SMOKE_PORT || '41731');
-const baseURL = `http://127.0.0.1:${port}`;
+const baseURL = externalBaseURL || `http://127.0.0.1:${port}`;
 const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results/smoke';
 const traceMode = process.env.PLAYWRIGHT_TRACE_MODE || 'retain-on-failure';
 const videoMode = process.env.PLAYWRIGHT_VIDEO_MODE || 'retain-on-failure';
+const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
 
 export default defineConfig({
   testDir: './tests/smoke',
@@ -30,10 +32,14 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: `npm run build && node scripts/start-smoke-server.mjs --port ${port}`,
-    url: `${baseURL}/api/session`,
-    reuseExistingServer: false,
-    timeout: 180_000,
-  },
+  ...(skipWebServer
+    ? {}
+    : {
+        webServer: {
+          command: `npm run build && node scripts/start-smoke-server.mjs --port ${port}`,
+          url: `${baseURL}/api/session`,
+          reuseExistingServer: false,
+          timeout: 180_000,
+        },
+      }),
 });

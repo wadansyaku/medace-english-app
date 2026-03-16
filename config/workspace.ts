@@ -57,6 +57,12 @@ export const BUSINESS_ADMIN_WORKSPACE_SECTIONS: WorkspaceSectionDefinition<Busin
     description: '講師ごとの稼働と負荷を比較する',
   },
   {
+    id: BusinessAdminWorkspaceView.SETTINGS,
+    label: 'Settings',
+    shortLabel: '設定',
+    description: '組織表示名、所属メンバー、監査ログを確認する',
+  },
+  {
     id: BusinessAdminWorkspaceView.WRITING,
     label: 'Writing',
     shortLabel: '作文',

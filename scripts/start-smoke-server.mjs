@@ -16,11 +16,11 @@ const readArg = (name, fallback) => {
 const port = readArg('port', process.env.PLAYWRIGHT_SMOKE_PORT || '41731');
 const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-smoke-'));
 
-const runCommand = (command, commandArgs, env = baseEnv) => new Promise((resolve, reject) => {
+const runCommand = (command, commandArgs, env = baseEnv, stdio = 'inherit') => new Promise((resolve, reject) => {
   const child = spawn(command, commandArgs, {
     cwd,
     env,
-    stdio: 'inherit',
+    stdio,
     detached: process.platform !== 'win32',
   });
 
@@ -103,6 +103,7 @@ process.on('SIGTERM', () => {
 });
 
 try {
+  console.log('Applying local D1 migrations for smoke server...');
   await runCommand('npx', [
     'wrangler',
     'd1',
@@ -115,8 +116,9 @@ try {
   ], {
     ...baseEnv,
     CI: '1',
-  });
+  }, ['ignore', 'ignore', 'ignore']);
 
+  console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
   server = spawn('npx', [
     'wrangler',
     'pages',

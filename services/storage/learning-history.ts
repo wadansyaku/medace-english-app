@@ -1,7 +1,10 @@
 import type {
+  BookMetadata,
   BookProgress,
   LearningHistory,
   MasteryDistribution,
+  StudentWeaknessProfile,
+  UserProfile,
   WordData,
 } from '../../types';
 import {
@@ -12,8 +15,20 @@ import {
   isDueMasteryHistory,
   isMasteryHistoryRecord,
   isMasteryProgressHistory,
+  isStudyInteractionSource,
   MASTERY_INTERACTION_SOURCE,
 } from '../../shared/learningHistory';
+import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import {
+  buildWeaknessProfile,
+  deriveWeaknessSignals,
+  rankWeaknessFocusedWords,
+  toInteractionEventId,
+  toWeaknessSignalRecordId,
+  type WeaknessInteractionEvent,
+} from '../../shared/weakness';
+import { getBookProgressionIndex } from '../../shared/bookProgression';
+import { formatDateKey } from '../../utils/date';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import {
   buildUserScopedRecordId,
@@ -25,12 +40,17 @@ import {
   readAllStoreRecords,
   readStoreRecord,
   STORES,
+  type StoredInteractionEventRecord,
   type StoredLearningHistoryRecord,
+  type StoredWeaknessSignalRecord,
 } from './idb-support';
+import { getLocalMissionAssignmentByStudent } from './missions';
 
 export interface LearningHistoryContext {
   getStore: GetStore;
+  getBooks: () => Promise<BookMetadata[]>;
   getWordsByBook: (bookId: string) => Promise<WordData[]>;
+  getSession: () => Promise<UserProfile | null>;
 }
 
 export const getUserHistoryRecords = (
@@ -134,33 +154,168 @@ export const getDailySessionWords = async (
   limit: number,
 ): Promise<WordData[]> => {
   const historyStore = await context.getStore(STORES.HISTORY);
-  const dueWordIds: string[] = [];
-  const studiedWordIds = new Set<string>();
+  const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
+  const userHistories = getUserLearningHistories(historyRecords, uid);
+  const masteryHistories = userHistories.filter((history) => isMasteryHistoryRecord(history));
+  const masteryHistoryExists = masteryHistories.some((history) => isStudyInteractionSource(history.interactionSource));
+  const studiedWordIds = new Set(masteryHistories.map((history) => history.wordId));
   const now = Date.now();
+  const dueHistories = masteryHistories
+    .filter((history) => isDueMasteryHistory(history, now))
+    .sort((left, right) => left.nextReviewDate - right.nextReviewDate);
 
-  await iterateStore<StoredLearningHistoryRecord>(historyStore, (record) => {
-    if (!isUserScopedRecordId(record.id, uid)) return;
-    if (isDueMasteryHistory(record.data, now)) dueWordIds.push(record.data.wordId);
-    if (isMasteryHistoryRecord(record.data)) studiedWordIds.add(record.data.wordId);
-  });
+  if (!masteryHistoryExists) {
+    const [books, sessionUser] = await Promise.all([
+      context.getBooks(),
+      context.getSession(),
+    ]);
+    const wordsStore = await context.getStore(STORES.WORDS);
+    const allWords = await readAllStoreRecords<WordData>(wordsStore);
+    const selection = selectColdStartSessionWords({
+      uid,
+      limit,
+      grade: sessionUser?.grade,
+      level: sessionUser?.englishLevel,
+      books,
+      words: allWords,
+    });
+
+    if (selection.selectedWords.length >= limit) {
+      return selection.selectedWords;
+    }
+
+    const selectedIds = new Set(selection.selectedWords.map((word) => word.id));
+    const fallbackWords = allWords
+      .filter((word) => !selectedIds.has(word.id) && !studiedWordIds.has(word.id))
+      .sort((left, right) => (
+        left.bookId === right.bookId
+          ? left.number - right.number
+          : left.bookId.localeCompare(right.bookId)
+      ));
+
+    return [
+      ...selection.selectedWords,
+      ...fallbackWords.slice(0, Math.max(0, limit - selection.selectedWords.length)),
+    ];
+  }
 
   const wordsStore = await context.getStore(STORES.WORDS);
   const sessionWords: WordData[] = [];
 
-  for (const wordId of dueWordIds.slice(0, limit)) {
-    const word = await readStoreRecord<WordData>(wordsStore, wordId);
+  for (const history of dueHistories.slice(0, limit)) {
+    const word = await readStoreRecord<WordData>(wordsStore, history.wordId);
     if (word) sessionWords.push(word);
   }
 
   if (sessionWords.length < limit) {
-    await iterateStore<WordData>(wordsStore, (word) => {
-      if (sessionWords.length >= limit) return false;
-      if (studiedWordIds.has(word.id)) return;
-      sessionWords.push(word);
+    const [allWords, books, sessionUser, weaknessProfile] = await Promise.all([
+      readAllStoreRecords<WordData>(wordsStore),
+      context.getBooks(),
+      context.getSession(),
+      getWeaknessProfile(context, uid),
+    ]);
+    const bookBandsById = Object.fromEntries(
+      books.map((book) => [book.id, getBookProgressionIndex(book)]),
+    );
+    const rankedNewWords = rankWeaknessFocusedWords({
+      uid,
+      words: allWords.filter((word) => !studiedWordIds.has(word.id)),
+      weaknessProfile,
+      grade: sessionUser?.grade,
+      level: sessionUser?.englishLevel,
+      dateKey: formatDateKey(now),
+      bookBandsById,
     });
+    sessionWords.push(...rankedNewWords.slice(0, limit - sessionWords.length));
   }
 
   return sessionWords;
+};
+
+const getInteractionEvents = async (
+  context: Pick<LearningHistoryContext, 'getStore'>,
+  uid: string,
+): Promise<WeaknessInteractionEvent[]> => {
+  const store = await context.getStore(STORES.INTERACTION_EVENTS);
+  const records = await readAllStoreRecords<StoredInteractionEventRecord>(store);
+  return records
+    .filter((record) => record.uid === uid)
+    .map((record) => record.data)
+    .sort((left, right) => right.createdAt - left.createdAt);
+};
+
+const rebuildWeaknessSignals = async (
+  context: LearningHistoryContext,
+  uid: string,
+): Promise<StudentWeaknessProfile | null> => {
+  const [historyStore, signalStore, sessionUser, events] = await Promise.all([
+    context.getStore(STORES.HISTORY),
+    context.getStore(STORES.WEAKNESS_SIGNALS, 'readwrite'),
+    context.getSession(),
+    getInteractionEvents(context, uid),
+  ]);
+  const histories = getUserLearningHistories(
+    await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore),
+    uid,
+  );
+  const signals = deriveWeaknessSignals({
+    events,
+    histories,
+    grade: sessionUser?.grade,
+    level: sessionUser?.englishLevel,
+  });
+
+  for (const signal of signals) {
+    await putStoreRecord(signalStore, {
+      id: toWeaknessSignalRecordId(uid, signal.dimension),
+      uid,
+      data: signal,
+    } satisfies StoredWeaknessSignalRecord);
+  }
+
+  return buildWeaknessProfile(signals);
+};
+
+export const getWeaknessProfile = async (
+  context: Pick<LearningHistoryContext, 'getStore'>,
+  uid: string,
+): Promise<StudentWeaknessProfile | null> => {
+  const store = await context.getStore(STORES.WEAKNESS_SIGNALS);
+  const records = await readAllStoreRecords<StoredWeaknessSignalRecord>(store);
+  const signals = records
+    .filter((record) => record.uid === uid)
+    .map((record) => record.data)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  return buildWeaknessProfile(signals);
+};
+
+const resolveMissionAssignmentId = (uid: string, bookId: string): string | undefined => {
+  const assignment = getLocalMissionAssignmentByStudent(uid);
+  if (!assignment) return undefined;
+  if (!assignment.mission.bookId || assignment.mission.bookId === bookId) {
+    return assignment.id;
+  }
+  return undefined;
+};
+
+const appendInteractionEvent = async (
+  context: Pick<LearningHistoryContext, 'getStore' | 'getBooks'>,
+  event: WeaknessInteractionEvent,
+): Promise<void> => {
+  const [store, books] = await Promise.all([
+    context.getStore(STORES.INTERACTION_EVENTS, 'readwrite'),
+    context.getBooks(),
+  ]);
+  const book = books.find((candidate) => candidate.id === event.bookId);
+  const enrichedEvent: WeaknessInteractionEvent = {
+    ...event,
+    bookProgressionBand: book ? getBookProgressionIndex(book) : event.bookProgressionBand,
+  };
+  await putStoreRecord(store, {
+    id: toInteractionEventId(enrichedEvent),
+    uid: event.userId,
+    data: enrichedEvent,
+  } satisfies StoredInteractionEventRecord);
 };
 
 export const getBookSession = async (
@@ -197,11 +352,13 @@ export const saveSrsHistory = async (
   const id = buildUserScopedRecordId(uid, word.id);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);
   const current = existing?.data;
+  const now = Date.now();
   let interval = current?.interval || 0;
   let easeFactor = current?.easeFactor || 2.5;
   const attemptCount = (current?.attemptCount || 0) + 1;
   const correctCount = (current?.correctCount || 0) + (rating >= 2 ? 1 : 0);
   const totalResponseTimeMs = (current?.totalResponseTimeMs || 0) + Math.max(0, Math.round(responseTimeMs));
+  const intervalDaysBefore = current?.interval || 0;
 
   if (rating === 0) {
     interval = 0;
@@ -227,8 +384,8 @@ export const saveSrsHistory = async (
         status: interval > 20 ? 'graduated' : 'learning',
         interval,
       }) === 'graduated' ? 'graduated' : 'learning',
-      lastStudiedAt: Date.now(),
-      nextReviewDate: Date.now() + interval * 86400000,
+      lastStudiedAt: now,
+      nextReviewDate: now + interval * 86400000,
       interval,
       easeFactor,
       correctCount,
@@ -237,6 +394,20 @@ export const saveSrsHistory = async (
       interactionSource: MASTERY_INTERACTION_SOURCE,
     },
   });
+
+  await appendInteractionEvent(context, {
+    userId: uid,
+    wordId: word.id,
+    bookId: word.bookId,
+    createdAt: now,
+    interactionSource: 'STUDY',
+    correct: rating >= 2,
+    rating,
+    responseTimeMs,
+    intervalDaysBefore,
+    missionAssignmentId: resolveMissionAssignmentId(uid, word.bookId),
+  });
+  await rebuildWeaknessSignals(context, uid);
 };
 
 export const recordQuizAttempt = async (
@@ -245,11 +416,13 @@ export const recordQuizAttempt = async (
   wordId: string,
   bookId: string,
   correct: boolean,
+  questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
   responseTimeMs = 0,
 ): Promise<void> => {
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, wordId);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);
+  const now = Date.now();
   await putStoreRecord(historyStore, {
     id,
     data: buildQuizAttemptHistory({
@@ -258,8 +431,22 @@ export const recordQuizAttempt = async (
       bookId,
       correct,
       responseTimeMs,
+      now,
     }),
   });
+  await appendInteractionEvent(context, {
+    userId: uid,
+    wordId,
+    bookId,
+    createdAt: now,
+    interactionSource: 'QUIZ',
+    questionMode,
+    correct,
+    responseTimeMs,
+    intervalDaysBefore: existing?.data?.interval || 0,
+    missionAssignmentId: resolveMissionAssignmentId(uid, bookId),
+  });
+  await rebuildWeaknessSignals(context, uid);
 };
 
 export const getStudiedWordIdsByBook = async (

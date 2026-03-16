@@ -3,10 +3,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { generateInstructorFollowUp } from '../services/gemini';
 import { storage } from '../services/storage';
 import {
+  InterventionKind,
+  InterventionOutcome,
+  RecommendedActionType,
   StudentRiskLevel,
   type StudentSummary,
   type UserProfile,
 } from '../types';
+import { resolveRecommendedActionType } from '../shared/retention';
+import { getDefaultInterventionKindFromWeakness } from '../shared/weakness';
 import {
   filterStudentsForInstructorView,
   resolveFocusedStudentUid,
@@ -32,6 +37,21 @@ const getTriggerReason = (student: StudentSummary): string => {
   return '継続称賛フォロー';
 };
 
+const getDefaultInterventionKind = (student: StudentSummary): InterventionKind => {
+  const weaknessDriven = getDefaultInterventionKindFromWeakness(student.topWeaknesses?.[0]);
+  if (weaknessDriven) return weaknessDriven;
+  if (
+    student.latestInterventionOutcome === InterventionOutcome.REACTIVATED
+    || student.riskLevel === StudentRiskLevel.SAFE
+  ) {
+    return InterventionKind.PRAISE;
+  }
+  if (!student.hasLearningPlan || student.latestRecommendedActionType === RecommendedActionType.OPEN_PLAN) {
+    return InterventionKind.PLAN_NUDGE;
+  }
+  return InterventionKind.REVIEW_RESTART;
+};
+
 interface UseInstructorDashboardControllerParams {
   students: StudentSummary[];
   user: UserProfile;
@@ -43,12 +63,13 @@ export const useInstructorDashboardController = ({
   user,
   refresh,
 }: UseInstructorDashboardControllerParams) => {
-  const [filter, setFilter] = useState<InstructorStudentFilter>('ALL');
+  const [filter, setFilter] = useState<InstructorStudentFilter>('IMMEDIATE');
   const [query, setQuery] = useState('');
   const [focusedStudentUid, setFocusedStudentUid] = useState<string | null>(null);
   const [composerStudentUid, setComposerStudentUid] = useState<string | null>(null);
   const [messageDraft, setMessageDraft] = useState('');
   const [customInstruction, setCustomInstruction] = useState('');
+  const [interventionKind, setInterventionKind] = useState<InterventionKind>(InterventionKind.REVIEW_RESTART);
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [usedAi, setUsedAi] = useState(false);
@@ -86,6 +107,7 @@ export const useInstructorDashboardController = ({
     setComposerStudentUid(student.uid);
     setMessageDraft(buildFallbackMessage(student, user.displayName));
     setCustomInstruction('');
+    setInterventionKind(getDefaultInterventionKind(student));
     setUsedAi(false);
   }, [user.displayName]);
 
@@ -93,6 +115,7 @@ export const useInstructorDashboardController = ({
     setComposerStudentUid(null);
     setMessageDraft('');
     setCustomInstruction('');
+    setInterventionKind(InterventionKind.REVIEW_RESTART);
     setUsedAi(false);
   }, []);
 
@@ -140,6 +163,11 @@ export const useInstructorDashboardController = ({
         messageDraft.trim(),
         getTriggerReason(selectedStudent),
         usedAi,
+        interventionKind,
+        resolveRecommendedActionType({
+          interventionKind,
+          hasLearningPlan: selectedStudent.hasLearningPlan,
+        }),
       );
       setNotice(`${selectedStudent.name}さんへ講師名入りのフォロー通知を保存しました。`);
       closeComposer();
@@ -150,7 +178,7 @@ export const useInstructorDashboardController = ({
     } finally {
       setSending(false);
     }
-  }, [closeComposer, messageDraft, refresh, selectedStudent, usedAi]);
+  }, [closeComposer, interventionKind, messageDraft, refresh, selectedStudent, usedAi]);
 
   return {
     filter,
@@ -159,6 +187,7 @@ export const useInstructorDashboardController = ({
     selectedStudent,
     messageDraft,
     customInstruction,
+    interventionKind,
     drafting,
     sending,
     usedAi,
@@ -171,6 +200,7 @@ export const useInstructorDashboardController = ({
     setFocusedStudentUid,
     setMessageDraft,
     setCustomInstruction,
+    setInterventionKind,
     openComposer,
     closeComposer,
     handleGenerateDraft,

@@ -3,12 +3,14 @@ import type {
   CommercialRequest,
   LearningHistory,
   ProductAnnouncement,
+  WeaknessSignalSummary,
   StudentWorksheetSnapshot,
   UserProfile,
 } from '../../types';
+import type { WeaknessInteractionEvent } from '../../shared/weakness';
 
 export const DB_NAME = 'MedAceDB';
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 export const STORES = {
   BOOKS: 'books',
@@ -18,6 +20,8 @@ export const STORES = {
   PLANS: 'plans',
   PREFERENCES: 'preferences',
   ASSIGNMENTS: 'assignments',
+  INTERACTION_EVENTS: 'interactionEvents',
+  WEAKNESS_SIGNALS: 'weaknessSignals',
   COMMERCIAL_REQUESTS: 'commercialRequests',
   PRODUCT_ANNOUNCEMENTS: 'productAnnouncements',
   ANNOUNCEMENT_RECEIPTS: 'announcementReceipts',
@@ -36,6 +40,18 @@ export interface StoredSessionRecord {
 export interface StoredAssignmentRecord {
   studentUid: string;
   instructorUid: string | null;
+}
+
+export interface StoredInteractionEventRecord {
+  id: string;
+  uid: string;
+  data: WeaknessInteractionEvent;
+}
+
+export interface StoredWeaknessSignalRecord {
+  id: string;
+  uid: string;
+  data: WeaknessSignalSummary;
 }
 
 export type StoredCommercialRequestRecord = CommercialRequest;
@@ -61,6 +77,8 @@ export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, r
     if (!db.objectStoreNames.contains(STORES.PLANS)) db.createObjectStore(STORES.PLANS, { keyPath: 'uid' });
     if (!db.objectStoreNames.contains(STORES.PREFERENCES)) db.createObjectStore(STORES.PREFERENCES, { keyPath: 'userUid' });
     if (!db.objectStoreNames.contains(STORES.ASSIGNMENTS)) db.createObjectStore(STORES.ASSIGNMENTS, { keyPath: 'studentUid' });
+    if (!db.objectStoreNames.contains(STORES.INTERACTION_EVENTS)) db.createObjectStore(STORES.INTERACTION_EVENTS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORES.WEAKNESS_SIGNALS)) db.createObjectStore(STORES.WEAKNESS_SIGNALS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.COMMERCIAL_REQUESTS)) db.createObjectStore(STORES.COMMERCIAL_REQUESTS, { keyPath: 'id', autoIncrement: true });
     if (!db.objectStoreNames.contains(STORES.PRODUCT_ANNOUNCEMENTS)) db.createObjectStore(STORES.PRODUCT_ANNOUNCEMENTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.ANNOUNCEMENT_RECEIPTS)) db.createObjectStore(STORES.ANNOUNCEMENT_RECEIPTS, { keyPath: 'id' });

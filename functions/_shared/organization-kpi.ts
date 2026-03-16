@@ -1,4 +1,6 @@
 import { isStudyInteractionSource } from '../../shared/learningHistory';
+import { FOLLOW_UP_WINDOW_MS, REACTIVATION_WINDOW_MS } from '../../shared/retention';
+import { UserRole } from '../../types';
 import { shiftDateKey } from '../../utils/date';
 import type { OrganizationKpiTrendPoint } from '../../types';
 import type { AppEnv } from './types';
@@ -6,12 +8,13 @@ import {
   DAY_MS,
   getLastTokyoDateKeys,
   readAll,
+  readFirst,
   toTokyoDateKey,
 } from './storage-support';
 
 export const ORGANIZATION_KPI_TREND_DAYS = 14;
 export const ORGANIZATION_KPI_SUMMARY_DAYS = 7;
-export const ORGANIZATION_KPI_REACTIVATION_WINDOW_MS = 3 * DAY_MS;
+export const ORGANIZATION_KPI_REACTIVATION_WINDOW_MS = REACTIVATION_WINDOW_MS;
 
 export interface OrganizationKpiStudentRow {
   uid: string;
@@ -47,6 +50,7 @@ export interface OrganizationKpiNotificationRow {
 }
 
 export interface OrganizationKpiDailySnapshot {
+  organizationId: string;
   organizationName: string;
   snapshotDate: string;
   totalStudents: number;
@@ -56,6 +60,9 @@ export interface OrganizationKpiDailySnapshot {
   notifications: number;
   notifiedStudents: number;
   reactivatedStudents: number;
+  students4PlusDaysActive: number;
+  atRiskStudents: number;
+  followedUpAtRiskStudents: number;
 }
 
 export interface OrganizationKpiSummary7d {
@@ -73,6 +80,10 @@ export interface RebuildOrganizationKpiSnapshotsOptions {
   dateKeys?: string[];
 }
 
+export interface ReadOrganizationKpiSeriesOptions {
+  dateKeys?: string[];
+}
+
 const TOKYO_OFFSET = '+09:00';
 
 const toTokyoDayStart = (dateKey: string): number => Date.parse(`${dateKey}T00:00:00${TOKYO_OFFSET}`);
@@ -81,7 +92,12 @@ const toTokyoNextDayStart = (dateKey: string): number => Date.parse(`${shiftDate
 
 const sortDateKeysAscending = (dateKeys: string[]): string[] => [...new Set(dateKeys)].sort((left, right) => left.localeCompare(right));
 
-const createDailySnapshot = (organizationName: string, snapshotDate: string): OrganizationKpiDailySnapshot => ({
+const createDailySnapshot = (
+  organizationId: string,
+  organizationName: string,
+  snapshotDate: string,
+): OrganizationKpiDailySnapshot => ({
+  organizationId,
   organizationName,
   snapshotDate,
   totalStudents: 0,
@@ -91,6 +107,9 @@ const createDailySnapshot = (organizationName: string, snapshotDate: string): Or
   notifications: 0,
   notifiedStudents: 0,
   reactivatedStudents: 0,
+  students4PlusDaysActive: 0,
+  atRiskStudents: 0,
+  followedUpAtRiskStudents: 0,
 });
 
 const roundPercentage = (value: number, total: number): number => (
@@ -126,6 +145,28 @@ const buildPlanCreatedAtByUser = (plans: OrganizationKpiPlanRow[]): Map<string, 
   return createdAtByUser;
 };
 
+const findLastValueAtOrBefore = (values: number[], target: number): number | null => {
+  let low = 0;
+  let high = values.length - 1;
+  let answer = -1;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (values[middle] <= target) {
+      answer = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return answer >= 0 ? values[answer] : null;
+};
+
+const countDateKeysInRange = (values: string[], startKey: string, endKey: string): number => (
+  values.reduce((count, value) => (value >= startKey && value <= endKey ? count + 1 : count), 0)
+);
+
 export const buildAssignedStudentCountsByDate = (
   dateKeys: string[],
   currentAssignments: OrganizationKpiAssignmentStateRow[],
@@ -160,6 +201,7 @@ export const buildAssignedStudentCountsByDate = (
 };
 
 export const buildOrganizationKpiSeries = ({
+  organizationId,
   organizationName,
   students,
   plans,
@@ -169,6 +211,7 @@ export const buildOrganizationKpiSeries = ({
   notifications,
   dateKeys = getLastTokyoDateKeys(ORGANIZATION_KPI_TREND_DAYS),
 }: {
+  organizationId: string;
   organizationName: string;
   students: OrganizationKpiStudentRow[];
   plans: OrganizationKpiPlanRow[];
@@ -186,6 +229,8 @@ export const buildOrganizationKpiSeries = ({
   const notifiedStudentsByDate = new Map<string, Set<string>>();
   const reactivatedStudentsByDate = new Map<string, Set<string>>();
   const studyTimesByStudent = new Map<string, number[]>();
+  const studyDateKeysByStudent = new Map<string, Set<string>>();
+  const notificationTimesByStudent = new Map<string, number[]>();
   const planCreatedAtByUser = buildPlanCreatedAtByUser(plans);
   const summary7d = {
     notifications7d: 0,
@@ -194,7 +239,7 @@ export const buildOrganizationKpiSeries = ({
   };
 
   orderedKeys.forEach((dateKey) => {
-    snapshotsByDate.set(dateKey, createDailySnapshot(organizationName, dateKey));
+    snapshotsByDate.set(dateKey, createDailySnapshot(organizationId, organizationName, dateKey));
     activeStudentsByDate.set(dateKey, new Set<string>());
     notifiedStudentsByDate.set(dateKey, new Set<string>());
     reactivatedStudentsByDate.set(dateKey, new Set<string>());
@@ -206,6 +251,9 @@ export const buildOrganizationKpiSeries = ({
     studyTimes.push(event.studiedAt);
     studyTimesByStudent.set(event.studentUid, studyTimes);
     const dateKey = toTokyoDateKey(event.studiedAt);
+    const studyDateKeys = studyDateKeysByStudent.get(event.studentUid) || new Set<string>();
+    studyDateKeys.add(dateKey);
+    studyDateKeysByStudent.set(event.studentUid, studyDateKeys);
     activeStudentsByDate.get(dateKey)?.add(event.studentUid);
   });
 
@@ -237,6 +285,9 @@ export const buildOrganizationKpiSeries = ({
   });
 
   notifications.forEach((notification) => {
+    const notificationTimes = notificationTimesByStudent.get(notification.studentUid) || [];
+    notificationTimes.push(notification.createdAt);
+    notificationTimesByStudent.set(notification.studentUid, notificationTimes);
     const dateKey = toTokyoDateKey(notification.createdAt);
     const snapshot = snapshotsByDate.get(dateKey);
     if (snapshot) {
@@ -263,11 +314,51 @@ export const buildOrganizationKpiSeries = ({
     }
   });
 
+  notificationTimesByStudent.forEach((times) => {
+    times.sort((left, right) => left - right);
+  });
+
   orderedKeys.forEach((dateKey) => {
     const snapshot = snapshotsByDate.get(dateKey)!;
+    const windowStartKey = shiftDateKey(dateKey, -6);
+    const dayEnd = toTokyoNextDayStart(dateKey) - 1;
+
+    let students4PlusDaysActive = 0;
+    let atRiskStudents = 0;
+    let followedUpAtRiskStudents = 0;
+
+    students.forEach((student) => {
+      if (student.createdAt >= toTokyoNextDayStart(dateKey)) return;
+
+      const activeStudyDays7d = countDateKeysInRange(
+        Array.from(studyDateKeysByStudent.get(student.uid) || []),
+        windowStartKey,
+        dateKey,
+      );
+      if (activeStudyDays7d >= 4) {
+        students4PlusDaysActive += 1;
+      }
+
+      const lastStudyAt = findLastValueAtOrBefore(studyTimesByStudent.get(student.uid) || [], dayEnd);
+      const daysSinceActive = lastStudyAt === null
+        ? Number.POSITIVE_INFINITY
+        : Math.floor((dayEnd - lastStudyAt) / DAY_MS);
+      if (daysSinceActive < 1) return;
+
+      atRiskStudents += 1;
+
+      const latestNotificationAt = findLastValueAtOrBefore(notificationTimesByStudent.get(student.uid) || [], dayEnd);
+      if (latestNotificationAt !== null && dayEnd - latestNotificationAt <= FOLLOW_UP_WINDOW_MS) {
+        followedUpAtRiskStudents += 1;
+      }
+    });
+
     snapshot.activeStudents = activeStudentsByDate.get(dateKey)?.size || 0;
     snapshot.notifiedStudents = notifiedStudentsByDate.get(dateKey)?.size || 0;
     snapshot.reactivatedStudents = reactivatedStudentsByDate.get(dateKey)?.size || 0;
+    snapshot.students4PlusDaysActive = students4PlusDaysActive;
+    snapshot.atRiskStudents = atRiskStudents;
+    snapshot.followedUpAtRiskStudents = followedUpAtRiskStudents;
   });
 
   return {
@@ -288,7 +379,7 @@ export const toOrganizationKpiTrendPoints = (
   const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.snapshotDate, snapshot]));
 
   return orderedKeys.map((dateKey) => {
-    const snapshot = snapshotMap.get(dateKey) || createDailySnapshot('', dateKey);
+    const snapshot = snapshotMap.get(dateKey) || createDailySnapshot('', '', dateKey);
     return {
       date: dateKey,
       totalStudents: snapshot.totalStudents,
@@ -298,16 +389,150 @@ export const toOrganizationKpiTrendPoints = (
       notifications: snapshot.notifications,
       notifiedStudents: snapshot.notifiedStudents,
       reactivatedStudents: snapshot.reactivatedStudents,
+      students4PlusDaysActive: snapshot.students4PlusDaysActive,
+      atRiskStudents: snapshot.atRiskStudents,
+      followedUpAtRiskStudents: snapshot.followedUpAtRiskStudents,
       assignmentCoverageRate: roundPercentage(snapshot.assignedStudents, snapshot.totalStudents),
       planCoverageRate: roundPercentage(snapshot.planStudents, snapshot.totalStudents),
       reactivationRate: roundPercentage(snapshot.reactivatedStudents, snapshot.notifiedStudents),
+      weeklyContinuityRate: roundPercentage(snapshot.students4PlusDaysActive, snapshot.totalStudents),
+      followUpCoverageRate48h: roundPercentage(snapshot.followedUpAtRiskStudents, snapshot.atRiskStudents),
     };
   });
 };
 
+export const readOrganizationKpiSeriesFromSnapshots = async (
+  env: AppEnv,
+  organizationId: string,
+  options: ReadOrganizationKpiSeriesOptions = {},
+): Promise<OrganizationKpiSeriesResult> => {
+  const requestedDateKeys = sortDateKeysAscending(
+    options.dateKeys && options.dateKeys.length > 0
+      ? options.dateKeys
+      : getLastTokyoDateKeys(ORGANIZATION_KPI_TREND_DAYS),
+  );
+  const summaryDateKeys = getLastTokyoDateKeys(ORGANIZATION_KPI_SUMMARY_DAYS);
+  const summaryStart = toTokyoDayStart(summaryDateKeys[0]);
+  const organization = await readFirst<{ id: string; display_name: string }>(
+    env,
+    `SELECT id, display_name
+     FROM organizations
+     WHERE id = ?`,
+    organizationId,
+  );
+  if (!organization) {
+    throw new Error(`Organization not found for KPI read: ${organizationId}`);
+  }
+
+  const [snapshotRows, summaryRow] = await Promise.all([
+    readAll<{
+      organization_id: string;
+      organization_name: string;
+      snapshot_date: string;
+      total_students: number;
+      assigned_students: number;
+      plan_students: number;
+      active_students: number;
+      notifications: number;
+      notified_students: number;
+      reactivated_students: number;
+      students_4plus_days_active: number;
+      at_risk_students: number;
+      followed_up_at_risk_students: number;
+    }>(
+      env,
+      `SELECT
+         organization_id,
+         organization_name,
+         snapshot_date,
+         total_students,
+         assigned_students,
+         plan_students,
+         active_students,
+         notifications,
+         notified_students,
+         reactivated_students,
+         students_4plus_days_active,
+         at_risk_students,
+         followed_up_at_risk_students
+       FROM organization_kpi_daily_snapshots
+       WHERE organization_id = ?
+         AND snapshot_date BETWEEN ? AND ?
+       ORDER BY snapshot_date ASC`,
+      organizationId,
+      requestedDateKeys[0],
+      requestedDateKeys[requestedDateKeys.length - 1],
+    ),
+    readFirst<{
+      notifications_7d: number;
+      notified_students_7d: number;
+      reactivated_students_7d: number;
+    }>(
+      env,
+      `SELECT
+         COUNT(*) AS notifications_7d,
+         COUNT(DISTINCT n.student_user_id) AS notified_students_7d,
+         COUNT(DISTINCT CASE
+           WHEN EXISTS (
+             SELECT 1
+             FROM learning_histories h
+             WHERE h.user_id = n.student_user_id
+               AND h.interaction_source = 'STUDY'
+               AND h.last_studied_at >= n.created_at
+               AND h.last_studied_at <= n.created_at + ?
+           ) THEN n.student_user_id
+           ELSE NULL
+         END) AS reactivated_students_7d
+       FROM instructor_notifications n
+       JOIN users u ON u.id = n.student_user_id
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ?
+         AND m.organization_id = ?
+         AND n.created_at >= ?`,
+      ORGANIZATION_KPI_REACTIVATION_WINDOW_MS,
+      UserRole.STUDENT,
+      organizationId,
+      summaryStart,
+    ),
+  ]);
+
+  const snapshotMap = new Map<string, OrganizationKpiDailySnapshot>();
+  snapshotRows.forEach((row) => {
+    snapshotMap.set(row.snapshot_date, {
+      organizationId: row.organization_id,
+      organizationName: row.organization_name,
+      snapshotDate: row.snapshot_date,
+      totalStudents: Number(row.total_students || 0),
+      assignedStudents: Number(row.assigned_students || 0),
+      planStudents: Number(row.plan_students || 0),
+      activeStudents: Number(row.active_students || 0),
+      notifications: Number(row.notifications || 0),
+      notifiedStudents: Number(row.notified_students || 0),
+      reactivatedStudents: Number(row.reactivated_students || 0),
+      students4PlusDaysActive: Number(row.students_4plus_days_active || 0),
+      atRiskStudents: Number(row.at_risk_students || 0),
+      followedUpAtRiskStudents: Number(row.followed_up_at_risk_students || 0),
+    });
+  });
+
+  return {
+    dailySnapshots: requestedDateKeys.map((dateKey) => (
+      snapshotMap.get(dateKey)
+      || createDailySnapshot(organization.id, organization.display_name, dateKey)
+    )),
+    summary7d: {
+      notifications7d: Number(summaryRow?.notifications_7d || 0),
+      notifiedStudents7d: Number(summaryRow?.notified_students_7d || 0),
+      reactivatedStudents7d: Number(summaryRow?.reactivated_students_7d || 0),
+    },
+  };
+};
+
 export const rebuildOrganizationKpiSnapshots = async (
   env: AppEnv,
-  organizationName: string,
+  organizationId: string,
   options: RebuildOrganizationKpiSnapshotsOptions = {},
 ): Promise<OrganizationKpiSeriesResult> => {
   const requestedDateKeys = sortDateKeysAscending(
@@ -320,32 +545,52 @@ export const rebuildOrganizationKpiSnapshots = async (
   const queryStart = toTokyoDayStart(queryStartKey);
   const assignmentEventStart = toTokyoDayStart(queryStartKey);
 
+  const organization = await readFirst<{ id: string; display_name: string }>(
+    env,
+    `SELECT id, display_name
+     FROM organizations
+     WHERE id = ?`,
+    organizationId,
+  );
+  if (!organization) {
+    throw new Error(`Organization not found for KPI rebuild: ${organizationId}`);
+  }
+
   const [students, plans, currentAssignments, assignmentEvents, studyEvents, notifications] = await Promise.all([
     readAll<{ uid: string; created_at: number }>(
       env,
-      `SELECT id AS uid, created_at
-       FROM users
-       WHERE role = ? AND organization_name = ?`,
+      `SELECT u.id AS uid, u.created_at
+       FROM users u
+       JOIN organization_memberships m ON m.user_id = u.id
+       WHERE u.role = ?
+         AND m.organization_id = ?
+         AND m.status = 'ACTIVE'`,
       'STUDENT',
-      organizationName,
+      organizationId,
     ),
     readAll<{ user_uid: string; created_at: number }>(
       env,
       `SELECT lp.user_id AS user_uid, lp.created_at AS created_at
        FROM learning_plans lp
        JOIN users u ON u.id = lp.user_id
-       WHERE u.role = ? AND u.organization_name = ?`,
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ? AND m.organization_id = ?`,
       'STUDENT',
-      organizationName,
+      organizationId,
     ),
     readAll<{ student_uid: string; instructor_uid: string | null }>(
       env,
       `SELECT a.student_user_id AS student_uid, a.instructor_user_id AS instructor_uid
        FROM student_instructor_assignments a
        JOIN users u ON u.id = a.student_user_id
-       WHERE u.role = ? AND u.organization_name = ?`,
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ? AND m.organization_id = ?`,
       'STUDENT',
-      organizationName,
+      organizationId,
     ),
     readAll<{ student_uid: string; previous_instructor_uid: string | null; next_instructor_uid: string | null; created_at: number }>(
       env,
@@ -356,9 +601,12 @@ export const rebuildOrganizationKpiSnapshots = async (
          e.created_at AS created_at
        FROM student_instructor_assignment_events e
        JOIN users u ON u.id = e.student_user_id
-       WHERE u.role = ? AND u.organization_name = ? AND e.created_at >= ?`,
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ? AND m.organization_id = ? AND e.created_at >= ?`,
       'STUDENT',
-      organizationName,
+      organizationId,
       assignmentEventStart,
     ),
     readAll<{ student_uid: string; studied_at: number; interaction_source: 'STUDY' | 'QUIZ' | null }>(
@@ -369,9 +617,12 @@ export const rebuildOrganizationKpiSnapshots = async (
          h.interaction_source AS interaction_source
        FROM learning_histories h
        JOIN users u ON u.id = h.user_id
-       WHERE u.role = ? AND u.organization_name = ? AND h.last_studied_at >= ?`,
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ? AND m.organization_id = ? AND h.last_studied_at >= ?`,
       'STUDENT',
-      organizationName,
+      organizationId,
       queryStart,
     ),
     readAll<{ student_uid: string; created_at: number }>(
@@ -381,15 +632,19 @@ export const rebuildOrganizationKpiSnapshots = async (
          n.created_at AS created_at
        FROM instructor_notifications n
        JOIN users u ON u.id = n.student_user_id
-       WHERE u.role = ? AND u.organization_name = ? AND n.created_at >= ?`,
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+       WHERE u.role = ? AND m.organization_id = ? AND n.created_at >= ?`,
       'STUDENT',
-      organizationName,
+      organizationId,
       queryStart,
     ),
   ]);
 
   const series = buildOrganizationKpiSeries({
-    organizationName,
+    organizationId: organization.id,
+    organizationName: organization.display_name,
     students: students.map((row) => ({ uid: row.uid, createdAt: Number(row.created_at || 0) })),
     plans: plans.map((row) => ({ userUid: row.user_uid, createdAt: Number(row.created_at || 0) })),
     currentAssignments: currentAssignments.map((row) => ({
@@ -417,6 +672,7 @@ export const rebuildOrganizationKpiSnapshots = async (
   if (series.dailySnapshots.length > 0) {
     const upserts = series.dailySnapshots.map((snapshot) => env.DB.prepare(`
       INSERT INTO organization_kpi_daily_snapshots (
+        organization_id,
         organization_name,
         snapshot_date,
         total_students,
@@ -426,10 +682,14 @@ export const rebuildOrganizationKpiSnapshots = async (
         notifications,
         notified_students,
         reactivated_students,
+        students_4plus_days_active,
+        at_risk_students,
+        followed_up_at_risk_students,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(organization_name, snapshot_date) DO UPDATE SET
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(organization_id, snapshot_date) DO UPDATE SET
+        organization_name = excluded.organization_name,
         total_students = excluded.total_students,
         assigned_students = excluded.assigned_students,
         plan_students = excluded.plan_students,
@@ -437,9 +697,13 @@ export const rebuildOrganizationKpiSnapshots = async (
         notifications = excluded.notifications,
         notified_students = excluded.notified_students,
         reactivated_students = excluded.reactivated_students,
+        students_4plus_days_active = excluded.students_4plus_days_active,
+        at_risk_students = excluded.at_risk_students,
+        followed_up_at_risk_students = excluded.followed_up_at_risk_students,
         updated_at = excluded.updated_at
     `).bind(
-      organizationName,
+      snapshot.organizationId,
+      snapshot.organizationName,
       snapshot.snapshotDate,
       snapshot.totalStudents,
       snapshot.assignedStudents,
@@ -448,6 +712,9 @@ export const rebuildOrganizationKpiSnapshots = async (
       snapshot.notifications,
       snapshot.notifiedStudents,
       snapshot.reactivatedStudents,
+      snapshot.students4PlusDaysActive,
+      snapshot.atRiskStudents,
+      snapshot.followedUpAtRiskStudents,
       Date.now(),
       Date.now(),
     ));

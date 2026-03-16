@@ -2,9 +2,14 @@ import React, { Suspense, lazy, useMemo } from 'react';
 import { getSubscriptionPolicy } from '../config/subscription';
 import {
   BusinessAdminWorkspaceView,
+  INTERVENTION_OUTCOME_LABELS,
+  LEARNING_TRACK_LABELS,
   OrganizationRole,
+  RETENTION_CONTINUITY_BAND_LABELS,
   StudentRiskLevel,
   SUBSCRIPTION_PLAN_LABELS,
+  WEAKNESS_DIMENSION_LABELS,
+  WEEKLY_MISSION_STATUS_LABELS,
   type UserProfile,
 } from '../types';
 import {
@@ -23,7 +28,7 @@ import { useBusinessAdminDashboardController } from '../hooks/useBusinessAdminDa
 import { resolveStorageMode } from '../shared/storageMode';
 import {
   getBusinessAdminWritingCounts,
-  sortInstructorsByAssignedLoad,
+  sortInstructorBacklogByLoad,
 } from '../utils/businessAdminDashboard';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import WorkspaceMetricCard from './workspace/WorkspaceMetricCard';
@@ -72,6 +77,14 @@ const formatTrendDate = (dateKey: string): string =>
     day: 'numeric',
   });
 
+const weaknessTone = (score = 0): string => (
+  score >= 55
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : score >= 30
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+);
+
 const VIEW_COPY: Record<BusinessAdminWorkspaceView, { eyebrow: string; title: string; body: string }> = {
   [BusinessAdminWorkspaceView.OVERVIEW]: {
     eyebrow: 'Organization Overview',
@@ -87,6 +100,11 @@ const VIEW_COPY: Record<BusinessAdminWorkspaceView, { eyebrow: string; title: st
     eyebrow: 'Instructor Load',
     title: '講師ごとの負荷と稼働を比較する',
     body: '通知数、担当生徒数、接触生徒数を並べて、偏りや詰まりを確認します。',
+  },
+  [BusinessAdminWorkspaceView.SETTINGS]: {
+    eyebrow: 'Organization Settings',
+    title: '組織情報と監査履歴を tenant 単位で管理する',
+    body: '表示名の更新、メンバー確認、最近の変更履歴を分けて見せ、組織名変更後も運用導線が崩れない状態を作ります。',
   },
   [BusinessAdminWorkspaceView.WRITING]: {
     eyebrow: 'Writing Management',
@@ -113,6 +131,9 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
 }) => {
   const {
     snapshot,
+    settingsSnapshot,
+    missionBoard,
+    books,
     writingAssignments,
     writingQueue,
     loading,
@@ -121,6 +142,10 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   } = useBusinessAdminDashboardData();
   const controller = useBusinessAdminDashboardController({
     snapshot,
+    settingsSnapshot,
+    missionBoard,
+    books,
+    writingAssignments,
     refresh,
   });
   const storageMode = useMemo(() => resolveStorageMode(import.meta.env.VITE_STORAGE_MODE), []);
@@ -143,17 +168,12 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   }
 
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
-  const planCoverageRate = snapshot.planCoverageRate;
-  const instructorLoad = sortInstructorsByAssignedLoad(snapshot.instructors);
+  const instructorLoad = sortInstructorBacklogByLoad(snapshot.instructorBacklog);
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
   const recentEvents = snapshot.assignmentEvents.slice(0, 6);
   const viewCopy = VIEW_COPY[activeView];
   const isLocalMockData = storageMode.isLocalMockData;
   const latestTrendPoint = snapshot.trend[snapshot.trend.length - 1];
-  const assignmentCoverageLabel = isLocalMockData ? '担当割当率 (参考)' : '担当割当率';
-  const assignmentCoverageDetail = isLocalMockData
-    ? 'ローカル擬似データのため参考値です'
-    : `未割当 ${snapshot.unassignedStudents}名`;
   const reactivatedStudentsLabel = isLocalMockData ? '通知後再開 (参考)' : '通知後再開';
   const reactivatedStudentsDetail = isLocalMockData
     ? 'ローカル擬似データ上の参考値'
@@ -225,6 +245,14 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               <CheckCircle2 className="h-4 w-4" />
               作文進捗を見る
             </button>
+            <button
+              type="button"
+              onClick={() => onChangeView(BusinessAdminWorkspaceView.SETTINGS)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
+            >
+              <Building2 className="h-4 w-4" />
+              組織設定を開く
+            </button>
           </div>
         </div>
       </section>
@@ -232,10 +260,18 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
       {activeView === BusinessAdminWorkspaceView.OVERVIEW && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="登録生徒" value={`${snapshot.totalStudents}名`} detail="組織内の学習対象生徒数" />
-            <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="学習が止まりかけている生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label={assignmentCoverageLabel} value={`${snapshot.assignmentCoverageRate}%`} detail={assignmentCoverageDetail} tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
-            <WorkspaceMetricCard label="プラン浸透" value={`${planCoverageRate}%`} detail={`${snapshot.learningPlanCount}名が設定済み`} tone="accent" />
+            <WorkspaceMetricCard label="週4日継続率" value={`${snapshot.weeklyContinuityRate}%`} detail="直近7日で4日以上学習した生徒" tone="accent" />
+            <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒への48時間以内フォロー" tone={snapshot.followUpCoverageRate48h >= 80 ? 'success' : 'warning'} />
+            <WorkspaceMetricCard label="未処理 backlog" value={`${snapshot.interventionBacklogCount}名`} detail="いま介入順を決めるべき生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="未割当 at-risk" value={`${snapshot.unassignedAtRiskCount}名`} detail="担当再設定が必要な生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <WorkspaceMetricCard label="期限超過ミッション" value={`${snapshot.overdueMissionCount}件`} detail="未介入で止まっている週次課題" tone={snapshot.overdueMissionCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="配布後着手率" value={`${snapshot.missionStartedRate}%`} detail="配布済みミッションの着手率" tone="accent" />
+            <WorkspaceMetricCard label="期限超過からの再開率" value={`${snapshot.overdueMissionRecoveryRate}%`} detail="締切後に再び動き出した割合" tone={snapshot.overdueMissionRecoveryRate >= 50 ? 'success' : 'warning'} />
+            <WorkspaceMetricCard label="作文返却率" value={`${Math.max(0, ...snapshot.writingReturnRateByTrack.map((track) => track.returnRate))}%`} detail="ミッション紐づき作文の返却率" tone="success" />
+            <WorkspaceMetricCard label="主力トラック完了率" value={`${Math.max(0, ...snapshot.trackCompletion.map((track) => track.completionRate))}%`} detail="トラック別で最も進んでいる完了率" tone="default" />
           </div>
 
           {!isLocalMockData && (
@@ -250,24 +286,24 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               <div className="mt-5 grid gap-4 xl:grid-cols-3">
                 {[
                   {
-                    testId: 'organization-kpi-trend-assignment',
-                    label: '割当率',
-                    value: `${snapshot.assignmentCoverageRate}%`,
-                    detail: latestTrendPoint ? `${latestTrendPoint.assignedStudents}/${latestTrendPoint.totalStudents}名が割当済み` : '直近14日を集計',
+                    testId: 'organization-kpi-trend-continuity',
+                    label: '週4日継続率',
+                    value: `${snapshot.weeklyContinuityRate}%`,
+                    detail: latestTrendPoint ? `${latestTrendPoint.students4PlusDaysActive}/${latestTrendPoint.totalStudents}名が週4日以上学習` : '直近14日を集計',
                     tone: 'bg-medace-500',
                     borderTone: 'border-medace-100 bg-medace-50/60',
                     textTone: 'text-medace-900',
-                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.assignmentCoverageRate })),
+                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.weeklyContinuityRate })),
                   },
                   {
-                    testId: 'organization-kpi-trend-plan',
-                    label: 'プラン浸透率',
-                    value: `${snapshot.planCoverageRate}%`,
-                    detail: latestTrendPoint ? `${latestTrendPoint.planStudents}/${latestTrendPoint.totalStudents}名が設定済み` : '直近14日を集計',
+                    testId: 'organization-kpi-trend-followup',
+                    label: '48時間介入率',
+                    value: `${snapshot.followUpCoverageRate48h}%`,
+                    detail: latestTrendPoint ? `${latestTrendPoint.followedUpAtRiskStudents}/${latestTrendPoint.atRiskStudents}名へ48時間以内に介入` : 'at-risk 生徒ベースで集計',
                     tone: 'bg-sky-500',
                     borderTone: 'border-sky-100 bg-sky-50/60',
                     textTone: 'text-sky-900',
-                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.planCoverageRate })),
+                    series: snapshot.trend.map((point) => ({ date: point.date, value: point.followUpCoverageRate48h })),
                   },
                   {
                     testId: 'organization-kpi-trend-reactivation',
@@ -336,6 +372,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                         {riskLabel(student.riskLevel)}
                       </span>
                     </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {student.needsFollowUpNow && (
+                        <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                          要即対応
+                        </span>
+                      )}
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                        {student.assignedInstructorName || '未割当'}
+                      </span>
+                    </div>
                     <div className="mt-3 text-sm text-slate-600">{student.recommendedAction || '担当講師の確認と次の声かけ内容を調整する'}</div>
                   </div>
                 ))}
@@ -357,14 +403,14 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">未割当</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.unassignedStudents}</div>
-                  <div className="mt-1 text-sm text-slate-600">担当講師がまだ決まっていない生徒</div>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">未割当 at-risk</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.unassignedAtRiskCount}</div>
+                  <div className="mt-1 text-sm text-slate-600">優先度が高いのに担当が未設定の生徒</div>
                 </div>
-                <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">未設定プラン</div>
-                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.totalStudents - snapshot.learningPlanCount}</div>
-                  <div className="mt-1 text-sm text-slate-600">学習プランが未設定の生徒</div>
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">未処理 backlog</div>
+                  <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.interventionBacklogCount}</div>
+                  <div className="mt-1 text-sm text-slate-600">48時間以内に介入順を決めたい生徒</div>
                 </div>
               </div>
               <div className="mt-5 flex flex-wrap gap-3">
@@ -409,18 +455,22 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                         {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : '講師'}
                       </span>
                     </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-4">
                       <div className="rounded-2xl border border-white bg-white px-4 py-3">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
                         <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
                       </div>
                       <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">接触生徒</div>
-                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifiedStudentCount}</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">要即対応</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.immediateCount}</div>
                       </div>
                       <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日通知</div>
-                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifications7d}</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開待ち</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.waitingCount}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開済み</div>
+                        <div className="mt-2 text-2xl font-black text-slate-950">{instructor.reactivatedCount}</div>
                       </div>
                     </div>
                   </div>
@@ -458,6 +508,33 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                 作文ワークスペースへ <ArrowRight className="h-4 w-4" />
               </button>
             </section>
+
+            <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Track Completion</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">トラック別の週次課題</h3>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {snapshot.trackCompletion.map((track) => (
+                  <div key={track.track} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{LEARNING_TRACK_LABELS[track.track]}</div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          完了 {track.completedCount}/{track.assignedCount} / 期限超過 {track.overdueCount}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-slate-950">{track.completionRate}%</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -466,9 +543,9 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <WorkspaceMetricCard label="割当対象" value={`${controller.filteredAssignments.length}名`} detail="現在の条件に一致する生徒" />
-            <WorkspaceMetricCard label="未割当" value={`${snapshot.unassignedStudents}名`} detail="担当講師が決まっていない生徒" tone={snapshot.unassignedStudents > 0 ? 'warning' : 'default'} />
-            <WorkspaceMetricCard label="要フォロー" value={`${snapshot.atRiskStudents}名`} detail="リスク高の生徒" tone={snapshot.atRiskStudents > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label={isLocalMockData ? '割当済み率 (参考)' : '割当済み率'} value={`${snapshot.assignmentCoverageRate}%`} detail={isLocalMockData ? 'ローカル擬似データのため参考値です' : '組織全体の割当進行'} tone="accent" />
+            <WorkspaceMetricCard label="未割当 at-risk" value={`${snapshot.unassignedAtRiskCount}名`} detail="優先して再割当したい生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="要即対応" value={`${snapshot.interventionBacklogCount}名`} detail="48時間以内に介入したい生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒へのフォロー進行" tone="accent" />
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -480,13 +557,13 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               <div className="flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
                 {[
                   { key: 'ALL', label: '全生徒' },
-                  { key: 'DANGER', label: '要フォロー' },
-                  { key: 'UNASSIGNED', label: '未割当' },
+                  { key: 'IMMEDIATE', label: '要即対応' },
+                  { key: 'UNASSIGNED_AT_RISK', label: '未割当 at-risk' },
                 ].map((option) => (
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => controller.setAssignmentFilter(option.key as 'ALL' | 'DANGER' | 'UNASSIGNED')}
+                    onClick={() => controller.setAssignmentFilter(option.key as 'ALL' | 'IMMEDIATE' | 'UNASSIGNED_AT_RISK')}
                     className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.assignmentFilter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
                   >
                     {option.label}
@@ -528,9 +605,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       }`}
                     >
                       <div>
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
-                          {riskLabel(student.riskLevel)}
-                        </span>
+                        <div className="flex flex-col gap-2">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
+                            {riskLabel(student.riskLevel)}
+                          </span>
+                          {student.needsFollowUpNow && (
+                            <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700">
+                              要即対応
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <div className="text-sm font-bold text-slate-950">{student.name}</div>
@@ -568,17 +652,33 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                         <div className="mt-2 text-xl font-black text-slate-950">{formatDays(controller.selectedAssignmentStudent.lastActive)}</div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終通知時刻</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">直近7日学習日数</div>
                         <div className="mt-2 text-xl font-black text-slate-950">
-                          {controller.selectedAssignmentStudent.lastNotificationAt
-                            ? formatDateTime(controller.selectedAssignmentStudent.lastNotificationAt)
-                            : '未送信'}
+                          {controller.selectedAssignmentStudent.activeStudyDays7d || 0}日
                         </div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">通知後再開</div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">継続帯</div>
                         <div className="mt-2 text-xl font-black text-slate-950">
-                          {controller.selectedAssignmentStudent.hasReactivatedSinceNotification ? '再開済み' : '未再開'}
+                          {controller.selectedAssignmentStudent.continuityBand
+                            ? RETENTION_CONTINUITY_BAND_LABELS[controller.selectedAssignmentStudent.continuityBand]
+                            : '未集計'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終介入時刻</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.latestInterventionAt
+                            ? formatDateTime(controller.selectedAssignmentStudent.latestInterventionAt)
+                            : '未介入'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終介入結果</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.latestInterventionOutcome
+                            ? INTERVENTION_OUTCOME_LABELS[controller.selectedAssignmentStudent.latestInterventionOutcome]
+                            : '未介入'}
                         </div>
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -589,6 +689,9 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                             : '未設定'}
                         </div>
                       </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>
                         <div className="mt-2 text-xl font-black text-slate-950">{controller.selectedAssignmentStudent.hasLearningPlan ? '設定済み' : '未設定'}</div>
@@ -596,6 +699,31 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">習得語</div>
                         <div className="mt-2 text-xl font-black text-slate-950">{controller.selectedAssignmentStudent.totalLearned}</div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今週ミッション</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedStudentMission?.progress.status
+                            ? WEEKLY_MISSION_STATUS_LABELS[controller.selectedStudentMission.progress.status]
+                            : '未配布'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">トラック</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedStudentMission?.mission.learningTrack
+                            ? LEARNING_TRACK_LABELS[controller.selectedStudentMission.mission.learningTrack]
+                            : '未設定'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">進捗</div>
+                        <div className="mt-2 text-xl font-black text-slate-950">
+                          {controller.selectedStudentMission ? `${controller.selectedStudentMission.progress.completionRate}%` : '0%'}
+                        </div>
                       </div>
                     </div>
 
@@ -633,12 +761,135 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       </div>
                     )}
 
+                    {controller.selectedAssignmentStudent.topWeaknesses && controller.selectedAssignmentStudent.topWeaknesses.length > 0 && (
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">弱点フォーカス</div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          {controller.selectedAssignmentStudent.topWeaknesses.slice(0, 2).map((weakness) => (
+                            <div key={weakness.dimension} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-bold text-slate-900">{WEAKNESS_DIMENSION_LABELS[weakness.dimension]}</div>
+                                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${weaknessTone(weakness.score)}`}>
+                                  score {weakness.score}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-sm leading-relaxed text-slate-600">{weakness.reason}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {controller.selectedAssignmentStudent.recommendedAction && (
                       <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5 text-sm leading-relaxed text-medace-900">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">推奨アクション</div>
                         <div className="mt-3">{controller.selectedAssignmentStudent.recommendedAction}</div>
                       </div>
                     )}
+
+                    <div data-testid="weekly-mission-form" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Weekly Mission</div>
+                          <div className="mt-1 text-lg font-black tracking-tight text-slate-950">今週の主課題を配布する</div>
+                          <div className="mt-2 text-sm text-slate-500">生徒に同時表示する主課題は1件だけに絞ります。</div>
+                        </div>
+                        {controller.selectedStudentMission && (
+                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600">
+                            現在: {controller.selectedStudentMission.mission.title}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">トラック</label>
+                          <select
+                            data-testid="weekly-mission-track-select"
+                            value={controller.missionTrack}
+                            onChange={(event) => controller.setMissionTrack(event.target.value as any)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          >
+                            {Object.entries(LEARNING_TRACK_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">教材</label>
+                          <select
+                            data-testid="weekly-mission-book-select"
+                            value={controller.missionBookId}
+                            onChange={(event) => controller.setMissionBookId(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          >
+                            <option value="">smart-session に任せる</option>
+                            {books.map((book) => (
+                              <option key={book.id} value={book.id}>{book.title}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">新規語数</label>
+                          <input
+                            type="number"
+                            value={controller.missionNewWordsTarget}
+                            onChange={(event) => controller.setMissionNewWordsTarget(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">復習語数</label>
+                          <input
+                            type="number"
+                            value={controller.missionReviewWordsTarget}
+                            onChange={(event) => controller.setMissionReviewWordsTarget(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">確認クイズ</label>
+                          <input
+                            type="number"
+                            value={controller.missionQuizTargetCount}
+                            onChange={(event) => controller.setMissionQuizTargetCount(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">締切</label>
+                          <input
+                            type="date"
+                            value={controller.missionDueDate}
+                            onChange={(event) => controller.setMissionDueDate(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">任意の英作文課題</label>
+                          <select
+                            value={controller.missionWritingAssignmentId}
+                            onChange={(event) => controller.setMissionWritingAssignmentId(event.target.value)}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                          >
+                            <option value="">紐づけない</option>
+                            {writingAssignments.map((assignment) => (
+                              <option key={assignment.id} value={assignment.id}>{assignment.promptTitle}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        data-testid="weekly-mission-issue-submit"
+                        onClick={controller.handleIssueMission}
+                        disabled={controller.missionSavingUid === controller.selectedAssignmentStudent.uid}
+                        className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:opacity-60"
+                      >
+                        配布する
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
@@ -687,9 +938,9 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <WorkspaceMetricCard label="講師数" value={`${snapshot.totalInstructors}名`} detail="組織内で稼働中の講師" />
-            <WorkspaceMetricCard label={assignmentCoverageLabel} value={`${snapshot.assignmentCoverageRate}%`} detail={isLocalMockData ? 'ローカル擬似データのため参考値です' : '講師に明示的に割り当て済み'} tone="accent" />
+            <WorkspaceMetricCard label="未処理 backlog" value={`${snapshot.interventionBacklogCount}名`} detail="講師に割り振るべき要対応件数" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒への介入進行" tone="accent" />
             <WorkspaceMetricCard label={reactivatedStudentsLabel} value={`${snapshot.reactivatedStudents7d}名`} detail={reactivatedStudentsDetail} tone="success" />
-            <WorkspaceMetricCard label="7日通知" value={`${snapshot.notifications7d}件`} detail="組織全体のフォロー通知数" />
           </div>
 
           <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -716,22 +967,144 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
                       {instructor.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : '講師'}
                     </span>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-4">
                     <div className="rounded-2xl border border-white bg-white px-4 py-3">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
                       <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">接触生徒</div>
-                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifiedStudentCount}</div>
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">要即対応</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.immediateCount}</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日通知</div>
-                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.notifications7d}</div>
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開待ち</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.waitingCount}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white bg-white px-4 py-3">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開済み</div>
+                      <div className="mt-2 text-2xl font-black text-slate-950">{instructor.reactivatedCount}</div>
                     </div>
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {activeView === BusinessAdminWorkspaceView.SETTINGS && settingsSnapshot && (
+        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <Building2 className="h-5 w-5 text-medace-600" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Organization Profile</p>
+                <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">組織表示名を更新する</h3>
+              </div>
+            </div>
+            <div className="mt-6 space-y-4">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Organization ID</div>
+                <div className="mt-2 text-sm font-medium text-slate-700">{settingsSnapshot.organizationId}</div>
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                <label htmlFor="organization-settings-name-input" className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                  Display Name
+                </label>
+                <input
+                  id="organization-settings-name-input"
+                  data-testid="organization-settings-name-input"
+                  type="text"
+                  value={controller.organizationDisplayName}
+                  onChange={(event) => controller.setOrganizationDisplayName(event.target.value)}
+                  className="mt-3 w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                />
+                <div className="mt-3 text-xs text-slate-500">`organization_id` は固定のまま、表示名だけ更新します。</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  data-testid="organization-settings-save"
+                  onClick={() => void controller.handleOrganizationProfileSave()}
+                  disabled={controller.organizationSaving || controller.organizationDisplayName.trim() === ''}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {controller.organizationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                  表示名を保存する
+                </button>
+                <div className="text-xs text-slate-500">
+                  最終更新: {formatDateTime(settingsSnapshot.updatedAt)}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-6">
+            <div data-testid="organization-members-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Membership</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">現メンバー一覧</h3>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {settingsSnapshot.members.map((member) => (
+                  <div key={member.userUid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{member.displayName}</div>
+                        <div className="mt-1 text-xs text-slate-400">{member.email}</div>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                        member.organizationRole === OrganizationRole.GROUP_ADMIN
+                          ? 'border-medace-200 bg-medace-50 text-medace-800'
+                          : member.organizationRole === OrganizationRole.INSTRUCTOR
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : 'border-slate-200 bg-white text-slate-600'
+                      }`}>
+                        {member.organizationRole === OrganizationRole.GROUP_ADMIN ? '管理者' : member.organizationRole === OrganizationRole.INSTRUCTOR ? '講師' : '生徒'}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{SUBSCRIPTION_PLAN_LABELS[member.subscriptionPlan]}</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{formatDateTime(member.updatedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div data-testid="organization-audit-section" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <BellRing className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Audit Trail</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最近の監査履歴</h3>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {settingsSnapshot.auditEvents.length > 0 ? settingsSnapshot.auditEvents.map((event) => (
+                  <div key={`${event.id}-${event.createdAt}`} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-950">{event.actionType}</div>
+                        <div className="mt-1 text-xs text-slate-500">{event.actorDisplayName}</div>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">{formatDateTime(event.createdAt)}</div>
+                    </div>
+                    {event.payload && (
+                      <div className="mt-3 rounded-2xl border border-white bg-white px-4 py-3 text-xs leading-relaxed text-slate-600">
+                        {Object.entries(event.payload).map(([key, value]) => `${key}: ${String(value)}`).join(' / ')}
+                      </div>
+                    )}
+                  </div>
+                )) : (
+                  <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
+                    まだ監査イベントはありません。
+                  </div>
+                )}
+              </div>
             </div>
           </section>
         </div>

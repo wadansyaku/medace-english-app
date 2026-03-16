@@ -196,6 +196,7 @@ export interface UserProfile {
   uid: string;
   displayName: string;
   role: UserRole;
+  organizationId?: string;
   organizationRole?: OrganizationRole;
   email: string;
   stats?: UserStats;
@@ -262,6 +263,233 @@ export enum StudentRiskLevel {
   DANGER = 'DANGER'
 }
 
+export enum RetentionContinuityBand {
+  LOW = 'LOW',
+  BUILDING = 'BUILDING',
+  STEADY = 'STEADY',
+}
+
+export const RETENTION_CONTINUITY_BAND_LABELS: Record<RetentionContinuityBand, string> = {
+  [RetentionContinuityBand.LOW]: '0-1日',
+  [RetentionContinuityBand.BUILDING]: '2-3日',
+  [RetentionContinuityBand.STEADY]: '4日以上',
+};
+
+export enum InterventionKind {
+  REVIEW_RESTART = 'REVIEW_RESTART',
+  PLAN_NUDGE = 'PLAN_NUDGE',
+  PRAISE = 'PRAISE',
+  MANUAL_OTHER = 'MANUAL_OTHER',
+}
+
+export const INTERVENTION_KIND_LABELS: Record<InterventionKind, string> = {
+  [InterventionKind.REVIEW_RESTART]: '復習再開',
+  [InterventionKind.PLAN_NUDGE]: 'プラン確認',
+  [InterventionKind.PRAISE]: '称賛',
+  [InterventionKind.MANUAL_OTHER]: 'その他',
+};
+
+export enum InterventionOutcome {
+  PENDING = 'PENDING',
+  REACTIVATED = 'REACTIVATED',
+  EXPIRED = 'EXPIRED',
+}
+
+export const INTERVENTION_OUTCOME_LABELS: Record<InterventionOutcome, string> = {
+  [InterventionOutcome.PENDING]: '再開待ち',
+  [InterventionOutcome.REACTIVATED]: '再開済み',
+  [InterventionOutcome.EXPIRED]: '失効',
+};
+
+export enum RecommendedActionType {
+  START_REVIEW = 'START_REVIEW',
+  OPEN_PLAN = 'OPEN_PLAN',
+}
+
+export const RECOMMENDED_ACTION_TYPE_LABELS: Record<RecommendedActionType, string> = {
+  [RecommendedActionType.START_REVIEW]: '復習を10語始める',
+  [RecommendedActionType.OPEN_PLAN]: '今日のプランに戻る',
+};
+
+export enum WeaknessDimension {
+  MEANING_RECALL = 'MEANING_RECALL',
+  MEANING_RECOGNITION = 'MEANING_RECOGNITION',
+  SPELLING_RECALL = 'SPELLING_RECALL',
+  RETENTION_STABILITY = 'RETENTION_STABILITY',
+  ADVANCED_BAND_CONFIDENCE = 'ADVANCED_BAND_CONFIDENCE',
+}
+
+export const WEAKNESS_DIMENSION_LABELS: Record<WeaknessDimension, string> = {
+  [WeaknessDimension.MEANING_RECALL]: '意味から英語を思い出す力',
+  [WeaknessDimension.MEANING_RECOGNITION]: '英語を見て意味を取る力',
+  [WeaknessDimension.SPELLING_RECALL]: 'スペリング想起',
+  [WeaknessDimension.RETENTION_STABILITY]: '復習の定着安定度',
+  [WeaknessDimension.ADVANCED_BAND_CONFIDENCE]: '今の難度帯への自信',
+};
+
+export enum WeaknessSignalLevel {
+  HIGH = 'HIGH',
+  MEDIUM = 'MEDIUM',
+  LOW = 'LOW',
+  INSUFFICIENT_DATA = 'INSUFFICIENT_DATA',
+}
+
+export const WEAKNESS_SIGNAL_LEVEL_LABELS: Record<WeaknessSignalLevel, string> = {
+  [WeaknessSignalLevel.HIGH]: '要対策',
+  [WeaknessSignalLevel.MEDIUM]: '調整中',
+  [WeaknessSignalLevel.LOW]: '安定',
+  [WeaknessSignalLevel.INSUFFICIENT_DATA]: 'データ不足',
+};
+
+export interface WeaknessSignalSummary {
+  dimension: WeaknessDimension;
+  level: WeaknessSignalLevel;
+  score: number;
+  sampleSize: number;
+  reason: string;
+  nextActionLabel: string;
+  recommendedActionType: RecommendedActionType;
+  targetQuestionModes: Array<'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT'>;
+  targetBandIndex?: number;
+  updatedAt: number;
+}
+
+export interface StudentWeaknessProfile {
+  signals: WeaknessSignalSummary[];
+  topWeaknesses: WeaknessSignalSummary[];
+  updatedAt: number;
+  hasSufficientData: boolean;
+}
+
+export enum LearningTrack {
+  EIKEN_PRE2 = 'EIKEN_PRE2',
+  EIKEN_2 = 'EIKEN_2',
+  COMMON_TEST = 'COMMON_TEST',
+  SCHOOL_TERM = 'SCHOOL_TERM',
+}
+
+export const LEARNING_TRACK_LABELS: Record<LearningTrack, string> = {
+  [LearningTrack.EIKEN_PRE2]: '英検準2級',
+  [LearningTrack.EIKEN_2]: '英検2級',
+  [LearningTrack.COMMON_TEST]: '共通テスト',
+  [LearningTrack.SCHOOL_TERM]: '学校定期対策',
+};
+
+export enum WeeklyMissionStatus {
+  ASSIGNED = 'ASSIGNED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  OVERDUE = 'OVERDUE',
+  COMPLETED = 'COMPLETED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export const WEEKLY_MISSION_STATUS_LABELS: Record<WeeklyMissionStatus, string> = {
+  [WeeklyMissionStatus.ASSIGNED]: '未着手',
+  [WeeklyMissionStatus.IN_PROGRESS]: '進行中',
+  [WeeklyMissionStatus.OVERDUE]: '期限超過',
+  [WeeklyMissionStatus.COMPLETED]: '完了',
+  [WeeklyMissionStatus.ARCHIVED]: '終了',
+};
+
+export enum MissionNextActionType {
+  OPEN_STUDY = 'OPEN_STUDY',
+  OPEN_WRITING = 'OPEN_WRITING',
+  OPEN_PLAN = 'OPEN_PLAN',
+}
+
+export enum MissionProgressEventType {
+  OPENED = 'OPENED',
+  MANUAL_COMPLETE = 'MANUAL_COMPLETE',
+}
+
+export interface MissionProgressSummary {
+  startedAt?: number;
+  restartedAt?: number;
+  lastActivityAt?: number;
+  completedAt?: number;
+  newWordsCompleted: number;
+  newWordsTarget: number;
+  reviewWordsCompleted: number;
+  reviewWordsTarget: number;
+  quizCompletedCount: number;
+  quizTargetCount: number;
+  writingCompleted: boolean;
+  writingRequired: boolean;
+  completionRate: number;
+  overdue: boolean;
+  status: WeeklyMissionStatus;
+  nextActionType: MissionNextActionType;
+  nextActionLabel: string;
+  blockers: string[];
+}
+
+export interface WeeklyMission {
+  id: string;
+  organizationId?: string;
+  createdByUid: string;
+  learningTrack: LearningTrack;
+  title: string;
+  rationale: string;
+  bookId?: string;
+  bookTitle?: string;
+  newWordsTarget: number;
+  reviewWordsTarget: number;
+  quizTargetCount: number;
+  writingAssignmentId?: string;
+  writingPromptTitle?: string;
+  dueAt: number;
+  status: WeeklyMissionStatus;
+  isSuggested?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MissionAssignment {
+  id: string;
+  missionId: string;
+  studentUid: string;
+  studentName: string;
+  assignedByUid: string;
+  assignedByName?: string;
+  assignedAt: number;
+  progress: MissionProgressSummary;
+  mission: WeeklyMission;
+}
+
+export interface WeeklyMissionBoard {
+  assignments: MissionAssignment[];
+}
+
+export interface PrimaryMissionSnapshot extends MissionProgressSummary {
+  assignmentId?: string;
+  missionId?: string;
+  track: LearningTrack;
+  title: string;
+  rationale: string;
+  dueAt: number;
+  dueDate: string;
+  sourceBookId?: string;
+  sourceBookTitle?: string;
+  writingAssignmentId?: string;
+  writingPromptTitle?: string;
+  isSuggested: boolean;
+}
+
+export interface MissionTrackCompletionSummary {
+  track: LearningTrack;
+  assignedCount: number;
+  completedCount: number;
+  overdueCount: number;
+  completionRate: number;
+}
+
+export interface MissionTrackWritingReturnSummary {
+  track: LearningTrack;
+  assignedCount: number;
+  returnedCount: number;
+  returnRate: number;
+}
+
 export interface StudentSummary {
   uid: string;
   name: string;
@@ -282,6 +510,22 @@ export interface StudentSummary {
   hasLearningPlan?: boolean;
   hasReactivatedSinceNotification?: boolean;
   lastReactivatedAt?: number;
+  activeStudyDays7d?: number;
+  continuityBand?: RetentionContinuityBand;
+  latestInterventionAt?: number;
+  latestInterventionKind?: InterventionKind;
+  latestInterventionOutcome?: InterventionOutcome;
+  latestRecommendedActionType?: RecommendedActionType;
+  needsFollowUpNow?: boolean;
+  primaryMissionStatus?: WeeklyMissionStatus;
+  primaryMissionTrack?: LearningTrack;
+  primaryMissionTitle?: string;
+  primaryMissionCompletionRate?: number;
+  missionDueAt?: number;
+  missionOverdue?: boolean;
+  missionLastActivityAt?: number;
+  topWeaknesses?: WeaknessSignalSummary[];
+  weaknessProfileUpdatedAt?: number;
   riskReasons?: string[];
   recommendedAction?: string;
 }
@@ -387,6 +631,9 @@ export interface InstructorNotification {
   triggerReason: string;
   deliveryChannel: 'IN_APP';
   usedAi: boolean;
+  interventionKind: InterventionKind;
+  recommendedActionType?: RecommendedActionType;
+  interventionOutcome?: InterventionOutcome;
   createdAt: number;
 }
 
@@ -423,6 +670,7 @@ export interface CommercialRequest {
   requestedByUid?: string;
   linkedUserUid?: string;
   targetSubscriptionPlan?: SubscriptionPlan;
+  targetOrganizationId?: string;
   targetOrganizationName?: string;
   targetOrganizationRole?: OrganizationRole;
   resolutionNote?: string;
@@ -470,6 +718,8 @@ export interface DashboardSnapshot {
   progressMap: Record<string, BookProgress>;
   learningPlan: LearningPlan | null;
   learningPreference: LearningPreference | null;
+  primaryMission: PrimaryMissionSnapshot | null;
+  weaknessProfile: StudentWeaknessProfile | null;
   leaderboard: LeaderboardEntry[];
   masteryDist: MasteryDistribution;
   activityLogs: ActivityLog[];
@@ -559,6 +809,18 @@ export interface OrganizationInstructorSummary {
   assignedStudentCount: number;
 }
 
+export interface OrganizationInstructorBacklogSummary {
+  uid: string;
+  displayName: string;
+  email: string;
+  organizationRole?: OrganizationRole;
+  assignedStudentCount: number;
+  immediateCount: number;
+  waitingCount: number;
+  reactivatedCount: number;
+  backlogCount: number;
+}
+
 export interface OrganizationKpiTrendPoint {
   date: string;
   totalStudents: number;
@@ -568,12 +830,51 @@ export interface OrganizationKpiTrendPoint {
   notifications: number;
   notifiedStudents: number;
   reactivatedStudents: number;
+  students4PlusDaysActive: number;
+  atRiskStudents: number;
+  followedUpAtRiskStudents: number;
   assignmentCoverageRate: number;
   planCoverageRate: number;
   reactivationRate: number;
+  weeklyContinuityRate: number;
+  followUpCoverageRate48h: number;
+}
+
+export interface OrganizationMemberSummary {
+  userUid: string;
+  displayName: string;
+  email: string;
+  userRole: UserRole;
+  organizationRole: OrganizationRole;
+  subscriptionPlan: SubscriptionPlan;
+  joinedAt: number;
+  updatedAt: number;
+}
+
+export interface OrganizationAuditEvent {
+  id: number;
+  organizationId: string;
+  actorUserId: string;
+  actorDisplayName: string;
+  actionType: string;
+  targetType: string;
+  targetId?: string;
+  payload?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface OrganizationSettingsSnapshot {
+  organizationId: string;
+  displayName: string;
+  nameKey: string;
+  subscriptionPlan: SubscriptionPlan;
+  members: OrganizationMemberSummary[];
+  auditEvents: OrganizationAuditEvent[];
+  updatedAt: number;
 }
 
 export interface OrganizationDashboardSnapshot {
+  organizationId: string;
   organizationName: string;
   subscriptionPlan: SubscriptionPlan;
   totalMembers: number;
@@ -585,10 +886,20 @@ export interface OrganizationDashboardSnapshot {
   notifications7d: number;
   reactivatedStudents7d: number;
   reactivationRate7d: number;
+  weeklyContinuityRate: number;
+  followUpCoverageRate48h: number;
+  interventionBacklogCount: number;
+  overdueMissionCount: number;
+  missionStartedRate: number;
+  overdueMissionRecoveryRate: number;
   assignmentCoverageRate: number;
   planCoverageRate: number;
   unassignedStudents: number;
+  unassignedAtRiskCount: number;
+  trackCompletion: MissionTrackCompletionSummary[];
+  writingReturnRateByTrack: MissionTrackWritingReturnSummary[];
   instructors: OrganizationInstructorSummary[];
+  instructorBacklog: OrganizationInstructorBacklogSummary[];
   atRiskStudentList: StudentSummary[];
   studentAssignments: StudentSummary[];
   assignmentEvents: AssignmentEvent[];
@@ -607,6 +918,7 @@ export enum BusinessAdminWorkspaceView {
   OVERVIEW = 'OVERVIEW',
   ASSIGNMENTS = 'ASSIGNMENTS',
   INSTRUCTORS = 'INSTRUCTORS',
+  SETTINGS = 'SETTINGS',
   WRITING = 'WRITING',
   WORKSHEETS = 'WORKSHEETS',
   CATALOG = 'CATALOG',
@@ -822,6 +1134,7 @@ export interface WritingSubmission {
 
 export interface WritingAssignment {
   id: string;
+  organizationId: string;
   organizationName: string;
   instructorUid: string;
   instructorName: string;

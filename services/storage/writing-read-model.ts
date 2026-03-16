@@ -1,4 +1,10 @@
-import type { DashboardSnapshot, UserProfile } from '../../types';
+import {
+  InterventionKind,
+  InterventionOutcome,
+  RecommendedActionType,
+  type DashboardSnapshot,
+  type UserProfile,
+} from '../../types';
 
 export const getCoachNotifications = async (
   uid: string,
@@ -14,6 +20,9 @@ export const getCoachNotifications = async (
     triggerReason: '学習フォローアップ',
     deliveryChannel: 'IN_APP',
     usedAi: false,
+    interventionKind: InterventionKind.PRAISE,
+    recommendedActionType: RecommendedActionType.START_REVIEW,
+    interventionOutcome: InterventionOutcome.REACTIVATED,
     createdAt: Date.now() - 3600_000,
   },
 ];
