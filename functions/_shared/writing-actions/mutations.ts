@@ -18,7 +18,9 @@ import {
   encodeSubmissionMarker,
 } from '../../../utils/writing';
 import { HttpError, noContent } from '../http';
-import { handleGetAllStudentsProgress } from '../storage-organization-actions';
+import { rebuildOrganizationKpiSnapshots } from '../organization-kpi';
+import { touchWeeklyMissionProgressFromWriting } from '../storage-mission-actions';
+import { readFirst, toTokyoDateKey } from '../storage-support';
 import type { AppEnv, DbUserRow } from '../types';
 import {
   generateWritingPrompt,
@@ -28,8 +30,10 @@ import {
 } from '../writing-ai';
 import {
   ensureAssignmentAccess,
+  getVisibleStudentIds,
   guardTeacher,
   guardWritingAccess,
+  requireWritingOrganizationContext,
 } from './access';
 import {
   type DbWritingAssetRow,
@@ -98,10 +102,27 @@ export const handleGenerateWritingAssignment = async (
   request: GenerateWritingAssignmentRequest,
 ): Promise<WritingAssignment> => {
   guardTeacher(user);
-  const visibleStudents = await handleGetAllStudentsProgress(env, user);
-  const student = visibleStudents.find((candidate) => candidate.uid === request.studentUid);
-  if (!student) {
+  const organization = await requireWritingOrganizationContext(env, user);
+  const visibleStudentIds = await getVisibleStudentIds(env, user, organization);
+  if (!visibleStudentIds.has(request.studentUid)) {
     throw new HttpError(403, '担当範囲の生徒のみ課題作成できます。');
+  }
+  const student = await readFirst<{ id: string; display_name: string }>(
+    env,
+    `SELECT u.id AS id, u.display_name AS display_name
+     FROM users u
+     JOIN organization_memberships m
+       ON m.user_id = u.id
+      AND m.status = 'ACTIVE'
+     WHERE u.id = ?
+       AND u.role = ?
+       AND m.organization_id = ?`,
+    request.studentUid,
+    'STUDENT',
+    organization.organizationId,
+  );
+  if (!student) {
+    throw new HttpError(404, '対象生徒が見つかりません。');
   }
 
   const template = await getTemplateOrThrow(env, request.templateId);
@@ -110,7 +131,7 @@ export const handleGenerateWritingAssignment = async (
     env,
     user,
     writingTemplate,
-    student.name,
+    student.display_name,
     request.topicHint,
     request.notes,
   );
@@ -132,15 +153,16 @@ export const handleGenerateWritingAssignment = async (
 
   await env.DB.prepare(`
     INSERT INTO writing_assignments (
-      id, organization_name, instructor_user_id, student_user_id, template_id, exam_category, template_type,
+      id, organization_id, organization_name, instructor_user_id, student_user_id, template_id, exam_category, template_type,
       prompt_title, prompt_text, guidance, word_count_min, word_count_max, submission_code, prompt_snapshot,
       status, attempt_count, max_attempts, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 2, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 2, ?, ?)
   `).bind(
     assignmentId,
-    user.organization_name,
+    organization.organizationId,
+    organization.organizationName,
     user.id,
-    student.uid,
+    student.id,
     template.id,
     template.exam_category,
     template.template_type,
@@ -218,7 +240,7 @@ export const handleCreateWritingUploadUrl = async (
   const assetId = crypto.randomUUID();
   const uploadToken = crypto.randomUUID();
   const safeName = request.fileName.replace(/[^\w.\-]+/g, '_');
-  const r2Key = `${assignmentRow.organization_name}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
+  const r2Key = `${assignmentRow.organization_id || 'org-unknown'}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
   const now = Date.now();
 
   await env.DB.prepare(`
@@ -423,6 +445,17 @@ export const handleFinalizeWritingSubmission = async (
     request.assignmentId,
   ).run();
 
+  await touchWeeklyMissionProgressFromWriting(env, {
+    studentUid: assignmentRow.student_user_id,
+    writingAssignmentId: request.assignmentId,
+    activityAt: now,
+  });
+  if (assignmentRow.organization_id) {
+    await rebuildOrganizationKpiSnapshots(env, assignmentRow.organization_id, {
+      dateKeys: [toTokyoDateKey(now)],
+    });
+  }
+
   return (await readSubmissionContext(env, submissionId)).detail;
 };
 
@@ -489,6 +522,17 @@ const applyTeacherReview = async (
     detail.assignment.id,
   ).run();
 
+  await touchWeeklyMissionProgressFromWriting(env, {
+    studentUid: detail.assignment.studentUid,
+    writingAssignmentId: detail.assignment.id,
+    activityAt: now,
+  });
+  if (detail.assignment.organizationId) {
+    await rebuildOrganizationKpiSnapshots(env, detail.assignment.organizationId, {
+      dateKeys: [toTokyoDateKey(now)],
+    });
+  }
+
   return (await readSubmissionContext(env, submissionId)).detail;
 };
 
@@ -531,6 +575,17 @@ export const handleCompleteWritingAssignment = async (
     Date.now(),
     assignmentId,
   ).run();
+
+  await touchWeeklyMissionProgressFromWriting(env, {
+    studentUid: row.student_user_id,
+    writingAssignmentId: assignmentId,
+    activityAt: Date.now(),
+  });
+  if (row.organization_id) {
+    await rebuildOrganizationKpiSnapshots(env, row.organization_id, {
+      dateKeys: [toTokyoDateKey(Date.now())],
+    });
+  }
 
   return readAssignmentResponse(env, assignmentId);
 };

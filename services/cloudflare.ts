@@ -8,7 +8,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, LeaderboardEntry, LearningPlan, LearningPreference, MasteryDistribution, OrganizationDashboardSnapshot, OrganizationRole, ProductAnnouncement, ProductAnnouncementFeed, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage';
 
@@ -139,10 +139,17 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs = 0): Promise<void> {
+  async recordQuizAttempt(
+    uid: string,
+    wordId: string,
+    bookId: string,
+    correct: boolean,
+    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+    responseTimeMs = 0,
+  ): Promise<void> {
     await this.callStorage({
       action: 'recordQuizAttempt',
-      payload: { wordId, bookId, correct, responseTimeMs },
+      payload: { wordId, bookId, correct, questionMode, responseTimeMs },
     });
   }
 
@@ -171,10 +178,17 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async sendInstructorNotification(studentUid: string, message: string, triggerReason: string, usedAi: boolean): Promise<void> {
+  async sendInstructorNotification(
+    studentUid: string,
+    message: string,
+    triggerReason: string,
+    usedAi: boolean,
+    interventionKind: InterventionKind,
+    recommendedActionType?: RecommendedActionType,
+  ): Promise<void> {
     await this.callStorage({
       action: 'sendInstructorNotification',
-      payload: { studentUid, message, triggerReason, usedAi },
+      payload: { studentUid, message, triggerReason, usedAi, interventionKind, recommendedActionType },
     });
   }
 
@@ -211,6 +225,42 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
+  async createWeeklyMission(payload: {
+    learningTrack: LearningTrack;
+    title?: string;
+    rationale?: string;
+    bookId?: string;
+    bookTitle?: string;
+    newWordsTarget: number;
+    reviewWordsTarget: number;
+    quizTargetCount: number;
+    writingAssignmentId?: string;
+    dueAt?: number;
+  }): Promise<WeeklyMission> {
+    return this.callStorage({
+      action: 'createWeeklyMission',
+      payload,
+    });
+  }
+
+  async assignWeeklyMission(missionId: string, studentUid: string): Promise<MissionAssignment> {
+    return this.callStorage({
+      action: 'assignWeeklyMission',
+      payload: { missionId, studentUid },
+    });
+  }
+
+  async getWeeklyMissionBoard(): Promise<WeeklyMissionBoard> {
+    return this.callStorage({ action: 'getWeeklyMissionBoard' });
+  }
+
+  async updateMissionProgress(assignmentId: string, eventType: MissionProgressEventType): Promise<MissionAssignment> {
+    return this.callStorage({
+      action: 'updateMissionProgress',
+      payload: { assignmentId, eventType },
+    });
+  }
+
   async getDashboardSnapshot(uid: string): Promise<DashboardSnapshot> {
     return this.callStorage({ action: 'getDashboardSnapshot' });
   }
@@ -221,6 +271,10 @@ export class CloudflareStorageService implements IStorageService {
 
   async getOrganizationDashboardSnapshot(): Promise<OrganizationDashboardSnapshot> {
     return this.callStorage({ action: 'getOrganizationDashboardSnapshot' });
+  }
+
+  async getOrganizationSettingsSnapshot(): Promise<OrganizationSettingsSnapshot> {
+    return this.callStorage({ action: 'getOrganizationSettingsSnapshot' });
   }
 
   async getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]> {
@@ -243,6 +297,13 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage({
       action: 'submitCommercialRequest',
       payload,
+    });
+  }
+
+  async updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot> {
+    return this.callStorage({
+      action: 'updateOrganizationProfile',
+      payload: { displayName },
     });
   }
 

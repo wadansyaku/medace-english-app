@@ -1,17 +1,36 @@
 import {
-  LearningHistory,
+  InterventionKind,
+  OrganizationAuditEvent,
   OrganizationDashboardSnapshot,
+  OrganizationMemberSummary,
   OrganizationRole,
+  OrganizationSettingsSnapshot,
+  RecommendedActionType,
   StudentRiskLevel,
   StudentSummary,
   StudentWorksheetSnapshot,
   SubscriptionPlan,
   UserProfile,
   UserRole,
+  WeeklyMissionStatus,
+  WeaknessDimension,
+  WeaknessSignalLevel,
   WordData,
 } from '../../types';
+import {
+  FOLLOW_UP_WINDOW_MS,
+  getContinuityBand,
+  resolveInterventionOutcome,
+  resolveNeedsFollowUpNow,
+  resolveRecommendedActionType,
+} from '../../shared/retention';
+import {
+  buildMissionTrackCompletion,
+  buildMissionWritingReturnRateByTrack,
+  calculateMissionOverdueRecoveryRate,
+  calculateMissionStartedRate,
+} from '../../shared/missions';
 import { isDemoEmail } from '../../utils/demo';
-import { getMasteryDistributionBucket } from '../../shared/learningHistory';
 import {
   FALLBACK_WORKSHEET_WORD_LIMIT,
   GetStore,
@@ -22,9 +41,14 @@ import {
   type StoredLearningHistoryRecord,
 } from './idb-support';
 import {
+  IDB_MOCK_ORGANIZATION_IDS,
   IDB_MOCK_ASSIGNMENTS,
   IDB_MOCK_USERS,
 } from './mockData';
+import {
+  getLocalMissionAssignmentByStudent,
+  listLocalMissionAssignments,
+} from './missions';
 import {
   getUserLearningHistories,
   toWorksheetMasteryStatus,
@@ -36,6 +60,141 @@ export interface OrganizationReadModelContext {
   getBooks: () => Promise<Array<{ id: string; title: string; }>>;
   getWordsByBook: (bookId: string) => Promise<WordData[]>;
 }
+
+interface LocalOrganizationRecord {
+  organizationId: string;
+  displayName: string;
+  nameKey: string;
+  subscriptionPlan: SubscriptionPlan;
+  updatedAt: number;
+}
+
+const toNameKey = (value: string): string => value.trim().toLocaleLowerCase('en-US');
+
+const LOCAL_ORGANIZATIONS = new Map<string, LocalOrganizationRecord>([
+  [
+    IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+    {
+      organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+      displayName: 'Steady Study Demo Academy',
+      nameKey: toNameKey('Steady Study Demo Academy'),
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      updatedAt: Date.now() - 2 * 3600_000,
+    },
+  ],
+  [
+    IDB_MOCK_ORGANIZATION_IDS.HQ,
+    {
+      organizationId: IDB_MOCK_ORGANIZATION_IDS.HQ,
+      displayName: 'Steady Study HQ',
+      nameKey: toNameKey('Steady Study HQ'),
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      updatedAt: Date.now() - 6 * 3600_000,
+    },
+  ],
+]);
+
+const LOCAL_ORGANIZATION_AUDIT_LOGS = new Map<string, OrganizationAuditEvent[]>([
+  [
+    IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+    [
+      {
+        id: 1,
+        organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+        actorUserId: 'mock-group-admin-001',
+        actorDisplayName: '朝比奈 由奈',
+        actionType: 'COMMERCIAL_PROVISIONED',
+        targetType: 'USER',
+        targetId: 'mock-student-biz-001',
+        payload: { source: 'local-demo' },
+        createdAt: Date.now() - 48 * 3600_000,
+      },
+      {
+        id: 2,
+        organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+        actorUserId: 'mock-group-admin-001',
+        actorDisplayName: '朝比奈 由奈',
+        actionType: 'STUDENT_ASSIGNMENT_CHANGED',
+        targetType: 'STUDENT',
+        targetId: 'student-biz-2',
+        payload: { nextInstructorUid: 'mock-instructor-001' },
+        createdAt: Date.now() - 6 * 3600_000,
+      },
+    ],
+  ],
+]);
+
+const readLocalOrganizationRecord = (organizationId?: string): LocalOrganizationRecord | null => {
+  if (!organizationId) return null;
+  return LOCAL_ORGANIZATIONS.get(organizationId) || null;
+};
+
+const resolveLocalOrganizationForUser = (user: UserProfile | null): LocalOrganizationRecord | null => {
+  if (!user) return null;
+  const byId = readLocalOrganizationRecord(user.organizationId);
+  if (byId) return byId;
+  if (!user.organizationName) return null;
+  for (const organization of LOCAL_ORGANIZATIONS.values()) {
+    if (organization.displayName === user.organizationName) return organization;
+  }
+  return null;
+};
+
+const listLocalOrganizationMembers = (organizationId: string): OrganizationMemberSummary[] => (
+  IDB_MOCK_USERS
+    .filter((user) => user.organizationId === organizationId && user.organizationRole)
+    .map((user) => ({
+      userUid: user.uid,
+      displayName: user.displayName,
+      email: user.email,
+      userRole: user.role,
+      organizationRole: user.organizationRole as OrganizationRole,
+      subscriptionPlan: user.subscriptionPlan || SubscriptionPlan.TOC_FREE,
+      joinedAt: Date.now() - 14 * 86400000,
+      updatedAt: Date.now() - 3600_000,
+    }))
+    .sort((left, right) => {
+      if (left.organizationRole !== right.organizationRole) {
+        return left.organizationRole.localeCompare(right.organizationRole);
+      }
+      return left.displayName.localeCompare(right.displayName, 'ja-JP');
+    })
+);
+
+const listLocalOrganizationAuditEvents = (organizationId: string): OrganizationAuditEvent[] => (
+  [...(LOCAL_ORGANIZATION_AUDIT_LOGS.get(organizationId) || [])]
+    .sort((left, right) => right.createdAt - left.createdAt)
+);
+
+const buildMockWeakness = (
+  dimension: WeaknessDimension,
+  overrides: Partial<NonNullable<StudentSummary['topWeaknesses']>[number]> = {},
+): NonNullable<StudentSummary['topWeaknesses']>[number] => ({
+  dimension,
+  level: WeaknessSignalLevel.HIGH,
+  score: 58,
+  sampleSize: 12,
+  reason: dimension === WeaknessDimension.RETENTION_STABILITY
+    ? '復習間隔が空いた単語で忘れやすさが出ています。'
+    : dimension === WeaknessDimension.SPELLING_RECALL
+      ? 'スペリング問題で綴りの取りこぼしが続いています。'
+      : '意味から英語を思い出す問題で取りこぼしが出ています。',
+  nextActionLabel: dimension === WeaknessDimension.ADVANCED_BAND_CONFIDENCE ? '今日のプランに戻る' : '復習を10語始める',
+  recommendedActionType: dimension === WeaknessDimension.ADVANCED_BAND_CONFIDENCE ? RecommendedActionType.OPEN_PLAN : RecommendedActionType.START_REVIEW,
+  targetQuestionModes: dimension === WeaknessDimension.SPELLING_RECALL ? ['SPELLING_HINT'] : ['JA_TO_EN'],
+  updatedAt: Date.now() - 3 * 3600_000,
+  ...overrides,
+});
+
+const getLocalSettingsSnapshot = (organization: LocalOrganizationRecord): OrganizationSettingsSnapshot => ({
+  organizationId: organization.organizationId,
+  displayName: organization.displayName,
+  nameKey: organization.nameKey,
+  subscriptionPlan: organization.subscriptionPlan,
+  members: listLocalOrganizationMembers(organization.organizationId),
+  auditEvents: listLocalOrganizationAuditEvents(organization.organizationId),
+  updatedAt: organization.updatedAt,
+});
 
 const buildFallbackWorksheetWords = async (
   context: Pick<OrganizationReadModelContext, 'getBooks' | 'getWordsByBook'>,
@@ -152,7 +311,10 @@ export const buildWorksheetWordsFromHistoryRecords = ({
 export const getAllStudentsProgress = async (
   context: Pick<OrganizationReadModelContext, 'getStore' | 'getSession'>,
 ): Promise<StudentSummary[]> => {
+  const now = Date.now();
   const sessionUser = await context.getSession();
+  const sessionOrganization = resolveLocalOrganizationForUser(sessionUser);
+  const businessOrganizationName = sessionOrganization?.displayName || 'Steady Study Demo Academy';
   const assignmentStore = await context.getStore(STORES.ASSIGNMENTS);
   const assignments = await readAllStoreRecords<StoredAssignmentRecord>(assignmentStore);
   const mergedAssignments = new Map<string, string | null>(
@@ -160,26 +322,153 @@ export const getAllStudentsProgress = async (
   );
 
   const allStudents: StudentSummary[] = [
-    { uid: 'student-free-1', name: '鈴木 健太', email: 'kenta@medace.com', totalLearned: 150, totalAttempts: 300, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.85, subscriptionPlan: SubscriptionPlan.TOC_FREE, hasLearningPlan: true, riskReasons: ['直近7日で安定して学習'], recommendedAction: '称賛して現状維持' },
-    { uid: 'student-biz-1', name: '黒田 颯太', email: 'sota@demo-school.jp', totalLearned: 96, totalAttempts: 130, lastActive: Date.now() - 86400000, riskLevel: StudentRiskLevel.WARNING, accuracy: 0.76, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 昨日の復習を10語だけ戻しましょう。', hasLearningPlan: true, hasReactivatedSinceNotification: true, lastReactivatedAt: Date.now() - 43200000, riskReasons: ['1日学習が空いている', '復習を先に戻したい段階'], recommendedAction: '復習10語の再開を促す' },
-    { uid: 'student-biz-2', name: '田中 陽葵', email: 'hina@demo-school.jp', totalLearned: 45, totalAttempts: 60, lastActive: Date.now() - 86400000 * 4, riskLevel: StudentRiskLevel.DANGER, accuracy: 0.60, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', lastNotificationAt: Date.now() - 86400000, lastNotificationMessage: 'Oak先生より: 2日空いたので、まずは10語だけ復習しましょう。', hasLearningPlan: false, hasReactivatedSinceNotification: false, riskReasons: ['3日以上学習が停止', '正答率が60%台', '学習プラン未設定'], recommendedAction: '担当講師が短い再開タスクを指定' },
-    { uid: 'student-biz-3', name: '森 結月', email: 'yuzuki@demo-school.jp', totalLearned: 188, totalAttempts: 240, lastActive: Date.now(), riskLevel: StudentRiskLevel.SAFE, accuracy: 0.88, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'Steady Study Demo Academy', hasLearningPlan: true, riskReasons: ['高い正答率で安定'], recommendedAction: '次の教材へ拡張' },
+    {
+      uid: 'student-free-1',
+      name: '鈴木 健太',
+      email: 'kenta@medace.com',
+      totalLearned: 150,
+      totalAttempts: 300,
+      lastActive: now,
+      riskLevel: StudentRiskLevel.SAFE,
+      accuracy: 0.85,
+      subscriptionPlan: SubscriptionPlan.TOC_FREE,
+      hasLearningPlan: true,
+      activeStudyDays7d: 5,
+      topWeaknesses: [buildMockWeakness(WeaknessDimension.MEANING_RECOGNITION, {
+        level: WeaknessSignalLevel.LOW,
+        score: 18,
+        sampleSize: 14,
+        reason: '英語を見て意味を取る力は安定しています。',
+      })],
+      weaknessProfileUpdatedAt: now - 2 * 3600_000,
+      riskReasons: ['直近7日で安定して学習'],
+      recommendedAction: '称賛して現状維持',
+    },
+    {
+      uid: 'student-biz-1',
+      name: '黒田 颯太',
+      email: 'sota@demo-school.jp',
+      totalLearned: 96,
+      totalAttempts: 130,
+      lastActive: now - 86400000,
+      riskLevel: StudentRiskLevel.WARNING,
+      accuracy: 0.76,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      organizationName: businessOrganizationName,
+      lastNotificationAt: now - 36 * 60 * 60 * 1000,
+      lastNotificationMessage: 'Oak先生より: 昨日の復習を10語だけ戻しましょう。',
+      latestInterventionKind: InterventionKind.REVIEW_RESTART,
+      hasLearningPlan: true,
+      hasReactivatedSinceNotification: true,
+      lastReactivatedAt: now - 12 * 60 * 60 * 1000,
+      activeStudyDays7d: 4,
+      topWeaknesses: [buildMockWeakness(WeaknessDimension.RETENTION_STABILITY)],
+      weaknessProfileUpdatedAt: now - 4 * 3600_000,
+      riskReasons: ['1日学習が空いている', '復習を先に戻したい段階'],
+      recommendedAction: '復習10語の再開を促す',
+    },
+    {
+      uid: 'student-biz-2',
+      name: '田中 陽葵',
+      email: 'hina@demo-school.jp',
+      totalLearned: 45,
+      totalAttempts: 60,
+      lastActive: now - 86400000 * 4,
+      riskLevel: StudentRiskLevel.DANGER,
+      accuracy: 0.60,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      organizationName: businessOrganizationName,
+      lastNotificationAt: now - 96 * 60 * 60 * 1000,
+      lastNotificationMessage: 'Oak先生より: まずは10語だけ復習して流れを戻しましょう。',
+      latestInterventionKind: InterventionKind.REVIEW_RESTART,
+      hasLearningPlan: false,
+      hasReactivatedSinceNotification: false,
+      activeStudyDays7d: 1,
+      topWeaknesses: [buildMockWeakness(WeaknessDimension.SPELLING_RECALL, {
+        score: 71,
+        sampleSize: 10,
+      })],
+      weaknessProfileUpdatedAt: now - 5 * 3600_000,
+      riskReasons: ['3日以上学習が停止', '正答率が60%台', '学習プラン未設定'],
+      recommendedAction: '担当講師が短い再開タスクを指定',
+    },
+    {
+      uid: 'student-biz-3',
+      name: '森 結月',
+      email: 'yuzuki@demo-school.jp',
+      totalLearned: 188,
+      totalAttempts: 240,
+      lastActive: now,
+      riskLevel: StudentRiskLevel.SAFE,
+      accuracy: 0.88,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      organizationName: businessOrganizationName,
+      lastNotificationAt: now - 20 * 60 * 60 * 1000,
+      lastNotificationMessage: 'Oak先生より: このリズムを維持できています。次も同じペースでいきましょう。',
+      latestInterventionKind: InterventionKind.PRAISE,
+      hasLearningPlan: true,
+      activeStudyDays7d: 6,
+      topWeaknesses: [buildMockWeakness(WeaknessDimension.ADVANCED_BAND_CONFIDENCE, {
+        level: WeaknessSignalLevel.MEDIUM,
+        score: 34,
+        sampleSize: 9,
+        reason: '今の難度帯で正答が安定しきっていません。',
+        nextActionLabel: '今日のプランに戻る',
+        recommendedActionType: RecommendedActionType.OPEN_PLAN,
+        targetQuestionModes: ['JA_TO_EN', 'EN_TO_JA'],
+      })],
+      weaknessProfileUpdatedAt: now - 2 * 3600_000,
+      riskReasons: ['高い正答率で安定'],
+      recommendedAction: '次の教材へ拡張',
+    },
   ];
 
   const withAssignments = allStudents.map((student) => {
     const assignedInstructorUid = mergedAssignments.get(student.uid) || undefined;
     const assignedInstructor = IDB_MOCK_USERS.find((user) => user.uid === assignedInstructorUid);
+    const missionAssignment = getLocalMissionAssignmentByStudent(student.uid);
+    const missionOverdue = Boolean(
+      missionAssignment?.progress.overdue
+      || missionAssignment?.progress.status === WeeklyMissionStatus.OVERDUE,
+    );
+    const latestInterventionAt = student.lastNotificationAt;
+    const latestInterventionOutcome = resolveInterventionOutcome({
+      latestInterventionAt,
+      lastReactivatedAt: student.lastReactivatedAt,
+      now,
+    });
     return {
       ...student,
       assignedInstructorUid,
       assignedInstructorName: assignedInstructor?.displayName,
+      continuityBand: getContinuityBand(student.activeStudyDays7d || 0),
+      latestInterventionAt,
+      latestInterventionOutcome,
+      latestRecommendedActionType: resolveRecommendedActionType({
+        interventionKind: student.latestInterventionKind,
+        hasLearningPlan: student.hasLearningPlan,
+      }),
+      needsFollowUpNow: resolveNeedsFollowUpNow({
+        riskLevel: student.riskLevel,
+      latestInterventionAt,
+      latestInterventionOutcome,
+      missionOverdue,
+      now,
+    }),
+      primaryMissionStatus: missionAssignment?.progress.status,
+      primaryMissionTrack: missionAssignment?.mission.learningTrack,
+      primaryMissionTitle: missionAssignment?.mission.title,
+      primaryMissionCompletionRate: missionAssignment?.progress.completionRate,
+      missionDueAt: missionAssignment?.mission.dueAt,
+      missionOverdue,
+      missionLastActivityAt: missionAssignment?.progress.lastActivityAt,
     };
   });
 
   if (sessionUser?.role === UserRole.ADMIN) return withAssignments;
 
-  if (sessionUser?.organizationName) {
-    const orgStudents = withAssignments.filter((student) => student.organizationName === sessionUser.organizationName);
+  if (sessionOrganization) {
+    const orgStudents = withAssignments.filter((student) => student.organizationName === sessionOrganization.displayName);
     const bypassAssignment =
       sessionUser.organizationRole === OrganizationRole.GROUP_ADMIN
       || (
@@ -233,6 +522,8 @@ export const sendInstructorNotification = async (
   _message: string,
   _triggerReason: string,
   _usedAi: boolean,
+  _interventionKind: InterventionKind,
+  _recommendedActionType?: RecommendedActionType,
 ): Promise<void> => {
 };
 
@@ -240,9 +531,18 @@ export const getOrganizationDashboardSnapshot = async (
   context: Pick<OrganizationReadModelContext, 'getSession' | 'getStore'>,
 ): Promise<OrganizationDashboardSnapshot> => {
   const sessionUser = await context.getSession();
+  const sessionOrganization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!sessionOrganization) {
+    throw new Error('ローカル組織情報が見つかりません。');
+  }
   const students = await getAllStudentsProgress(context);
+  const missionAssignments = listLocalMissionAssignments(sessionUser)
+    .filter((assignment) => assignment.progress.status !== WeeklyMissionStatus.ARCHIVED)
+    .filter((assignment) => assignment.mission.organizationId === sessionOrganization.organizationId);
+  const now = Date.now();
   const instructors = IDB_MOCK_USERS
-    .filter((user) => user.role === UserRole.INSTRUCTOR && user.organizationName === sessionUser?.organizationName)
+    .filter((user) => user.role === UserRole.INSTRUCTOR && user.organizationId === sessionOrganization.organizationId)
     .map((user) => ({
       uid: user.uid,
       displayName: user.displayName,
@@ -254,24 +554,61 @@ export const getOrganizationDashboardSnapshot = async (
     }));
 
   const assignedStudents = students.filter((student) => student.assignedInstructorUid).length;
+  const atRiskStudents = students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE);
+  const weeklyContinuityStudents = students.filter((student) => (student.activeStudyDays7d || 0) >= 4).length;
+  const followedUpAtRiskStudents = atRiskStudents.filter((student) => (
+    Boolean(student.latestInterventionAt) && now - Number(student.latestInterventionAt || 0) <= FOLLOW_UP_WINDOW_MS
+  )).length;
+  const instructorBacklog = instructors.map((instructor) => {
+    const assigned = students.filter((student) => student.assignedInstructorUid === instructor.uid);
+    const immediateCount = assigned.filter((student) => student.needsFollowUpNow).length;
+    const waitingCount = assigned.filter((student) => (
+      !student.needsFollowUpNow && student.latestInterventionOutcome === 'PENDING'
+    )).length;
+    const reactivatedCount = assigned.filter((student) => student.latestInterventionOutcome === 'REACTIVATED').length;
+    return {
+      uid: instructor.uid,
+      displayName: instructor.displayName,
+      email: instructor.email,
+      organizationRole: instructor.organizationRole,
+      assignedStudentCount: instructor.assignedStudentCount,
+      immediateCount,
+      waitingCount,
+      reactivatedCount,
+      backlogCount: immediateCount + waitingCount,
+    };
+  });
+  const trackCompletion = buildMissionTrackCompletion(missionAssignments);
+  const writingReturnRateByTrack = buildMissionWritingReturnRateByTrack(missionAssignments);
 
   return {
-    organizationName: sessionUser?.organizationName || 'Steady Study Demo Academy',
-    subscriptionPlan: sessionUser?.subscriptionPlan || SubscriptionPlan.TOB_PAID,
+    organizationId: sessionOrganization.organizationId,
+    organizationName: sessionOrganization.displayName,
+    subscriptionPlan: sessionOrganization.subscriptionPlan,
     totalMembers: instructors.length + students.length,
     totalStudents: students.length,
     totalInstructors: instructors.length,
     activeStudents7d: students.filter((student) => Date.now() - student.lastActive < 7 * 86400000).length,
-    atRiskStudents: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE).length,
+    atRiskStudents: atRiskStudents.length,
     learningPlanCount: Math.max(1, students.length - 1),
     notifications7d: 8,
     reactivatedStudents7d: Math.max(0, students.length - 2),
     reactivationRate7d: students.length > 0 ? Math.round((Math.max(0, students.length - 2) / students.length) * 100) : 0,
+    weeklyContinuityRate: students.length > 0 ? Math.round((weeklyContinuityStudents / students.length) * 100) : 0,
+    followUpCoverageRate48h: atRiskStudents.length > 0 ? Math.round((followedUpAtRiskStudents / atRiskStudents.length) * 100) : 0,
+    interventionBacklogCount: students.filter((student) => student.needsFollowUpNow).length,
+    overdueMissionCount: missionAssignments.filter((assignment) => assignment.progress.status === WeeklyMissionStatus.OVERDUE).length,
+    missionStartedRate: calculateMissionStartedRate(missionAssignments),
+    overdueMissionRecoveryRate: calculateMissionOverdueRecoveryRate(missionAssignments, now),
     assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
     planCoverageRate: students.length > 0 ? Math.round((Math.max(1, students.length - 1) / students.length) * 100) : 0,
     unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
+    unassignedAtRiskCount: students.filter((student) => !student.assignedInstructorUid && student.riskLevel !== StudentRiskLevel.SAFE).length,
+    trackCompletion,
+    writingReturnRateByTrack,
     instructors,
-    atRiskStudentList: students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE),
+    instructorBacklog,
+    atRiskStudentList: atRiskStudents,
     studentAssignments: students,
     assignmentEvents: [
       {
@@ -289,4 +626,71 @@ export const getOrganizationDashboardSnapshot = async (
     ],
     trend: [],
   };
+};
+
+export const getOrganizationSettingsSnapshot = async (
+  context: Pick<OrganizationReadModelContext, 'getSession'>,
+): Promise<OrganizationSettingsSnapshot> => {
+  const sessionUser = await context.getSession();
+  const organization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!organization) {
+    throw new Error('組織設定を表示できません。');
+  }
+  return getLocalSettingsSnapshot(organization);
+};
+
+export const updateOrganizationProfile = async (
+  context: Pick<OrganizationReadModelContext, 'getSession'>,
+  displayName: string,
+): Promise<OrganizationSettingsSnapshot> => {
+  const trimmed = displayName.trim();
+  if (!trimmed) {
+    throw new Error('組織名を入力してください。');
+  }
+
+  const sessionUser = await context.getSession();
+  const organization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!organization) {
+    throw new Error('組織設定を更新できません。');
+  }
+
+  const nextNameKey = toNameKey(trimmed);
+  const duplicate = [...LOCAL_ORGANIZATIONS.values()].find((candidate) => (
+    candidate.organizationId !== organization.organizationId && candidate.nameKey === nextNameKey
+  ));
+  if (duplicate) {
+    throw new Error('同名の組織が既に存在します。');
+  }
+
+  organization.displayName = trimmed;
+  organization.nameKey = nextNameKey;
+  organization.updatedAt = Date.now();
+  IDB_MOCK_USERS.forEach((user) => {
+    if (user.organizationId === organization.organizationId) {
+      user.organizationName = trimmed;
+    }
+  });
+
+  const nextAuditId = Math.max(
+    0,
+    ...[...(LOCAL_ORGANIZATION_AUDIT_LOGS.get(organization.organizationId) || [])].map((event) => event.id),
+  ) + 1;
+  const actor = IDB_MOCK_USERS.find((user) => user.uid === sessionUser?.uid) || IDB_MOCK_USERS.find((user) => user.organizationRole === OrganizationRole.GROUP_ADMIN);
+  const nextEvent: OrganizationAuditEvent = {
+    id: nextAuditId,
+    organizationId: organization.organizationId,
+    actorUserId: actor?.uid || 'local-group-admin',
+    actorDisplayName: actor?.displayName || 'ローカル管理者',
+    actionType: 'ORGANIZATION_RENAMED',
+    targetType: 'ORGANIZATION',
+    targetId: organization.organizationId,
+    payload: { displayName: trimmed },
+    createdAt: Date.now(),
+  };
+  const existingEvents = LOCAL_ORGANIZATION_AUDIT_LOGS.get(organization.organizationId) || [];
+  LOCAL_ORGANIZATION_AUDIT_LOGS.set(organization.organizationId, [nextEvent, ...existingEvents]);
+
+  return getLocalSettingsSnapshot(organization);
 };

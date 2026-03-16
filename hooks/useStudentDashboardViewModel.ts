@@ -31,11 +31,13 @@ export const useStudentDashboardViewModel = ({
   const progressMap = snapshot?.progressMap ?? {};
   const learningPlan = snapshot?.learningPlan ?? null;
   const learningPreference = snapshot?.learningPreference ?? null;
+  const weaknessProfile = snapshot?.weaknessProfile ?? null;
   const leaderboard = snapshot?.leaderboard ?? [];
   const masteryDist = snapshot?.masteryDist ?? null;
   const activityLogs = snapshot?.activityLogs ?? [];
   const motivationSnapshot = snapshot?.motivationSnapshot ?? null;
   const coachNotifications = snapshot?.coachNotifications ?? [];
+  const primaryMission = snapshot?.primaryMission ?? null;
   const accountOverview = snapshot?.accountOverview ?? null;
   const commercialRequests = snapshot?.commercialRequests ?? [];
 
@@ -144,11 +146,13 @@ export const useStudentDashboardViewModel = ({
     progressMap,
     learningPlan,
     learningPreference,
+    weaknessProfile,
     leaderboard,
     masteryDist,
     activityLogs,
     motivationSnapshot,
     coachNotifications,
+    primaryMission,
     accountOverview,
     commercialRequests,
     planningBooks,

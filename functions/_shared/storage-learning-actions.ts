@@ -1,8 +1,15 @@
 import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, UserProfile } from '../../types';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
+import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
+import { readActiveOrganizationContextForUser } from './organization-memberships';
+import {
+  readMissionAssignmentsByStudent,
+  touchWeeklyMissionProgressFromQuiz,
+  touchWeeklyMissionProgressFromStudy,
+} from './storage-mission-actions';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
 import {
   AppEnv,
@@ -23,6 +30,12 @@ import {
   type DbLearningPreferenceRow,
 } from './storage-support';
 import { HttpError } from './http';
+
+const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
+  const organization = await readActiveOrganizationContextForUser(env, userId);
+  if (!organization) return;
+  await rebuildOrganizationKpiSnapshots(env, organization.organizationId, { dateKeys });
+};
 
 export const handleAddXP = async (
   env: AppEnv,
@@ -67,6 +80,7 @@ export const handleSaveSrsHistory = async (
   responseTimeMs = 0,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, word.bookId);
+  const now = Date.now();
   const existing = await readFirst<DbHistoryRow>(
     env,
     'SELECT * FROM learning_histories WHERE user_id = ? AND word_id = ?',
@@ -94,7 +108,7 @@ export const handleSaveSrsHistory = async (
 
   if (interval > 365) interval = 365;
 
-  const nextReviewDate = Date.now() + interval * DAY_MS;
+  const nextReviewDate = now + interval * DAY_MS;
   const status = normalizeHistoryStatus(interval);
 
   await env.DB.prepare(`
@@ -118,7 +132,7 @@ export const handleSaveSrsHistory = async (
     word.id,
     word.bookId,
     status,
-    Date.now(),
+    now,
     nextReviewDate,
     interval,
     easeFactor,
@@ -128,11 +142,37 @@ export const handleSaveSrsHistory = async (
     MASTERY_INTERACTION_SOURCE,
   ).run();
 
-  if (user.organization_name) {
-    await rebuildOrganizationKpiSnapshots(env, user.organization_name, {
-      dateKeys: getLastTokyoDateKeys(4),
-    });
-  }
+  const [bookProgressionBand, missionAssignments] = await Promise.all([
+    resolveBookProgressionBand(env, word.bookId),
+    readMissionAssignmentsByStudent(env, [user.id]),
+  ]);
+  const missionAssignment = missionAssignments.get(user.id);
+  const missionAssignmentId = !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === word.bookId
+    ? missionAssignment?.id
+    : undefined;
+  await appendLearningInteractionEvent(env, {
+    userId: user.id,
+    wordId: word.id,
+    bookId: word.bookId,
+    createdAt: now,
+    interactionSource: 'STUDY',
+    correct: rating >= 2,
+    rating,
+    responseTimeMs,
+    intervalDaysBefore: existing?.interval_days || 0,
+    bookProgressionBand,
+    missionAssignmentId,
+  });
+  await rebuildWeaknessSignalsForUser(env, user.id, user);
+
+  await touchWeeklyMissionProgressFromStudy(env, user, {
+    wordId: word.id,
+    bookId: word.bookId,
+    existingWasStudy: Boolean(existing?.interaction_source === MASTERY_INTERACTION_SOURCE),
+    studiedAt: now,
+  });
+
+  await rebuildOrganizationKpiForUser(env, user.id, getLastTokyoDateKeys(4));
 };
 
 export const handleRecordQuizAttempt = async (
@@ -141,9 +181,11 @@ export const handleRecordQuizAttempt = async (
   wordId: string,
   bookId: string,
   correct: boolean,
+  questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
   responseTimeMs = 0,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, bookId);
+  const now = Date.now();
   const existing = await readFirst<DbHistoryRow>(
     env,
     'SELECT * FROM learning_histories WHERE user_id = ? AND word_id = ?',
@@ -171,6 +213,7 @@ export const handleRecordQuizAttempt = async (
     bookId,
     correct,
     responseTimeMs,
+    now,
   });
 
   await env.DB.prepare(`
@@ -203,6 +246,35 @@ export const handleRecordQuizAttempt = async (
     nextHistory.totalResponseTimeMs,
     nextHistory.interactionSource || null,
   ).run();
+
+  const [bookProgressionBand, missionAssignments] = await Promise.all([
+    resolveBookProgressionBand(env, bookId),
+    readMissionAssignmentsByStudent(env, [user.id]),
+  ]);
+  const missionAssignment = missionAssignments.get(user.id);
+  const missionAssignmentId = !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === bookId
+    ? missionAssignment?.id
+    : undefined;
+  await appendLearningInteractionEvent(env, {
+    userId: user.id,
+    wordId,
+    bookId,
+    createdAt: nextHistory.lastStudiedAt,
+    interactionSource: 'QUIZ',
+    questionMode,
+    correct,
+    responseTimeMs,
+    intervalDaysBefore: existing?.interval_days || 0,
+    bookProgressionBand,
+    missionAssignmentId,
+  });
+  await rebuildWeaknessSignalsForUser(env, user.id, user);
+
+  await touchWeeklyMissionProgressFromQuiz(env, user, {
+    bookId,
+    dateKey: formatDateKey(nextHistory.lastStudiedAt),
+    attemptedAt: nextHistory.lastStudiedAt,
+  });
 };
 
 export const handleGetStudiedWordIdsByBook = async (
@@ -240,7 +312,13 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM product_announcements'),
     env.DB.prepare('DELETE FROM commercial_requests'),
     env.DB.prepare('DELETE FROM student_instructor_assignment_events'),
+    env.DB.prepare('DELETE FROM organization_audit_logs'),
+    env.DB.prepare('DELETE FROM organization_memberships'),
     env.DB.prepare('DELETE FROM organization_kpi_daily_snapshots'),
+    env.DB.prepare('DELETE FROM weekly_mission_assignments'),
+    env.DB.prepare('DELETE FROM weekly_missions'),
+    env.DB.prepare('DELETE FROM student_weakness_signals'),
+    env.DB.prepare('DELETE FROM learning_interaction_events'),
     env.DB.prepare('DELETE FROM word_reports'),
     env.DB.prepare('DELETE FROM learning_histories'),
     env.DB.prepare('DELETE FROM student_instructor_assignments'),
@@ -248,9 +326,16 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM learning_plans'),
     env.DB.prepare('DELETE FROM words'),
     env.DB.prepare('DELETE FROM books'),
+    env.DB.prepare('DELETE FROM organizations'),
     env.DB.prepare(`
       UPDATE users
-      SET stats_xp = 0, stats_level = 1, stats_current_streak = 0, updated_at = ?
+      SET stats_xp = 0,
+          stats_level = 1,
+          stats_current_streak = 0,
+          organization_id = NULL,
+          organization_name = NULL,
+          organization_role = NULL,
+          updated_at = ?
     `).bind(Date.now()),
   ];
   await env.DB.batch(statements);
@@ -279,11 +364,7 @@ export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan:
     Date.now(),
   ).run();
 
-  if (user.organization_name) {
-    await rebuildOrganizationKpiSnapshots(env, user.organization_name, {
-      dateKeys: getLastTokyoDateKeys(1),
-    });
-  }
+  await rebuildOrganizationKpiForUser(env, user.id, getLastTokyoDateKeys(1));
 };
 
 export const handleGetLearningPlan = async (env: AppEnv, user: DbUserRow): Promise<LearningPlan | null> => {

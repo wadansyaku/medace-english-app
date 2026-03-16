@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import {
+  InterventionOutcome,
   StudentRiskLevel,
   type StudentSummary,
   type WritingAssignment,
@@ -36,13 +37,21 @@ const makeStudent = (overrides: Partial<StudentSummary>): StudentSummary => ({
 describe('b2b workspace helpers', () => {
   it('filters assignment students by risk, assignment state, and query', () => {
     const students = [
-      makeStudent({ uid: 'danger-unassigned', name: 'Danger Uno', email: 'danger@example.com', riskLevel: StudentRiskLevel.DANGER }),
-      makeStudent({ uid: 'warning-assigned', name: 'Warning Duo', email: 'warning@example.com', riskLevel: StudentRiskLevel.WARNING, assignedInstructorUid: 'inst-1' }),
+      makeStudent({ uid: 'danger-unassigned', name: 'Danger Uno', email: 'danger@example.com', riskLevel: StudentRiskLevel.DANGER, needsFollowUpNow: true }),
+      makeStudent({
+        uid: 'warning-assigned',
+        name: 'Warning Duo',
+        email: 'warning@example.com',
+        riskLevel: StudentRiskLevel.WARNING,
+        assignedInstructorUid: 'inst-1',
+        latestInterventionAt: Date.now(),
+        latestInterventionOutcome: InterventionOutcome.PENDING,
+      }),
       makeStudent({ uid: 'safe-unassigned', name: 'Safe Trio', email: 'safe@example.com', riskLevel: StudentRiskLevel.SAFE }),
     ];
 
-    expect(filterAssignmentStudents(students, 'DANGER', '').map((student) => student.uid)).toEqual(['danger-unassigned']);
-    expect(filterAssignmentStudents(students, 'UNASSIGNED', '').map((student) => student.uid)).toEqual(['danger-unassigned', 'safe-unassigned']);
+    expect(filterAssignmentStudents(students, 'IMMEDIATE', '').map((student) => student.uid)).toEqual(['danger-unassigned']);
+    expect(filterAssignmentStudents(students, 'UNASSIGNED_AT_RISK', '').map((student) => student.uid)).toEqual(['danger-unassigned']);
     expect(filterAssignmentStudents(students, 'ALL', 'warning').map((student) => student.uid)).toEqual(['warning-assigned']);
   });
 
@@ -58,26 +67,28 @@ describe('b2b workspace helpers', () => {
     expect(resolveFocusedStudentUid([], 'student-a')).toBeNull();
   });
 
-  it('sorts instructor student queues by risk first and oldest activity next', () => {
+  it('sorts instructor student queues by queue segment first and oldest activity next', () => {
+    const now = Date.now();
     const students = [
-      makeStudent({ uid: 'safe', riskLevel: StudentRiskLevel.SAFE, lastActive: 500 }),
-      makeStudent({ uid: 'warning-recent', riskLevel: StudentRiskLevel.WARNING, lastActive: 400 }),
-      makeStudent({ uid: 'danger-recent', riskLevel: StudentRiskLevel.DANGER, lastActive: 300 }),
-      makeStudent({ uid: 'danger-oldest', riskLevel: StudentRiskLevel.DANGER, lastActive: 100 }),
+      makeStudent({ uid: 'reactivated', riskLevel: StudentRiskLevel.SAFE, lastActive: 500, latestInterventionOutcome: InterventionOutcome.REACTIVATED }),
+      makeStudent({ uid: 'waiting', riskLevel: StudentRiskLevel.WARNING, lastActive: 400, latestInterventionAt: now, latestInterventionOutcome: InterventionOutcome.PENDING }),
+      makeStudent({ uid: 'danger-recent', riskLevel: StudentRiskLevel.DANGER, lastActive: 300, needsFollowUpNow: true, latestInterventionOutcome: InterventionOutcome.EXPIRED }),
+      makeStudent({ uid: 'danger-oldest', riskLevel: StudentRiskLevel.DANGER, lastActive: 100, needsFollowUpNow: true }),
     ];
 
     expect(sortStudentsByPriority(students).map((student) => student.uid)).toEqual([
-      'danger-oldest',
       'danger-recent',
-      'warning-recent',
-      'safe',
+      'danger-oldest',
+      'waiting',
+      'reactivated',
     ]);
 
-    expect(filterStudentsForInstructorView(sortStudentsByPriority(students), 'WARNING', '').map((student) => student.uid)).toEqual([
-      'danger-oldest',
+    expect(filterStudentsForInstructorView(sortStudentsByPriority(students), 'IMMEDIATE', '').map((student) => student.uid)).toEqual([
       'danger-recent',
-      'warning-recent',
+      'danger-oldest',
     ]);
+    expect(filterStudentsForInstructorView(sortStudentsByPriority(students), 'WAITING', '').map((student) => student.uid)).toEqual(['waiting']);
+    expect(filterStudentsForInstructorView(sortStudentsByPriority(students), 'REACTIVATED', '').map((student) => student.uid)).toEqual(['reactivated']);
   });
 
   it('repairs writing review selections to the first available item', () => {

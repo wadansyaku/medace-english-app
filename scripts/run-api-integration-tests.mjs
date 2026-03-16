@@ -63,6 +63,20 @@ const findTrendPoint = (snapshot, dateKey) => (
   (snapshot?.trend || []).find((point) => point.date === dateKey) || null
 );
 
+const getBookBandIndex = (title) => {
+  if (!title) return null;
+  const normalized = title.replace(/\s+/g, '');
+  const levelMatch = normalized.match(/レベル([1-6])/);
+  if (levelMatch) return Number(levelMatch[1]);
+  if (normalized.includes('中1')) return 1;
+  if (normalized.includes('中2')) return 2;
+  if (normalized.includes('中3')) return 3;
+  if (normalized.includes('高1')) return 4;
+  if (normalized.includes('高2')) return 5;
+  if (normalized.includes('高3')) return 6;
+  return null;
+};
+
 class SessionClient {
   constructor(baseUrl, name) {
     this.baseUrl = baseUrl;
@@ -258,15 +272,17 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
   });
 };
 
-const importOfficialCatalog = async (admin, title, accessScope, catalogSource) => {
+const importOfficialCatalog = async (admin, title, accessScope, catalogSource, wordCount = 2) => {
   const result = await admin.storage('batchImportWords', {
     defaultBookName: title,
     source: {
       kind: 'rows',
-      rows: [
-        { bookName: title, number: 1, word: `${title} alpha`, definition: 'alpha definition' },
-        { bookName: title, number: 2, word: `${title} beta`, definition: 'beta definition' },
-      ],
+      rows: Array.from({ length: wordCount }, (_, index) => ({
+        bookName: title,
+        number: index + 1,
+        word: `${title} word ${index + 1}`,
+        definition: `${title} definition ${index + 1}`,
+      })),
     },
     options: {
       accessScope,
@@ -346,12 +362,45 @@ const main = async () => {
 
     await importOfficialCatalog(admin, 'Starter 120', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL');
     await importOfficialCatalog(admin, 'Business 500', 'BUSINESS_ONLY', 'LICENSED_PARTNER');
+    await importOfficialCatalog(admin, 'レベル1', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
+    await importOfficialCatalog(admin, 'レベル2', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
+    await importOfficialCatalog(admin, 'レベル3', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
+    await importOfficialCatalog(admin, 'レベル4', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
 
     const freeStudentUser = await freeStudent.demoLogin('STUDENT');
     const freeBooks = await freeStudent.storage('getBooks');
     const freeBookTitles = freeBooks.map((book) => book.title);
     assert(freeBookTitles.includes('Starter 120'), 'free student should see ALL_PLANS official books');
     assert(!freeBookTitles.includes('Business 500'), 'free student should not see BUSINESS_ONLY official books');
+    assert(freeBookTitles.includes('レベル3'), 'free student should see indexed level books for cold-start calibration');
+
+    const updatedFreeProfile = await freeStudent.post('/api/profile', {
+      user: {
+        grade: 'JHS2',
+        englishLevel: 'B2',
+      },
+    });
+    assert(updatedFreeProfile.englishLevel === 'B2', 'profile update should persist the higher placement level');
+
+    const coldStartWords = await freeStudent.storage('getDailySessionWords', { limit: 10 });
+    const bandByBookId = new Map(freeBooks.map((book) => [book.id, getBookBandIndex(book.title)]));
+    const coldStartBands = coldStartWords
+      .map((word) => bandByBookId.get(word.bookId) || null)
+      .filter((band) => band !== null);
+    assert(coldStartBands.length > 0, 'cold-start session should include indexed books when level books are available');
+    assert(coldStartBands.filter((band) => band === 3).length >= 5, 'cold-start session should center the target level band');
+    assert(!coldStartBands.slice(0, 5).every((band) => band === 1), 'cold-start session should not open with only the easiest band');
+
+    await freeStudent.storage('saveSRSHistory', {
+      word: coldStartWords[0],
+      rating: 2,
+      responseTimeMs: 900,
+    });
+    const followUpWords = await freeStudent.storage('getDailySessionWords', { limit: 10 });
+    assert(
+      followUpWords.map((word) => word.id).join(',') !== coldStartWords.map((word) => word.id).join(','),
+      'after a study history is created, daily session selection should leave cold-start calibration',
+    );
 
     const orgStudentUser = await orgStudent.demoLogin('STUDENT', 'STUDENT');
     const groupAdminUser = await groupAdmin.demoLogin('INSTRUCTOR', 'GROUP_ADMIN');
@@ -485,6 +534,14 @@ const main = async () => {
       instructorUid: groupAdminUser.uid,
     });
 
+    const settingsAfterAssignment = await groupAdmin.storage('getOrganizationSettingsSnapshot');
+    assert(settingsAfterAssignment.organizationId, 'organization settings should expose organizationId');
+    assert(settingsAfterAssignment.members.some((member) => member.userUid === groupAdminUser.uid), 'organization settings should include the current group admin in the roster');
+    assert(
+      settingsAfterAssignment.auditEvents.some((event) => event.actionType === 'STUDENT_ASSIGNMENT_CHANGED'),
+      'assignment changes should append an organization audit event',
+    );
+
     const todayDateKey = toTokyoDateKey(Date.now());
     let orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     assert(Array.isArray(orgSnapshot.trend) && orgSnapshot.trend.length === 14, 'organization snapshot should expose a 14-day trend');
@@ -538,6 +595,7 @@ const main = async () => {
       message: '担当外の通知テスト',
       triggerReason: 'integration-test',
       usedAi: false,
+      interventionKind: 'REVIEW_RESTART',
     });
     assert(forbiddenNotification.status === 403, 'non-assigned instructor should be blocked from notifying the student');
 
@@ -546,17 +604,77 @@ const main = async () => {
       message: '48時間以内に5語だけ見直しましょう。',
       triggerReason: 'integration-test',
       usedAi: false,
+      interventionKind: 'REVIEW_RESTART',
     });
+
+    const settingsAfterNotification = await groupAdmin.storage('getOrganizationSettingsSnapshot');
+    assert(
+      settingsAfterNotification.auditEvents.some((event) => event.actionType === 'INSTRUCTOR_NOTIFICATION_SAVED'),
+      'notification saves should append an organization audit event',
+    );
 
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     const reactivated7dBeforeStudy = orgSnapshot.reactivatedStudents7d;
     const todayTrendAfterNotification = findTrendPoint(orgSnapshot, todayDateKey);
     assert(todayTrendAfterNotification?.notifications >= 1, 'today trend should reflect recent notifications');
+    const orgStudentSummaryAfterNotification = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
+    assert(orgStudentSummaryAfterNotification?.latestInterventionKind === 'REVIEW_RESTART', 'student summary should retain the latest intervention kind');
+    assert(orgStudentSummaryAfterNotification?.latestInterventionOutcome === 'PENDING', 'student summary should mark the latest intervention as pending before reactivation');
 
     const reviewBook = orgBooks.find((book) => book.title === 'Starter 120') || orgBooks[0];
     assert(reviewBook, 'business student did not receive any visible books');
     const reviewWords = await orgStudent.storage('getWordsByBook', { bookId: reviewBook.id });
     assert(reviewWords.length > 0, 'imported test catalog should contain at least one word');
+
+    const weeklyMission = await groupAdmin.storage('createWeeklyMission', {
+      learningTrack: 'EIKEN_2',
+      title: 'Integration Weekly Mission',
+      rationale: '今週の主課題を1本に絞って確認します。',
+      bookId: reviewBook.id,
+      bookTitle: reviewBook.title,
+      newWordsTarget: 12,
+      reviewWordsTarget: 6,
+      quizTargetCount: 1,
+    });
+    assert(weeklyMission.learningTrack === 'EIKEN_2', 'weekly mission should persist the selected learning track');
+
+    const forbiddenMissionAssignment = await groupAdmin.storageRaw('assignWeeklyMission', {
+      missionId: weeklyMission.id,
+      studentUid: freeStudentUser.uid,
+    });
+    assert(forbiddenMissionAssignment.status === 403, 'group admin should not assign a mission to a student in another organization');
+
+    const assignedMission = await groupAdmin.storage('assignWeeklyMission', {
+      missionId: weeklyMission.id,
+      studentUid: orgStudentUser.uid,
+    });
+    assert(assignedMission.studentUid === orgStudentUser.uid, 'assigned mission should target the requested student');
+    assert(assignedMission.progress.status === 'ASSIGNED', 'newly assigned missions should start as ASSIGNED');
+
+    const missionBoardBeforeStudy = await orgStudent.storage('getWeeklyMissionBoard');
+    assert(
+      missionBoardBeforeStudy.assignments.some((assignment) => assignment.id === assignedMission.id),
+      'student should receive the assigned weekly mission',
+    );
+
+    const forbiddenMissionUpdate = await freeStudent.storageRaw('updateMissionProgress', {
+      assignmentId: assignedMission.id,
+      eventType: 'OPENED',
+    });
+    assert(forbiddenMissionUpdate.status === 403, 'another student should not be able to update someone else\'s mission');
+
+    const openedMission = await orgStudent.storage('updateMissionProgress', {
+      assignmentId: assignedMission.id,
+      eventType: 'OPENED',
+    });
+    assert(openedMission.progress.status === 'IN_PROGRESS', 'opening a mission should move it into IN_PROGRESS');
+
+    const studentDashboardBeforeMissionStudy = await orgStudent.storage('getDashboardSnapshot');
+    assert(studentDashboardBeforeMissionStudy.primaryMission?.assignmentId === assignedMission.id, 'student dashboard should expose the assigned primary mission');
+    assert(
+      !studentDashboardBeforeMissionStudy.weaknessProfile || studentDashboardBeforeMissionStudy.weaknessProfile.hasSufficientData === false,
+      'new students should start without a populated weakness focus',
+    );
 
     await orgStudent.storage('saveSRSHistory', {
       word: reviewWords[0],
@@ -569,6 +687,17 @@ const main = async () => {
     assert(orgSnapshot.reactivatedStudents7d >= 1, 'organization snapshot should count a student who resumed after notification');
     assert(orgSnapshot.reactivatedStudents7d >= reactivated7dBeforeStudy, 'study should keep or increase 7-day reactivation counts');
     assert((todayTrendAfterStudy?.reactivatedStudents || 0) >= (todayTrendAfterNotification?.reactivatedStudents || 0), 'today trend should keep or increase reactivation counts after study');
+    assert(orgSnapshot.followUpCoverageRate48h >= 0, 'organization snapshot should expose 48-hour follow-up coverage');
+    assert(orgSnapshot.trackCompletion.some((track) => track.track === 'EIKEN_2' && track.assignedCount >= 1), 'organization snapshot should aggregate weekly missions by track');
+    assert(orgSnapshot.missionStartedRate >= 1, 'organization snapshot should expose a non-zero mission started rate after mission activity');
+
+    const missionBoardAfterStudy = await orgStudent.storage('getWeeklyMissionBoard');
+    const studiedMission = missionBoardAfterStudy.assignments.find((assignment) => assignment.id === assignedMission.id);
+    assert(studiedMission, 'student mission board should keep the assigned mission after study');
+    assert((studiedMission?.progress.newWordsCompleted || 0) >= 1, 'studying the mission book should advance mission new-word progress');
+
+    const studentDashboardAfterMissionStudy = await orgStudent.storage('getDashboardSnapshot');
+    assert(studentDashboardAfterMissionStudy.weaknessProfile?.signals?.length === 5, 'student dashboard should materialize weakness signals after study');
 
     const masteryBeforeQuiz = await orgStudent.storage('getMasteryDistribution');
     assert(masteryBeforeQuiz.total === 1, 'study history should create exactly one mastery row');
@@ -578,6 +707,7 @@ const main = async () => {
       wordId: reviewWords[0].id,
       bookId: reviewBook.id,
       correct: false,
+      questionMode: 'JA_TO_EN',
       responseTimeMs: 850,
     });
 
@@ -593,6 +723,7 @@ const main = async () => {
       wordId: reviewWords[1].id,
       bookId: reviewBook.id,
       correct: false,
+      questionMode: 'SPELLING_HINT',
       responseTimeMs: 900,
     });
 
@@ -623,6 +754,7 @@ const main = async () => {
     assert((todayTrendAfterQuizOnly?.activeStudents || 0) === (todayTrendAfterStudy?.activeStudents || 0), 'quiz-only activity must not increase trend active counts');
     const orgStudentSummaryAfterQuiz = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     assert(orgStudentSummaryAfterQuiz?.totalLearned === 1, 'organization totalLearned should ignore quiz-only rows');
+    assert(Boolean(orgStudentSummaryAfterQuiz?.weaknessProfileUpdatedAt), 'organization student summaries should expose weakness metadata');
 
     await executeLocalSql(
       persistDir,
@@ -683,6 +815,26 @@ const main = async () => {
     assert(firstFinalize.submission.ocrProvider === 'OPENAI', 'writing OCR should rerun with OPENAI when fallback confidence is low');
     assert(firstFinalize.submission.ocrMeta?.mode === 'fixture', 'fixture mode should expose OCR provenance');
     assert(firstFinalize.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'writing evaluations should expose provenance');
+
+    const renamedSettings = await groupAdmin.storage('updateOrganizationProfile', {
+      displayName: 'Phase 4 Academy Renamed',
+    });
+    assert(renamedSettings.displayName === 'Phase 4 Academy Renamed', 'group admin should be able to update the organization display name');
+    assert(
+      renamedSettings.auditEvents.some((event) => event.actionType === 'ORGANIZATION_RENAMED'),
+      'organization rename should append an audit event',
+    );
+
+    const renamedSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
+    assert(renamedSnapshot.organizationName === 'Phase 4 Academy Renamed', 'dashboard should continue loading after organization rename');
+    const renamedGroupAdminSession = await groupAdmin.get('/api/session');
+    assert(renamedGroupAdminSession.organizationName === 'Phase 4 Academy Renamed', 'group admin session should reflect the renamed organization on reload');
+    const renamedStudentSession = await orgStudent.get('/api/session');
+    assert(renamedStudentSession.organizationName === 'Phase 4 Academy Renamed', 'student session should reflect the renamed organization on reload');
+    const firstAssetUrl = firstFinalize.submission.assets[0]?.assetUrl;
+    assert(firstAssetUrl, 'first writing submission should expose an uploaded asset URL');
+    const firstAssetResponse = await orgStudent.request(firstAssetUrl, { method: 'GET' });
+    assert(firstAssetResponse.status === 200, 'pre-rename writing assets should remain downloadable after organization rename');
 
     const forbiddenStudentDetail = await orgStudent.request(`/api/writing/submissions/${firstFinalize.submission.id}`, { method: 'GET' });
     assert(forbiddenStudentDetail.status === 403, 'student should not see feedback before teacher approval');
@@ -832,6 +984,13 @@ const main = async () => {
     assert(provisionedSession.organizationName === 'Phase 4 Integration Academy', 'provisioned user should receive the target organization name');
     assert(provisionedSession.organizationRole === 'GROUP_ADMIN', 'provisioned user should receive the target organization role');
     assert(provisionedSession.role === 'INSTRUCTOR', 'GROUP_ADMIN provisioning should elevate the user to instructor role');
+    assert(provisionedSession.organizationId, 'provisioned user should receive a concrete organizationId');
+
+    const provisionedSettings = await freeStudent.storage('getOrganizationSettingsSnapshot');
+    assert(
+      provisionedSettings.auditEvents.some((event) => event.actionType === 'COMMERCIAL_PROVISIONED'),
+      'commercial provisioning should append an organization audit event',
+    );
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');
     assert(groupAdminReset.status === 403, 'group admin should not be allowed to reset all data');

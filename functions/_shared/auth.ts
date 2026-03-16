@@ -2,6 +2,11 @@ import { EnglishLevel, OrganizationRole, SubscriptionPlan, UserGrade, UserProfil
 import { getRelativeDateKey, getTodayDateKey } from '../../utils/date';
 import { buildDemoEmail, DEMO_RETENTION_TTL_MS, getDemoDisplayName } from '../../utils/demo';
 import { HttpError } from './http';
+import {
+  isBusinessSubscriptionPlan,
+  resolveOrCreateOrganization,
+  upsertActiveOrganizationMembership,
+} from './organization-memberships';
 import { AppEnv, DbUserRow } from './types';
 
 const SESSION_COOKIE_NAME = 'medace_session';
@@ -117,26 +122,20 @@ const updateStreak = (stats: UserStats): UserStats => {
   };
 };
 
-const resolveOrganizationRole = (row: Pick<DbUserRow, 'role' | 'subscription_plan' | 'organization_name' | 'organization_role'>): OrganizationRole | undefined => {
-  if (row.organization_role) {
-    return row.organization_role as OrganizationRole;
-  }
-
-  const plan = (row.subscription_plan as SubscriptionPlan | null) || SubscriptionPlan.TOC_FREE;
-  if (!row.organization_name || (plan !== SubscriptionPlan.TOB_FREE && plan !== SubscriptionPlan.TOB_PAID)) {
-    return undefined;
-  }
-
-  if (row.role === UserRole.INSTRUCTOR) return OrganizationRole.INSTRUCTOR;
-  if (row.role === UserRole.STUDENT) return OrganizationRole.STUDENT;
-  return undefined;
-};
+const resolveOrganizationRole = (
+  row: Pick<DbUserRow, 'organization_role'>,
+): OrganizationRole | undefined => (
+  row.organization_role
+    ? row.organization_role as OrganizationRole
+    : undefined
+);
 
 export const mapUserRowToProfile = (row: DbUserRow): UserProfile => ({
   uid: row.id,
   email: row.email,
   displayName: row.display_name,
   role: row.role as UserRole,
+  organizationId: row.organization_id || undefined,
   organizationRole: resolveOrganizationRole(row),
   grade: row.grade as UserGrade | undefined,
   englishLevel: row.english_level as EnglishLevel | undefined,
@@ -209,6 +208,19 @@ export const createUser = async (
 ): Promise<DbUserRow> => {
   const now = Date.now();
   const userId = crypto.randomUUID();
+  const subscriptionPlan = input.subscriptionPlan || SubscriptionPlan.TOC_FREE;
+  const shouldCreateBusinessMembership = Boolean(
+    input.organizationName
+    && input.organizationRole
+    && input.role !== UserRole.ADMIN
+    && isBusinessSubscriptionPlan(subscriptionPlan)
+  );
+  const organization = shouldCreateBusinessMembership
+    ? await resolveOrCreateOrganization(env, {
+        targetOrganizationName: input.organizationName,
+        subscriptionPlan,
+      })
+    : null;
   const stats = {
     xp: 0,
     level: 1,
@@ -218,10 +230,10 @@ export const createUser = async (
 
   await env.DB.prepare(`
     INSERT INTO users (
-      id, email, password_hash, display_name, role, grade, english_level, subscription_plan, organization_name, organization_role,
+      id, email, password_hash, display_name, role, grade, english_level, subscription_plan, organization_id, organization_name, organization_role,
       stats_xp, stats_level, stats_current_streak, stats_last_login_date,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     userId,
     input.email,
@@ -230,8 +242,9 @@ export const createUser = async (
     input.role,
     input.grade || null,
     input.englishLevel || null,
-    input.subscriptionPlan || SubscriptionPlan.TOC_FREE,
-    input.organizationName || null,
+    subscriptionPlan,
+    organization?.id || null,
+    organization?.display_name || input.organizationName || null,
     input.organizationRole || null,
     stats.xp,
     stats.level,
@@ -240,6 +253,15 @@ export const createUser = async (
     now,
     now
   ).run();
+
+  if (organization && input.organizationRole) {
+    await upsertActiveOrganizationMembership(env, {
+      userId,
+      organizationId: organization.id,
+      organizationRole: input.organizationRole,
+      subscriptionPlan,
+    });
+  }
 
   const user = await findUserById(env, userId);
   if (!user) throw new HttpError(500, 'ユーザー作成後の取得に失敗しました。');

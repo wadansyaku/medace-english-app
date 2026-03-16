@@ -204,8 +204,8 @@ npx wrangler pages deploy dist --project-name medace-english-app
 GitHub Actions では次の流れで確認してから Cloudflare へ流します。
 
 - `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `typecheck` / `test:unit` / `test:api` / `cf:doctor`
-- `deploy-pages.yml`: production deploy 前に `typecheck` / `test:unit` / `test:api` / `cf:doctor`、その後に remote D1 migration と Pages deploy
+- `deploy-pages-preview.yml`: preview deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`
+- `deploy-pages.yml`: production deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`、その後に remote D1 migration と Pages deploy
 
 ## 補足
 

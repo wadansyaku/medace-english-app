@@ -13,10 +13,16 @@ import {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
+  InterventionKind,
+  LearningTrack,
   LeaderboardEntry,
   LearningPlan,
   LearningPreference,
   MasteryDistribution,
+  MissionAssignment,
+  MissionProgressEventType,
+  OrganizationSettingsSnapshot,
+  RecommendedActionType,
   ProductAnnouncement,
   ProductAnnouncementFeed,
   OrganizationDashboardSnapshot,
@@ -26,6 +32,8 @@ import {
   SubscriptionPlan,
   UserProfile,
   UserRole,
+  WeeklyMission,
+  WeeklyMissionBoard,
   WordData,
 } from '../types';
 
@@ -99,6 +107,7 @@ export interface CommercialRequestUpdatePayload {
   resolutionNote?: string;
   linkedUserUid?: string;
   targetSubscriptionPlan?: SubscriptionPlan;
+  targetOrganizationId?: string;
   targetOrganizationName?: string;
   targetOrganizationRole?: OrganizationRole;
 }
@@ -167,6 +176,10 @@ export interface StorageActionMap {
     payload: undefined;
     response: OrganizationDashboardSnapshot;
   };
+  getOrganizationSettingsSnapshot: {
+    payload: undefined;
+    response: OrganizationSettingsSnapshot;
+  };
   getDueCount: {
     payload: undefined;
     response: number;
@@ -180,6 +193,7 @@ export interface StorageActionMap {
       wordId: string;
       bookId: string;
       correct: boolean;
+      questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
       responseTimeMs: number;
     };
     response: null;
@@ -201,7 +215,14 @@ export interface StorageActionMap {
     response: StudentWorksheetSnapshot;
   };
   sendInstructorNotification: {
-    payload: { studentUid: string; message: string; triggerReason: string; usedAi: boolean };
+    payload: {
+      studentUid: string;
+      message: string;
+      triggerReason: string;
+      usedAi: boolean;
+      interventionKind: InterventionKind;
+      recommendedActionType?: RecommendedActionType;
+    };
     response: null;
   };
   resetAllData: {
@@ -227,6 +248,40 @@ export interface StorageActionMap {
   assignStudentInstructor: {
     payload: { studentUid: string; instructorUid: string | null };
     response: null;
+  };
+  createWeeklyMission: {
+    payload: {
+      learningTrack: LearningTrack;
+      title?: string;
+      rationale?: string;
+      bookId?: string;
+      bookTitle?: string;
+      newWordsTarget: number;
+      reviewWordsTarget: number;
+      quizTargetCount: number;
+      writingAssignmentId?: string;
+      dueAt?: number;
+    };
+    response: WeeklyMission;
+  };
+  assignWeeklyMission: {
+    payload: { missionId: string; studentUid: string };
+    response: MissionAssignment;
+  };
+  getWeeklyMissionBoard: {
+    payload: undefined;
+    response: WeeklyMissionBoard;
+  };
+  updateMissionProgress: {
+    payload: {
+      assignmentId: string;
+      eventType: MissionProgressEventType;
+    };
+    response: MissionAssignment;
+  };
+  updateOrganizationProfile: {
+    payload: { displayName: string };
+    response: OrganizationSettingsSnapshot;
   };
   getLeaderboard: {
     payload: undefined;

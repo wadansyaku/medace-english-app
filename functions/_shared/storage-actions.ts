@@ -52,9 +52,17 @@ import {
   handleAssignStudentInstructor,
   handleGetAllStudentsProgress,
   handleGetOrganizationDashboardSnapshot,
+  handleGetOrganizationSettingsSnapshot,
   handleGetStudentWorksheetSnapshot,
   handleSendInstructorNotification,
+  handleUpdateOrganizationProfile,
 } from './storage-organization-actions';
+import {
+  handleAssignWeeklyMission,
+  handleCreateWeeklyMission,
+  handleGetWeeklyMissionBoard,
+  handleUpdateMissionProgress,
+} from './storage-mission-actions';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
 
@@ -108,6 +116,9 @@ export const handleStorageAction = async (
     case 'getOrganizationDashboardSnapshot':
       requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
       return handleGetOrganizationDashboardSnapshot(env, user);
+    case 'getOrganizationSettingsSnapshot':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleGetOrganizationSettingsSnapshot(env, user);
     case 'getDueCount':
       return handleGetDueCount(env, user);
     case 'saveSRSHistory':
@@ -125,6 +136,7 @@ export const handleStorageAction = async (
         String(payload.wordId || ''),
         String(payload.bookId || ''),
         Boolean(payload.correct),
+        String(payload.questionMode || '') as 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
         Number(payload.responseTimeMs || 0),
       );
     case 'getStudiedWordIdsByBook':
@@ -146,6 +158,8 @@ export const handleStorageAction = async (
         String(payload.message || ''),
         String(payload.triggerReason || ''),
         Boolean(payload.usedAi),
+        String(payload.interventionKind || ''),
+        typeof payload.recommendedActionType === 'string' ? payload.recommendedActionType : undefined,
       );
     case 'resetAllData':
       requireRole(user, [UserRole.ADMIN]);
@@ -168,6 +182,25 @@ export const handleStorageAction = async (
     case 'assignStudentInstructor':
       requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
       return handleAssignStudentInstructor(env, user, String(payload.studentUid || ''), (payload.instructorUid as string | null) || null);
+    case 'createWeeklyMission':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleCreateWeeklyMission(
+        env,
+        user,
+        payload as unknown as StorageActionRequest<'createWeeklyMission'>['payload'],
+      );
+    case 'assignWeeklyMission':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleAssignWeeklyMission(env, user, String(payload.missionId || ''), String(payload.studentUid || ''));
+    case 'getWeeklyMissionBoard':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR, UserRole.STUDENT]);
+      return handleGetWeeklyMissionBoard(env, user);
+    case 'updateMissionProgress':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR, UserRole.STUDENT]);
+      return handleUpdateMissionProgress(env, user, String(payload.assignmentId || ''), String(payload.eventType || ''));
+    case 'updateOrganizationProfile':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleUpdateOrganizationProfile(env, user, String(payload.displayName || ''));
     case 'getLeaderboard':
       return handleGetLeaderboard(env, user.id);
     case 'getMasteryDistribution':
@@ -195,6 +228,7 @@ export const handleStorageAction = async (
       requireRole(user, [UserRole.ADMIN]);
       return handleUpdateCommercialRequest(
         env,
+        user,
         payload as unknown as StorageActionRequest<'updateCommercialRequest'>['payload'],
       );
     case 'listProductAnnouncementsAdmin':

@@ -27,6 +27,8 @@ const run = (command, args, options = {}) => {
   };
 };
 
+const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
+
 const parseJsonc = (source) => source
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
@@ -43,6 +45,74 @@ const parsePagesSecretNames = (output) => output
   .map((line) => line.match(/^\s*-\s([^:]+):/))
   .filter(Boolean)
   .map((match) => match[1]);
+
+const parseWranglerTableRows = (output) => output
+  .split('\n')
+  .map((line) => line.trimEnd())
+  .filter((line) => line.includes('│'))
+  .map((line) => line.split('│').map((part) => part.trim()).filter(Boolean))
+  .filter((columns) => columns.length > 1);
+
+const normalizeTableHeader = (value) => value.trim().toLowerCase();
+
+const readPagesProjectColumn = (output, projectName, columnName) => {
+  const rows = parseWranglerTableRows(output);
+  const headers = rows.find((columns) => columns.some((column) => normalizeTableHeader(column) === 'project name'));
+  if (!headers) return null;
+
+  const projectNameIndex = headers.findIndex((column) => normalizeTableHeader(column) === 'project name');
+  const targetColumnIndex = headers.findIndex((column) => normalizeTableHeader(column) === normalizeTableHeader(columnName));
+  if (projectNameIndex < 0 || targetColumnIndex < 0) return null;
+
+  const row = rows.find((columns) => columns[projectNameIndex] === projectName);
+  return row?.[targetColumnIndex] || null;
+};
+
+const getCloudflareApiCredentials = (fallbackAccountId = '') => {
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN || '';
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || fallbackAccountId || '';
+  if (!apiToken || !accountId) return null;
+  return { apiToken, accountId };
+};
+
+const readErrorMessage = (payload, fallback) => {
+  if (payload?.errors?.length) {
+    return payload.errors.map((error) => error.message || JSON.stringify(error)).join('; ');
+  }
+  return fallback;
+};
+
+const fetchCloudflareApi = async (apiPath, init = {}, fallbackAccountId = '') => {
+  const credentials = getCloudflareApiCredentials(fallbackAccountId);
+  if (!credentials) {
+    throw new Error('CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID が未設定です。');
+  }
+
+  const response = await fetch(`${CLOUDFLARE_API_BASE}/accounts/${credentials.accountId}${apiPath}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${credentials.apiToken}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) : null;
+  if (!response.ok || (payload && payload.success === false)) {
+    throw new Error(readErrorMessage(payload, text || `HTTP ${response.status}`));
+  }
+  return payload?.result ?? null;
+};
+
+const isPagesGitAutoDeployDisabled = (sourceConfig) => (
+  Boolean(
+    sourceConfig
+    && sourceConfig.deployments_enabled === false
+    && sourceConfig.production_deployments_enabled === false
+    && sourceConfig.preview_deployment_setting === 'none'
+  )
+);
 
 const getRepoSlug = () => {
   const result = run('git', ['remote', 'get-url', 'origin']);
@@ -162,6 +232,50 @@ if (cloudflareReady) {
       `Pages project ${pagesProject}`,
       pagesProjects.stdout.includes(pagesProject) ? 'present' : 'missing',
     );
+    const gitProvider = readPagesProjectColumn(pagesProjects.stdout, pagesProject, 'Git Provider');
+    if (gitProvider?.toLowerCase() === 'yes') {
+      try {
+        const project = await fetchCloudflareApi(`/pages/projects/${pagesProject}`, {}, detectedAccountId);
+        const sourceConfig = project?.source?.config || null;
+
+        if (isPagesGitAutoDeployDisabled(sourceConfig)) {
+          pushRecord('ok', `Pages project ${pagesProject} Git auto-deploy`, 'already disabled');
+        } else if (project?.source?.type === 'github') {
+          const nextSource = {
+            ...project.source,
+            config: {
+              ...sourceConfig,
+              deployments_enabled: false,
+              production_deployments_enabled: false,
+              preview_deployment_setting: 'none',
+            },
+          };
+          const updatedProject = await fetchCloudflareApi(
+            `/pages/projects/${pagesProject}`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify({ source: nextSource }),
+            },
+            detectedAccountId,
+          );
+          pushRecord(
+            isPagesGitAutoDeployDisabled(updatedProject?.source?.config || null) ? 'ok' : 'warn',
+            `Pages project ${pagesProject} Git auto-deploy`,
+            isPagesGitAutoDeployDisabled(updatedProject?.source?.config || null)
+              ? 'disabled to keep GitHub Actions as the canonical deploy path'
+              : 'Git integration remains active; verify Cloudflare Pages branch control settings',
+          );
+        } else {
+          pushRecord('warn', `Pages project ${pagesProject} Git auto-deploy`, 'Git provider is linked, but the source type is not github');
+        }
+      } catch (error) {
+        pushRecord(
+          'warn',
+          `Pages project ${pagesProject} Git auto-deploy`,
+          `unable to verify or disable via API: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 
   if (d1Database) {

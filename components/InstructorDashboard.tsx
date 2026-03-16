@@ -1,27 +1,32 @@
 import React, { Suspense, lazy, useMemo } from 'react';
 import {
+  INTERVENTION_KIND_LABELS,
+  INTERVENTION_OUTCOME_LABELS,
+  InterventionKind,
   InstructorWorkspaceView,
+  LEARNING_TRACK_LABELS,
+  RETENTION_CONTINUITY_BAND_LABELS,
   StudentRiskLevel,
   SUBSCRIPTION_PLAN_LABELS,
+  WEAKNESS_DIMENSION_LABELS,
+  WEEKLY_MISSION_STATUS_LABELS,
   type StudentSummary,
   type UserProfile,
 } from '../types';
 import {
   ArrowRight,
   Bell,
-  CheckCircle2,
   Clock3,
   FileStack,
   Loader2,
-  MessageSquareText,
   ScanText,
   Search,
   Send,
   Sparkles,
-  Users,
 } from 'lucide-react';
 import { useInstructorDashboardData } from '../hooks/useInstructorDashboardData';
 import { useInstructorDashboardController } from '../hooks/useInstructorDashboardController';
+import { getInstructorQueueSegment } from '../shared/retention';
 import { resolveStorageMode } from '../shared/storageMode';
 import { getBusinessAdminWritingCounts } from '../utils/businessAdminDashboard';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
@@ -68,6 +73,27 @@ const getRiskLabel = (risk: StudentRiskLevel) => {
   }
 };
 
+const getQueueLabel = (student: StudentSummary): string => {
+  const segment = getInstructorQueueSegment(student);
+  if (segment === 'IMMEDIATE') return '要即対応';
+  if (segment === 'WAITING') return '再開待ち';
+  return '再開済み';
+};
+
+const getQueueStyle = (student: StudentSummary): string => {
+  const segment = getInstructorQueueSegment(student);
+  if (segment === 'IMMEDIATE') return 'bg-red-50 text-red-700 border-red-200';
+  if (segment === 'WAITING') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+};
+
+const getOutcomeStyle = (student: StudentSummary): string => {
+  if (student.latestInterventionOutcome === 'EXPIRED') return 'bg-red-50 text-red-700 border-red-200';
+  if (student.latestInterventionOutcome === 'PENDING') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (student.latestInterventionOutcome === 'REACTIVATED') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  return 'bg-slate-50 text-slate-600 border-slate-200';
+};
+
 const formatDateTime = (timestamp: number): string =>
   new Date(timestamp).toLocaleString('ja-JP', {
     month: 'numeric',
@@ -83,6 +109,16 @@ const formatDaysSinceActive = (timestamp: number): string => {
   if (days === 1) return '1日ぶり';
   return `${days}日ぶり`;
 };
+
+const formatStudyDays7d = (days?: number): string => `${days || 0}日`;
+
+const getWeaknessTone = (score = 0): string => (
+  score >= 55
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : score >= 30
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+);
 
 const getNextActionText = (student: StudentSummary): string => {
   if (student.recommendedAction) return student.recommendedAction;
@@ -152,13 +188,15 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     );
   }
 
-  const atRiskCount = students.filter((student) => student.riskLevel === StudentRiskLevel.DANGER).length;
-  const notificationTodayCount = students.filter((student) => (
-    student.lastNotificationAt && Date.now() - student.lastNotificationAt < 86400000
-  )).length;
+  const immediateCount = controller.sortedStudents.filter((student) => getInstructorQueueSegment(student) === 'IMMEDIATE').length;
+  const waitingCount = controller.sortedStudents.filter((student) => getInstructorQueueSegment(student) === 'WAITING').length;
+  const reactivatedCount = controller.sortedStudents.filter((student) => getInstructorQueueSegment(student) === 'REACTIVATED').length;
   const unassignedVisibleCount = students.filter((student) => !student.assignedInstructorUid).length;
+  const unassignedAtRiskCount = students.filter((student) => !student.assignedInstructorUid && student.riskLevel !== StudentRiskLevel.SAFE).length;
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
-  const topPriorityStudents = controller.sortedStudents.slice(0, 5);
+  const topPriorityStudents = controller.sortedStudents
+    .filter((student) => getInstructorQueueSegment(student) === 'IMMEDIATE')
+    .slice(0, 5);
   const latestWritingQueue = writingQueue.slice(0, 3);
   const viewCopy = VIEW_COPY[activeView];
   const isLocalMockData = storageMode.isLocalMockData;
@@ -204,15 +242,41 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                   ))}
                 </div>
               )}
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase text-slate-500">AIへの補足</label>
-                <input
-                  type="text"
-                  value={controller.customInstruction}
-                  onChange={(event) => controller.setCustomInstruction(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
-                  placeholder="例: 次の模試までに復習を再開してほしい"
-                />
+              {controller.selectedStudent.topWeaknesses && controller.selectedStudent.topWeaknesses.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {controller.selectedStudent.topWeaknesses.slice(0, 2).map((weakness) => (
+                    <span key={weakness.dimension} className={`rounded-full border px-3 py-1 text-xs font-bold ${getWeaknessTone(weakness.score)}`}>
+                      {WEAKNESS_DIMENSION_LABELS[weakness.dimension]}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase text-slate-500">介入種別</label>
+                  <select
+                    data-testid="notification-intervention-kind"
+                    value={controller.interventionKind}
+                    onChange={(event) => controller.setInterventionKind(event.target.value as InterventionKind)}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                  >
+                    {Object.values(InterventionKind).map((kind) => (
+                      <option key={kind} value={kind}>
+                        {INTERVENTION_KIND_LABELS[kind]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase text-slate-500">AIへの補足</label>
+                  <input
+                    type="text"
+                    value={controller.customInstruction}
+                    onChange={(event) => controller.setCustomInstruction(event.target.value)}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                    placeholder="例: 次の模試までに復習を再開してほしい"
+                  />
+                </div>
               </div>
               <button
                 type="button"
@@ -324,10 +388,10 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       {activeView === InstructorWorkspaceView.OVERVIEW && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="要フォロー人数" value={`${atRiskCount}名`} detail="最優先で声かけしたい生徒" tone={atRiskCount > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label="今日送る通知" value={`${notificationTodayCount}件`} detail="過去24時間の講師フォロー通知" tone="accent" />
-            <WorkspaceMetricCard label="再提出待ち作文" value={`${writingCounts.revisionRequestedCount}件`} detail="生徒の再提出待ちになっている課題" tone={writingCounts.revisionRequestedCount > 0 ? 'warning' : 'default'} />
-            <WorkspaceMetricCard label="未割当生徒" value={`${unassignedVisibleCount}名`} detail="担当講師がまだ付いていない生徒" tone={unassignedVisibleCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="要即対応" value={`${immediateCount}名`} detail="48時間以内に介入したい生徒" tone={immediateCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="再開待ち" value={`${waitingCount}名`} detail="前回フォロー後の反応を確認中" tone={waitingCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="再開済み" value={`${reactivatedCount}名`} detail="前回フォロー後に学習再開済み" tone="success" />
+            <WorkspaceMetricCard label="未割当 at-risk" value={`${unassignedAtRiskCount}名`} detail="担当講師の再確認が必要" tone={unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
@@ -346,22 +410,36 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                 </button>
               </div>
               <div className="mt-5 space-y-3">
-                {topPriorityStudents.map((student) => (
+                {(topPriorityStudents.length > 0 ? topPriorityStudents : controller.sortedStudents.slice(0, 5)).map((student) => (
                   <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-sm font-bold text-slate-950">{student.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                        {student.topWeaknesses && student.topWeaknesses.length > 0 && (
+                          <div className="mt-2">
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${getWeaknessTone(student.topWeaknesses[0].score)}`}>
+                              {WEAKNESS_DIMENSION_LABELS[student.topWeaknesses[0].dimension]}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(student.riskLevel)}`}>
-                        {getRiskLabel(student.riskLevel)}
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getQueueStyle(student)}`}>
+                        {getQueueLabel(student)}
                       </span>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-[0.82fr_1.18fr_auto] sm:items-center">
                       <div className="text-sm text-slate-500">
                         最終学習: <span className="font-bold text-slate-900">{formatDaysSinceActive(student.lastActive)}</span>
                       </div>
-                      <div className="text-sm text-slate-600">{getNextActionText(student)}</div>
+                      <div className="text-sm text-slate-600">
+                        {student.primaryMissionStatus && (
+                          <div className="mb-1 text-xs font-bold text-slate-500">
+                            {student.primaryMissionTrack ? LEARNING_TRACK_LABELS[student.primaryMissionTrack] : '今週ミッション'} / {WEEKLY_MISSION_STATUS_LABELS[student.primaryMissionStatus]}
+                          </div>
+                        )}
+                        {getNextActionText(student)}
+                      </div>
                       <button
                         type="button"
                         data-testid={`send-notification-${student.uid}`}
@@ -456,10 +534,10 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
       {activeView === InstructorWorkspaceView.STUDENTS && (
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <WorkspaceMetricCard label="対象生徒" value={`${controller.filteredStudents.length}名`} detail="現在のフィルタ条件に一致" />
-            <WorkspaceMetricCard label="要フォロー" value={`${atRiskCount}名`} detail="最優先の声かけ対象" tone={atRiskCount > 0 ? 'danger' : 'success'} />
-            <WorkspaceMetricCard label="プラン未設定" value={`${students.filter((student) => !student.hasLearningPlan).length}名`} detail="学習プランの確認が必要" tone="warning" />
-            <WorkspaceMetricCard label="未割当" value={`${unassignedVisibleCount}名`} detail="担当講師が決まっていない生徒" tone={unassignedVisibleCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="要即対応" value={`${immediateCount}名`} detail="今すぐ介入するキュー" tone={immediateCount > 0 ? 'danger' : 'success'} />
+            <WorkspaceMetricCard label="再開待ち" value={`${waitingCount}名`} detail="前回フォロー後の確認待ち" tone={waitingCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="再開済み" value={`${reactivatedCount}名`} detail="称賛と次の維持導線" tone="success" />
+            <WorkspaceMetricCard label="期限超過課題" value={`${students.filter((student) => student.missionOverdue).length}名`} detail="今週ミッションが止まっている生徒" tone={students.some((student) => student.missionOverdue) ? 'danger' : 'default'} />
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -470,14 +548,14 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             <div className="flex flex-col gap-3 md:flex-row">
               <div className="flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
                 {[
-                  { key: 'ALL', label: '全体' },
-                  { key: 'DANGER', label: '要フォロー' },
-                  { key: 'WARNING', label: '見守り以上' },
+                  { key: 'IMMEDIATE', label: '要即対応' },
+                  { key: 'WAITING', label: '再開待ち' },
+                  { key: 'REACTIVATED', label: '再開済み' },
                 ].map((option) => (
                   <button
                     key={option.key}
                     type="button"
-                    onClick={() => controller.setFilter(option.key as 'ALL' | 'DANGER' | 'WARNING')}
+                    onClick={() => controller.setFilter(option.key as 'IMMEDIATE' | 'WAITING' | 'REACTIVATED')}
                     className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.filter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
                   >
                     {option.label}
@@ -500,9 +578,9 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
               <div className="grid grid-cols-[0.72fr_1.2fr_0.88fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                <div>優先度</div>
+                <div>キュー</div>
                 <div>生徒</div>
-                <div>最終接触</div>
+                <div>直近介入</div>
                 <div>次アクション</div>
               </div>
               <div data-testid="instructor-students-list">
@@ -519,17 +597,28 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       }`}
                     >
                       <div>
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(student.riskLevel)}`}>
-                          {getRiskLabel(student.riskLevel)}
-                        </span>
+                        <div className="flex flex-col gap-2">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${getQueueStyle(student)}`}>
+                            {getQueueLabel(student)}
+                          </span>
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(student.riskLevel)}`}>
+                            {getRiskLabel(student.riskLevel)}
+                          </span>
+                        </div>
                       </div>
                       <div>
                         <div className="text-sm font-bold text-slate-950">{student.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{student.email}</div>
                       </div>
                       <div className="text-sm text-slate-600">
-                        <div className="font-bold text-slate-900">{formatDaysSinceActive(student.lastActive)}</div>
-                        {student.lastNotificationAt && <div className="mt-1 text-xs text-slate-400">通知: {formatDateTime(student.lastNotificationAt)}</div>}
+                        <div className="font-bold text-slate-900">
+                          {student.latestInterventionAt ? formatDateTime(student.latestInterventionAt) : '未介入'}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-400">
+                          {student.latestInterventionOutcome
+                            ? INTERVENTION_OUTCOME_LABELS[student.latestInterventionOutcome]
+                            : '初回フォロー前'}
+                        </div>
                       </div>
                       <div className="text-sm leading-relaxed text-slate-600">{getNextActionText(student)}</div>
                     </button>
@@ -559,10 +648,30 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-3">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終学習</div>
                       <div className="mt-2 text-xl font-black text-slate-950">{formatDaysSinceActive(controller.focusedStudent.lastActive)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">直近7日学習日数</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">{formatStudyDays7d(controller.focusedStudent.activeStudyDays7d)}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">継続帯</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">
+                        {controller.focusedStudent.continuityBand
+                          ? RETENTION_CONTINUITY_BAND_LABELS[controller.focusedStudent.continuityBand]
+                          : '未集計'}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最終介入結果</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">
+                        {controller.focusedStudent.latestInterventionOutcome
+                          ? INTERVENTION_OUTCOME_LABELS[controller.focusedStudent.latestInterventionOutcome]
+                          : '未介入'}
+                      </div>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習プラン</div>
@@ -571,6 +680,33 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当講師</div>
                       <div className="mt-2 text-sm font-black text-slate-950">{controller.focusedStudent.assignedInstructorName || '未割当'}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今週ミッション</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">
+                        {controller.focusedStudent.primaryMissionStatus
+                          ? WEEKLY_MISSION_STATUS_LABELS[controller.focusedStudent.primaryMissionStatus]
+                          : '未配布'}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">トラック</div>
+                      <div className="mt-2 text-sm font-black text-slate-950">
+                        {controller.focusedStudent.primaryMissionTrack
+                          ? LEARNING_TRACK_LABELS[controller.focusedStudent.primaryMissionTrack]
+                          : '未設定'}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">課題進捗</div>
+                      <div className="mt-2 text-xl font-black text-slate-950">
+                        {controller.focusedStudent.primaryMissionCompletionRate != null
+                          ? `${controller.focusedStudent.primaryMissionCompletionRate}%`
+                          : '0%'}
+                      </div>
                     </div>
                   </div>
 
@@ -587,6 +723,25 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     </div>
                   )}
 
+                  {controller.focusedStudent.topWeaknesses && controller.focusedStudent.topWeaknesses.length > 0 && (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">弱点の根拠</div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {controller.focusedStudent.topWeaknesses.slice(0, 3).map((weakness) => (
+                          <div key={weakness.dimension} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-bold text-slate-900">{WEAKNESS_DIMENSION_LABELS[weakness.dimension]}</div>
+                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${getWeaknessTone(weakness.score)}`}>
+                                score {weakness.score}
+                              </span>
+                            </div>
+                            <div className="mt-2 text-sm leading-relaxed text-slate-600">{weakness.reason}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">次にやること</div>
                     <div className="mt-3 text-sm leading-relaxed text-medace-900">{getNextActionText(controller.focusedStudent)}</div>
@@ -597,6 +752,18 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">最新フォロー</div>
                         <div className="text-xs text-slate-400">{controller.focusedStudent.lastNotificationAt ? formatDateTime(controller.focusedStudent.lastNotificationAt) : ''}</div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {controller.focusedStudent.latestInterventionKind && (
+                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600">
+                            {INTERVENTION_KIND_LABELS[controller.focusedStudent.latestInterventionKind]}
+                          </span>
+                        )}
+                        {controller.focusedStudent.latestInterventionOutcome && (
+                          <span className={`rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeStyle(controller.focusedStudent)}`}>
+                            {INTERVENTION_OUTCOME_LABELS[controller.focusedStudent.latestInterventionOutcome]}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-3 text-sm leading-relaxed text-slate-700">{controller.focusedStudent.lastNotificationMessage}</div>
                     </div>

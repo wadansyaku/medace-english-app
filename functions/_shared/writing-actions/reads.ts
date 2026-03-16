@@ -25,6 +25,7 @@ import {
   guardTeacher,
   guardWritingAccess,
   isStudentFeedbackVisibleStatus,
+  requireWritingOrganizationContext,
 } from './access';
 import {
   parsePromptSnapshot,
@@ -114,7 +115,7 @@ export const handleListWritingTemplates = async (
   user: DbUserRow,
   examCategory?: string,
 ): Promise<WritingTemplateListResponse> => {
-  guardWritingAccess(user);
+  await requireWritingOrganizationContext(env, user);
   const rows = await listTemplateRows(env, examCategory);
   return { templates: rows.map(toTemplate) };
 };
@@ -124,11 +125,11 @@ export const handleListWritingAssignments = async (
   user: DbUserRow,
   scope: 'mine' | 'organization',
 ): Promise<WritingAssignmentListResponse> => {
-  guardWritingAccess(user);
-  const visibleStudentIds = await getVisibleStudentIds(env, user);
+  const organization = await requireWritingOrganizationContext(env, user);
+  const visibleStudentIds = await getVisibleStudentIds(env, user, organization);
   const rows = await readAssignmentRowsForScope(
     env,
-    String(user.organization_name || ''),
+    organization.organizationId,
     user.role !== UserRole.STUDENT,
     user.id,
   );
@@ -154,11 +155,12 @@ export const handleListWritingReviewQueue = async (
   scope: 'QUEUE' | 'HISTORY',
 ): Promise<WritingReviewQueueResponse> => {
   guardTeacher(user);
-  const visibleStudentIds = await getVisibleStudentIds(env, user);
+  const organization = await requireWritingOrganizationContext(env, user);
+  const visibleStudentIds = await getVisibleStudentIds(env, user, organization);
   const statuses = scope === 'QUEUE'
     ? [AssignmentStatus.REVIEW_READY]
     : [AssignmentStatus.RETURNED, AssignmentStatus.REVISION_REQUESTED, AssignmentStatus.COMPLETED];
-  const rows = await readReviewQueueAssignmentRows(env, String(user.organization_name || ''), statuses);
+  const rows = await readReviewQueueAssignmentRows(env, organization.organizationId, statuses);
   const visibleRows = rows.filter((row) => visibleStudentIds.has(row.student_user_id));
   const latestSubmissionRows = await readLatestSubmissionRowsForAssignments(env, visibleRows.map((row) => row.id));
 

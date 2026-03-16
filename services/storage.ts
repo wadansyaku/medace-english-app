@@ -9,19 +9,27 @@ import {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
+  LearningTrack,
+  InterventionKind,
   LeaderboardEntry,
   LearningPlan,
   LearningPreference,
   MasteryDistribution,
+  MissionAssignment,
+  MissionProgressEventType,
   OrganizationDashboardSnapshot,
+  OrganizationSettingsSnapshot,
   OrganizationRole,
   ProductAnnouncement,
   ProductAnnouncementFeed,
+  RecommendedActionType,
   StudentSummary,
   StudentWorksheetSnapshot,
   SubscriptionPlan,
   UserProfile,
   UserRole,
+  WeeklyMission,
+  WeeklyMissionBoard,
   WordData,
 } from '../types';
 import {
@@ -86,10 +94,21 @@ import {
 import {
   getAllStudentsProgress as getAllStudentsProgressReadModel,
   getOrganizationDashboardSnapshot as getOrganizationDashboardSnapshotReadModel,
+  getOrganizationSettingsSnapshot as getOrganizationSettingsSnapshotReadModel,
   getStudentWorksheetSnapshot as getStudentWorksheetSnapshotReadModel,
   sendInstructorNotification as sendInstructorNotificationReadModel,
+  updateOrganizationProfile as updateOrganizationProfileReadModel,
   type OrganizationReadModelContext,
 } from './storage/organization-read-model';
+import {
+  assignLocalWeeklyMission,
+  createLocalWeeklyMission,
+  getLocalPrimaryMissionSnapshot,
+  getLocalWeeklyMissionBoard,
+  getLocalMissionAssignmentByStudent,
+  resetLocalMissionState,
+  updateLocalMissionProgress,
+} from './storage/missions';
 import { getCoachNotifications } from './storage/writing-read-model';
 import { resolveStorageMode } from '../shared/storageMode';
 
@@ -117,13 +136,27 @@ export interface IStorageService {
   getDueCount(uid: string): Promise<number>;
   
   saveSRSHistory(uid: string, word: WordData, rating: number, responseTimeMs?: number): Promise<void>;
-  recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs?: number): Promise<void>;
+  recordQuizAttempt(
+    uid: string,
+    wordId: string,
+    bookId: string,
+    correct: boolean,
+    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+    responseTimeMs?: number,
+  ): Promise<void>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
   
   getAllStudentsProgress(): Promise<StudentSummary[]>;
   getStudentWorksheetSnapshot(studentUid: string): Promise<StudentWorksheetSnapshot>;
-  sendInstructorNotification(studentUid: string, message: string, triggerReason: string, usedAi: boolean): Promise<void>;
+  sendInstructorNotification(
+    studentUid: string,
+    message: string,
+    triggerReason: string,
+    usedAi: boolean,
+    interventionKind: InterventionKind,
+    recommendedActionType?: RecommendedActionType,
+  ): Promise<void>;
   resetAllData(): Promise<void>;
 
   // Plan
@@ -132,16 +165,33 @@ export interface IStorageService {
   saveLearningPreference(preference: LearningPreference): Promise<void>;
   getLearningPreference(uid: string): Promise<LearningPreference | null>;
   assignStudentInstructor(studentUid: string, instructorUid: string | null): Promise<void>;
+  createWeeklyMission(payload: {
+    learningTrack: LearningTrack;
+    title?: string;
+    rationale?: string;
+    bookId?: string;
+    bookTitle?: string;
+    newWordsTarget: number;
+    reviewWordsTarget: number;
+    quizTargetCount: number;
+    writingAssignmentId?: string;
+    dueAt?: number;
+  }): Promise<WeeklyMission>;
+  assignWeeklyMission(missionId: string, studentUid: string): Promise<MissionAssignment>;
+  getWeeklyMissionBoard(): Promise<WeeklyMissionBoard>;
+  updateMissionProgress(assignmentId: string, eventType: MissionProgressEventType): Promise<MissionAssignment>;
 
   // Analytics & Social
   getDashboardSnapshot(uid: string): Promise<DashboardSnapshot>;
   getAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot>;
   getOrganizationDashboardSnapshot(): Promise<OrganizationDashboardSnapshot>;
+  getOrganizationSettingsSnapshot(): Promise<OrganizationSettingsSnapshot>;
   getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]>;
   getMasteryDistribution(uid: string): Promise<MasteryDistribution>;
   getActivityLogs(uid: string): Promise<ActivityLog[]>;
   getCommercialRequestStatus(): Promise<CommercialRequest[]>;
   submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest>;
+  updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot>;
   listProductAnnouncements(): Promise<ProductAnnouncementFeed>;
   markAnnouncementSeen(announcementId: string): Promise<void>;
   acknowledgeAnnouncement(announcementId: string): Promise<void>;
@@ -166,6 +216,11 @@ const hashString = (value: string): string => {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
+};
+
+const createLocalOrganizationId = (displayName: string): string => {
+  const slug = slugifySegment(displayName) || 'organization';
+  return `org_local_${slug}_${hashString(displayName)}`;
 };
 
 const createBookId = (bookName: string, createdByUid?: string, uniqueSalt?: string): string => {
@@ -293,7 +348,9 @@ class IndexedDBStorageService implements IStorageService {
   private getLearningHistoryContext(): LearningHistoryContext {
     return {
       getStore: this.getStore.bind(this),
+      getBooks: this.getBooks.bind(this),
       getWordsByBook: this.getWordsByBook.bind(this),
+      getSession: this.getSession.bind(this),
     };
   }
 
@@ -581,8 +638,23 @@ class IndexedDBStorageService implements IStorageService {
     return saveSrsHistoryFromHistory(this.getLearningHistoryContext(), uid, word, rating, responseTimeMs);
   }
 
-  async recordQuizAttempt(uid: string, wordId: string, bookId: string, correct: boolean, responseTimeMs = 0): Promise<void> {
-    return recordQuizAttemptFromHistory(this.getLearningHistoryContext(), uid, wordId, bookId, correct, responseTimeMs);
+  async recordQuizAttempt(
+    uid: string,
+    wordId: string,
+    bookId: string,
+    correct: boolean,
+    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+    responseTimeMs = 0,
+  ): Promise<void> {
+    return recordQuizAttemptFromHistory(
+      this.getLearningHistoryContext(),
+      uid,
+      wordId,
+      bookId,
+      correct,
+      questionMode,
+      responseTimeMs,
+    );
   }
 
   async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
@@ -601,13 +673,22 @@ class IndexedDBStorageService implements IStorageService {
     return getStudentWorksheetSnapshotReadModel(this.getOrganizationReadModelContext(), studentUid);
   }
 
-  async sendInstructorNotification(studentUid: string, message: string, triggerReason: string, usedAi: boolean): Promise<void> {
+  async sendInstructorNotification(
+    studentUid: string,
+    message: string,
+    triggerReason: string,
+    usedAi: boolean,
+    interventionKind: InterventionKind,
+    recommendedActionType?: RecommendedActionType,
+  ): Promise<void> {
     return sendInstructorNotificationReadModel(
       this.getOrganizationReadModelContext(),
       studentUid,
       message,
       triggerReason,
       usedAi,
+      interventionKind,
+      recommendedActionType,
     );
   }
 
@@ -622,6 +703,8 @@ class IndexedDBStorageService implements IStorageService {
         STORES.PLANS,
         STORES.PREFERENCES,
         STORES.ASSIGNMENTS,
+        STORES.INTERACTION_EVENTS,
+        STORES.WEAKNESS_SIGNALS,
         STORES.COMMERCIAL_REQUESTS,
         STORES.PRODUCT_ANNOUNCEMENTS,
         STORES.ANNOUNCEMENT_RECEIPTS,
@@ -635,10 +718,13 @@ class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.PLANS).clear();
     tx.objectStore(STORES.PREFERENCES).clear();
     tx.objectStore(STORES.ASSIGNMENTS).clear();
+    tx.objectStore(STORES.INTERACTION_EVENTS).clear();
+    tx.objectStore(STORES.WEAKNESS_SIGNALS).clear();
     tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
     tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();
     tx.objectStore(STORES.ANNOUNCEMENT_RECEIPTS).clear();
     await waitForTransaction(tx);
+    resetLocalMissionState();
   }
 
   async saveLearningPlan(plan: LearningPlan): Promise<void> {
@@ -678,11 +764,61 @@ class IndexedDBStorageService implements IStorageService {
       store.put({ studentUid, instructorUid });
   }
 
+  async createWeeklyMission(payload: {
+    learningTrack: LearningTrack;
+    title?: string;
+    rationale?: string;
+    bookId?: string;
+    bookTitle?: string;
+    newWordsTarget: number;
+    reviewWordsTarget: number;
+    quizTargetCount: number;
+    writingAssignmentId?: string;
+    dueAt?: number;
+  }): Promise<WeeklyMission> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) {
+      throw new Error('ログインが必要です。');
+    }
+    return createLocalWeeklyMission(sessionUser, payload);
+  }
+
+  async assignWeeklyMission(missionId: string, studentUid: string): Promise<MissionAssignment> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) {
+      throw new Error('ログインが必要です。');
+    }
+    const student = (await this.getAllStudentsProgress()).find((candidate) => candidate.uid === studentUid);
+    return assignLocalWeeklyMission(sessionUser, missionId, studentUid, student?.name);
+  }
+
+  async getWeeklyMissionBoard(): Promise<WeeklyMissionBoard> {
+    return getLocalWeeklyMissionBoard(await this.getSession());
+  }
+
+  async updateMissionProgress(assignmentId: string, eventType: MissionProgressEventType): Promise<MissionAssignment> {
+    const sessionUser = await this.getSession();
+    if (!sessionUser) {
+      throw new Error('ログインが必要です。');
+    }
+    return updateLocalMissionProgress(sessionUser, assignmentId, eventType);
+  }
+
   async getDashboardSnapshot(uid: string): Promise<DashboardSnapshot> {
     const snapshot = await getDashboardSnapshotReadModel(this.getDashboardReadModelContext(), uid);
     const commercialRequests = await this.getCommercialRequestStatus();
+    const sessionUser = await this.getSession();
+    const primaryMission = sessionUser
+      ? getLocalPrimaryMissionSnapshot({
+          user: sessionUser,
+          books: [...snapshot.officialBooks, ...snapshot.myBooks],
+          learningPlan: snapshot.learningPlan,
+          learningPreference: snapshot.learningPreference,
+        })
+      : null;
     return {
       ...snapshot,
+      primaryMission,
       commercialRequests,
     };
   }
@@ -693,6 +829,10 @@ class IndexedDBStorageService implements IStorageService {
 
   async getOrganizationDashboardSnapshot(): Promise<OrganizationDashboardSnapshot> {
     return getOrganizationDashboardSnapshotReadModel(this.getOrganizationReadModelContext());
+  }
+
+  async getOrganizationSettingsSnapshot(): Promise<OrganizationSettingsSnapshot> {
+    return getOrganizationSettingsSnapshotReadModel(this.getOrganizationReadModelContext());
   }
 
   async getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]> {
@@ -748,6 +888,20 @@ class IndexedDBStorageService implements IStorageService {
     };
     await requestToPromise(store.put(nextRequest));
     return nextRequest;
+  }
+
+  async updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot> {
+    const snapshot = await updateOrganizationProfileReadModel(this.getOrganizationReadModelContext(), displayName);
+    const sessionUser = await this.getSession();
+    if (sessionUser?.organizationId === snapshot.organizationId) {
+      await this.updateSessionUser({
+        ...sessionUser,
+        organizationId: snapshot.organizationId,
+        organizationName: snapshot.displayName,
+        subscriptionPlan: snapshot.subscriptionPlan,
+      });
+    }
+    return snapshot;
   }
 
   async listProductAnnouncements(): Promise<ProductAnnouncementFeed> {
@@ -819,6 +973,9 @@ class IndexedDBStorageService implements IStorageService {
       resolutionNote: payload.resolutionNote || current.resolutionNote,
       linkedUserUid: payload.linkedUserUid || current.linkedUserUid,
       targetSubscriptionPlan: payload.targetSubscriptionPlan || current.targetSubscriptionPlan,
+      targetOrganizationId: payload.targetOrganizationId
+        || current.targetOrganizationId
+        || (payload.targetOrganizationName ? createLocalOrganizationId(payload.targetOrganizationName) : undefined),
       targetOrganizationName: payload.targetOrganizationName || current.targetOrganizationName,
       targetOrganizationRole: payload.targetOrganizationRole || current.targetOrganizationRole,
       updatedAt: Date.now(),
@@ -841,6 +998,7 @@ class IndexedDBStorageService implements IStorageService {
         ...sessionUser,
         role: nextUserRole,
         subscriptionPlan: nextRequest.targetSubscriptionPlan || sessionUser.subscriptionPlan || SubscriptionPlan.TOC_FREE,
+        organizationId: nextRequest.targetOrganizationId,
         organizationName: nextRequest.targetOrganizationName,
         organizationRole: nextRequest.targetOrganizationRole,
       });
