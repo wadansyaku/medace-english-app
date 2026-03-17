@@ -13,6 +13,7 @@ import type {
 } from '../types';
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
+const canUseWritingApi = storageMode.capabilities.writing.available;
 
 export const useBusinessAdminDashboardData = () => {
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
@@ -34,10 +35,10 @@ export const useBusinessAdminDashboardData = () => {
         storage.getOrganizationSettingsSnapshot(),
         storage.getWeeklyMissionBoard(),
         storage.getBooks(),
-        storageMode.isLocalMockData
+        !canUseWritingApi
           ? Promise.resolve<WritingAssignment[]>([])
           : listWritingAssignments('organization').then((response) => response.assignments),
-        storageMode.isLocalMockData
+        !canUseWritingApi
           ? Promise.resolve<WritingQueueItem[]>([])
           : listWritingReviewQueue('QUEUE').then((response) => response.items),
       ]);

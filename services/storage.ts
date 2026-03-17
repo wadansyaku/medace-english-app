@@ -45,6 +45,18 @@ import {
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
+import type {
+  AdminStorageService,
+  AnnouncementStorageService,
+  CatalogStorageService,
+  CommercialStorageService,
+  DashboardStorageService,
+  IStorageService,
+  LearningStorageService,
+  MissionStorageService,
+  OrganizationOpsStorageService,
+  SessionStorageService,
+} from './storage/types';
 import { buildAnnouncementFeed, getEffectiveAudienceRole, isAnnouncementVisibleToUser } from '../shared/announcements';
 import { hasDuplicateOpenRequest } from '../shared/commercial';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
@@ -117,107 +129,6 @@ import {
 } from './storage/missions';
 import { getCoachNotifications } from './storage/writing-read-model';
 import { resolveStorageMode } from '../shared/storageMode';
-
-export interface IStorageService {
-  login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>; 
-  authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null>; 
-  saveSession(user: UserProfile): Promise<void>;
-  updateSessionUser(user: UserProfile): Promise<void>;
-  clearSession(): Promise<void>;
-  getSession(): Promise<UserProfile | null>;
-  addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile, leveledUp: boolean }>;
-  
-  batchImportWords(request: CatalogImportRequest, onProgress?: (progress: number) => void): Promise<CatalogImportResult>;
-  getBooks(): Promise<BookMetadata[]>;
-  deleteBook(bookId: string): Promise<void>; 
-  
-  getWordsByBook(bookId: string): Promise<WordData[]>;
-  updateWord(word: WordData): Promise<void>;
-  reportWord(wordId: string, reason: string): Promise<void>; // New
-  
-  updateWordCache(wordId: string, sentence: string, translation: string): Promise<void>;
-  
-  getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
-  getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
-  getDueCount(uid: string): Promise<number>;
-  
-  saveSRSHistory(
-    uid: string,
-    word: WordData,
-    rating: number,
-    responseTimeMs?: number,
-    missionAssignmentId?: string,
-    taskIntentType?: LearningTaskIntentType,
-  ): Promise<void>;
-  recordQuizAttempt(
-    uid: string,
-    wordId: string,
-    bookId: string,
-    correct: boolean,
-    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
-    responseTimeMs?: number,
-    missionAssignmentId?: string,
-    taskIntentType?: LearningTaskIntentType,
-  ): Promise<void>;
-  getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
-  getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
-  
-  getAllStudentsProgress(): Promise<StudentSummary[]>;
-  getStudentWorksheetSnapshot(studentUid: string): Promise<StudentWorksheetSnapshot>;
-  sendInstructorNotification(
-    studentUid: string,
-    message: string,
-    triggerReason: string,
-    usedAi: boolean,
-    interventionKind: InterventionKind,
-    recommendedActionType?: RecommendedActionType,
-  ): Promise<void>;
-  resetAllData(): Promise<void>;
-
-  // Plan
-  saveLearningPlan(plan: LearningPlan): Promise<void>;
-  getLearningPlan(uid: string): Promise<LearningPlan | null>;
-  saveLearningPreference(preference: LearningPreference): Promise<void>;
-  getLearningPreference(uid: string): Promise<LearningPreference | null>;
-  assignStudentInstructor(studentUid: string, instructorUid: string | null): Promise<void>;
-  createWeeklyMission(payload: {
-    learningTrack: LearningTrack;
-    title?: string;
-    rationale?: string;
-    bookId?: string;
-    bookTitle?: string;
-    newWordsTarget: number;
-    reviewWordsTarget: number;
-    quizTargetCount: number;
-    writingAssignmentId?: string;
-    dueAt?: number;
-  }): Promise<WeeklyMission>;
-  assignWeeklyMission(missionId: string, studentUid: string): Promise<MissionAssignment>;
-  getWeeklyMissionBoard(): Promise<WeeklyMissionBoard>;
-  updateMissionProgress(assignmentId: string, eventType: MissionProgressEventType): Promise<MissionAssignment>;
-
-  // Analytics & Social
-  getDashboardSnapshot(uid: string): Promise<DashboardSnapshot>;
-  getAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot>;
-  getOrganizationDashboardSnapshot(): Promise<OrganizationDashboardSnapshot>;
-  getOrganizationSettingsSnapshot(): Promise<OrganizationSettingsSnapshot>;
-  getLeaderboard(currentUid: string): Promise<LeaderboardEntry[]>;
-  getMasteryDistribution(uid: string): Promise<MasteryDistribution>;
-  getActivityLogs(uid: string): Promise<ActivityLog[]>;
-  getCommercialRequestStatus(): Promise<CommercialRequest[]>;
-  submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest>;
-  updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot>;
-  upsertOrganizationCohort(cohortId: string | undefined, name: string): Promise<OrganizationCohort>;
-  setStudentCohort(studentUid: string, cohortId: string | null): Promise<void>;
-  setInstructorCohorts(instructorUid: string, cohortIds: string[]): Promise<void>;
-  listProductAnnouncements(): Promise<ProductAnnouncementFeed>;
-  markAnnouncementSeen(announcementId: string): Promise<void>;
-  acknowledgeAnnouncement(announcementId: string): Promise<void>;
-  listCommercialRequests(): Promise<CommercialRequest[]>;
-  updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest>;
-  listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]>;
-  upsertProductAnnouncement(payload: ProductAnnouncementUpsertPayload): Promise<ProductAnnouncement>;
-}
 
 const slugifySegment = (value: string): string => value
   .normalize('NFKC')
@@ -1080,8 +991,33 @@ class IndexedDBStorageService implements IStorageService {
   }
 }
 
-const USE_REMOTE_STORAGE = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE).mode === 'cloudflare';
+export type {
+  AdminStorageService,
+  AnnouncementStorageService,
+  CatalogStorageService,
+  CommercialStorageService,
+  DashboardStorageService,
+  IStorageService,
+  LearningStorageService,
+  MissionStorageService,
+  OrganizationOpsStorageService,
+  SessionStorageService,
+} from './storage/types';
+
+export const storageModeSummary = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
+
+const USE_REMOTE_STORAGE = storageModeSummary.mode === 'cloudflare';
 
 export const storage: IStorageService = USE_REMOTE_STORAGE
     ? new CloudflareStorageService()
     : new IndexedDBStorageService();
+
+export const sessionStorage: SessionStorageService = storage;
+export const catalogStorage: CatalogStorageService = storage;
+export const learningStorage: LearningStorageService = storage;
+export const dashboardStorage: DashboardStorageService = storage;
+export const organizationOpsStorage: OrganizationOpsStorageService = storage;
+export const missionStorage: MissionStorageService = storage;
+export const commercialStorage: CommercialStorageService = storage;
+export const announcementStorage: AnnouncementStorageService = storage;
+export const adminStorage: AdminStorageService = storage;

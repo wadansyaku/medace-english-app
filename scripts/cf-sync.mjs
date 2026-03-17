@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
 
@@ -26,6 +27,11 @@ const run = (command, args, options = {}) => {
     stdout: (result.stdout || '').trim(),
     stderr: (result.stderr || '').trim(),
   };
+};
+
+const runWrangler = (args, options = {}) => {
+  const wrangler = createNodeToolCommand('wrangler', args);
+  return run(wrangler.command, wrangler.args, options);
 };
 
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -271,7 +277,7 @@ if (githubReady && repoSlug) {
 }
 
 if (cloudflareReady) {
-  const pagesProjects = run('npx', ['wrangler', 'pages', 'project', 'list']);
+  const pagesProjects = runWrangler(['pages', 'project', 'list']);
   if (recordCommand('Cloudflare Pages project inventory', pagesProjects, 'retrieved')) {
     pushRecord(
       pagesProjects.stdout.includes(pagesProject) ? 'ok' : 'error',
@@ -361,7 +367,7 @@ if (cloudflareReady) {
     pushRecord('error', 'Cloudflare D1 inventory', error instanceof Error ? error.message : String(error));
   }
 
-  const r2List = r2Bindings.length > 0 ? run('npx', ['wrangler', 'r2', 'bucket', 'list']) : null;
+  const r2List = r2Bindings.length > 0 ? runWrangler(['r2', 'bucket', 'list']) : null;
   const canInspectR2 = Boolean(r2List) && recordCommand('Cloudflare R2 inventory', r2List, 'retrieved');
   const r2Names = canInspectR2 ? new Set(r2List.stdout.split('\n').filter((line) => line.includes('│')).map((line) => {
     const columns = line.split('│').map((part) => part.trim()).filter(Boolean);
@@ -379,7 +385,7 @@ if (cloudflareReady) {
       continue;
     }
 
-    const createResult = run('npx', ['wrangler', 'r2', 'bucket', 'create', bucket.name]);
+    const createResult = runWrangler(['r2', 'bucket', 'create', bucket.name]);
     if (!createResult.ok && isAlreadyOwnedR2BucketError(createResult)) {
       pushRecord('ok', `R2 bucket ${bucket.name}`, 'already exists');
       continue;
@@ -388,7 +394,7 @@ if (cloudflareReady) {
   }
 
   const readPagesSecretNames = (envArgs) => {
-    const secretList = run('npx', ['wrangler', 'pages', 'secret', 'list', '--project-name', pagesProject, ...envArgs]);
+    const secretList = runWrangler(['pages', 'secret', 'list', '--project-name', pagesProject, ...envArgs]);
     if (!recordCommand(`Pages ${envArgs.length > 0 ? 'preview' : 'production'} secret inventory`, secretList, 'retrieved')) {
       return null;
     }
@@ -420,9 +426,8 @@ if (cloudflareReady) {
       if (label === 'preview' && name === 'ADMIN_DEMO_PASSWORD' && !process.env.ADMIN_DEMO_PASSWORD_PREVIEW) {
         pushRecord('warn', 'Pages preview secret ADMIN_DEMO_PASSWORD', 'using ADMIN_DEMO_PASSWORD fallback; set ADMIN_DEMO_PASSWORD_PREVIEW to split preview credentials');
       }
-      const result = run(
-        'npx',
-        ['wrangler', 'pages', 'secret', 'put', name, '--project-name', pagesProject, ...envArgs],
+      const result = runWrangler(
+        ['pages', 'secret', 'put', name, '--project-name', pagesProject, ...envArgs],
         { input: `${value}\n` },
       );
       recordCommand(`Pages ${label} secret ${name}`, result, 'synced');
@@ -438,9 +443,8 @@ if (cloudflareReady) {
         pushRecord('warn', `Pages ${label} secret ${name}`, 'missing locally, skipped');
         continue;
       }
-      const result = run(
-        'npx',
-        ['wrangler', 'pages', 'secret', 'put', name, '--project-name', pagesProject, ...envArgs],
+      const result = runWrangler(
+        ['pages', 'secret', 'put', name, '--project-name', pagesProject, ...envArgs],
         { input: `${value}\n` },
       );
       recordCommand(`Pages ${label} secret ${name}`, result, 'synced');

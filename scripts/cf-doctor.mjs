@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
 const includeDeferred = process.argv.includes('--include-deferred');
@@ -28,6 +29,11 @@ const run = (command, args, options = {}) => {
     stdout: (result.stdout || '').trim(),
     stderr: (result.stderr || '').trim(),
   };
+};
+
+const runWrangler = (args, options = {}) => {
+  const wrangler = createNodeToolCommand('wrangler', args);
+  return run(wrangler.command, wrangler.args, options);
 };
 
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -298,7 +304,7 @@ if (githubReady && repoSlug) {
 }
 
 if (cloudflareReady) {
-  const pagesProjects = run('npx', ['wrangler', 'pages', 'project', 'list']);
+  const pagesProjects = runWrangler(['pages', 'project', 'list']);
   if (recordCommand('Cloudflare Pages project inventory', pagesProjects, 'retrieved', { allowTransientFailure: true })) {
     pushRecord(
       pagesProjects.stdout.includes(pagesProject) ? 'ok' : 'error',
@@ -372,7 +378,7 @@ if (cloudflareReady) {
   }
 
   if (r2Buckets.length > 0) {
-    const r2List = run('npx', ['wrangler', 'r2', 'bucket', 'list']);
+    const r2List = runWrangler(['r2', 'bucket', 'list']);
     if (recordCommand('Cloudflare R2 inventory', r2List, 'retrieved')) {
       r2Buckets.forEach((bucket) => {
         pushRecord(
@@ -389,7 +395,7 @@ if (cloudflareReady) {
   }
 
   const checkPagesSecrets = (envName, args) => {
-    const secrets = run('npx', ['wrangler', 'pages', 'secret', 'list', '--project-name', pagesProject, ...args]);
+    const secrets = runWrangler(['pages', 'secret', 'list', '--project-name', pagesProject, ...args]);
     const labelPrefix = `Pages ${envName}`;
     if (!recordCommand(`${labelPrefix} secret inventory`, secrets, 'retrieved')) {
       return;
@@ -419,7 +425,7 @@ if (cloudflareReady) {
 
   const currentBranch = run('git', ['branch', '--show-current']);
   if (currentBranch.ok && currentBranch.stdout) {
-    const deployments = run('npx', ['wrangler', 'pages', 'deployment', 'list', '--project-name', pagesProject]);
+    const deployments = runWrangler(['pages', 'deployment', 'list', '--project-name', pagesProject]);
     if (recordCommand('Cloudflare deployment inventory', deployments, 'retrieved', { allowTransientFailure: true })) {
       const branch = currentBranch.stdout.trim();
       const matchingLine = deployments.stdout
