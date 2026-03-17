@@ -13,7 +13,7 @@ import { handleError, HttpError, json, noContent, readJson } from '../_shared/ht
 import getServerRuntimeFlags from '../_shared/runtime';
 import { handleGetPublicMotivationSnapshot } from '../_shared/storage-dashboard-actions';
 import { handleStorageAction } from '../_shared/storage-actions';
-import { AppEnv } from '../_shared/types';
+import { AppEnv, DbUserRow } from '../_shared/types';
 import { handleWritingAssetUpload, handleWritingRequest } from '../_shared/writing-actions';
 import { DEMO_SESSION_TTL_MS } from '../../utils/demo';
 
@@ -25,6 +25,8 @@ interface ProfileBody {
     studyMode?: string;
   };
 }
+
+type ApiLogUser = Pick<DbUserRow, 'id' | 'role' | 'organization_id' | 'organization_role'> | null;
 
 const createJsonResponse = (data: unknown, init: ResponseInit = {}): Response => {
   if (data === null || data === undefined) {
@@ -38,6 +40,57 @@ const isEnumValue = <TEnum extends Record<string, string>>(
   value: unknown,
 ): value is TEnum[keyof TEnum] => {
   return typeof value === 'string' && Object.values(enumObject).includes(value as TEnum[keyof TEnum]);
+};
+
+const getDeploymentLabel = (request: Request, env: AppEnv) => {
+  const deployment = getServerRuntimeFlags(request, env).deployment;
+  if (deployment.isLocalhost) return 'local';
+  if (deployment.isPagesPreviewHost) return 'preview';
+  return 'production';
+};
+
+const finalizeApiResponse = (request: Request, env: AppEnv, response: Response): Response => {
+  const headers = new Headers(response.headers);
+  if (getServerRuntimeFlags(request, env).deployment.isPagesPreviewHost) {
+    headers.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+  if (env.DEPLOYMENT_SHA) {
+    headers.set('X-Deployment-Sha', env.DEPLOYMENT_SHA);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+const logApiResponse = (
+  request: Request,
+  env: AppEnv,
+  pathname: string,
+  response: Response,
+  user: ApiLogUser,
+  error?: unknown,
+) => {
+  const logPayload = {
+    type: 'api_request',
+    method: request.method,
+    pathname: pathname || '/',
+    hostname: new URL(request.url).hostname,
+    status: response.status,
+    deployment: getDeploymentLabel(request, env),
+    deploymentSha: env.DEPLOYMENT_SHA || null,
+    requestId: request.headers.get('cf-ray') || crypto.randomUUID(),
+    userId: user?.id || null,
+    role: user?.role || null,
+    organizationId: user?.organization_id || null,
+    organizationRole: user?.organization_role || null,
+    error: error instanceof Error ? error.message : null,
+  };
+
+  const sink = response.status >= 500 ? console.error : console.log;
+  sink(JSON.stringify(logPayload));
 };
 
 const handleDemoLogin = async (env: AppEnv, request: Request, body: DemoLoginRequest): Promise<Response> => {
@@ -137,8 +190,7 @@ const handleEmailAuth = async (env: AppEnv, request: Request, body: EmailAuthReq
   });
 };
 
-const handleProfileUpdate = async (env: AppEnv, request: Request): Promise<Response> => {
-  const currentUser = await requireUser(env, request);
+const handleProfileUpdate = async (env: AppEnv, request: Request, currentUser: DbUserRow): Promise<Response> => {
   const body = await readJson<ProfileBody>(request);
   const nextUser = body.user || {};
   const nextDisplayName =
@@ -174,68 +226,113 @@ const handleProfileUpdate = async (env: AppEnv, request: Request): Promise<Respo
 };
 
 export const onRequest = async (context: { request: Request; env: AppEnv; }): Promise<Response> => {
+  const { request, env } = context;
+  let pathname = '';
+  let logUser: ApiLogUser = null;
+
   try {
-    const { request, env } = context;
     const url = new URL(request.url);
-    const pathname = url.pathname.replace(/^\/api\/?/, '');
+    pathname = url.pathname.replace(/^\/api\/?/, '');
+    let response: Response;
 
     if (pathname === 'auth' && request.method === 'POST') {
       const body = await readJson<AuthRequest>(request);
-      if (body.action === 'demo-login') return await handleDemoLogin(env, request, body);
-      if (body.action === 'email-auth') return await handleEmailAuth(env, request, body);
-      throw new HttpError(404, '未知の認証操作です。');
+      if (body.action === 'demo-login') {
+        response = await handleDemoLogin(env, request, body);
+      } else if (body.action === 'email-auth') {
+        response = await handleEmailAuth(env, request, body);
+      } else {
+        throw new HttpError(404, '未知の認証操作です。');
+      }
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'session' && request.method === 'GET') {
       const user = await requireUser(env, request).catch(() => null);
-      return createJsonResponse(user ? mapUserRowToProfile(user) : null);
+      logUser = user;
+      response = createJsonResponse(user ? mapUserRowToProfile(user) : null);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'session' && request.method === 'DELETE') {
       const cookie = await clearSession(env, request);
-      return noContent({ headers: { 'Set-Cookie': cookie } });
+      response = noContent({ headers: { 'Set-Cookie': cookie } });
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'public/motivation' && request.method === 'GET') {
-      return createJsonResponse(await handleGetPublicMotivationSnapshot(env));
+      response = createJsonResponse(await handleGetPublicMotivationSnapshot(env));
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'public/commercial-request' && request.method === 'POST') {
       const body = await readJson<CommercialRequestPayload>(request);
-      return createJsonResponse(await handleCreateCommercialRequest(env, body));
+      response = createJsonResponse(await handleCreateCommercialRequest(env, body));
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'profile' && request.method === 'POST') {
-      return await handleProfileUpdate(env, request);
+      const user = await requireUser(env, request);
+      logUser = user;
+      response = await handleProfileUpdate(env, request, user);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname.startsWith('writing/upload/') && request.method === 'PUT') {
-      const uploadToken = pathname.replace(/^writing\/upload\//, '');
-      return await handleWritingAssetUpload(env, uploadToken, request);
+      response = await handleWritingAssetUpload(env, pathname.replace(/^writing\/upload\//, ''), request);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname.startsWith('writing')) {
       const user = await requireUser(env, request);
+      logUser = user;
       const writingPath = pathname.replace(/^writing/, '');
-      return await handleWritingRequest(env, user, request, writingPath);
+      response = await handleWritingRequest(env, user, request, writingPath);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'storage' && request.method === 'POST') {
       const user = await requireUser(env, request);
+      logUser = user;
       const body = await readJson<StorageActionRequest<StorageAction>>(request);
       const result = await handleStorageAction(env, user, body, request);
-      return createJsonResponse(result);
+      response = createJsonResponse(result);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     if (pathname === 'ai' && request.method === 'POST') {
       const user = await requireUser(env, request);
+      logUser = user;
       const body = await readJson<{ action: string; payload?: any }>(request);
       const result = await handleAiAction(env, user, body);
-      return createJsonResponse(result);
+      response = createJsonResponse(result);
+      response = finalizeApiResponse(request, env, response);
+      logApiResponse(request, env, pathname, response, logUser);
+      return response;
     }
 
     throw new HttpError(404, 'APIエンドポイントが見つかりません。');
   } catch (error) {
-    return handleError(error);
+    const response = finalizeApiResponse(request, env, handleError(error));
+    logApiResponse(request, env, pathname, response, logUser, error);
+    return response;
   }
 };

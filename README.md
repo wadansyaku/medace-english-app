@@ -8,7 +8,7 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 - サブ顧客: 個人学習ユーザー
 - 初回診断: AI生成ではなく、静的な12問バンクで開始レベルを判定
 - AIの役割: 例文生成、クイズ生成、学習プラン生成、講師フォロー文面の下書き
-- 権限設計: グループ管理者は組織全体、講師は担当生徒と未割当生徒を中心に運用
+- 権限設計: グループ管理者は組織全体、講師は同一 cohort または直接担当している生徒を運用
 
 ## 料金モデル
 
@@ -143,7 +143,7 @@ echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --proj
 echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --project-name medace-english-app
 ```
 
-preview 環境も使う場合は、同じ secret を `--env preview` 付きで追加してください。
+preview 環境も使う場合は、`ADMIN_DEMO_PASSWORD` を preview 専用値に分ける前提で `--env preview` 付きで追加してください。
 
 ```bash
 echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app --env preview
@@ -157,6 +157,8 @@ echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --proj
 
 - production: `medace-writing-assets`
 - preview: `medace-writing-assets-preview`
+
+D1 は production の `medace-db` に加えて preview 専用の `medace-db-preview` を使います。`wrangler.jsonc` の `preview_database_id` と GitHub `preview` environment の `CLOUDFLARE_D1_DATABASE` はこの preview DB を参照させてください。
 
 CLI で同期する場合は `npm run cf:sync` を使います。R2 がまだ未有効化のアカウントでは Cloudflare API が `code: 10042` を返すため、その場合は先に Dashboard で R2 を有効化してください。
 
@@ -172,6 +174,8 @@ GitHub Actions 側では次を使います。
   - `CLOUDFLARE_D1_DATABASE`
 
 Variables 未設定時は workflow 側で `medace-english-app` / `medace-db` を既定値として使います。
+
+deploy workflow は GitHub の `production` / `preview` environment を参照します。repo-level secret / variable は CI と local doctor の fallback に残しつつ、実運用の deploy では environment-scoped config を優先してください。
 
 ローカルから接続状態を確認する場合は `npm run cf:doctor` を使ってください。`GEMINI_API_KEY` は未設定でも warning 扱いで、GitHub / Cloudflare の接続と Pages / D1 の疎通を先に確認できます。なお、学習プラン生成は key 未設定時でも標準ロジックで継続でき、AI教材化だけが停止します。
 
@@ -204,8 +208,10 @@ npx wrangler pages deploy dist --project-name medace-english-app
 GitHub Actions では次の流れで確認してから Cloudflare へ流します。
 
 - `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`
-- `deploy-pages.yml`: production deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`、その後に remote D1 migration と Pages deploy
+- `deploy-pages-preview.yml`: preview deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`、その後に preview D1 remote migration / Pages deploy / deployed preview smoke
+- `deploy-pages.yml`: production deploy 前に `typecheck` / `test:unit` / `test:api` / `test:smoke` / `cf:doctor`、その後に D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke
+
+運用 runbook は [docs/deployment-ops-runbook.md](/Users/Yodai/projects/MedAce英単語アプリ/docs/deployment-ops-runbook.md) を参照してください。
 
 ## 補足
 

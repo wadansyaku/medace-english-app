@@ -19,6 +19,7 @@ import {
   MasteryDistribution,
   MissionAssignment,
   MissionProgressEventType,
+  OrganizationCohort,
   OrganizationDashboardSnapshot,
   OrganizationSettingsSnapshot,
   OrganizationRole,
@@ -99,6 +100,9 @@ import {
   getOrganizationSettingsSnapshot as getOrganizationSettingsSnapshotReadModel,
   getStudentWorksheetSnapshot as getStudentWorksheetSnapshotReadModel,
   sendInstructorNotification as sendInstructorNotificationReadModel,
+  setInstructorCohorts as setInstructorCohortsReadModel,
+  setStudentCohort as setStudentCohortReadModel,
+  upsertOrganizationCohort as upsertOrganizationCohortReadModel,
   updateOrganizationProfile as updateOrganizationProfileReadModel,
   type OrganizationReadModelContext,
 } from './storage/organization-read-model';
@@ -203,6 +207,9 @@ export interface IStorageService {
   getCommercialRequestStatus(): Promise<CommercialRequest[]>;
   submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest>;
   updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot>;
+  upsertOrganizationCohort(cohortId: string | undefined, name: string): Promise<OrganizationCohort>;
+  setStudentCohort(studentUid: string, cohortId: string | null): Promise<void>;
+  setInstructorCohorts(instructorUid: string, cohortIds: string[]): Promise<void>;
   listProductAnnouncements(): Promise<ProductAnnouncementFeed>;
   markAnnouncementSeen(announcementId: string): Promise<void>;
   acknowledgeAnnouncement(announcementId: string): Promise<void>;
@@ -932,6 +939,18 @@ class IndexedDBStorageService implements IStorageService {
       });
     }
     return snapshot;
+  }
+
+  async upsertOrganizationCohort(cohortId: string | undefined, name: string): Promise<OrganizationCohort> {
+    return upsertOrganizationCohortReadModel(this.getOrganizationReadModelContext(), cohortId, name);
+  }
+
+  async setStudentCohort(studentUid: string, cohortId: string | null): Promise<void> {
+    await setStudentCohortReadModel(this.getOrganizationReadModelContext(), studentUid, cohortId);
+  }
+
+  async setInstructorCohorts(instructorUid: string, cohortIds: string[]): Promise<void> {
+    await setInstructorCohortsReadModel(this.getOrganizationReadModelContext(), instructorUid, cohortIds);
   }
 
   async listProductAnnouncements(): Promise<ProductAnnouncementFeed> {

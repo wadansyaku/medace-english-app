@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 const cwd = process.cwd();
 
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
+const GITHUB_DEPLOYMENT_ENVIRONMENTS = ['production', 'preview'];
 const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
 const OPTIONAL_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY'];
 
@@ -153,6 +154,8 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW || `${d1Database}-preview`;
+const previewD1DatabaseId = wranglerConfig.d1_databases?.[0]?.preview_database_id || '';
 const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
 const r2Bindings = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
   const pairs = [];
@@ -166,14 +169,22 @@ pushRecord('info', 'Workspace', cwd);
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
+pushRecord('info', 'Preview D1 database', previewD1Database || '(missing preview name)');
+pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing preview_database_id)');
 pushRecord('info', 'Writing AI mode', writingAiMode);
 pushRecord('info', 'R2 buckets', r2Bindings.length > 0 ? r2Bindings.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 
 const ghAuth = run('gh', ['auth', 'status']);
-const wranglerAuth = run('npx', ['wrangler', 'whoami']);
 const githubReady = recordCommand('GitHub auth', ghAuth, 'authenticated');
-const cloudflareReady = recordCommand('Cloudflare auth', wranglerAuth, 'authenticated');
-const detectedAccountId = wranglerAuth.ok ? getAccountIdFromWhoami(wranglerAuth.stdout) : '';
+const detectedAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
+let cloudflareReady = false;
+try {
+  await fetchCloudflareApi('/d1/database', {}, detectedAccountId);
+  pushRecord('ok', 'Cloudflare auth', 'authenticated');
+  cloudflareReady = true;
+} catch (error) {
+  pushRecord('error', 'Cloudflare auth', error instanceof Error ? error.message : String(error));
+}
 
 if (githubReady && repoSlug) {
   const repoVariables = new Map([
@@ -189,6 +200,30 @@ if (githubReady && repoSlug) {
     }
     const result = run('gh', ['variable', 'set', name, '--repo', repoSlug, '--body', value]);
     recordCommand(`GitHub variable ${name}`, result, value);
+  }
+
+  const deploymentEnvironmentVariables = new Map([
+    ['production', new Map([
+      ['CLOUDFLARE_PAGES_PROJECT', pagesProject],
+      ['CLOUDFLARE_D1_DATABASE', d1Database],
+      ['WRITING_AI_MODE', writingAiMode],
+    ])],
+    ['preview', new Map([
+      ['CLOUDFLARE_PAGES_PROJECT', pagesProject],
+      ['CLOUDFLARE_D1_DATABASE', previewD1Database],
+      ['WRITING_AI_MODE', writingAiMode],
+    ])],
+  ]);
+
+  for (const envName of GITHUB_DEPLOYMENT_ENVIRONMENTS) {
+    for (const [name, value] of deploymentEnvironmentVariables.get(envName) || new Map()) {
+      if (!value) {
+        pushRecord('error', `GitHub ${envName} variable ${name}`, 'value is empty');
+        continue;
+      }
+      const result = run('gh', ['variable', 'set', name, '--env', envName, '--repo', repoSlug, '--body', value]);
+      recordCommand(`GitHub ${envName} variable ${name}`, result, value);
+    }
   }
 
   const ghSecrets = run('gh', ['secret', 'list', '--repo', repoSlug]);
@@ -215,6 +250,17 @@ if (githubReady && repoSlug) {
     }
     const result = run('gh', ['secret', 'set', name, '--repo', repoSlug, '--body', value]);
     recordCommand(`GitHub secret ${name}`, result, 'synced');
+  }
+
+  for (const envName of GITHUB_DEPLOYMENT_ENVIRONMENTS) {
+    for (const [name, value] of secretSources) {
+      if (!value) {
+        pushRecord('warn', `GitHub ${envName} secret ${name}`, 'missing locally, skipped');
+        continue;
+      }
+      const result = run('gh', ['secret', 'set', name, '--env', envName, '--repo', repoSlug, '--body', value]);
+      recordCommand(`GitHub ${envName} secret ${name}`, result, 'synced');
+    }
   }
 
   REQUIRED_GITHUB_VARIABLES.forEach((name) => {
@@ -278,15 +324,41 @@ if (cloudflareReady) {
     }
   }
 
-  if (d1Database) {
-    const d1List = run('npx', ['wrangler', 'd1', 'list']);
-    if (recordCommand('Cloudflare D1 inventory', d1List, 'retrieved')) {
+  try {
+    const databases = await fetchCloudflareApi('/d1/database', {}, detectedAccountId);
+    pushRecord('ok', 'Cloudflare D1 inventory', 'retrieved');
+
+    const productionDatabase = databases.find((database) => database.name === d1Database);
+    pushRecord(
+      productionDatabase ? 'ok' : 'error',
+      `D1 database ${d1Database}`,
+      productionDatabase ? `present (${productionDatabase.uuid})` : 'missing',
+    );
+
+    let previewDatabase = databases.find((database) => database.name === previewD1Database);
+    if (!previewDatabase) {
+      previewDatabase = await fetchCloudflareApi(
+        '/d1/database',
+        {
+          method: 'POST',
+          body: JSON.stringify({ name: previewD1Database }),
+        },
+        detectedAccountId,
+      );
+      pushRecord('ok', `D1 database ${previewD1Database}`, `created (${previewDatabase.uuid})`);
+    } else {
+      pushRecord('ok', `D1 database ${previewD1Database}`, `present (${previewDatabase.uuid})`);
+    }
+
+    if (previewD1DatabaseId) {
       pushRecord(
-        d1List.stdout.includes(d1Database) ? 'ok' : 'error',
-        `D1 database ${d1Database}`,
-        d1List.stdout.includes(d1Database) ? 'present' : 'missing',
+        previewDatabase.uuid === previewD1DatabaseId ? 'ok' : 'error',
+        `D1 preview binding ${previewD1DatabaseId}`,
+        previewDatabase.uuid === previewD1DatabaseId ? `mapped to ${previewDatabase.name}` : `wrangler.jsonc points to ${previewD1DatabaseId}, but Cloudflare returned ${previewDatabase.uuid}`,
       );
     }
+  } catch (error) {
+    pushRecord('error', 'Cloudflare D1 inventory', error instanceof Error ? error.message : String(error));
   }
 
   const r2List = r2Bindings.length > 0 ? run('npx', ['wrangler', 'r2', 'bucket', 'list']) : null;
@@ -336,10 +408,17 @@ if (cloudflareReady) {
       }
       const value = name === 'WRITING_AI_MODE'
         ? writingAiMode
-        : (process.env[name] || '');
+        : (
+          label === 'preview'
+            ? (process.env.ADMIN_DEMO_PASSWORD_PREVIEW || process.env[name] || '')
+            : (process.env[name] || '')
+        );
       if (!value) {
         pushRecord('error', `Pages ${label} secret ${name}`, 'missing locally, cannot sync');
         continue;
+      }
+      if (label === 'preview' && name === 'ADMIN_DEMO_PASSWORD' && !process.env.ADMIN_DEMO_PASSWORD_PREVIEW) {
+        pushRecord('warn', 'Pages preview secret ADMIN_DEMO_PASSWORD', 'using ADMIN_DEMO_PASSWORD fallback; set ADMIN_DEMO_PASSWORD_PREVIEW to split preview credentials');
       }
       const result = run(
         'npx',

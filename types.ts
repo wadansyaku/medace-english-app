@@ -538,6 +538,8 @@ export interface StudentSummary {
   lastLoginDate?: number;
   subscriptionPlan?: SubscriptionPlan;
   organizationName?: string;
+  cohortId?: string;
+  cohortName?: string;
   lastNotificationAt?: number;
   lastNotificationMessage?: string;
   assignedInstructorUid?: string;
@@ -845,6 +847,20 @@ export interface OrganizationInstructorSummary {
   assignedStudentCount: number;
 }
 
+export interface OrganizationCohort {
+  id: string;
+  organizationId: string;
+  name: string;
+  studentCount: number;
+  instructorCount: number;
+  updatedAt: number;
+}
+
+export interface OrganizationInstructorCohortSummary {
+  instructorUid: string;
+  cohortIds: string[];
+}
+
 export interface OrganizationInstructorBacklogSummary {
   uid: string;
   displayName: string;
@@ -905,6 +921,8 @@ export interface OrganizationSettingsSnapshot {
   nameKey: string;
   subscriptionPlan: SubscriptionPlan;
   members: OrganizationMemberSummary[];
+  cohorts: OrganizationCohort[];
+  instructorCohorts: Record<string, string[]>;
   auditEvents: OrganizationAuditEvent[];
   updatedAt: number;
 }

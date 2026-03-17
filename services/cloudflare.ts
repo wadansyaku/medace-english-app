@@ -8,7 +8,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage';
 
@@ -313,6 +313,27 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage({
       action: 'updateOrganizationProfile',
       payload: { displayName },
+    });
+  }
+
+  async upsertOrganizationCohort(cohortId: string | undefined, name: string): Promise<OrganizationCohort> {
+    return this.callStorage({
+      action: 'upsertOrganizationCohort',
+      payload: { cohortId, name },
+    });
+  }
+
+  async setStudentCohort(studentUid: string, cohortId: string | null): Promise<void> {
+    await this.callStorage({
+      action: 'setStudentCohort',
+      payload: { studentUid, cohortId },
+    });
+  }
+
+  async setInstructorCohorts(instructorUid: string, cohortIds: string[]): Promise<void> {
+    await this.callStorage({
+      action: 'setInstructorCohorts',
+      payload: { instructorUid, cohortIds },
     });
   }
 

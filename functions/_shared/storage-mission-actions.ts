@@ -24,6 +24,7 @@ import {
 } from '../../shared/missions';
 import { requireActiveOrganizationContext, appendOrganizationAuditLog } from './organization-memberships';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
+import { buildVisibleStudentFilter, readVisibleStudentIds } from './student-visibility';
 import type { AppEnv, DbUserRow } from './types';
 import { HttpError } from './http';
 import {
@@ -270,6 +271,9 @@ const readMissionBoardRows = async (
     if (effectiveOrganizationId !== org.organizationId) {
       throw new HttpError(403, '同じ組織のミッションのみ参照できます。');
     }
+    const visibleStudentFilter = org.organizationRole === OrganizationRole.GROUP_ADMIN
+      ? { sql: '', bindings: [] as string[] }
+      : buildVisibleStudentFilter(await readVisibleStudentIds(env, currentUser, org), 'a.student_user_id');
 
     return readAll<DbMissionBoardRow>(
       env,
@@ -311,15 +315,10 @@ const readMissionBoardRows = async (
        JOIN users student ON student.id = a.student_user_id
        JOIN users assigner ON assigner.id = a.assigned_by_user_id
        LEFT JOIN writing_assignments wa ON wa.id = m.writing_assignment_id
-       LEFT JOIN student_instructor_assignments assign ON assign.student_user_id = a.student_user_id
        WHERE m.organization_id = ?
          AND a.status != ?
          AND (? IS NULL OR a.student_user_id = ?)
-         AND (
-           ? = 1
-           OR assign.instructor_user_id IS NULL
-           OR assign.instructor_user_id = ?
-         )
+         ${visibleStudentFilter.sql}
        ORDER BY
          CASE a.status
            WHEN 'OVERDUE' THEN 0
@@ -333,8 +332,7 @@ const readMissionBoardRows = async (
       WeeklyMissionStatus.ARCHIVED,
       studentUid || null,
       studentUid || null,
-      org.organizationRole === OrganizationRole.GROUP_ADMIN ? 1 : 0,
-      currentUser.id,
+      ...visibleStudentFilter.bindings,
     );
   }
 
@@ -931,6 +929,12 @@ export const handleUpdateMissionProgress = async (
     const organization = await requireActiveOrganizationContext(env, currentUser);
     if (organization.organizationId !== row.organization_id) {
       throw new HttpError(403, '同じ組織のミッションのみ更新できます。');
+    }
+    if (organization.organizationRole === OrganizationRole.INSTRUCTOR) {
+      const visibleStudentIds = await readVisibleStudentIds(env, currentUser, organization);
+      if (!visibleStudentIds.has(row.student_uid)) {
+        throw new HttpError(403, '担当範囲の生徒のミッションのみ更新できます。');
+      }
     }
   }
 

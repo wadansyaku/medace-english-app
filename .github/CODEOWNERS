@@ -1,0 +1,5 @@
+/.github/workflows/ @wadansyaku
+/wrangler.jsonc @wadansyaku
+/migrations/ @wadansyaku
+/scripts/cf-doctor.mjs @wadansyaku
+/scripts/cf-sync.mjs @wadansyaku

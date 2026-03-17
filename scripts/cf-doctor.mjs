@@ -7,6 +7,7 @@ const includeDeferred = process.argv.includes('--include-deferred');
 
 const REQUIRED_GITHUB_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
+const GITHUB_DEPLOYMENT_ENVIRONMENTS = ['production', 'preview'];
 const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
 const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY'];
 
@@ -50,6 +51,17 @@ const parseGhListNames = (output) => output
   .filter(Boolean)
   .map((line) => line.split(/\s+/)[0])
   .filter(Boolean);
+
+const parseGhVariableMap = (output) => new Map(
+  output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [name, value = ''] = line.split(/\s+/, 2);
+      return [name, value];
+    }),
+);
 
 const parsePagesSecretNames = (output) => output
   .split('\n')
@@ -153,6 +165,8 @@ const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
 const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW || `${d1Database}-preview`;
+const previewD1DatabaseId = wranglerConfig.d1_databases?.[0]?.preview_database_id || '';
 const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
 const r2Buckets = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
   const pairs = [];
@@ -165,18 +179,23 @@ const repoSlug = getRepoSlug();
 pushRecord('info', 'Workspace', cwd);
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
+pushRecord('info', 'Preview D1 database', previewD1Database || '(missing preview name)');
+pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing preview_database_id)');
 pushRecord('info', 'Writing AI mode', writingAiMode || '(missing locally, expecting Pages binding)');
 pushRecord('info', 'R2 buckets', r2Buckets.length > 0 ? r2Buckets.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 
 const ghAuth = run('gh', ['auth', 'status']);
-const wranglerAuth = run('npx', ['wrangler', 'whoami']);
 const githubReady = recordCommand('GitHub auth', ghAuth, 'authenticated');
-const cloudflareReady = recordCommand('Cloudflare auth', wranglerAuth, 'authenticated');
-const detectedAccountId = ((output) => {
-  const match = output.match(/\b([a-f0-9]{32})\b/i);
-  return match?.[1] || '';
-})(wranglerAuth.stdout);
+const detectedAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || '';
+let cloudflareReady = false;
+try {
+  await fetchCloudflareApi('/d1/database', {}, detectedAccountId);
+  pushRecord('ok', 'Cloudflare auth', 'authenticated');
+  cloudflareReady = true;
+} catch (error) {
+  pushRecord('error', 'Cloudflare auth', error instanceof Error ? error.message : String(error));
+}
 
 if (githubReady && repoSlug) {
   const ghSecrets = run('gh', ['secret', 'list', '--repo', repoSlug]);
@@ -216,6 +235,66 @@ if (githubReady && repoSlug) {
       pushRecord(value ? 'ok' : 'error', `GitHub variable ${name}`, value || 'missing');
     });
   }
+
+  const expectedEnvironmentVariables = new Map([
+    ['production', new Map([
+      ['CLOUDFLARE_PAGES_PROJECT', pagesProject],
+      ['CLOUDFLARE_D1_DATABASE', d1Database],
+      ['WRITING_AI_MODE', writingAiMode],
+    ])],
+    ['preview', new Map([
+      ['CLOUDFLARE_PAGES_PROJECT', pagesProject],
+      ['CLOUDFLARE_D1_DATABASE', previewD1Database],
+      ['WRITING_AI_MODE', writingAiMode],
+    ])],
+  ]);
+
+  GITHUB_DEPLOYMENT_ENVIRONMENTS.forEach((envName) => {
+    const ghEnvSecrets = run('gh', ['secret', 'list', '--env', envName, '--repo', repoSlug]);
+    if (!ghEnvSecrets.ok && isGitHubActions && isGithubInventoryPermissionError(ghEnvSecrets)) {
+      pushRecord('warn', `GitHub ${envName} secret inventory`, 'skipped: workflow token cannot list environment secrets');
+      REQUIRED_GITHUB_SECRETS.forEach((name) => {
+        const present = Boolean(process.env[name]);
+        pushRecord(
+          present ? 'ok' : 'warn',
+          `Workflow environment secret ${envName}:${name}`,
+          present ? 'available to current workflow' : 'not exposed in current workflow context',
+        );
+      });
+    } else if (recordCommand(`GitHub ${envName} secret inventory`, ghEnvSecrets, 'retrieved')) {
+      const names = new Set(parseGhListNames(ghEnvSecrets.stdout));
+      REQUIRED_GITHUB_SECRETS.forEach((name) => {
+        pushRecord(
+          names.has(name) ? 'ok' : 'error',
+          `GitHub ${envName} secret ${name}`,
+          names.has(name) ? 'present' : 'missing',
+        );
+      });
+    }
+
+    const ghEnvVariables = run('gh', ['variable', 'list', '--env', envName, '--repo', repoSlug]);
+    if (!ghEnvVariables.ok && isGitHubActions && isGithubInventoryPermissionError(ghEnvVariables)) {
+      pushRecord('warn', `GitHub ${envName} variable inventory`, 'skipped: workflow token cannot list environment variables');
+      for (const [name] of expectedEnvironmentVariables.get(envName) || new Map()) {
+        const value = process.env[name];
+        pushRecord(
+          value ? 'ok' : 'warn',
+          `Runtime environment variable ${envName}:${name}`,
+          value || 'not exposed in current workflow context',
+        );
+      }
+    } else if (recordCommand(`GitHub ${envName} variable inventory`, ghEnvVariables, 'retrieved')) {
+      const envVariables = parseGhVariableMap(ghEnvVariables.stdout);
+      for (const [name, expectedValue] of expectedEnvironmentVariables.get(envName) || new Map()) {
+        const value = envVariables.get(name);
+        pushRecord(
+          value === expectedValue ? 'ok' : 'error',
+          `GitHub ${envName} variable ${name}`,
+          value || 'missing',
+        );
+      }
+    }
+  });
 }
 
 if (cloudflareReady) {
@@ -256,15 +335,40 @@ if (cloudflareReady) {
     }
   }
 
-  if (d1Database) {
-    const d1List = run('npx', ['wrangler', 'd1', 'list']);
-    if (recordCommand('Cloudflare D1 inventory', d1List, 'retrieved')) {
+  pushRecord(
+    previewD1DatabaseId ? 'ok' : 'error',
+    'wrangler preview_database_id',
+    previewD1DatabaseId || 'missing in wrangler.jsonc',
+  );
+
+  try {
+    const databases = await fetchCloudflareApi('/d1/database', {}, detectedAccountId);
+    pushRecord('ok', 'Cloudflare D1 inventory', 'retrieved');
+
+    const productionDatabase = databases.find((database) => database.name === d1Database);
+    pushRecord(
+      productionDatabase ? 'ok' : 'error',
+      `D1 database ${d1Database}`,
+      productionDatabase ? `present (${productionDatabase.uuid})` : 'missing',
+    );
+
+    const previewDatabase = databases.find((database) => database.name === previewD1Database);
+    pushRecord(
+      previewDatabase ? 'ok' : 'error',
+      `D1 database ${previewD1Database}`,
+      previewDatabase ? `present (${previewDatabase.uuid})` : 'missing',
+    );
+
+    if (previewD1DatabaseId) {
+      const previewById = databases.find((database) => database.uuid === previewD1DatabaseId);
       pushRecord(
-        d1List.stdout.includes(d1Database) ? 'ok' : 'error',
-        `D1 database ${d1Database}`,
-        d1List.stdout.includes(d1Database) ? 'present' : 'missing'
+        previewById ? 'ok' : 'error',
+        `D1 preview binding ${previewD1DatabaseId}`,
+        previewById ? `mapped to ${previewById.name}` : 'missing',
       );
     }
+  } catch (error) {
+    pushRecord('error', 'Cloudflare D1 inventory', error instanceof Error ? error.message : String(error));
   }
 
   if (r2Buckets.length > 0) {
@@ -292,7 +396,7 @@ if (cloudflareReady) {
     }
 
     const names = new Set(parsePagesSecretNames(secrets.stdout));
-    const missingRequiredStatus = envName === 'production' ? 'error' : 'warn';
+    const missingRequiredStatus = 'error';
     REQUIRED_PAGES_SECRETS.forEach((name) => {
       pushRecord(
         names.has(name) ? 'ok' : missingRequiredStatus,

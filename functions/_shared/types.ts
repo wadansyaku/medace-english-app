@@ -10,6 +10,7 @@ export interface AppEnv {
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_OCR_MODEL?: string;
   CLOUDFLARE_EVAL_MODEL?: string;
+  DEPLOYMENT_SHA?: string;
   ADMIN_DEMO_PASSWORD?: string;
   ENABLE_ADMIN_DEMO?: string;
   ENABLE_PUBLIC_BUSINESS_DEMO?: string;
