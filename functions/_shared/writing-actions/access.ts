@@ -11,9 +11,8 @@ import {
   readActiveOrganizationContextForUser,
 } from '../organization-memberships';
 import {
-  canBypassInstructorAssignment,
-  readAll,
-} from '../storage-support';
+  readVisibleStudentIds,
+} from '../student-visibility';
 import type { AppEnv, DbUserRow } from '../types';
 
 interface AssignmentAccessTarget {
@@ -56,59 +55,22 @@ export const requireWritingOrganizationContext = async (
   return organization;
 };
 
-const readOrganizationStudentIds = async (env: AppEnv, organizationId: string): Promise<Set<string>> => {
-  const rows = await readAll<{ student_uid: string }>(
-    env,
-    `SELECT u.id AS student_uid
-     FROM users u
-     JOIN organization_memberships m
-       ON m.user_id = u.id
-      AND m.status = 'ACTIVE'
-     WHERE u.role = ?
-       AND m.organization_id = ?`,
-    UserRole.STUDENT,
-    organizationId,
-  );
-  return new Set(rows.map((row) => row.student_uid));
-};
+const getAssignmentStudentId = (assignment: AssignmentAccessTarget): string | undefined => (
+  assignment.student_user_id || assignment.studentUid
+);
 
 export const getVisibleStudentIds = async (
   env: AppEnv,
   user: DbUserRow,
   organization?: ActiveOrganizationContext,
 ): Promise<Set<string>> => {
-  const activeOrganization = organization || await requireWritingOrganizationContext(env, user);
-  if (user.role === UserRole.STUDENT) {
-    return new Set([user.id]);
-  }
-  if (
-    activeOrganization.organizationRole === OrganizationRole.GROUP_ADMIN
-    || canBypassInstructorAssignment(user)
-  ) {
-    return readOrganizationStudentIds(env, activeOrganization.organizationId);
-  }
-
-  const rows = await readAll<{ student_uid: string }>(
-    env,
-    `SELECT a.student_user_id AS student_uid
-     FROM student_instructor_assignments a
-     JOIN users u ON u.id = a.student_user_id
-     JOIN organization_memberships m
-       ON m.user_id = u.id
-      AND m.status = 'ACTIVE'
-     WHERE a.instructor_user_id = ?
-       AND u.role = ?
-       AND m.organization_id = ?`,
-    user.id,
-    UserRole.STUDENT,
-    activeOrganization.organizationId,
+  const scopedOrganization = organization || (
+    user.role === UserRole.STUDENT
+      ? undefined
+      : await requireWritingOrganizationContext(env, user)
   );
-  return new Set(rows.map((row) => row.student_uid));
+  return readVisibleStudentIds(env, user, scopedOrganization);
 };
-
-const getAssignmentStudentId = (assignment: AssignmentAccessTarget): string | undefined => (
-  assignment.student_user_id || assignment.studentUid
-);
 
 export const ensureAssignmentAccess = async (
   env: AppEnv,

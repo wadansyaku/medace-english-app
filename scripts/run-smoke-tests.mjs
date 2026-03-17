@@ -8,6 +8,8 @@ import { getAvailablePort } from './_shared/ports.mjs';
 const cwd = process.cwd();
 const extraArgs = process.argv.slice(2);
 const { FORCE_COLOR: _forceColor, ...baseEnv } = process.env;
+const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL || '';
+const isExternalTarget = externalBaseUrl.length > 0;
 
 const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -106,31 +108,44 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
   });
 };
 
-const suites = [
-  {
-    name: 'core',
-    args: ['--grep-invert', 'writing|idb mode'],
-    env: {},
-  },
-  {
-    name: 'writing',
-    args: ['--grep', 'writing'],
-    env: {},
-  },
-  {
-    name: 'idb',
-    args: ['--grep', 'idb mode'],
-    env: {
-      VITE_STORAGE_MODE: 'idb',
-    },
-  },
-];
+const suites = isExternalTarget
+  ? [
+      {
+        name: 'remote-core',
+        args: ['--grep-invert', 'writing|idb mode'],
+        env: {},
+      },
+      {
+        name: 'remote-writing',
+        args: ['--grep', 'writing'],
+        env: {},
+      },
+    ]
+  : [
+      {
+        name: 'core',
+        args: ['--grep-invert', 'writing|idb mode'],
+        env: {},
+      },
+      {
+        name: 'writing',
+        args: ['--grep', 'writing'],
+        env: {},
+      },
+      {
+        name: 'idb',
+        args: ['--grep', 'idb mode'],
+        env: {
+          VITE_STORAGE_MODE: 'idb',
+        },
+      },
+    ];
 
 let exitCode = 0;
 
 for (const suite of suites) {
   const port = await getAvailablePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const baseUrl = isExternalTarget ? externalBaseUrl : `http://127.0.0.1:${port}`;
   const outputDir = path.join(cwd, 'test-results', `smoke-${suite.name}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
 
@@ -140,25 +155,29 @@ for (const suite of suites) {
     ...baseEnv,
     ...(suite.env || {}),
   };
-  const buildExitCode = await runCommand(
-    npmCommand,
-    ['run', 'build'],
-    suiteEnv,
-  );
+  if (!isExternalTarget) {
+    const buildExitCode = await runCommand(
+      npmCommand,
+      ['run', 'build'],
+      suiteEnv,
+    );
 
-  if (buildExitCode !== 0) {
-    exitCode = buildExitCode;
-    continue;
+    if (buildExitCode !== 0) {
+      exitCode = buildExitCode;
+      continue;
+    }
   }
 
   let server;
 
   try {
-    server = startServer(port, {
-      ...suiteEnv,
-      PLAYWRIGHT_SMOKE_PORT: String(port),
-    });
-    await waitForServer(baseUrl);
+    if (!isExternalTarget) {
+      server = startServer(port, {
+        ...suiteEnv,
+        PLAYWRIGHT_SMOKE_PORT: String(port),
+      });
+      await waitForServer(baseUrl);
+    }
 
     const suiteExitCode = await runCommand(
       npxCommand,

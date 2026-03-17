@@ -7,6 +7,7 @@ import {
 
 const mobileViewport = { width: 390, height: 844 };
 const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW === '1';
 
 const completeDiagnostic = async (page: Page) => {
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingTest)).toBeVisible();
@@ -301,12 +302,81 @@ const openBusinessPreview = async (page: Page) => {
   await page.getByTestId('business-role-preview-section').scrollIntoViewIfNeeded();
 };
 
+const getInstructorSegmentLabel = (student: {
+  riskLevel?: string;
+  latestInterventionAt?: number;
+  latestInterventionOutcome?: string;
+  needsFollowUpNow?: boolean;
+  primaryMissionStatus?: string;
+  missionOverdue?: boolean;
+}) => {
+  const missionOverdue = Boolean(student.missionOverdue || student.primaryMissionStatus === 'OVERDUE');
+  const missionUnstarted = student.primaryMissionStatus === 'ASSIGNED';
+  if (missionOverdue) return '要即対応';
+  if (student.latestInterventionOutcome === 'REACTIVATED') {
+    return missionUnstarted ? '再開待ち' : '再開済み';
+  }
+  if (
+    student.needsFollowUpNow
+    || (
+      student.riskLevel !== 'SAFE'
+      && (!student.latestInterventionAt || Number(student.latestInterventionAt) <= 0)
+    )
+  ) {
+    return '要即対応';
+  }
+  return '再開待ち';
+};
+
 const loginAdminDemo = async (page: Page) => {
   await openBusinessPreview(page);
   await page.getByTestId('demo-login-admin').click();
   await expect(page.getByTestId('admin-demo-password')).toBeVisible();
   await page.getByTestId('admin-demo-password').fill('admin');
   await page.getByTestId('admin-demo-submit').click();
+};
+
+const emailAuth = async (
+  page: Page,
+  payload: {
+    email: string;
+    password: string;
+    isSignUp: boolean;
+    role?: string;
+    displayName?: string;
+  },
+  timeoutMs = 10_000,
+) => {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async (nextPayload) => {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'email-auth',
+          ...nextPayload,
+        }),
+      });
+
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, payload);
+
+    if (result.ok) {
+      return result.text ? JSON.parse(result.text) : null;
+    }
+    if (result.status !== 401) {
+      throw new Error(`email-auth failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(`email-auth failed with status 401 after ${timeoutMs}ms`);
 };
 
 const storageAction = async <T,>(
@@ -603,6 +673,128 @@ test('group admin can open settings and organization rename survives reload acro
   await adminContext.close();
   await instructorContext.close();
   await studentContext.close();
+});
+
+test('group admin can scope cohorts and instructor dashboard only shows assigned cohort students', async ({ browser }) => {
+  const platformAdminContext = await browser.newContext();
+  const adminContext = await browser.newContext();
+  const instructorContext = await browser.newContext();
+  const studentAContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const studentBContext = await browser.newContext({ viewport: mobileViewport, userAgent: iphoneUserAgent });
+  const platformAdminPage = await platformAdminContext.newPage();
+  const adminPage = await adminContext.newPage();
+  const instructorPage = await instructorContext.newPage();
+  const studentAPage = await studentAContext.newPage();
+  const studentBPage = await studentBContext.newPage();
+
+  await loginAdminDemo(platformAdminPage);
+  await openBusinessPreview(adminPage);
+  await adminPage.getByTestId('demo-login-group-admin').click();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  await instructorPage.goto('/');
+  const provisionedInstructor = await emailAuth(instructorPage, {
+    email: 'smoke-cohort-instructor@example.jp',
+    password: 'smoke-pass-123',
+    isSignUp: true,
+    role: 'STUDENT',
+    displayName: 'Smoke Cohort Instructor',
+  });
+
+  await openBusinessPreview(studentAPage);
+  await studentAPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentAPage);
+  await expect(studentAPage.getByTestId('student-dashboard')).toBeVisible();
+
+  await openBusinessPreview(studentBPage);
+  await studentBPage.getByTestId('demo-login-business-student').click();
+  await maybeCompleteOnboarding(studentBPage);
+  await expect(studentBPage.getByTestId('student-dashboard')).toBeVisible();
+
+  const adminUser = await getCurrentSessionUser(adminPage);
+  const studentAUser = await getCurrentSessionUser(studentAPage);
+  const studentBUser = await getCurrentSessionUser(studentBPage);
+  expect(adminUser?.organizationId).toBeTruthy();
+  expect(provisionedInstructor?.uid).toBeTruthy();
+  expect(studentAUser?.uid).toBeTruthy();
+  expect(studentBUser?.uid).toBeTruthy();
+
+  const instructorRequest = await storageAction<any>(instructorPage, 'submitCommercialRequest', {
+    kind: 'BUSINESS_ROLE_CONVERSION',
+    contactName: 'Smoke Cohort Instructor',
+    contactEmail: 'smoke-cohort-instructor@example.jp',
+    organizationName: adminUser!.organizationName,
+    requestedWorkspaceRole: 'INSTRUCTOR',
+    seatEstimate: '1-30名',
+    message: 'smoke cohort instructor provisioning',
+    source: 'DASHBOARD_ACCOUNT',
+  });
+  await storageAction(platformAdminPage, 'updateCommercialRequest', {
+    id: instructorRequest.id,
+    status: 'PROVISIONED',
+    resolutionNote: 'smoke cohort instructor provisioning',
+    linkedUserUid: provisionedInstructor.uid,
+    targetSubscriptionPlan: 'TOB_PAID',
+    targetOrganizationId: adminUser!.organizationId,
+    targetOrganizationName: adminUser!.organizationName,
+    targetOrganizationRole: 'INSTRUCTOR',
+  });
+
+  await instructorPage.goto('/instructor');
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+  const instructorUser = await getCurrentSessionUser(instructorPage);
+  expect(instructorUser?.organizationRole).toBe('INSTRUCTOR');
+
+  await adminPage.reload();
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  await adminPage.getByTestId('workspace-tab-settings').click();
+
+  await adminPage.getByTestId('cohort-create-input').fill('Smoke Cohort A');
+  await adminPage.getByTestId('cohort-create-submit').click();
+  await expect(adminPage.getByText('クラス/担当グループを追加しました。')).toBeVisible();
+
+  await adminPage.getByTestId('cohort-create-input').fill('Smoke Cohort B');
+  await adminPage.getByTestId('cohort-create-submit').click();
+  await expect(adminPage.getByText('クラス/担当グループを追加しました。')).toBeVisible();
+
+  const settingsSnapshot = await storageAction<any>(adminPage, 'getOrganizationSettingsSnapshot');
+  const cohortA = settingsSnapshot.cohorts.find((cohort: { name: string }) => cohort.name === 'Smoke Cohort A');
+  const cohortB = settingsSnapshot.cohorts.find((cohort: { name: string }) => cohort.name === 'Smoke Cohort B');
+  expect(cohortA?.id).toBeTruthy();
+  expect(cohortB?.id).toBeTruthy();
+
+  await adminPage.getByTestId(`instructor-cohort-checkbox-${instructorUser!.uid}-${cohortA.id}`).check();
+  await adminPage.getByTestId(`instructor-cohort-save-${instructorUser!.uid}`).click();
+  await expect(adminPage.getByText('講師のクラス/担当グループ範囲を更新しました。')).toBeVisible();
+
+  await adminPage.getByTestId('workspace-tab-assignments').click();
+  await adminPage.getByTestId(`assignment-row-${studentAUser!.uid}`).click();
+  await adminPage.getByTestId(`student-cohort-select-${studentAUser!.uid}`).selectOption(cohortA.id);
+  await expect(adminPage.getByText('生徒のクラス/担当グループを更新しました。')).toBeVisible();
+
+  await adminPage.getByTestId(`assignment-row-${studentBUser!.uid}`).click();
+  await adminPage.getByTestId(`student-cohort-select-${studentBUser!.uid}`).selectOption(cohortB.id);
+  await expect(adminPage.getByText('生徒のクラス/担当グループを更新しました。')).toBeVisible();
+
+  await instructorPage.reload();
+  await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
+
+  const visibleStudents = await storageAction<any[]>(instructorPage, 'getAllStudentsProgress');
+  const visibleStudentA = visibleStudents.find((student) => student.uid === studentAUser!.uid);
+  const visibleStudentB = visibleStudents.find((student) => student.uid === studentBUser!.uid);
+  expect(visibleStudentA?.cohortId).toBe(cohortA.id);
+  expect(visibleStudentB).toBeUndefined();
+
+  await instructorPage.getByTestId('workspace-tab-students').click();
+  await instructorPage.getByRole('button', { name: getInstructorSegmentLabel(visibleStudentA), exact: true }).first().click();
+  await expect(instructorPage.getByTestId(`instructor-student-row-${studentAUser!.uid}`)).toBeVisible();
+  await expect(instructorPage.getByTestId(`instructor-student-row-${studentBUser!.uid}`)).toHaveCount(0);
+
+  await platformAdminContext.close();
+  await adminContext.close();
+  await instructorContext.close();
+  await studentAContext.close();
+  await studentBContext.close();
 });
 
 test('instructor can keep and send a fallback follow-up draft after an AI attempt', async ({ browser }) => {
@@ -978,6 +1170,15 @@ test.describe('student mobile ux', () => {
     const box = await guideButton.boundingBox();
     expect(box).not.toBeNull();
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
+  });
+
+  test('preview deployment surfaces a visible preview banner and noindex marker', async ({ page }) => {
+    test.skip(!expectPreviewDeployment, 'preview-only deployment validation');
+
+    await page.goto('/');
+
+    await expect(page.getByTestId('preview-deployment-banner')).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/i);
   });
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {

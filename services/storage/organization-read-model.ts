@@ -1,6 +1,7 @@
 import {
   InterventionKind,
   OrganizationAuditEvent,
+  OrganizationCohort,
   OrganizationDashboardSnapshot,
   OrganizationMemberSummary,
   OrganizationRole,
@@ -69,6 +70,14 @@ interface LocalOrganizationRecord {
   updatedAt: number;
 }
 
+interface LocalOrganizationCohortRecord {
+  id: string;
+  organizationId: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 const toNameKey = (value: string): string => value.trim().toLocaleLowerCase('en-US');
 
 const LOCAL_ORGANIZATIONS = new Map<string, LocalOrganizationRecord>([
@@ -124,9 +133,140 @@ const LOCAL_ORGANIZATION_AUDIT_LOGS = new Map<string, OrganizationAuditEvent[]>(
   ],
 ]);
 
+const LOCAL_ORGANIZATION_STUDENT_UIDS = new Map<string, string[]>([
+  [
+    IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+    ['student-biz-1', 'student-biz-2', 'student-biz-3'],
+  ],
+]);
+
+const LOCAL_ORGANIZATION_COHORTS = new Map<string, LocalOrganizationCohortRecord[]>([
+  [
+    IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+    [
+      {
+        id: 'cohort_demo_foundations',
+        organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+        name: '基礎クラス',
+        createdAt: Date.now() - 7 * 86400000,
+        updatedAt: Date.now() - 7 * 86400000,
+      },
+      {
+        id: 'cohort_demo_advanced',
+        organizationId: IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY,
+        name: '演習クラス',
+        createdAt: Date.now() - 6 * 86400000,
+        updatedAt: Date.now() - 6 * 86400000,
+      },
+    ],
+  ],
+]);
+
+const LOCAL_STUDENT_COHORT_ASSIGNMENTS = new Map<string, string>([
+  ['student-biz-1', 'cohort_demo_foundations'],
+  ['student-biz-2', 'cohort_demo_foundations'],
+  ['student-biz-3', 'cohort_demo_advanced'],
+]);
+
+const LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS = new Map<string, string[]>([
+  ['mock-instructor-001', ['cohort_demo_foundations']],
+]);
+
 const readLocalOrganizationRecord = (organizationId?: string): LocalOrganizationRecord | null => {
   if (!organizationId) return null;
   return LOCAL_ORGANIZATIONS.get(organizationId) || null;
+};
+
+const touchLocalOrganization = (organizationId: string, updatedAt = Date.now()): void => {
+  const organization = LOCAL_ORGANIZATIONS.get(organizationId);
+  if (organization) {
+    organization.updatedAt = updatedAt;
+  }
+};
+
+const appendLocalOrganizationAuditEvent = (
+  organizationId: string,
+  event: Omit<OrganizationAuditEvent, 'id' | 'organizationId' | 'createdAt'> & {
+    createdAt?: number;
+  },
+): void => {
+  const createdAt = event.createdAt || Date.now();
+  const existingEvents = LOCAL_ORGANIZATION_AUDIT_LOGS.get(organizationId) || [];
+  const nextId = Math.max(0, ...existingEvents.map((candidate) => candidate.id)) + 1;
+  const nextEvent: OrganizationAuditEvent = {
+    id: nextId,
+    organizationId,
+    actorUserId: event.actorUserId,
+    actorDisplayName: event.actorDisplayName,
+    actionType: event.actionType,
+    targetType: event.targetType,
+    targetId: event.targetId,
+    payload: event.payload,
+    createdAt,
+  };
+  LOCAL_ORGANIZATION_AUDIT_LOGS.set(organizationId, [nextEvent, ...existingEvents]);
+  touchLocalOrganization(organizationId, createdAt);
+};
+
+const listLocalOrganizationStudentUids = (organizationId: string): string[] => (
+  [...(LOCAL_ORGANIZATION_STUDENT_UIDS.get(organizationId) || [])]
+);
+
+const listLocalOrganizationCohortRecords = (organizationId: string): LocalOrganizationCohortRecord[] => (
+  [...(LOCAL_ORGANIZATION_COHORTS.get(organizationId) || [])]
+    .sort((left, right) => left.name.localeCompare(right.name, 'ja-JP'))
+);
+
+const getLocalOrganizationCohorts = (organizationId: string): OrganizationCohort[] => {
+  const studentUids = listLocalOrganizationStudentUids(organizationId);
+  const instructors = listLocalOrganizationMembers(organizationId)
+    .filter((member) => member.organizationRole === OrganizationRole.INSTRUCTOR)
+    .map((member) => member.userUid);
+
+  return listLocalOrganizationCohortRecords(organizationId).map((cohort) => ({
+    id: cohort.id,
+    organizationId: cohort.organizationId,
+    name: cohort.name,
+    studentCount: studentUids.filter((studentUid) => LOCAL_STUDENT_COHORT_ASSIGNMENTS.get(studentUid) === cohort.id).length,
+    instructorCount: instructors.filter((instructorUid) => (
+      (LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.get(instructorUid) || []).includes(cohort.id)
+    )).length,
+    updatedAt: cohort.updatedAt,
+  }));
+};
+
+const getLocalInstructorCohortMap = (organizationId: string): Record<string, string[]> => {
+  const instructorUids = listLocalOrganizationMembers(organizationId)
+    .filter((member) => member.organizationRole === OrganizationRole.INSTRUCTOR)
+    .map((member) => member.userUid);
+  const result: Record<string, string[]> = {};
+  instructorUids.forEach((instructorUid) => {
+    const cohortIds = LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.get(instructorUid) || [];
+    if (cohortIds.length > 0) {
+      result[instructorUid] = [...cohortIds].sort();
+    }
+  });
+  return result;
+};
+
+const getLocalStudentCohortSummary = (
+  studentUid: string,
+): { cohortId: string; cohortName: string; organizationId: string } | null => {
+  const cohortId = LOCAL_STUDENT_COHORT_ASSIGNMENTS.get(studentUid);
+  if (!cohortId) return null;
+
+  for (const [organizationId, cohorts] of LOCAL_ORGANIZATION_COHORTS.entries()) {
+    const cohort = cohorts.find((candidate) => candidate.id === cohortId);
+    if (cohort) {
+      return {
+        cohortId,
+        cohortName: cohort.name,
+        organizationId,
+      };
+    }
+  }
+
+  return null;
 };
 
 const resolveLocalOrganizationForUser = (user: UserProfile | null): LocalOrganizationRecord | null => {
@@ -192,6 +332,8 @@ const getLocalSettingsSnapshot = (organization: LocalOrganizationRecord): Organi
   nameKey: organization.nameKey,
   subscriptionPlan: organization.subscriptionPlan,
   members: listLocalOrganizationMembers(organization.organizationId),
+  cohorts: getLocalOrganizationCohorts(organization.organizationId),
+  instructorCohorts: getLocalInstructorCohortMap(organization.organizationId),
   auditEvents: listLocalOrganizationAuditEvents(organization.organizationId),
   updatedAt: organization.updatedAt,
 });
@@ -427,6 +569,7 @@ export const getAllStudentsProgress = async (
     const assignedInstructorUid = mergedAssignments.get(student.uid) || undefined;
     const assignedInstructor = IDB_MOCK_USERS.find((user) => user.uid === assignedInstructorUid);
     const missionAssignment = getLocalMissionAssignmentByStudent(student.uid);
+    const cohortSummary = student.organizationName ? getLocalStudentCohortSummary(student.uid) : null;
     const missionOverdue = Boolean(
       missionAssignment?.progress.overdue
       || missionAssignment?.progress.status === WeeklyMissionStatus.OVERDUE,
@@ -439,6 +582,8 @@ export const getAllStudentsProgress = async (
     });
     return {
       ...student,
+      cohortId: cohortSummary?.cohortId,
+      cohortName: cohortSummary?.cohortName,
       assignedInstructorUid,
       assignedInstructorName: assignedInstructor?.displayName,
       continuityBand: getContinuityBand(student.activeStudyDays7d || 0),
@@ -477,7 +622,11 @@ export const getAllStudentsProgress = async (
         && isDemoEmail(sessionUser.email)
       );
     if (bypassAssignment) return orgStudents;
-    return orgStudents.filter((student) => !student.assignedInstructorUid || student.assignedInstructorUid === sessionUser.uid);
+    const visibleCohortIds = new Set(LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.get(sessionUser.uid) || []);
+    return orgStudents.filter((student) => (
+      student.assignedInstructorUid === sessionUser.uid
+      || Boolean(student.cohortId && visibleCohortIds.has(student.cohortId))
+    ));
   }
 
   return withAssignments.filter((student) => !student.organizationName);
@@ -488,7 +637,10 @@ export const getStudentWorksheetSnapshot = async (
   studentUid: string,
 ): Promise<StudentWorksheetSnapshot> => {
   const students = await getAllStudentsProgress(context);
-  const targetStudent = students.find((student) => student.uid === studentUid) || students[0];
+  const targetStudent = students.find((student) => student.uid === studentUid);
+  if (!targetStudent) {
+    throw new Error('担当範囲の生徒のみ問題印刷できます。');
+  }
   const books = await context.getBooks();
   const wordsById = new Map<string, WordData>();
 
@@ -509,9 +661,9 @@ export const getStudentWorksheetSnapshot = async (
   });
 
   return {
-    studentUid: targetStudent?.uid || studentUid,
-    studentName: targetStudent?.name || '対象生徒',
-    organizationName: targetStudent?.organizationName,
+    studentUid: targetStudent.uid,
+    studentName: targetStudent.name,
+    organizationName: targetStudent.organizationName,
     words: worksheetWords.length > 0 ? worksheetWords : await buildFallbackWorksheetWords(context),
   };
 };
@@ -673,24 +825,201 @@ export const updateOrganizationProfile = async (
     }
   });
 
-  const nextAuditId = Math.max(
-    0,
-    ...[...(LOCAL_ORGANIZATION_AUDIT_LOGS.get(organization.organizationId) || [])].map((event) => event.id),
-  ) + 1;
   const actor = IDB_MOCK_USERS.find((user) => user.uid === sessionUser?.uid) || IDB_MOCK_USERS.find((user) => user.organizationRole === OrganizationRole.GROUP_ADMIN);
-  const nextEvent: OrganizationAuditEvent = {
-    id: nextAuditId,
-    organizationId: organization.organizationId,
+  appendLocalOrganizationAuditEvent(organization.organizationId, {
     actorUserId: actor?.uid || 'local-group-admin',
     actorDisplayName: actor?.displayName || 'ローカル管理者',
     actionType: 'ORGANIZATION_RENAMED',
     targetType: 'ORGANIZATION',
     targetId: organization.organizationId,
     payload: { displayName: trimmed },
-    createdAt: Date.now(),
-  };
-  const existingEvents = LOCAL_ORGANIZATION_AUDIT_LOGS.get(organization.organizationId) || [];
-  LOCAL_ORGANIZATION_AUDIT_LOGS.set(organization.organizationId, [nextEvent, ...existingEvents]);
+  });
 
   return getLocalSettingsSnapshot(organization);
+};
+
+export const upsertOrganizationCohort = async (
+  context: Pick<OrganizationReadModelContext, 'getSession'>,
+  cohortId: string | undefined,
+  name: string,
+): Promise<OrganizationCohort> => {
+  const sessionUser = await context.getSession();
+  const organization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!organization) {
+    throw new Error('組織設定を更新できません。');
+  }
+
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error('クラス/担当グループ名を入力してください。');
+  }
+
+  const existingCohorts = LOCAL_ORGANIZATION_COHORTS.get(organization.organizationId) || [];
+  const duplicate = existingCohorts.find((cohort) => (
+    cohort.name.toLocaleLowerCase('ja-JP') === trimmedName.toLocaleLowerCase('ja-JP')
+    && cohort.id !== cohortId
+  ));
+  if (duplicate) {
+    throw new Error('同じクラス/担当グループ名が既に存在します。');
+  }
+
+  const actor = IDB_MOCK_USERS.find((user) => user.uid === sessionUser?.uid) || IDB_MOCK_USERS.find((user) => user.organizationRole === OrganizationRole.GROUP_ADMIN);
+  const now = Date.now();
+
+  if (cohortId) {
+    const currentCohort = existingCohorts.find((cohort) => cohort.id === cohortId);
+    if (!currentCohort) {
+      throw new Error('対象のクラス/担当グループが見つかりません。');
+    }
+    if (currentCohort.name !== trimmedName) {
+      currentCohort.name = trimmedName;
+      currentCohort.updatedAt = now;
+      appendLocalOrganizationAuditEvent(organization.organizationId, {
+        actorUserId: actor?.uid || 'local-group-admin',
+        actorDisplayName: actor?.displayName || 'ローカル管理者',
+        actionType: 'ORGANIZATION_COHORT_RENAMED',
+        targetType: 'COHORT',
+        targetId: cohortId,
+        payload: {
+          nextName: trimmedName,
+        },
+        createdAt: now,
+      });
+    }
+  } else {
+    const nextCohortId = `cohort_local_${crypto.randomUUID().replace(/-/g, '')}`;
+    existingCohorts.push({
+      id: nextCohortId,
+      organizationId: organization.organizationId,
+      name: trimmedName,
+      createdAt: now,
+      updatedAt: now,
+    });
+    LOCAL_ORGANIZATION_COHORTS.set(organization.organizationId, existingCohorts);
+    appendLocalOrganizationAuditEvent(organization.organizationId, {
+      actorUserId: actor?.uid || 'local-group-admin',
+      actorDisplayName: actor?.displayName || 'ローカル管理者',
+      actionType: 'ORGANIZATION_COHORT_CREATED',
+      targetType: 'COHORT',
+      targetId: nextCohortId,
+      payload: {
+        nextName: trimmedName,
+      },
+      createdAt: now,
+    });
+    cohortId = nextCohortId;
+  }
+
+  const savedCohort = getLocalOrganizationCohorts(organization.organizationId)
+    .find((cohort) => cohort.id === cohortId);
+  if (!savedCohort) {
+    throw new Error('クラス/担当グループの保存に失敗しました。');
+  }
+  return savedCohort;
+};
+
+export const setStudentCohort = async (
+  context: Pick<OrganizationReadModelContext, 'getSession'>,
+  studentUid: string,
+  cohortId: string | null,
+): Promise<void> => {
+  const sessionUser = await context.getSession();
+  const organization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!organization) {
+    throw new Error('組織設定を更新できません。');
+  }
+  if (!studentUid) {
+    throw new Error('対象生徒を指定してください。');
+  }
+  if (!listLocalOrganizationStudentUids(organization.organizationId).includes(studentUid)) {
+    throw new Error('対象生徒が見つかりません。');
+  }
+
+  const availableCohorts = getLocalOrganizationCohorts(organization.organizationId);
+  if (cohortId && !availableCohorts.some((cohort) => cohort.id === cohortId)) {
+    throw new Error('指定したクラス/担当グループが見つかりません。');
+  }
+
+  const previousCohort = getLocalStudentCohortSummary(studentUid);
+  if ((previousCohort?.cohortId || null) === cohortId) {
+    return;
+  }
+
+  if (cohortId) {
+    LOCAL_STUDENT_COHORT_ASSIGNMENTS.set(studentUid, cohortId);
+  } else {
+    LOCAL_STUDENT_COHORT_ASSIGNMENTS.delete(studentUid);
+  }
+
+  const nextCohort = cohortId
+    ? getLocalOrganizationCohorts(organization.organizationId).find((cohort) => cohort.id === cohortId) || null
+    : null;
+  const actor = IDB_MOCK_USERS.find((user) => user.uid === sessionUser?.uid) || IDB_MOCK_USERS.find((user) => user.organizationRole === OrganizationRole.GROUP_ADMIN);
+  appendLocalOrganizationAuditEvent(organization.organizationId, {
+    actorUserId: actor?.uid || 'local-group-admin',
+    actorDisplayName: actor?.displayName || 'ローカル管理者',
+    actionType: 'STUDENT_COHORT_CHANGED',
+    targetType: 'STUDENT',
+    targetId: studentUid,
+    payload: {
+      previousCohortId: previousCohort?.cohortId || null,
+      previousCohortName: previousCohort?.cohortName || null,
+      nextCohortId: nextCohort?.id || null,
+      nextCohortName: nextCohort?.name || null,
+    },
+  });
+};
+
+export const setInstructorCohorts = async (
+  context: Pick<OrganizationReadModelContext, 'getSession'>,
+  instructorUid: string,
+  cohortIds: string[],
+): Promise<void> => {
+  const sessionUser = await context.getSession();
+  const organization = resolveLocalOrganizationForUser(sessionUser)
+    || readLocalOrganizationRecord(IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY);
+  if (!organization) {
+    throw new Error('組織設定を更新できません。');
+  }
+  if (!instructorUid) {
+    throw new Error('対象講師を指定してください。');
+  }
+
+  const instructor = listLocalOrganizationMembers(organization.organizationId)
+    .find((member) => member.userUid === instructorUid && member.organizationRole === OrganizationRole.INSTRUCTOR);
+  if (!instructor) {
+    throw new Error('対象講師が見つかりません。');
+  }
+
+  const availableCohortIds = new Set(getLocalOrganizationCohorts(organization.organizationId).map((cohort) => cohort.id));
+  const nextCohortIds = [...new Set(cohortIds.filter((cohortId) => availableCohortIds.has(cohortId)))].sort();
+  if (nextCohortIds.length !== cohortIds.filter(Boolean).length) {
+    throw new Error('指定したクラス/担当グループが見つかりません。');
+  }
+
+  const previousCohortIds = [...(LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.get(instructorUid) || [])].sort();
+  if (previousCohortIds.join(',') === nextCohortIds.join(',')) {
+    return;
+  }
+
+  if (nextCohortIds.length > 0) {
+    LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.set(instructorUid, nextCohortIds);
+  } else {
+    LOCAL_INSTRUCTOR_COHORT_ASSIGNMENTS.delete(instructorUid);
+  }
+
+  const actor = IDB_MOCK_USERS.find((user) => user.uid === sessionUser?.uid) || IDB_MOCK_USERS.find((user) => user.organizationRole === OrganizationRole.GROUP_ADMIN);
+  appendLocalOrganizationAuditEvent(organization.organizationId, {
+    actorUserId: actor?.uid || 'local-group-admin',
+    actorDisplayName: actor?.displayName || 'ローカル管理者',
+    actionType: 'INSTRUCTOR_COHORTS_CHANGED',
+    targetType: 'INSTRUCTOR',
+    targetId: instructorUid,
+    payload: {
+      previousCohortIds,
+      nextCohortIds,
+    },
+  });
 };

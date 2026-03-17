@@ -27,6 +27,7 @@ export const useAssignmentManagement = ({
   setNotice,
 }: UseAssignmentManagementParams) => {
   const [assignmentSavingUid, setAssignmentSavingUid] = useState<string | null>(null);
+  const [studentCohortSavingUid, setStudentCohortSavingUid] = useState<string | null>(null);
   const [assignmentFilter, setAssignmentFilter] = useState<AssignmentFilter>('ALL');
   const [assignmentQuery, setAssignmentQuery] = useState('');
   const [selectedStudentUid, setSelectedStudentUid] = useState<string | null>(null);
@@ -77,16 +78,42 @@ export const useAssignmentManagement = ({
     }
   }, [refresh, setNotice, snapshot]);
 
+  const handleStudentCohortChange = useCallback(async (studentUid: string, cohortId: string) => {
+    setStudentCohortSavingUid(studentUid);
+    setNotice(null);
+
+    try {
+      await storage.setStudentCohort(studentUid, cohortId || null);
+      setNotice({
+        tone: 'success',
+        message: cohortId
+          ? '生徒のクラス/担当グループを更新しました。'
+          : '生徒のクラス/担当グループ設定を解除しました。',
+      });
+      await refresh();
+    } catch (cohortError) {
+      console.error(cohortError);
+      setNotice({
+        tone: 'error',
+        message: (cohortError as Error).message || '生徒のクラス/担当グループ更新に失敗しました。',
+      });
+    } finally {
+      setStudentCohortSavingUid(null);
+    }
+  }, [refresh, setNotice]);
+
   return {
     assignmentSavingUid,
     assignmentFilter,
     assignmentQuery,
     filteredAssignments,
+    studentCohortSavingUid,
     selectedAssignmentStudent,
     selectedStudentUid,
     setAssignmentFilter,
     setAssignmentQuery,
     setSelectedStudentUid,
     handleAssignmentChange,
+    handleStudentCohortChange,
   };
 };

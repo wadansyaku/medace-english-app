@@ -54,7 +54,10 @@ import {
   handleGetOrganizationDashboardSnapshot,
   handleGetOrganizationSettingsSnapshot,
   handleGetStudentWorksheetSnapshot,
+  handleSetInstructorCohorts,
+  handleSetStudentCohort,
   handleSendInstructorNotification,
+  handleUpsertOrganizationCohort,
   handleUpdateOrganizationProfile,
 } from './storage-organization-actions';
 import {
@@ -211,6 +214,32 @@ export const handleStorageAction = async (
     case 'updateOrganizationProfile':
       requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
       return handleUpdateOrganizationProfile(env, user, String(payload.displayName || ''));
+    case 'upsertOrganizationCohort':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleUpsertOrganizationCohort(
+        env,
+        user,
+        typeof payload.cohortId === 'string' ? payload.cohortId : undefined,
+        String(payload.name || ''),
+      );
+    case 'setStudentCohort':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleSetStudentCohort(
+        env,
+        user,
+        String(payload.studentUid || ''),
+        typeof payload.cohortId === 'string' ? payload.cohortId : null,
+      );
+    case 'setInstructorCohorts':
+      requireRole(user, [UserRole.ADMIN, UserRole.INSTRUCTOR]);
+      return handleSetInstructorCohorts(
+        env,
+        user,
+        String(payload.instructorUid || ''),
+        Array.isArray(payload.cohortIds)
+          ? payload.cohortIds.filter((value): value is string => typeof value === 'string')
+          : [],
+      );
     case 'getLeaderboard':
       return handleGetLeaderboard(env, user.id);
     case 'getMasteryDistribution':

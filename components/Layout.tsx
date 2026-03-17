@@ -48,6 +48,7 @@ const Layout: React.FC<LayoutProps> = ({
   const isOnline = useNetworkStatus();
   const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
   const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
+  const isPreviewDeployment = runtimeFlags.deployment.isPagesPreviewHost;
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -60,6 +61,31 @@ const Layout: React.FC<LayoutProps> = ({
   React.useEffect(() => {
     setShowDemoBannerDetails(!compactStudentShell);
   }, [compactStudentShell, user?.email]);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const managedMetaSelector = 'meta[data-runtime-managed="preview-robots"]';
+    const existing = document.head.querySelector<HTMLMetaElement>(managedMetaSelector);
+    if (!isPreviewDeployment) {
+      existing?.remove();
+      return;
+    }
+
+    const robotsMeta = existing || document.createElement('meta');
+    robotsMeta.setAttribute('name', 'robots');
+    robotsMeta.setAttribute('content', 'noindex, nofollow, noarchive');
+    robotsMeta.setAttribute('data-runtime-managed', 'preview-robots');
+    if (!existing) {
+      document.head.appendChild(robotsMeta);
+    }
+
+    return () => {
+      if (!isPreviewDeployment) return;
+      const current = document.head.querySelector<HTMLMetaElement>(managedMetaSelector);
+      current?.remove();
+    };
+  }, [isPreviewDeployment]);
 
   return (
     <div className="min-h-screen bg-medace-50/40 flex flex-col font-sans">
@@ -81,6 +107,25 @@ const Layout: React.FC<LayoutProps> = ({
             >
               再読み込み
             </button>
+          </div>
+        </div>
+      )}
+
+      {isPreviewDeployment && (
+        <div
+          data-testid="preview-deployment-banner"
+          className="border-b border-sky-300/80 bg-sky-100 px-4 py-3 text-sky-950"
+        >
+          <div className="mx-auto flex max-w-7xl items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-700">Public Preview Deployment</p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed">
+                この URL は preview 環境です。検索対象にせず、動作確認と内部レビュー専用として扱ってください。
+              </p>
+            </div>
+            <div className="rounded-full border border-sky-400 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-sky-700">
+              noindex
+            </div>
           </div>
         </div>
       )}

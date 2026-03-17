@@ -120,6 +120,14 @@ const getWeaknessTone = (score = 0): string => (
       : 'border-emerald-200 bg-emerald-50 text-emerald-700'
 );
 
+const getCohortStyle = (cohortName?: string): string => (
+  cohortName
+    ? 'bg-sky-50 text-sky-700 border-sky-200'
+    : 'bg-white text-slate-500 border-dashed border-slate-200'
+);
+
+const getCohortLabel = (cohortName?: string): string => cohortName || '未設定';
+
 const getNextActionText = (student: StudentSummary): string => {
   if (student.recommendedAction) return student.recommendedAction;
   if (student.riskLevel === StudentRiskLevel.DANGER) return '今日のうちに声かけする';
@@ -223,6 +231,9 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
               <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                 <span className={`rounded-full border px-2.5 py-1 ${getRiskStyle(controller.selectedStudent.riskLevel)}`}>
                   {getRiskLabel(controller.selectedStudent.riskLevel)}
+                </span>
+                <span className={`rounded-full border px-2.5 py-1 ${getCohortStyle(controller.selectedStudent.cohortName)}`}>
+                  クラス: {getCohortLabel(controller.selectedStudent.cohortName)}
                 </span>
                 {controller.selectedStudent.subscriptionPlan && (
                   <span className={`rounded-full border px-2.5 py-1 ${getPlanStyle(controller.selectedStudent.subscriptionPlan)}`}>
@@ -416,6 +427,11 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <div>
                         <div className="text-sm font-bold text-slate-950">{student.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                        <div className="mt-2">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${getCohortStyle(student.cohortName)}`}>
+                            クラス: {getCohortLabel(student.cohortName)}
+                          </span>
+                        </div>
                         {student.topWeaknesses && student.topWeaknesses.length > 0 && (
                           <div className="mt-2">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${getWeaknessTone(student.topWeaknesses[0].score)}`}>
@@ -591,6 +607,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                     <button
                       key={student.uid}
                       type="button"
+                      data-testid={`instructor-student-row-${student.uid}`}
                       onClick={() => controller.setFocusedStudentUid(student.uid)}
                       className={`grid w-full grid-cols-[0.72fr_1.2fr_0.88fr_1.2fr] gap-3 border-b border-slate-100 px-5 py-4 text-left transition-colors last:border-b-0 ${
                         controller.focusedStudent?.uid === student.uid ? 'bg-medace-50/70' : 'bg-white hover:bg-slate-50'
@@ -609,6 +626,11 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <div>
                         <div className="text-sm font-bold text-slate-950">{student.name}</div>
                         <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                        <div className="mt-2">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${getCohortStyle(student.cohortName)}`}>
+                            クラス: {getCohortLabel(student.cohortName)}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-sm text-slate-600">
                         <div className="font-bold text-slate-900">
@@ -635,6 +657,11 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
                       <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Student Detail</p>
                       <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{controller.focusedStudent.name}</h3>
                       <p className="mt-2 text-sm leading-relaxed text-slate-500">{controller.focusedStudent.email}</p>
+                      <div className="mt-3">
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getCohortStyle(controller.focusedStudent.cohortName)}`}>
+                          クラス/担当グループ: {getCohortLabel(controller.focusedStudent.cohortName)}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(controller.focusedStudent.riskLevel)}`}>

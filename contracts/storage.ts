@@ -23,6 +23,7 @@ import {
   MasteryDistribution,
   MissionAssignment,
   MissionProgressEventType,
+  OrganizationCohort,
   OrganizationSettingsSnapshot,
   RecommendedActionType,
   ProductAnnouncement,
@@ -292,6 +293,18 @@ export interface StorageActionMap {
   updateOrganizationProfile: {
     payload: { displayName: string };
     response: OrganizationSettingsSnapshot;
+  };
+  upsertOrganizationCohort: {
+    payload: { cohortId?: string; name: string };
+    response: OrganizationCohort;
+  };
+  setStudentCohort: {
+    payload: { studentUid: string; cohortId: string | null };
+    response: null;
+  };
+  setInstructorCohorts: {
+    payload: { instructorUid: string; cohortIds: string[] };
+    response: null;
   };
   getLeaderboard: {
     payload: undefined;

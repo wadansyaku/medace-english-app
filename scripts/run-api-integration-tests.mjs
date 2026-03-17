@@ -126,6 +126,22 @@ class SessionClient {
     return result.data;
   }
 
+  async emailAuth({ email, password, isSignUp, role, displayName }) {
+    const result = await this.request('/api/auth', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'email-auth',
+        email,
+        password,
+        isSignUp,
+        role,
+        displayName,
+      }),
+    });
+    assert(result.status === 200, `[${this.name}] email auth failed: ${JSON.stringify(result.data)}`);
+    return result.data;
+  }
+
   async storage(action, payload) {
     const result = await this.storageRaw(action, payload);
     assert(result.status >= 200 && result.status < 300, `[${this.name}] ${action} failed: ${JSON.stringify(result.data)}`);
@@ -354,6 +370,8 @@ const main = async () => {
     const publicClient = new SessionClient(baseUrl, 'public');
     const freeStudent = new SessionClient(baseUrl, 'free-student');
     const orgStudent = new SessionClient(baseUrl, 'org-student');
+    const cohortStudent = new SessionClient(baseUrl, 'cohort-student');
+    const otherCohortStudent = new SessionClient(baseUrl, 'other-cohort-student');
     const groupAdmin = new SessionClient(baseUrl, 'group-admin');
     const instructor = new SessionClient(baseUrl, 'instructor');
 
@@ -403,8 +421,40 @@ const main = async () => {
     );
 
     const orgStudentUser = await orgStudent.demoLogin('STUDENT', 'STUDENT');
+    const cohortStudentUser = await cohortStudent.demoLogin('STUDENT', 'STUDENT');
+    const otherCohortStudentUser = await otherCohortStudent.demoLogin('STUDENT', 'STUDENT');
     const groupAdminUser = await groupAdmin.demoLogin('INSTRUCTOR', 'GROUP_ADMIN');
-    await instructor.demoLogin('INSTRUCTOR');
+    const instructorEmail = 'cohort-instructor@example.jp';
+    const instructorSeedUser = await instructor.emailAuth({
+      email: instructorEmail,
+      password: 'integration-pass',
+      isSignUp: true,
+      role: 'STUDENT',
+      displayName: 'Cohort Instructor',
+    });
+    const instructorCommercialRequest = await instructor.storage('submitCommercialRequest', {
+      kind: 'BUSINESS_ROLE_CONVERSION',
+      contactName: 'Cohort Instructor',
+      contactEmail: instructorEmail,
+      organizationName: groupAdminUser.organizationName,
+      requestedWorkspaceRole: 'INSTRUCTOR',
+      seatEstimate: '1-30名',
+      message: 'cohort scope integration test instructor',
+      source: 'DASHBOARD_ACCOUNT',
+    });
+    await admin.storage('updateCommercialRequest', {
+      id: instructorCommercialRequest.id,
+      status: 'PROVISIONED',
+      resolutionNote: 'integration test instructor provisioning',
+      linkedUserUid: instructorSeedUser.uid,
+      targetSubscriptionPlan: 'TOB_PAID',
+      targetOrganizationId: groupAdminUser.organizationId,
+      targetOrganizationName: groupAdminUser.organizationName,
+      targetOrganizationRole: 'INSTRUCTOR',
+    });
+    const instructorUser = await instructor.get('/api/session');
+    assert(instructorUser.organizationRole === 'INSTRUCTOR', 'provisioned instructor should receive instructor organization role');
+    assert(instructorUser.organizationId === groupAdminUser.organizationId, 'provisioned instructor should join the group admin organization');
 
     const publicCommercialEmail = 'phase4-public@example.jp';
     const anonymousBusinessTrial = await publicClient.request('/api/public/commercial-request', {
@@ -542,6 +592,101 @@ const main = async () => {
       'assignment changes should append an organization audit event',
     );
 
+    const readingCohort = await groupAdmin.storage('upsertOrganizationCohort', {
+      name: '読解クラス',
+    });
+    const reviewCohort = await groupAdmin.storage('upsertOrganizationCohort', {
+      name: '復習クラス',
+    });
+
+    await groupAdmin.storage('setStudentCohort', {
+      studentUid: cohortStudentUser.uid,
+      cohortId: readingCohort.id,
+    });
+    await groupAdmin.storage('setStudentCohort', {
+      studentUid: otherCohortStudentUser.uid,
+      cohortId: reviewCohort.id,
+    });
+    await groupAdmin.storage('setStudentCohort', {
+      studentUid: orgStudentUser.uid,
+      cohortId: reviewCohort.id,
+    });
+
+    const instructorBeforeCohortAssignment = await instructor.storage('getAllStudentsProgress');
+    assert(
+      !instructorBeforeCohortAssignment.some((student) => student.uid === cohortStudentUser.uid),
+      'instructor without cohort membership should not see unassigned cohort students',
+    );
+
+    const forbiddenWorksheetBeforeCohortAssignment = await instructor.storageRaw('getStudentWorksheetSnapshot', {
+      studentUid: cohortStudentUser.uid,
+    });
+    assert(
+      forbiddenWorksheetBeforeCohortAssignment.status === 403,
+      'instructor without cohort membership should be blocked from worksheet access',
+    );
+
+    await groupAdmin.storage('setInstructorCohorts', {
+      instructorUid: instructorUser.uid,
+      cohortIds: [readingCohort.id],
+    });
+
+    const settingsAfterCohortUpdate = await groupAdmin.storage('getOrganizationSettingsSnapshot');
+    assert(
+      settingsAfterCohortUpdate.cohorts.some((cohort) => cohort.id === readingCohort.id && cohort.name === '読解クラス'),
+      'settings snapshot should include saved cohorts',
+    );
+    assert(
+      settingsAfterCohortUpdate.cohorts.some((cohort) => cohort.id === reviewCohort.id && cohort.name === '復習クラス'),
+      'settings snapshot should include multiple cohorts',
+    );
+    assert(
+      (settingsAfterCohortUpdate.instructorCohorts[instructorUser.uid] || []).includes(readingCohort.id),
+      'settings snapshot should include instructor cohort memberships',
+    );
+    assert(
+      settingsAfterCohortUpdate.auditEvents.some((event) => event.actionType === 'ORGANIZATION_COHORT_CREATED'),
+      'cohort creation should append an organization audit event',
+    );
+    assert(
+      settingsAfterCohortUpdate.auditEvents.some((event) => event.actionType === 'STUDENT_COHORT_CHANGED'),
+      'student cohort changes should append an organization audit event',
+    );
+    assert(
+      settingsAfterCohortUpdate.auditEvents.some((event) => event.actionType === 'INSTRUCTOR_COHORTS_CHANGED'),
+      'instructor cohort changes should append an organization audit event',
+    );
+
+    const instructorAfterCohortAssignment = await instructor.storage('getAllStudentsProgress');
+    assert(
+      instructorAfterCohortAssignment.some((student) => (
+        student.uid === cohortStudentUser.uid
+        && student.cohortId === readingCohort.id
+        && student.cohortName === '読解クラス'
+      )),
+      'same-cohort unassigned student should appear in instructor progress',
+    );
+    assert(
+      !instructorAfterCohortAssignment.some((student) => student.uid === otherCohortStudentUser.uid),
+      'other-cohort unassigned student should stay hidden from instructor progress',
+    );
+
+    const allowedWorksheet = await instructor.storage('getStudentWorksheetSnapshot', {
+      studentUid: cohortStudentUser.uid,
+    });
+    assert(
+      allowedWorksheet.studentUid === cohortStudentUser.uid,
+      'same-cohort unassigned student should be visible for worksheet access',
+    );
+
+    const forbiddenOtherWorksheet = await instructor.storageRaw('getStudentWorksheetSnapshot', {
+      studentUid: otherCohortStudentUser.uid,
+    });
+    assert(
+      forbiddenOtherWorksheet.status === 403,
+      'other-cohort unassigned student should be blocked from worksheet access',
+    );
+
     const todayDateKey = toTokyoDateKey(Date.now());
     let orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     assert(Array.isArray(orgSnapshot.trend) && orgSnapshot.trend.length === 14, 'organization snapshot should expose a 14-day trend');
@@ -550,6 +695,8 @@ const main = async () => {
     ));
     assert(assignmentEvent, 'assignment event was not recorded for the reassignment');
     const assignedStudent = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
+    assert(assignedStudent?.cohortId === reviewCohort.id, 'student summary should expose cohortId after cohort assignment');
+    assert(assignedStudent?.cohortName === '復習クラス', 'student summary should expose cohortName after cohort assignment');
     assert(assignedStudent?.assignmentUpdatedAt, 'assigned student summary should include assignmentUpdatedAt');
     assert(orgSnapshot.assignmentCoverageRate > 0, 'organization snapshot should expose a non-zero assignment coverage rate');
     const todayTrendAfterAssignment = findTrendPoint(orgSnapshot, todayDateKey);
@@ -772,6 +919,69 @@ const main = async () => {
 
     const writingTemplates = await groupAdmin.get('/api/writing/templates');
     assert(writingTemplates.templates.length >= 2, 'writing templates should be available');
+
+    const hiddenGeneratedAssignment = await groupAdmin.post('/api/writing/assignments/generate', {
+      studentUid: otherCohortStudentUser.uid,
+      templateId: writingTemplates.templates[0].id,
+      topicHint: 'cohort visibility',
+      notes: 'hidden cohort writing assignment',
+    });
+    const hiddenIssuedAssignment = await groupAdmin.post('/api/writing/assignments/issue', {
+      assignmentId: hiddenGeneratedAssignment.id,
+    });
+    assert(hiddenIssuedAssignment.status === 'ISSUED', 'hidden cohort writing assignment should move to ISSUED');
+
+    const hiddenUpload = await otherCohortStudent.post('/api/writing/upload-url', {
+      assignmentId: hiddenIssuedAssignment.id,
+      fileName: 'cohort-hidden.png',
+      mimeType: 'image/png',
+      byteSize: 18,
+      assetOrder: 1,
+      attemptNo: 1,
+    });
+    const hiddenUploadResponse = await fetch(`${baseUrl}${hiddenUpload.uploadUrl}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: Buffer.from('cohort-hidden-binary'),
+    });
+    assert(hiddenUploadResponse.status === 204, 'hidden cohort upload should succeed');
+
+    const hiddenFinalize = await otherCohortStudent.post('/api/writing/submissions/finalize', {
+      assignmentId: hiddenIssuedAssignment.id,
+      source: 'STUDENT_MOBILE',
+      assetIds: [hiddenUpload.assetId],
+      attemptNo: 1,
+    });
+    const forbiddenWritingDetail = await instructor.request(`/api/writing/submissions/${hiddenFinalize.submission.id}`, { method: 'GET' });
+    assert(
+      forbiddenWritingDetail.status === 403,
+      'instructor should be blocked from writing detail outside cohort scope',
+    );
+
+    await groupAdmin.storage('assignStudentInstructor', {
+      studentUid: otherCohortStudentUser.uid,
+      instructorUid: instructorUser.uid,
+    });
+
+    const instructorAfterDirectAssignment = await instructor.storage('getAllStudentsProgress');
+    assert(
+      instructorAfterDirectAssignment.some((student) => student.uid === otherCohortStudentUser.uid),
+      'direct assignment should override cohort scope in instructor progress',
+    );
+
+    const directAssignmentWorksheet = await instructor.storage('getStudentWorksheetSnapshot', {
+      studentUid: otherCohortStudentUser.uid,
+    });
+    assert(
+      directAssignmentWorksheet.studentUid === otherCohortStudentUser.uid,
+      'direct assignment should override cohort scope for worksheet access',
+    );
+
+    const allowedWritingDetail = await instructor.request(`/api/writing/submissions/${hiddenFinalize.submission.id}`, { method: 'GET' });
+    assert(
+      allowedWritingDetail.status === 200,
+      'direct assignment should override cohort scope for writing detail',
+    );
 
     const generatedAssignment = await groupAdmin.post('/api/writing/assignments/generate', {
       studentUid: orgStudentUser.uid,

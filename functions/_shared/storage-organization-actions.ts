@@ -6,6 +6,7 @@ import {
   LearningHistory,
   type MissionAssignment,
   OrganizationAuditEvent,
+  OrganizationCohort,
   OrganizationDashboardSnapshot,
   OrganizationInstructorSummary,
   OrganizationMemberSummary,
@@ -42,6 +43,14 @@ import {
   requireActiveOrganizationContext,
   syncOrganizationShadowForActiveMembers,
 } from './organization-memberships';
+import {
+  buildVisibleStudentFilter,
+  readInstructorCohortMap,
+  readOrganizationCohortRow,
+  readOrganizationCohorts,
+  readStudentCohort,
+  readVisibleStudentIds,
+} from './student-visibility';
 import type { AppEnv, DbUserRow } from './types';
 import {
   DAY_MS,
@@ -115,6 +124,7 @@ const readActiveOrganizationMember = async (
   id: string;
   display_name: string;
   role: string;
+  organization_role: string | null;
   organization_id: string | null;
   organization_name: string | null;
 } | null> => readFirst(
@@ -123,6 +133,7 @@ const readActiveOrganizationMember = async (
      u.id AS id,
      u.display_name AS display_name,
      u.role AS role,
+     m.role AS organization_role,
      m.organization_id AS organization_id,
      o.display_name AS organization_name
    FROM users u
@@ -137,16 +148,27 @@ const readActiveOrganizationMember = async (
 export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbUserRow): Promise<StudentSummary[]> => {
   const now = Date.now();
   const activeStudyWindowStart = now - 6 * DAY_MS;
-  const organizationId = currentUser.role === UserRole.ADMIN
+  const organization = currentUser.role === UserRole.ADMIN
     ? null
-    : (await requireActiveOrganizationContext(env, currentUser)).organizationId;
-  const bypassInstructorAssignment = canBypassInstructorAssignment(currentUser);
+    : await requireActiveOrganizationContext(env, currentUser);
+  const organizationId = organization?.organizationId || null;
+  const needsScopedVisibility = Boolean(
+    organization
+    && currentUser.role === UserRole.INSTRUCTOR
+    && organization.organizationRole === OrganizationRole.INSTRUCTOR
+    && !canBypassInstructorAssignment(currentUser),
+  );
+  const visibleStudentFilter = needsScopedVisibility
+    ? buildVisibleStudentFilter(await readVisibleStudentIds(env, currentUser, organization))
+    : { sql: '', bindings: [] as string[] };
   const rows = await readAll<{
     uid: string;
     name: string;
     email: string;
     subscription_plan: string | null;
     organization_name: string | null;
+    cohort_id: string | null;
+    cohort_name: string | null;
     total_learned: number;
     total_correct: number;
     total_attempts: number;
@@ -169,6 +191,8 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        u.email AS email,
        COALESCE(org.subscription_plan, u.subscription_plan) AS subscription_plan,
        COALESCE(org.display_name, u.organization_name) AS organization_name,
+       cohort.id AS cohort_id,
+       cohort.name AS cohort_name,
        COALESCE(SUM(CASE WHEN ${getMasteryProgressSql('h')} THEN 1 ELSE 0 END), 0) AS total_learned,
        COALESCE(SUM(h.correct_count), 0) AS total_correct,
        COALESCE(SUM(h.attempt_count), 0) AS total_attempts,
@@ -229,19 +253,23 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
      LEFT JOIN learning_plans lp ON lp.user_id = u.id
      LEFT JOIN student_instructor_assignments assign ON assign.student_user_id = u.id
      LEFT JOIN users assigned ON assigned.id = assign.instructor_user_id
+     LEFT JOIN organization_cohort_students cohort_student ON cohort_student.student_user_id = u.id
+     LEFT JOIN organization_cohorts cohort ON cohort.id = cohort_student.cohort_id
      LEFT JOIN organization_memberships student_membership
        ON student_membership.user_id = u.id
       AND student_membership.status = 'ACTIVE'
      LEFT JOIN organizations org ON org.id = student_membership.organization_id
      WHERE u.role = ?
        AND (? IS NULL OR student_membership.organization_id = ?)
-       AND (? = 1 OR assign.instructor_user_id = ? OR assign.instructor_user_id IS NULL)
+       ${visibleStudentFilter.sql}
      GROUP BY
        u.id,
        u.display_name,
        u.email,
        org.subscription_plan,
        org.display_name,
+       cohort.id,
+       cohort.name,
        assign.instructor_user_id,
        assigned.display_name,
        assign.updated_at,
@@ -252,8 +280,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
     UserRole.STUDENT,
     organizationId,
     organizationId,
-    bypassInstructorAssignment ? 1 : 0,
-    currentUser.id,
+    ...visibleStudentFilter.bindings,
   );
   const missionAssignmentsByStudent = await readMissionAssignmentsByStudent(env, rows.map((row) => row.uid));
   const weaknessProfilesByStudent = await readWeaknessProfilesByUserIds(env, rows.map((row) => row.uid));
@@ -332,6 +359,8 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
       accuracy,
       subscriptionPlan: (row.subscription_plan as SubscriptionPlan | null) || SubscriptionPlan.TOC_FREE,
       organizationName: row.organization_name || undefined,
+      cohortId: row.cohort_id || undefined,
+      cohortName: row.cohort_name || undefined,
       lastNotificationAt: latestInterventionAt,
       lastNotificationMessage: row.last_notification_message || undefined,
       hasReactivatedSinceNotification: latestInterventionOutcome === InterventionOutcome.REACTIVATED,
@@ -748,14 +777,10 @@ export const handleSendInstructorNotification = async (
   if (instructorOrganization && instructorOrganization.organizationId !== student.organization_id) {
     throw new HttpError(403, '同じ組織の生徒にのみ通知できます。');
   }
-  if (!canBypassInstructorAssignment(instructor)) {
-    const assignment = await readFirst<{ instructor_user_id: string | null }>(
-      env,
-      'SELECT instructor_user_id FROM student_instructor_assignments WHERE student_user_id = ?',
-      studentUid,
-    );
-    if (assignment?.instructor_user_id && assignment.instructor_user_id !== instructor.id) {
-      throw new HttpError(403, '担当外の生徒には通知できません。');
+  if (instructorOrganization) {
+    const visibleStudentIds = await readVisibleStudentIds(env, instructor, instructorOrganization);
+    if (!visibleStudentIds.has(studentUid)) {
+      throw new HttpError(403, '担当範囲の生徒にのみ通知できます。');
     }
   }
 
@@ -970,6 +995,239 @@ export const handleAssignStudentInstructor = async (
   }
 };
 
+export const handleUpsertOrganizationCohort = async (
+  env: AppEnv,
+  user: DbUserRow,
+  cohortId: string | undefined,
+  name: string,
+): Promise<OrganizationCohort> => {
+  const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new HttpError(400, 'クラス/担当グループ名を入力してください。');
+  }
+
+  const duplicate = await readFirst<{ id: string }>(
+    env,
+    `SELECT id
+     FROM organization_cohorts
+     WHERE organization_id = ?
+       AND lower(name) = lower(?)
+       AND (? IS NULL OR id != ?)`,
+    organization.organizationId,
+    trimmedName,
+    cohortId || null,
+    cohortId || null,
+  );
+  if (duplicate) {
+    throw new HttpError(409, '同じクラス/担当グループ名が既に存在します。');
+  }
+
+  const now = Date.now();
+  let actionType = 'ORGANIZATION_COHORT_CREATED';
+  let previousName: string | undefined;
+  let nextCohortId = cohortId;
+
+  if (cohortId) {
+    const currentCohort = await readOrganizationCohortRow(env, organization.organizationId, cohortId);
+    if (!currentCohort) {
+      throw new HttpError(404, '対象のクラス/担当グループが見つかりません。');
+    }
+    previousName = currentCohort.name;
+    if (currentCohort.name === trimmedName) {
+      return currentCohort;
+    }
+    await env.DB.prepare(`
+      UPDATE organization_cohorts
+         SET name = ?,
+             updated_at = ?
+       WHERE id = ?
+    `).bind(
+      trimmedName,
+      now,
+      cohortId,
+    ).run();
+    actionType = 'ORGANIZATION_COHORT_RENAMED';
+  } else {
+    nextCohortId = `cohort_${crypto.randomUUID().replace(/-/g, '')}`;
+    await env.DB.prepare(`
+      INSERT INTO organization_cohorts (
+        id,
+        organization_id,
+        name,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      nextCohortId,
+      organization.organizationId,
+      trimmedName,
+      now,
+      now,
+    ).run();
+  }
+
+  await appendOrganizationAuditLog(env, {
+    organizationId: organization.organizationId,
+    actorUserId: user.id,
+    actionType,
+    targetType: 'cohort',
+    targetId: nextCohortId,
+    payload: {
+      previousName,
+      nextName: trimmedName,
+    },
+  });
+
+  const savedCohort = await readOrganizationCohortRow(env, organization.organizationId, String(nextCohortId));
+  if (!savedCohort) {
+    throw new HttpError(500, 'クラス/担当グループの保存に失敗しました。');
+  }
+  return savedCohort;
+};
+
+export const handleSetStudentCohort = async (
+  env: AppEnv,
+  user: DbUserRow,
+  studentUid: string,
+  cohortId: string | null,
+): Promise<void> => {
+  if (!studentUid) {
+    throw new HttpError(400, '対象生徒を指定してください。');
+  }
+
+  const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
+  const student = await readActiveOrganizationMember(env, studentUid);
+  if (!student || student.role !== UserRole.STUDENT) {
+    throw new HttpError(404, '対象生徒が見つかりません。');
+  }
+  if (student.organization_id !== organization.organizationId) {
+    throw new HttpError(403, '同じ組織の生徒のみ更新できます。');
+  }
+
+  const previousCohort = await readStudentCohort(env, studentUid);
+  if (!cohortId && !previousCohort) return;
+  if (cohortId && previousCohort?.cohortId === cohortId) return;
+
+  let nextCohortName: string | undefined;
+  if (cohortId) {
+    const cohort = await readOrganizationCohortRow(env, organization.organizationId, cohortId);
+    if (!cohort) {
+      throw new HttpError(404, '指定したクラス/担当グループが見つかりません。');
+    }
+    nextCohortName = cohort.name;
+    await env.DB.prepare(`
+      INSERT INTO organization_cohort_students (
+        student_user_id,
+        cohort_id,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(student_user_id) DO UPDATE SET
+        cohort_id = excluded.cohort_id,
+        updated_at = excluded.updated_at
+    `).bind(
+      studentUid,
+      cohortId,
+      Date.now(),
+      Date.now(),
+    ).run();
+  } else {
+    await env.DB.prepare(
+      'DELETE FROM organization_cohort_students WHERE student_user_id = ?',
+    ).bind(studentUid).run();
+  }
+
+  await appendOrganizationAuditLog(env, {
+    organizationId: organization.organizationId,
+    actorUserId: user.id,
+    actionType: 'STUDENT_COHORT_CHANGED',
+    targetType: 'student',
+    targetId: studentUid,
+    payload: {
+      previousCohortId: previousCohort?.cohortId || null,
+      previousCohortName: previousCohort?.cohortName || null,
+      nextCohortId: cohortId,
+      nextCohortName: nextCohortName || null,
+    },
+  });
+};
+
+export const handleSetInstructorCohorts = async (
+  env: AppEnv,
+  user: DbUserRow,
+  instructorUid: string,
+  cohortIds: string[],
+): Promise<void> => {
+  if (!instructorUid) {
+    throw new HttpError(400, '対象講師を指定してください。');
+  }
+
+  const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
+  const instructor = await readActiveOrganizationMember(env, instructorUid);
+  if (!instructor || instructor.role !== UserRole.INSTRUCTOR || instructor.organization_role !== OrganizationRole.INSTRUCTOR) {
+    throw new HttpError(404, '対象講師が見つかりません。');
+  }
+  if (instructor.organization_id !== organization.organizationId) {
+    throw new HttpError(403, '同じ組織の講師のみ更新できます。');
+  }
+
+  const nextCohortIds = [...new Set(cohortIds.filter(Boolean))];
+  const availableCohorts = await readOrganizationCohorts(env, organization.organizationId);
+  const availableCohortIds = new Set(availableCohorts.map((cohort) => cohort.id));
+  if (!nextCohortIds.every((cohortId) => availableCohortIds.has(cohortId))) {
+    throw new HttpError(404, '指定したクラス/担当グループが見つかりません。');
+  }
+
+  const instructorCohorts = await readInstructorCohortMap(env, organization.organizationId);
+  const previousCohortIds = instructorCohorts[instructorUid] || [];
+  const previousKey = [...previousCohortIds].sort().join(',');
+  const nextKey = [...nextCohortIds].sort().join(',');
+  if (previousKey === nextKey) return;
+
+  await env.DB.prepare(`
+    DELETE FROM organization_cohort_instructors
+     WHERE instructor_user_id = ?
+       AND cohort_id IN (
+         SELECT id
+         FROM organization_cohorts
+         WHERE organization_id = ?
+       )
+  `).bind(
+    instructorUid,
+    organization.organizationId,
+  ).run();
+
+  const now = Date.now();
+  for (const nextCohortId of nextCohortIds) {
+    await env.DB.prepare(`
+      INSERT INTO organization_cohort_instructors (
+        cohort_id,
+        instructor_user_id,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?)
+    `).bind(
+      nextCohortId,
+      instructorUid,
+      now,
+      now,
+    ).run();
+  }
+
+  await appendOrganizationAuditLog(env, {
+    organizationId: organization.organizationId,
+    actorUserId: user.id,
+    actionType: 'INSTRUCTOR_COHORTS_CHANGED',
+    targetType: 'instructor',
+    targetId: instructorUid,
+    payload: {
+      previousCohortIds,
+      nextCohortIds,
+    },
+  });
+};
+
 export const handleGetOrganizationSettingsSnapshot = async (
   env: AppEnv,
   user: DbUserRow,
@@ -993,7 +1251,7 @@ export const handleGetOrganizationSettingsSnapshot = async (
     throw new HttpError(404, '組織情報が見つかりません。');
   }
 
-  const [memberRows, auditRows] = await Promise.all([
+  const [memberRows, auditRows, cohorts, instructorCohorts] = await Promise.all([
     readAll<{
       user_uid: string;
       display_name: string;
@@ -1056,6 +1314,8 @@ export const handleGetOrganizationSettingsSnapshot = async (
        LIMIT 20`,
       organization.organizationId,
     ),
+    readOrganizationCohorts(env, organization.organizationId),
+    readInstructorCohortMap(env, organization.organizationId),
   ]);
 
   const members: OrganizationMemberSummary[] = memberRows.map((row) => ({
@@ -1087,6 +1347,8 @@ export const handleGetOrganizationSettingsSnapshot = async (
     nameKey: organizationRow.name_key,
     subscriptionPlan: organizationRow.subscription_plan as SubscriptionPlan,
     members,
+    cohorts,
+    instructorCohorts,
     auditEvents,
     updatedAt: Number(organizationRow.updated_at || 0),
   };
