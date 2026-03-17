@@ -4,20 +4,46 @@ import { resolveStorageMode } from '../shared/storageMode';
 
 describe('resolveStorageMode', () => {
   it('treats idb as local mock data mode', () => {
-    expect(resolveStorageMode('idb')).toEqual({
+    expect(resolveStorageMode('idb')).toEqual(expect.objectContaining({
       mode: 'idb',
       isLocalMockData: true,
-    });
+      capabilities: expect.objectContaining({
+        dashboard: {
+          available: true,
+          provider: 'idb',
+          usesMockData: true,
+        },
+        writing: {
+          available: false,
+          provider: 'unavailable',
+          usesMockData: false,
+        },
+      }),
+    }));
   });
 
   it('falls back to cloudflare mode for unset or unknown values', () => {
-    expect(resolveStorageMode(undefined)).toEqual({
+    expect(resolveStorageMode(undefined)).toEqual(expect.objectContaining({
       mode: 'cloudflare',
       isLocalMockData: false,
-    });
-    expect(resolveStorageMode('remote')).toEqual({
+      capabilities: expect.objectContaining({
+        dashboard: {
+          available: true,
+          provider: 'cloudflare',
+          usesMockData: false,
+        },
+      }),
+    }));
+    expect(resolveStorageMode('remote')).toEqual(expect.objectContaining({
       mode: 'cloudflare',
       isLocalMockData: false,
-    });
+      capabilities: expect.objectContaining({
+        writing: {
+          available: true,
+          provider: 'cloudflare',
+          usesMockData: false,
+        },
+      }),
+    }));
   });
 });

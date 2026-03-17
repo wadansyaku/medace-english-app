@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
 const args = process.argv.slice(2);
@@ -104,8 +105,7 @@ process.on('SIGTERM', () => {
 
 try {
   console.log('Applying local D1 migrations for smoke server...');
-  await runCommand('npx', [
-    'wrangler',
+  const wranglerMigrate = createNodeToolCommand('wrangler', [
     'd1',
     'migrations',
     'apply',
@@ -113,14 +113,14 @@ try {
     '--local',
     '--persist-to',
     persistDir,
-  ], {
+  ]);
+  await runCommand(wranglerMigrate.command, wranglerMigrate.args, {
     ...baseEnv,
     CI: '1',
   }, ['ignore', 'ignore', 'ignore']);
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
-  server = spawn('npx', [
-    'wrangler',
+  const wranglerPagesDev = createNodeToolCommand('wrangler', [
     'pages',
     'dev',
     'dist',
@@ -130,7 +130,8 @@ try {
     String(port),
     '--persist-to',
     persistDir,
-  ], {
+  ]);
+  server = spawn(wranglerPagesDev.command, wranglerPagesDev.args, {
     cwd,
     env: {
       ...baseEnv,

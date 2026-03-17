@@ -4,6 +4,7 @@ import os from 'node:os';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
 
@@ -212,8 +213,7 @@ const getAvailablePort = () => new Promise((resolve, reject) => {
 
 const startServer = (persistDir, port) => {
   const logs = [];
-  const child = spawn('npx', [
-    'wrangler',
+  const wranglerPagesDev = createNodeToolCommand('wrangler', [
     'pages',
     'dev',
     'dist',
@@ -223,7 +223,8 @@ const startServer = (persistDir, port) => {
     String(port),
     '--persist-to',
     persistDir,
-  ], {
+  ]);
+  const child = spawn(wranglerPagesDev.command, wranglerPagesDev.args, {
     cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
@@ -310,8 +311,7 @@ const importOfficialCatalog = async (admin, title, accessScope, catalogSource, w
 };
 
 const executeLocalSql = async (persistDir, sql) => {
-  await runCommand('npx', [
-    'wrangler',
+  const wranglerExecute = createNodeToolCommand('wrangler', [
     'd1',
     'execute',
     'medace-db',
@@ -321,11 +321,11 @@ const executeLocalSql = async (persistDir, sql) => {
     '--command',
     sql,
   ]);
+  await runCommand(wranglerExecute.command, wranglerExecute.args);
 };
 
 const executeLocalSqlFile = async (persistDir, filePath) => {
-  await runCommand('npx', [
-    'wrangler',
+  const wranglerExecute = createNodeToolCommand('wrangler', [
     'd1',
     'execute',
     'medace-db',
@@ -335,6 +335,7 @@ const executeLocalSqlFile = async (persistDir, filePath) => {
     '--file',
     filePath,
   ]);
+  await runCommand(wranglerExecute.command, wranglerExecute.args);
 };
 
 const main = async () => {
@@ -345,8 +346,7 @@ const main = async () => {
 
   try {
     console.log('Applying local D1 migrations...');
-    await runCommand('npx', [
-      'wrangler',
+    const wranglerMigrate = createNodeToolCommand('wrangler', [
       'd1',
       'migrations',
       'apply',
@@ -355,6 +355,7 @@ const main = async () => {
       '--persist-to',
       persistDir,
     ]);
+    await runCommand(wranglerMigrate.command, wranglerMigrate.args);
 
     console.log('Starting local Pages Functions server...');
     server = startServer(persistDir, port);

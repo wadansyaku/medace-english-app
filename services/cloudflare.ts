@@ -10,7 +10,7 @@ import {
 } from '../contracts/storage';
 import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
 import { apiDelete, apiGet, apiPost } from './apiClient';
-import type { IStorageService } from './storage';
+import type { IStorageService } from './storage/types';
 
 export class CloudflareStorageService implements IStorageService {
   private async callStorage<TAction extends StorageAction>(

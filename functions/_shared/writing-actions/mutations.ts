@@ -18,9 +18,7 @@ import {
   encodeSubmissionMarker,
 } from '../../../utils/writing';
 import { HttpError, noContent } from '../http';
-import { rebuildOrganizationKpiSnapshots } from '../organization-kpi';
-import { touchWeeklyMissionProgressFromWriting } from '../storage-mission-actions';
-import { readFirst, toTokyoDateKey } from '../storage-support';
+import { readFirst } from '../storage-support';
 import type { AppEnv, DbUserRow } from '../types';
 import {
   generateWritingPrompt,
@@ -52,6 +50,18 @@ import {
   readAssignmentResponse,
   readSubmissionContext,
 } from './reads';
+import {
+  createSubmissionRecord,
+  insertSubmissionEvaluations,
+  linkSubmissionAssets,
+  resolveAssignmentStatusForTeacherDecision,
+  setAssignmentCompleted,
+  setAssignmentReviewReady,
+  setAssignmentTeacherDecision,
+  setSubmissionSelectedEvaluation,
+  upsertTeacherReviewRecord,
+} from './mutation-state';
+import { syncWritingActivitySideEffects } from './mutation-side-effects';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
@@ -360,113 +370,52 @@ export const handleFinalizeWritingSubmission = async (
         return [];
       });
   const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript);
-  const submissionId = crypto.randomUUID();
   const now = Date.now();
-
-  await env.DB.prepare(`
-    INSERT INTO writing_submissions (
-      id, assignment_id, attempt_no, submission_source, submitted_by_user_id, transcript,
-      transcript_confidence, ocr_provider, ocr_meta, processing_state, created_at, submitted_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'EVALUATED', ?, ?, ?)
-  `).bind(
-    submissionId,
-    request.assignmentId,
+  const submissionId = await createSubmissionRecord(env, {
+    assignmentId: request.assignmentId,
     attemptNo,
-    request.source,
-    user.id,
-    ocrResult.transcript,
-    ocrResult.confidence,
-    ocrResult.provider,
-    JSON.stringify({ provenance: ocrResult.provenance }),
+    source: request.source,
+    submittedByUserId: user.id,
+    transcript: ocrResult.transcript,
+    transcriptConfidence: ocrResult.confidence,
+    ocrProvider: ocrResult.provider,
+    ocrProvenance: ocrResult.provenance,
     now,
-    now,
-    now,
-  ).run();
-
-  await env.DB.prepare(`
-    UPDATE writing_submission_assets
-    SET submission_id = ?, finalized_at = ?, updated_at = ?
-    WHERE assignment_id = ?
-      AND attempt_no = ?
-      AND id IN (${assetRows.map(() => '?').join(', ')})
-  `).bind(
+  });
+  await linkSubmissionAssets(env, {
     submissionId,
-    now,
-    now,
-    request.assignmentId,
+    assignmentId: request.assignmentId,
     attemptNo,
-    ...assetRows.map((row) => row.id),
-  ).run();
+    assetRows,
+    now,
+  });
 
   const assignmentWithSubmission = await readAssignmentResponse(env, request.assignmentId);
   const evaluations = await runWritingEvaluations(env, user, assignmentWithSubmission, ocrResult.transcript);
   const selectedEvaluation = evaluations.find((evaluation) => evaluation.isDefault) || evaluations[0];
 
-  for (const evaluation of evaluations) {
-    await env.DB.prepare(`
-      INSERT INTO writing_ai_evaluations (
-        id, submission_id, provider, overall_score, rubric_json, strengths_json, improvement_points_json,
-        sentence_corrections_json, corrected_draft, model_answer, confidence, transcript_alignment,
-        rubric_consistency, structure_score, selection_score, cost_milli_yen, latency_ms, prompt_snapshot,
-        raw_payload, is_default, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      evaluation.id,
-      submissionId,
-      evaluation.provider,
-      evaluation.overallScore,
-      JSON.stringify(evaluation.rubric),
-      JSON.stringify(evaluation.strengths),
-      JSON.stringify(evaluation.improvementPoints),
-      JSON.stringify(evaluation.sentenceCorrections),
-      evaluation.correctedDraft,
-      evaluation.modelAnswer,
-      evaluation.confidence,
-      evaluation.transcriptAlignment,
-      evaluation.rubricConsistency,
-      evaluation.structureScore,
-      evaluation.selectionScore,
-      evaluation.costMilliYen,
-      evaluation.latencyMs,
-      assignmentRow.prompt_snapshot,
-      JSON.stringify({ provenance: evaluation.provenance }),
-      evaluation.isDefault ? 1 : 0,
-      now,
-    ).run();
-  }
-
-  await env.DB.prepare(`
-    UPDATE writing_submissions
-    SET selected_evaluation_id = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(
-    selectedEvaluation.id,
-    now,
+  await insertSubmissionEvaluations(env, {
     submissionId,
-  ).run();
-
-  await env.DB.prepare(`
-    UPDATE writing_assignments
-    SET status = ?, attempt_count = ?, last_submitted_at = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(
-    AssignmentStatus.REVIEW_READY,
+    evaluations,
+    promptSnapshot: assignmentRow.prompt_snapshot,
+    now,
+  });
+  await setSubmissionSelectedEvaluation(env, {
+    submissionId,
+    selectedEvaluationId: selectedEvaluation.id,
+    now,
+  });
+  await setAssignmentReviewReady(env, {
+    assignmentId: request.assignmentId,
     attemptNo,
     now,
-    now,
-    request.assignmentId,
-  ).run();
-
-  await touchWeeklyMissionProgressFromWriting(env, {
+  });
+  await syncWritingActivitySideEffects(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
+    organizationId: assignmentRow.organization_id,
     activityAt: now,
   });
-  if (assignmentRow.organization_id) {
-    await rebuildOrganizationKpiSnapshots(env, assignmentRow.organization_id, {
-      dateKeys: [toTokyoDateKey(now)],
-    });
-  }
 
   return (await readSubmissionContext(env, submissionId)).detail;
 };
@@ -490,60 +439,32 @@ const applyTeacherReview = async (
 
   const now = Date.now();
   const reviewId = detail.submission.teacherReview?.id || crypto.randomUUID();
-  await env.DB.prepare(`
-    INSERT INTO writing_teacher_reviews (
-      id, submission_id, reviewer_user_id, selected_evaluation_id, public_comment, private_memo, review_decision,
-      created_at, updated_at, released_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(submission_id) DO UPDATE SET
-      reviewer_user_id = excluded.reviewer_user_id,
-      selected_evaluation_id = excluded.selected_evaluation_id,
-      public_comment = excluded.public_comment,
-      private_memo = excluded.private_memo,
-      review_decision = excluded.review_decision,
-      updated_at = excluded.updated_at,
-      released_at = excluded.released_at
-  `).bind(
-    reviewId,
+  await upsertTeacherReviewRecord(env, {
     submissionId,
-    user.id,
-    payload.selectedEvaluationId,
-    payload.publicComment.trim(),
-    payload.privateMemo?.trim() || null,
+    reviewId,
+    reviewerUserId: user.id,
+    payload,
     decision,
     now,
-    now,
-    now,
-  ).run();
+  });
 
-  const nextStatus =
-    decision === 'REVISION_REQUESTED'
-      ? AssignmentStatus.REVISION_REQUESTED
-      : detail.submission.attemptNo >= detail.assignment.maxAttempts
-        ? AssignmentStatus.COMPLETED
-        : AssignmentStatus.RETURNED;
+  const nextStatus = resolveAssignmentStatusForTeacherDecision(
+    decision,
+    detail.submission.attemptNo,
+    detail.assignment.maxAttempts,
+  );
 
-  await env.DB.prepare(`
-    UPDATE writing_assignments
-    SET status = ?, last_returned_at = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(
-    nextStatus,
+  await setAssignmentTeacherDecision(env, {
+    assignmentId: detail.assignment.id,
+    status: nextStatus,
     now,
-    now,
-    detail.assignment.id,
-  ).run();
-
-  await touchWeeklyMissionProgressFromWriting(env, {
+  });
+  await syncWritingActivitySideEffects(env, {
     studentUid: detail.assignment.studentUid,
     writingAssignmentId: detail.assignment.id,
+    organizationId: detail.assignment.organizationId,
     activityAt: now,
   });
-  if (detail.assignment.organizationId) {
-    await rebuildOrganizationKpiSnapshots(env, detail.assignment.organizationId, {
-      dateKeys: [toTokyoDateKey(now)],
-    });
-  }
 
   return (await readSubmissionContext(env, submissionId)).detail;
 };
@@ -577,27 +498,15 @@ export const handleCompleteWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  const now = Date.now();
 
-  await env.DB.prepare(`
-    UPDATE writing_assignments
-    SET status = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(
-    AssignmentStatus.COMPLETED,
-    Date.now(),
-    assignmentId,
-  ).run();
-
-  await touchWeeklyMissionProgressFromWriting(env, {
+  await setAssignmentCompleted(env, { assignmentId, now });
+  await syncWritingActivitySideEffects(env, {
     studentUid: row.student_user_id,
     writingAssignmentId: assignmentId,
-    activityAt: Date.now(),
+    organizationId: row.organization_id,
+    activityAt: now,
   });
-  if (row.organization_id) {
-    await rebuildOrganizationKpiSnapshots(env, row.organization_id, {
-      dateKeys: [toTokyoDateKey(Date.now())],
-    });
-  }
 
   return readAssignmentResponse(env, assignmentId);
 };

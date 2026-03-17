@@ -4,15 +4,13 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { getAvailablePort } from './_shared/ports.mjs';
+import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
 const extraArgs = process.argv.slice(2);
 const { FORCE_COLOR: _forceColor, ...baseEnv } = process.env;
 const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL || '';
 const isExternalTarget = externalBaseUrl.length > 0;
-
-const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 const runCommand = (command, args, env) => new Promise((resolve) => {
   const child = spawn(command, args, {
@@ -142,6 +140,20 @@ const suites = isExternalTarget
     ];
 
 let exitCode = 0;
+const buildCache = new Set();
+
+const runBuildForEnv = async (suiteEnv, buildKey) => {
+  if (buildCache.has(buildKey)) {
+    return 0;
+  }
+
+  const viteBuild = createNodeToolCommand('vite', ['build']);
+  const buildExitCode = await runCommand(viteBuild.command, viteBuild.args, suiteEnv);
+  if (buildExitCode === 0) {
+    buildCache.add(buildKey);
+  }
+  return buildExitCode;
+};
 
 for (const suite of suites) {
   const port = await getAvailablePort();
@@ -156,11 +168,8 @@ for (const suite of suites) {
     ...(suite.env || {}),
   };
   if (!isExternalTarget) {
-    const buildExitCode = await runCommand(
-      npmCommand,
-      ['run', 'build'],
-      suiteEnv,
-    );
+    const buildKey = suite.env?.VITE_STORAGE_MODE === 'idb' ? 'idb' : 'cloudflare';
+    const buildExitCode = await runBuildForEnv(suiteEnv, buildKey);
 
     if (buildExitCode !== 0) {
       exitCode = buildExitCode;
@@ -179,9 +188,10 @@ for (const suite of suites) {
       await waitForServer(baseUrl);
     }
 
+    const playwrightCommand = createNodeToolCommand('playwright', ['test', '--config=playwright.smoke.config.ts', ...suite.args, ...extraArgs]);
     const suiteExitCode = await runCommand(
-      npxCommand,
-      ['playwright', 'test', '--config=playwright.smoke.config.ts', ...suite.args, ...extraArgs],
+      playwrightCommand.command,
+      playwrightCommand.args,
       {
         ...suiteEnv,
         PLAYWRIGHT_BASE_URL: baseUrl,
