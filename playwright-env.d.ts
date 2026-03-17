@@ -10,3 +10,8 @@ declare namespace NodeJS {
     PLAYWRIGHT_EXPECT_PREVIEW?: '0' | '1';
   }
 }
+
+declare const Buffer: {
+  from(value: string, encoding?: string): Buffer;
+  from(value: ArrayBuffer | SharedArrayBuffer | Uint8Array | readonly number[]): Buffer;
+};

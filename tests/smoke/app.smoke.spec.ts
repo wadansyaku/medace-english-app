@@ -8,7 +8,7 @@ import {
 const mobileViewport = { width: 390, height: 844 };
 const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW === '1';
-const toUploadBuffer = (value: string): Buffer => new TextEncoder().encode(value) as unknown as Buffer;
+const toUploadBuffer = (value: string): Buffer => Buffer.from(value);
 
 const completeDiagnostic = async (page: Page) => {
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingTest)).toBeVisible();
