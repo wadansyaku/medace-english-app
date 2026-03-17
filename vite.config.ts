@@ -1,6 +1,7 @@
-import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const projectRoot = decodeURIComponent(new URL('.', import.meta.url).pathname);
 
 export default defineConfig({
   server: {
@@ -29,7 +30,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
+      '@': projectRoot,
     }
   }
 });

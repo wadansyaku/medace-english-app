@@ -56,6 +56,18 @@ import {
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
 
+const encodeBase64 = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+
+  return btoa(binary);
+};
+
 const readAiAssetsForOcr = async (
   env: AppEnv,
   rows: DbWritingAssetRow[],
@@ -74,7 +86,7 @@ const readAiAssetsForOcr = async (
     assets.push({
       fileName: row.file_name,
       mimeType: row.mime_type,
-      base64Data: Buffer.from(bytes).toString('base64'),
+      base64Data: encodeBase64(bytes),
     });
   }
   return assets;

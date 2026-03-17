@@ -74,12 +74,23 @@ const todayString = (): string => getTodayDateKey();
 
 const getYesterdayString = (): string => getRelativeDateKey(-1);
 
-const encodeBase64 = (value: ArrayBuffer | Uint8Array): string => {
-  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-  return Buffer.from(bytes).toString('base64');
+const bytesToBinary = (bytes: Uint8Array): string => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return binary;
 };
 
-const decodeBase64 = (value: string): Uint8Array => new Uint8Array(Buffer.from(value, 'base64'));
+const encodeBase64 = (value: ArrayBuffer | Uint8Array): string => {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  return btoa(bytesToBinary(bytes));
+};
+
+const decodeBase64 = (value: string): Uint8Array => (
+  Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+);
 
 const parseCookies = (request: Request): Record<string, string> => {
   const header = request.headers.get('Cookie') || '';
