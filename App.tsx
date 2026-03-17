@@ -102,6 +102,7 @@ const App: React.FC = () => {
         return (
           <Dashboard
             user={user}
+            announcementFeed={announcementFeed}
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
@@ -138,6 +139,7 @@ const App: React.FC = () => {
         return (
           <Dashboard
             user={user}
+            announcementFeed={announcementFeed}
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}

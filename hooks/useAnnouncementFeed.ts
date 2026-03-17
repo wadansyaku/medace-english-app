@@ -9,7 +9,15 @@ const EMPTY_FEED: ProductAnnouncementFeed = {
   unreadCount: 0,
 };
 
-export const useAnnouncementFeed = (enabled: boolean) => {
+export interface AnnouncementFeedController {
+  feed: ProductAnnouncementFeed;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  markSeen: (announcementId: string) => Promise<void>;
+  acknowledge: (announcementId: string) => Promise<void>;
+}
+
+export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedController => {
   const [feed, setFeed] = useState<ProductAnnouncementFeed>(EMPTY_FEED);
   const [loading, setLoading] = useState(false);
 

@@ -8,6 +8,7 @@ import {
 const mobileViewport = { width: 390, height: 844 };
 const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW === '1';
+const toUploadBuffer = (value: string): Buffer => new TextEncoder().encode(value) as unknown as Buffer;
 
 const completeDiagnostic = async (page: Page) => {
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingTest)).toBeVisible();
@@ -1021,7 +1022,7 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-1.png',
     mimeType: 'image/png',
-    buffer: Buffer.from('student-attempt-one'),
+    buffer: toUploadBuffer('student-attempt-one'),
   });
   await studentPage.getByTestId('writing-submit-upload').click();
   await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
@@ -1042,7 +1043,7 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-2.png',
     mimeType: 'image/png',
-    buffer: Buffer.from('student-attempt-two'),
+    buffer: toUploadBuffer('student-attempt-two'),
   });
   await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(
     'I agree that students should use tablets because they can review lessons quickly and share ideas more easily. For example, they can check notes at home and ask better questions in class.',
@@ -1678,7 +1679,7 @@ test('student weakness focus card populates after the first smart-session on mob
     await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
       name: 'mobile-attempt.png',
       mimeType: 'image/png',
-      buffer: Buffer.from('mobile-writing-attempt'),
+      buffer: toUploadBuffer('mobile-writing-attempt'),
     });
     await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
     await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(
@@ -1738,7 +1739,7 @@ test('student weakness focus card populates after the first smart-session on mob
     await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
       name: 'mobile-feedback.png',
       mimeType: 'image/png',
-      buffer: Buffer.from('mobile-feedback-attempt'),
+      buffer: toUploadBuffer('mobile-feedback-attempt'),
     });
     await studentPage.getByRole('button', { name: '最終送信へ進む' }).click();
     await studentPage.getByPlaceholder(MOBILE_FLOW_WRITING.transcriptPlaceholder).fill(

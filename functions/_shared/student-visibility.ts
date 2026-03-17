@@ -231,6 +231,20 @@ export const readVisibleStudentIds = async (
   return new Set(rows.map((row) => row.student_uid));
 };
 
+export const canAccessVisibleStudent = async (
+  env: AppEnv,
+  user: DbUserRow,
+  studentUid: string,
+  organization?: ActiveOrganizationContext,
+): Promise<boolean> => {
+  if (user.role === UserRole.ADMIN) {
+    return true;
+  }
+
+  const visibleStudentIds = await readVisibleStudentIds(env, user, organization);
+  return visibleStudentIds.has(studentUid);
+};
+
 export const buildVisibleStudentFilter = (
   visibleStudentIds: Iterable<string>,
   column = 'u.id',

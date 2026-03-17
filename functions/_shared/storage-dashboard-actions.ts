@@ -28,9 +28,10 @@ import {
 import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
+import { handleGetCoachNotifications } from './organization-notification-actions';
+import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { buildSuggestedPrimaryMission, readMissionAssignmentsByStudent } from './storage-mission-actions';
-import { handleGetAllStudentsProgress, handleGetCoachNotifications } from './storage-organization-actions';
 import { readWeaknessProfile } from './weakness-actions';
 import type { AppEnv, DbUserRow } from './types';
 import {

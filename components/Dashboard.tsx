@@ -30,7 +30,8 @@ import PhrasebookCreateModal from './dashboard/PhrasebookCreateModal';
 import PlanEditorModal from './dashboard/PlanEditorModal';
 import WritingStudentSection from './WritingStudentSection';
 import { useDashboardData } from '../hooks/useDashboardData';
-import { useAnnouncementFeed } from '../hooks/useAnnouncementFeed';
+import type { AnnouncementFeedController } from '../hooks/useAnnouncementFeed';
+import { useDashboardSectionNavigation } from '../hooks/useDashboardSectionNavigation';
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
@@ -45,12 +46,19 @@ import {
 
 interface DashboardProps {
   user: UserProfile;
+  announcementFeed: AnnouncementFeedController;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, onUserUpdate }) => {
+const Dashboard: React.FC<DashboardProps> = ({
+  user,
+  announcementFeed,
+  onSelectBook,
+  onStartTask,
+  onUserUpdate,
+}) => {
   const {
     snapshot,
     loading,
@@ -62,7 +70,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, 
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
   const viewModel = useStudentDashboardViewModel({ user, snapshot });
-  const announcementFeed = useAnnouncementFeed(Boolean(user));
   const controller = useStudentDashboardController({
     user,
     learningPlan: viewModel.learningPlan,
@@ -143,15 +150,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, 
     isSavingProfile,
     handleSaveProfile,
   } = controller;
-
-  const heroSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const weaknessSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const missionSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const writingSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const coachSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const planSectionRef = React.useRef<HTMLDivElement | null>(null);
-  const librarySectionRef = React.useRef<HTMLDivElement | null>(null);
-  const [activeQuickNavId, setActiveQuickNavId] = React.useState('today');
   const coachActionType = viewModel.latestCoachNotification
     ? (
         viewModel.latestCoachNotification.recommendedActionType
@@ -178,55 +176,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, 
       hasLearningPlan: Boolean(viewModel.learningPlan),
     })
   ), [coachActionType, viewModel.learningPlan]);
-  const mobileAnchorStyle = isStudentMobileShell
-    ? { scrollMarginTop: 'calc(5.5rem + var(--safe-top))' }
-    : undefined;
-  const taskQuickNavTarget = React.useMemo(() => (
-    primaryMission
-      ? { id: 'task', label: '課題', kind: 'mission' as const, ref: missionSectionRef }
-      : viewModel.canShowWritingSection
-        ? { id: 'task', label: '作文', kind: 'writing' as const, ref: writingSectionRef }
-        : viewModel.latestCoachNotification
-          ? { id: 'task', label: '講師', kind: 'coach' as const, ref: coachSectionRef }
-          : { id: 'task', label: 'プラン', kind: 'plan' as const, ref: planSectionRef }
-  ), [primaryMission, viewModel.canShowWritingSection, viewModel.latestCoachNotification]);
-
-  const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  const mobileQuickNavItems = React.useMemo(() => ([
-    { id: 'today', label: '今日', kind: 'today' as const, ref: heroSectionRef },
-    { id: 'weakness', label: '苦手', kind: 'weakness' as const, ref: weaknessSectionRef },
-    taskQuickNavTarget,
-    { id: 'library', label: '教材', kind: 'library' as const, ref: librarySectionRef },
-  ]), [taskQuickNavTarget]);
-
-  React.useEffect(() => {
-    if (!isStudentMobileShell || typeof window === 'undefined') return undefined;
-
-    const updateActiveQuickNav = () => {
-      const threshold = 132;
-      let nextActiveId = mobileQuickNavItems[0]?.id || 'today';
-
-      mobileQuickNavItems.forEach((item) => {
-        const top = item.ref.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-        if (top <= threshold) {
-          nextActiveId = item.id;
-        }
-      });
-
-      setActiveQuickNavId((previous) => (previous === nextActiveId ? previous : nextActiveId));
-    };
-
-    updateActiveQuickNav();
-    window.addEventListener('scroll', updateActiveQuickNav, { passive: true });
-    window.addEventListener('resize', updateActiveQuickNav);
-    return () => {
-      window.removeEventListener('scroll', updateActiveQuickNav);
-      window.removeEventListener('resize', updateActiveQuickNav);
-    };
-  }, [isStudentMobileShell, mobileQuickNavItems]);
+  const {
+    heroSectionRef,
+    weaknessSectionRef,
+    missionSectionRef,
+    writingSectionRef,
+    coachSectionRef,
+    planSectionRef,
+    librarySectionRef,
+    activeQuickNavId,
+    mobileQuickNavItems,
+    scrollToSection,
+    mobileAnchorStyle,
+  } = useDashboardSectionNavigation({
+    isStudentMobileShell,
+    hasPrimaryMission: Boolean(primaryMission),
+    canShowWritingSection: viewModel.canShowWritingSection,
+    hasCoachNotification: Boolean(viewModel.latestCoachNotification),
+  });
+  const handleSubmitCommercialRequest = React.useCallback(async (payload: Parameters<typeof storage.submitCommercialRequest>[0]) => {
+    await storage.submitCommercialRequest(payload);
+    await refreshDashboard();
+  }, [refreshDashboard]);
 
   if (showOnboarding) {
     return (
@@ -366,10 +337,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, 
         onEditDisplayDensity={setEditDisplayDensity}
         commercialRequests={viewModel.commercialRequests}
         announcementFeed={announcementFeed.feed}
-        onSubmitCommercialRequest={async (payload) => {
-          await storage.submitCommercialRequest(payload);
-          await refreshDashboard();
-        }}
+        onSubmitCommercialRequest={handleSubmitCommercialRequest}
       />
 
       <PhrasebookCreateModal
@@ -601,10 +569,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onSelectBook, onStartTask, 
             coachNotificationCount={viewModel.coachNotifications.length}
             showAdSlots={viewModel.showAdSlots}
             isCompact={isStudentMobileShell}
-            onSubmitCommercialRequest={async (payload) => {
-              await storage.submitCommercialRequest(payload);
-              await refreshDashboard();
-            }}
+            onSubmitCommercialRequest={handleSubmitCommercialRequest}
             onToggle={() => setShowAccountDetails((previous) => !previous)}
           />
         </div>
