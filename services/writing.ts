@@ -58,6 +58,12 @@ export const uploadWritingAsset = async (
     credentials: 'include',
   });
   if (!response.ok) {
+    if (response.status === 409) {
+      throw new Error('このアップロードURLはすでに使用済みです。再度アップロードしてください。');
+    }
+    if (response.status === 410) {
+      throw new Error('アップロードURLの有効期限が切れました。再度アップロードしてください。');
+    }
     throw new Error(`アップロードに失敗しました: ${response.status}`);
   }
 };

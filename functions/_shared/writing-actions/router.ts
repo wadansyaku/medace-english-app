@@ -1,6 +1,7 @@
 import type {
   WritingExamCategory,
 } from '../../../types';
+import type { AiUsageLogContext } from '../ai-metering';
 import { HttpError, json } from '../http';
 import type { AppEnv, DbUserRow } from '../types';
 import {
@@ -35,6 +36,7 @@ interface WritingRouteContext {
   user: DbUserRow;
   request: Request;
   segments: string[];
+  logContext?: AiUsageLogContext;
 }
 
 interface WritingRouteDefinition {
@@ -64,7 +66,14 @@ const routes: WritingRouteDefinition[] = [
   {
     method: 'POST',
     match: (segments) => segments[0] === 'assignments' && segments[1] === 'generate',
-    handle: async ({ env, user, request }) => json(await handleGenerateWritingAssignment(env, user, parseGenerateWritingAssignmentRequest(await request.json()))),
+    handle: async ({ env, user, request, logContext }) => json(
+      await handleGenerateWritingAssignment(
+        env,
+        user,
+        parseGenerateWritingAssignmentRequest(await request.json()),
+        logContext,
+      ),
+    ),
   },
   {
     method: 'POST',
@@ -104,7 +113,14 @@ const routes: WritingRouteDefinition[] = [
   {
     method: 'POST',
     match: (segments) => segments[0] === 'submissions' && segments[1] === 'finalize',
-    handle: async ({ env, user, request }) => json(await handleFinalizeWritingSubmission(env, user, parseFinalizeWritingSubmissionRequest(await request.json()))),
+    handle: async ({ env, user, request, logContext }) => json(
+      await handleFinalizeWritingSubmission(
+        env,
+        user,
+        parseFinalizeWritingSubmissionRequest(await request.json()),
+        logContext,
+      ),
+    ),
   },
   {
     method: 'GET',
@@ -138,6 +154,7 @@ export const handleWritingRequest = async (
   user: DbUserRow,
   request: Request,
   writingPath: string,
+  logContext?: AiUsageLogContext,
 ): Promise<Response> => {
   const pathname = writingPath.replace(/^\/+/, '');
   const segments = pathname.split('/').filter(Boolean);
@@ -148,6 +165,7 @@ export const handleWritingRequest = async (
       user,
       request,
       segments,
+      logContext,
     });
   }
 

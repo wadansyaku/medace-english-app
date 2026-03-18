@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
-import { storage } from '../services/storage';
+import { dashboardService } from '../services/dashboard';
 import {
   extractVocabularyFromMedia,
   extractVocabularyFromText,
@@ -135,7 +135,7 @@ export const useStudentDashboardMutations = ({
 
       if (plan) {
         plan.uid = user.uid;
-        await storage.saveLearningPlan(plan);
+        await dashboardService.saveLearningPlan(plan);
         updateLearningPlan(plan);
         setPageNotice({ tone: 'success', message: '学習プランを作成しました。' });
       } else {
@@ -161,7 +161,7 @@ export const useStudentDashboardMutations = ({
     if (!learningPlan) return;
     try {
       const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
-      await storage.saveLearningPlan(updated);
+      await dashboardService.saveLearningPlan(updated);
       updateLearningPlan(updated);
       setShowPlanEditModal(false);
       setPageNotice({ tone: 'success', message: '学習プランを更新しました。' });
@@ -216,7 +216,7 @@ export const useStudentDashboardMutations = ({
         throw new Error('単語を抽出できませんでした。');
       }
 
-      const importResult = await storage.batchImportWords({
+      const importResult = await dashboardService.batchImportWords({
         defaultBookName: newBookTitle,
         source: {
           kind: 'rows',
@@ -271,7 +271,7 @@ export const useStudentDashboardMutations = ({
     if (!pendingDeleteBook) return;
     try {
       removeMyBook(pendingDeleteBook.id);
-      await storage.deleteBook(pendingDeleteBook.id);
+      await dashboardService.deleteBook(pendingDeleteBook.id);
       setPageNotice({ tone: 'success', message: `単語帳「${pendingDeleteBook.title}」を削除しました。` });
     } catch (error) {
       console.error(error);
@@ -303,9 +303,9 @@ export const useStudentDashboardMutations = ({
         intensity: editIntensity,
         updatedAt: Date.now(),
       };
-      await storage.saveLearningPreference(nextPreference);
-      await storage.updateSessionUser(updatedUser);
-      const refreshedUser = await storage.getSession();
+      await dashboardService.saveLearningPreference(nextPreference);
+      await dashboardService.updateSessionUser(updatedUser);
+      const refreshedUser = await dashboardService.getSession();
       const nextUser = refreshedUser || updatedUser;
       saveDisplayPreferences(user.uid, {
         fontSize: editDisplayFontSize,

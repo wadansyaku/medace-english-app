@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { STATUS_LABELS, StudentSummary, StudentWorksheetSnapshot, UserProfile, WorksheetQuestionMode } from '../types';
-import { storage } from '../services/storage';
+import { workspaceService } from '../services/workspace';
 import { GeneratedWorksheetQuestion, generateWorksheetQuestions, WORKSHEET_MODE_COPY } from '../utils/worksheet';
 import { BookOpen, ExternalLink, Eye, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
 import ModalOverlay from './ModalOverlay';
@@ -446,7 +446,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       setStudentsLoading(true);
       setError(null);
       try {
-        const nextStudents = await storage.getAllStudentsProgress();
+        const nextStudents = await workspaceService.getAllStudentsProgress();
         setStudents(nextStudents);
         if (!selectedStudentUid && nextStudents[0]) {
           setSelectedStudentUid(nextStudents[0].uid);
@@ -469,7 +469,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       setSnapshotLoading(true);
       setError(null);
       try {
-        const nextSnapshot = await storage.getStudentWorksheetSnapshot(selectedStudentUid);
+        const nextSnapshot = await workspaceService.getStudentWorksheetSnapshot(selectedStudentUid);
         setSnapshot(nextSnapshot);
       } catch (loadError) {
         console.error(loadError);

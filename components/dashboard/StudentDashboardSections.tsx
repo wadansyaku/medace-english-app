@@ -14,7 +14,8 @@ import type { AnnouncementFeedController } from '../../hooks/useAnnouncementFeed
 import type { useDashboardSectionNavigation } from '../../hooks/useDashboardSectionNavigation';
 import type { useStudentDashboardController } from '../../hooks/useStudentDashboardController';
 import type { useStudentDashboardViewModel } from '../../hooks/useStudentDashboardViewModel';
-import { storage } from '../../services/storage';
+import type { CommercialRequestPayload } from '../../contracts/storage';
+import { workspaceService } from '../../services/workspace';
 import StudyCompanion from '../StudyCompanion';
 import MotivationBoard from '../MotivationBoard';
 import WritingStudentSection from '../WritingStudentSection';
@@ -48,7 +49,7 @@ interface StudentDashboardSectionsProps {
   navigation: StudentDashboardSectionNavigation;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onStartTask: (task: LearningTaskIntent) => void;
-  onSubmitCommercialRequest: (payload: Parameters<typeof storage.submitCommercialRequest>[0]) => Promise<void>;
+  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
 
 export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> = ({
@@ -92,7 +93,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   const handlePrimaryMissionAction = async () => {
     if (primaryMission?.assignmentId) {
       try {
-        await storage.updateMissionProgress(primaryMission.assignmentId, MissionProgressEventType.OPENED);
+        await workspaceService.updateMissionProgress(primaryMission.assignmentId, MissionProgressEventType.OPENED);
       } catch (missionError) {
         console.error(missionError);
       }

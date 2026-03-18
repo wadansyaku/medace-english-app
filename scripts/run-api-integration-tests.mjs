@@ -1001,6 +1001,28 @@ const main = async () => {
     const assignedWriting = studentAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
     assert(assignedWriting, 'student should receive the issued writing assignment');
 
+    const expiredUpload = await orgStudent.post('/api/writing/upload-url', {
+      assignmentId: issuedAssignment.id,
+      fileName: 'expired-attempt-1.png',
+      mimeType: 'image/png',
+      byteSize: 12,
+      assetOrder: 1,
+      attemptNo: 1,
+    });
+    assert(expiredUpload.expiresAt > Date.now(), 'upload url response should include a future expiry timestamp');
+    await executeLocalSql(
+      persistDir,
+      `UPDATE writing_submission_assets
+       SET upload_expires_at = ${Date.now() - 1_000}
+       WHERE id = '${expiredUpload.assetId}'`,
+    );
+    const expiredUploadResponse = await fetch(`${baseUrl}${expiredUpload.uploadUrl}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: Buffer.from('expired-upload-binary'),
+    });
+    assert(expiredUploadResponse.status === 410, 'expired upload token should return 410');
+
     const firstUpload = await orgStudent.post('/api/writing/upload-url', {
       assignmentId: issuedAssignment.id,
       fileName: 'attempt-1.png',
@@ -1009,12 +1031,19 @@ const main = async () => {
       assetOrder: 1,
       attemptNo: 1,
     });
+    assert(firstUpload.expiresAt > Date.now(), 'writing upload url should expose expiry metadata');
     const firstUploadResponse = await fetch(`${baseUrl}${firstUpload.uploadUrl}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: Buffer.from('fake-image-binary'),
     });
     assert(firstUploadResponse.status === 204, 'first writing upload should succeed');
+    const replayedFirstUploadResponse = await fetch(`${baseUrl}${firstUpload.uploadUrl}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: Buffer.from('fake-image-binary-retry'),
+    });
+    assert(replayedFirstUploadResponse.status === 409, 'replayed upload token should return 409');
 
     const firstFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
       assignmentId: issuedAssignment.id,
@@ -1026,6 +1055,16 @@ const main = async () => {
     assert(firstFinalize.submission.ocrProvider === 'OPENAI', 'writing OCR should rerun with OPENAI when fallback confidence is low');
     assert(firstFinalize.submission.ocrMeta?.mode === 'fixture', 'fixture mode should expose OCR provenance');
     assert(firstFinalize.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'writing evaluations should expose provenance');
+    const duplicateFinalize = await orgStudent.request('/api/writing/submissions/finalize', {
+      method: 'POST',
+      body: JSON.stringify({
+        assignmentId: issuedAssignment.id,
+        source: 'STUDENT_MOBILE',
+        assetIds: [firstUpload.assetId],
+        attemptNo: 1,
+      }),
+    });
+    assert(duplicateFinalize.status === 409, 'duplicate finalize retry should return 409');
 
     const renamedSettings = await groupAdmin.storage('updateOrganizationProfile', {
       displayName: 'Phase 4 Academy Renamed',
@@ -1063,6 +1102,16 @@ const main = async () => {
       privateMemo: 'integration test revision',
     });
     assert(revisionDecision.assignment.status === 'REVISION_REQUESTED', 'first review should be able to request a revision');
+    const retriedRevisionDecision = await groupAdmin.post(`/api/writing/submissions/${queueItem.submissionId}/request-revision`, {
+      selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,
+      publicComment: '理由のつながりを整えて、もう一度書き直しましょう。',
+      privateMemo: 'integration test revision',
+    });
+    assert(retriedRevisionDecision.assignment.status === 'REVISION_REQUESTED', 'teacher review retry should remain idempotent for revision requests');
+    assert(
+      retriedRevisionDecision.submission.teacherReview?.id === revisionDecision.submission.teacherReview?.id,
+      'teacher review retry should reuse the same review row for revision requests',
+    );
 
     const revisedAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
     const revisedAssignment = revisedAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
@@ -1104,6 +1153,16 @@ const main = async () => {
       privateMemo: 'integration test final return',
     });
     assert(finalReturn.assignment.status === 'COMPLETED', 'second approved return should complete the assignment');
+    const retriedFinalReturn = await groupAdmin.post(`/api/writing/submissions/${secondQueueItem.submissionId}/approve-return`, {
+      selectedEvaluationId: secondDetail.submission.selectedEvaluationId || secondDetail.submission.evaluations[0].id,
+      publicComment: '構成が安定しました。次回は語彙の幅も意識しましょう。',
+      privateMemo: 'integration test final return',
+    });
+    assert(retriedFinalReturn.assignment.status === 'COMPLETED', 'teacher review retry should remain idempotent for approved returns');
+    assert(
+      retriedFinalReturn.submission.teacherReview?.id === finalReturn.submission.teacherReview?.id,
+      'teacher review retry should reuse the same review row for approved returns',
+    );
 
     const finalAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
     const completedAssignment = finalAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);

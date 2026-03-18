@@ -4,10 +4,12 @@ import {
   type MeteredAiAction,
 } from '../../config/subscription';
 import type { WritingAiProvider } from '../../types';
+import { formatMonthKey } from '../../utils/date';
+import type { ApiRequestLogContext } from './api-routes/runtime';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
 
-const currentMonthKey = (): string => new Date().toISOString().slice(0, 7);
+const currentMonthKey = (): string => formatMonthKey(new Date());
 
 const getUserSubscriptionPolicy = (user: DbUserRow) => getSubscriptionPolicy(user.subscription_plan as any);
 
@@ -17,7 +19,7 @@ export const assertAiActionAllowed = (
 ): void => {
   const policy = getUserSubscriptionPolicy(user);
   if (!policy.allowedAiActions.includes(action)) {
-    throw new HttpError(403, `${policy.label} ではこの AI 機能を利用できません。`);
+    throw new HttpError(403, `${policy.label} では ${AI_ACTION_ESTIMATES[action].label} を利用できません。`);
   }
 };
 
@@ -52,6 +54,11 @@ export interface AiUsageEventInput {
   usedAi: boolean;
   estimatedCostMilliYen?: number;
   requestUnits?: number;
+  logContext?: AiUsageLogContext;
+}
+
+export interface AiUsageLogContext extends ApiRequestLogContext {
+  source?: 'api.ai' | 'writing';
 }
 
 export const recordAiUsageEvent = async (
@@ -78,4 +85,22 @@ export const recordAiUsageEvent = async (
     currentMonthKey(),
     Date.now(),
   ).run();
+
+  console.log(JSON.stringify({
+    type: 'ai_usage_event',
+    source: input.logContext?.source || 'unknown',
+    action: input.action,
+    requestId: input.logContext?.requestId || null,
+    pathname: input.logContext?.pathname || null,
+    method: input.logContext?.method || null,
+    deployment: input.logContext?.deployment || null,
+    deploymentSha: input.logContext?.deploymentSha || null,
+    userId: user.id,
+    organizationId: user.organization_id || null,
+    provider: input.provider || 'GEMINI',
+    model: input.model || estimate.model,
+    usedAi: input.usedAi,
+    estimatedCostMilliYen,
+    requestUnits: input.requestUnits || 1,
+  }));
 };

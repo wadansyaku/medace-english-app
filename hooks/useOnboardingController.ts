@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DIAGNOSTIC_QUESTIONS, evaluateDiagnostic, type SelfAssessmentKey } from '../data/diagnostic';
-import { storage } from '../services/storage';
+import { sessionService } from '../services/session';
 import { type EnglishLevel, type UserProfile, UserGrade } from '../types';
 
 export type OnboardingStep = 'PROFILE' | 'TEST' | 'RESULT';
@@ -78,7 +78,7 @@ export const useOnboardingController = ({
         needsOnboarding: false,
       };
 
-      await storage.updateSessionUser(updatedUser);
+      await sessionService.updateSessionUser(updatedUser);
       onComplete(updatedUser);
     } finally {
       setIsSaving(false);

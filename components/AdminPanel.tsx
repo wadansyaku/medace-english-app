@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
 import getClientRuntimeFlags from '../config/runtime';
-import { storage } from '../services/storage';
+import { dashboardService } from '../services/dashboard';
 import { extractVocabularyFromText, isAiUnavailableError } from '../services/gemini';
 import { BookAccessScope, BookCatalogSource } from '../types';
 import { BRAND } from '../config/brand';
@@ -85,7 +85,7 @@ const AdminPanel: React.FC = () => {
         setLog((previous) => [...previous, 'サーバーで CSV を検証しています...']);
         const defaultBookName = file.name.replace('.csv', '');
 
-        const result = await storage.batchImportWords({
+        const result = await dashboardService.batchImportWords({
           defaultBookName,
           source: {
             kind: 'csv',
@@ -124,7 +124,7 @@ const AdminPanel: React.FC = () => {
 
       setLog((previous) => [...previous, `抽出成功: ${extracted.words.length}語を検出しました。`]);
       setLog((previous) => [...previous, 'データベースへ保存中...']);
-      const result = await storage.batchImportWords({
+      const result = await dashboardService.batchImportWords({
         defaultBookName: contentTitle,
         source: {
           kind: 'rows',
@@ -162,7 +162,7 @@ const AdminPanel: React.FC = () => {
   const handleReset = async () => {
     setResetting(true);
     try {
-      await storage.resetAllData();
+      await dashboardService.resetAllData();
       setShowResetModal(false);
       setLog((previous) => [...previous, 'データをリセットしました。ページを更新します。']);
       window.location.reload();

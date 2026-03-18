@@ -62,6 +62,13 @@ npm run cf:preview
 - `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
 - `npm run cf:sync` は `wrangler.jsonc` を基準に GitHub variables、Cloudflare Pages secrets、R2 バケットを同期します。R2 がアカウントで未有効化の場合はここで停止します。
 
+## Storage Mode Policy
+
+- 既定の運用モードは Cloudflare です。`/api/storage`、`/api/writing`、D1、R2 を含む本番相当の挙動確認は `npm run cf:preview` または `npm run test:api` / `npm run test:smoke` を基準にしてください。
+- `VITE_STORAGE_MODE=idb` は demo / offline 学習の最小導線向けです。個人学習の session、教材閲覧、学習履歴のローカル検証には使えますが、学校・教室向け workspace の正史ではありません。
+- business dashboard、missions、commercial request、announcements、writing は Cloudflare 側を正史とし、新規 business 機能では IndexedDB の並行実装を追加しない方針です。
+- frontend からは `services/storage.ts` の巨大 facade へ直接依存を増やさず、`services/session.ts`、`services/dashboard.ts`、`services/workspace.ts`、`services/writing.ts` の薄い adapter を優先してください。
+
 ## Cloudflare ローカル確認
 
 `Steady Study` はブラウザ URL ルーティングではなく、アプリ内の view state で画面を切り替えます。そのため Pages 向けの SPA fallback rewrite は不要で、ローカル確認も `wrangler pages dev dist` を基準にします。

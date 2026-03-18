@@ -1,8 +1,14 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, SubscriptionPlan, UserGrade, WordData } from '../../types';
-import { AI_ACTION_ESTIMATES, getSubscriptionPolicy, MeteredAiAction } from '../../config/subscription';
-import { formatDateKey, formatMonthKey } from '../../utils/date';
+import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData } from '../../types';
+import type { MeteredAiAction } from '../../config/subscription';
+import { formatDateKey } from '../../utils/date';
 import { buildFallbackLearningPlan } from '../../utils/learningPlan';
+import {
+  assertAiActionAllowed,
+  assertBudgetAvailable,
+  recordAiUsageEvent,
+  type AiUsageLogContext,
+} from './ai-metering';
 import { HttpError } from './http';
 import { AppEnv, DbUserRow } from './types';
 
@@ -56,61 +62,20 @@ const handleAiError = (error: unknown, fallbackMessage: string): never => {
   throw new HttpError(502, fallbackMessage);
 };
 
-const currentMonthKey = (): string => formatMonthKey(new Date());
-
-const getUserSubscriptionPlan = (user: DbUserRow): SubscriptionPlan => {
-  return (user.subscription_plan as SubscriptionPlan | null) || SubscriptionPlan.TOC_FREE;
-};
-
-const guardAiActionAccess = (user: DbUserRow, action: MeteredAiAction): void => {
-  const plan = getSubscriptionPolicy(getUserSubscriptionPlan(user));
-  if (!plan.allowedAiActions.includes(action)) {
-    throw new HttpError(403, `${plan.label} では ${AI_ACTION_ESTIMATES[action].label} を利用できません。`);
-  }
-};
-
-const guardAiBudget = async (env: AppEnv, user: DbUserRow, action: MeteredAiAction): Promise<void> => {
-  guardAiActionAccess(user, action);
-  const plan = getSubscriptionPolicy(getUserSubscriptionPlan(user));
-
-  const monthKey = currentMonthKey();
-  const row = await env.DB.prepare(`
-    SELECT COALESCE(SUM(estimated_cost_milli_yen), 0) AS total
-    FROM ai_usage_events
-    WHERE user_id = ? AND month_key = ?
-  `).bind(user.id, monthKey).first() as { total: number } | null;
-
-  const projected = Number(row?.total || 0) + AI_ACTION_ESTIMATES[action].estimatedCostMilliYen;
-  if (projected > plan.monthlyAiBudgetMilliYen) {
-    throw new HttpError(429, `今月のAI利用上限に達しました。現在プラン: ${plan.label}`);
-  }
-};
-
-const recordAiUsage = async (env: AppEnv, user: DbUserRow, action: MeteredAiAction): Promise<void> => {
-  const estimate = AI_ACTION_ESTIMATES[action];
-  await env.DB.prepare(`
-    INSERT INTO ai_usage_events (
-      user_id, action, model, estimated_cost_milli_yen, request_units, used_ai, month_key, created_at
-    ) VALUES (?, ?, ?, ?, 1, 1, ?, ?)
-  `).bind(
-    user.id,
-    action,
-    estimate.model,
-    estimate.estimatedCostMilliYen,
-    currentMonthKey(),
-    Date.now()
-  ).run();
-};
-
 const runMeteredAiAction = async <T>(
   env: AppEnv,
   user: DbUserRow,
   action: MeteredAiAction,
-  runner: () => Promise<T>
+  runner: () => Promise<T>,
+  logContext?: AiUsageLogContext,
 ): Promise<T> => {
-  await guardAiBudget(env, user, action);
+  await assertBudgetAvailable(env, user, action);
   const result = await runner();
-  await recordAiUsage(env, user, action);
+  await recordAiUsageEvent(env, user, {
+    action,
+    usedAi: true,
+    ...(logContext ? { logContext } : {}),
+  });
   return result;
 };
 
@@ -560,21 +525,26 @@ const evaluateAdvancedTest = async (env: AppEnv, payload: any): Promise<EnglishL
   }
 };
 
-export const handleAiAction = async (env: AppEnv, user: DbUserRow, body: AiRequestBody): Promise<unknown> => {
+export const handleAiAction = async (
+  env: AppEnv,
+  user: DbUserRow,
+  body: AiRequestBody,
+  logContext?: AiUsageLogContext,
+): Promise<unknown> => {
   switch (body.action) {
     case 'generateGeminiSentence':
-      return runMeteredAiAction(env, user, 'generateGeminiSentence', () => generateGeminiSentence(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateGeminiSentence', () => generateGeminiSentence(env, body.payload), logContext);
     case 'generateWordImage':
-      return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, body.payload), logContext);
     case 'generateAIQuiz':
-      return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, body.payload), logContext);
     case 'extractVocabularyFromText':
-      return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload));
+      return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload), logContext);
     case 'extractVocabularyFromMedia':
-      return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, body.payload));
+      return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, body.payload), logContext);
     case 'generateLearningPlan':
       if (!env.GEMINI_API_KEY) {
-        guardAiActionAccess(user, 'generateLearningPlan');
+        assertAiActionAllowed(user, 'generateLearningPlan');
         return buildFallbackLearningPlan({
           uid: user.id,
           grade: (body.payload?.grade || UserGrade.ADULT) as UserGrade,
@@ -583,15 +553,15 @@ export const handleAiAction = async (env: AppEnv, user: DbUserRow, body: AiReque
           learningPreference: (body.payload?.learningPreference || null) as LearningPreference | null,
         });
       }
-      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, body.payload), logContext);
     case 'generateInstructorFollowUp':
-      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, body.payload), logContext);
     case 'generateDiagnosticTest':
-      return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, body.payload), logContext);
     case 'generateAdvancedDiagnosticTest':
-      return runMeteredAiAction(env, user, 'generateAdvancedDiagnosticTest', () => generateAdvancedDiagnosticTest(env, body.payload));
+      return runMeteredAiAction(env, user, 'generateAdvancedDiagnosticTest', () => generateAdvancedDiagnosticTest(env, body.payload), logContext);
     case 'evaluateAdvancedTest':
-      return runMeteredAiAction(env, user, 'evaluateAdvancedTest', () => evaluateAdvancedTest(env, body.payload));
+      return runMeteredAiAction(env, user, 'evaluateAdvancedTest', () => evaluateAdvancedTest(env, body.payload), logContext);
     default:
       throw new HttpError(404, '未知のAI操作です。');
   }

@@ -10,7 +10,8 @@ import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
-import { storage } from '../services/storage';
+import { submitCommercialRequest } from '../services/commercial';
+import type { CommercialRequestPayload } from '../contracts/storage';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
 
@@ -60,8 +61,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
 
-  const handleSubmitCommercialRequest = React.useCallback(async (payload: Parameters<typeof storage.submitCommercialRequest>[0]) => {
-    await storage.submitCommercialRequest(payload);
+  const handleSubmitCommercialRequest = React.useCallback(async (payload: CommercialRequestPayload) => {
+    await submitCommercialRequest(payload);
     await refreshDashboard();
   }, [refreshDashboard]);
 

@@ -97,7 +97,10 @@ export interface DbWritingAssetRow {
   byte_size: number;
   r2_key: string;
   upload_token: string | null;
+  upload_expires_at: number | null;
+  upload_consumed_at: number | null;
   uploaded_at: number | null;
+  uploaded_etag: string | null;
 }
 
 export interface DbWritingEvaluationRow {

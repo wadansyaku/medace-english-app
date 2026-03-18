@@ -17,6 +17,7 @@ import {
   createSubmissionCode,
   encodeSubmissionMarker,
 } from '../../../utils/writing';
+import type { AiUsageLogContext } from '../ai-metering';
 import { HttpError, noContent } from '../http';
 import { readFirst } from '../storage-support';
 import type { AppEnv, DbUserRow } from '../types';
@@ -44,6 +45,7 @@ import {
   readSubmissionAssetRowByUploadToken,
   readSubmissionAssetRowsByIdsForAttempt,
   readSubmissionAssetRowsForAttempt,
+  readSubmissionRowByAssignmentAttempt,
   readTemplateRow,
 } from './repository';
 import {
@@ -51,20 +53,16 @@ import {
   readSubmissionContext,
 } from './reads';
 import {
-  createSubmissionRecord,
-  insertSubmissionEvaluations,
-  linkSubmissionAssets,
+  commitFinalizedSubmission,
+  commitTeacherReviewDecision,
   resolveAssignmentStatusForTeacherDecision,
   setAssignmentCompleted,
-  setAssignmentReviewReady,
-  setAssignmentTeacherDecision,
-  setSubmissionSelectedEvaluation,
-  upsertTeacherReviewRecord,
 } from './mutation-state';
 import { syncWritingActivitySideEffects } from './mutation-side-effects';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
+const WRITING_UPLOAD_URL_TTL_MS = 15 * 60 * 1000;
 
 const encodeBase64 = (buffer: ArrayBuffer): string => {
   const bytes = new Uint8Array(buffer);
@@ -118,10 +116,17 @@ const getAssignmentRowOrThrow = async (env: AppEnv, assignmentId: string) => {
   return row;
 };
 
+const isUploadReservationActive = (row: DbWritingAssetRow, now: number): boolean => {
+  if (row.uploaded_at) return true;
+  if (row.upload_consumed_at) return false;
+  return Number(row.upload_expires_at || 0) > now;
+};
+
 export const handleGenerateWritingAssignment = async (
   env: AppEnv,
   user: DbUserRow,
   request: GenerateWritingAssignmentRequest,
+  logContext?: AiUsageLogContext,
 ): Promise<WritingAssignment> => {
   guardTeacher(user);
   const organization = await requireWritingOrganizationContext(env, user);
@@ -156,6 +161,7 @@ export const handleGenerateWritingAssignment = async (
     student.display_name,
     request.topicHint,
     request.notes,
+    logContext,
   );
   const submissionCode = createSubmissionCode();
   const assignmentId = crypto.randomUUID();
@@ -251,11 +257,13 @@ export const handleCreateWritingUploadUrl = async (
     throw new HttpError(400, 'PDF または画像のみ提出できます。');
   }
 
+  const now = Date.now();
   const existingAssets = await readSubmissionAssetRowsForAttempt(env, request.assignmentId, attemptNo);
-  if (isPdf && existingAssets.length > 0) {
+  const activeAssets = existingAssets.filter((row) => isUploadReservationActive(row, now));
+  if (isPdf && activeAssets.length > 0) {
     throw new HttpError(400, 'PDF 提出は1ファイルのみです。');
   }
-  if (!isPdf && existingAssets.length >= 4) {
+  if (!isPdf && activeAssets.length >= 4) {
     throw new HttpError(400, '画像提出は最大4枚までです。');
   }
 
@@ -263,13 +271,13 @@ export const handleCreateWritingUploadUrl = async (
   const uploadToken = crypto.randomUUID();
   const safeName = request.fileName.replace(/[^\w.\-]+/g, '_');
   const r2Key = `${assignmentRow.organization_id || 'org-unknown'}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
-  const now = Date.now();
+  const expiresAt = now + WRITING_UPLOAD_URL_TTL_MS;
 
   await env.DB.prepare(`
     INSERT INTO writing_submission_assets (
       id, assignment_id, submission_id, attempt_no, asset_order, file_name, mime_type, byte_size, r2_key, upload_token,
-      created_at, updated_at
-    ) VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+      upload_expires_at, created_at, updated_at
+    ) VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
   `).bind(
     assetId,
     request.assignmentId,
@@ -279,6 +287,7 @@ export const handleCreateWritingUploadUrl = async (
     mimeType,
     r2Key,
     uploadToken,
+    expiresAt,
     now,
     now,
   ).run();
@@ -292,6 +301,7 @@ export const handleCreateWritingUploadUrl = async (
       'Content-Type': mimeType,
     },
     attemptNo,
+    expiresAt,
   };
 };
 
@@ -304,25 +314,33 @@ export const handleWritingAssetUpload = async (
   if (!assetRow) {
     throw new HttpError(404, 'アップロードトークンが無効です。');
   }
+  const now = Date.now();
+  if (Number(assetRow.upload_expires_at || 0) <= now) {
+    throw new HttpError(410, 'アップロードURLの有効期限が切れています。再度アップロードURLを取得してください。');
+  }
+  if (assetRow.upload_consumed_at || assetRow.uploaded_at) {
+    throw new HttpError(409, 'このアップロードURLはすでに使用済みです。');
+  }
   if (!env.WRITING_ASSETS) {
     throw new HttpError(503, 'WRITING_ASSETS が設定されていません。');
   }
 
   const body = await request.arrayBuffer();
-  await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
+  const object = await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
     httpMetadata: {
       contentType: assetRow.mime_type,
     },
   });
 
-  const now = Date.now();
   await env.DB.prepare(`
     UPDATE writing_submission_assets
-    SET byte_size = ?, uploaded_at = ?, updated_at = ?
+    SET byte_size = ?, uploaded_at = ?, upload_consumed_at = ?, uploaded_etag = ?, updated_at = ?
     WHERE id = ?
   `).bind(
     body.byteLength,
     now,
+    now,
+    object?.etag || null,
     now,
     assetRow.id,
   ).run();
@@ -334,6 +352,7 @@ export const handleFinalizeWritingSubmission = async (
   env: AppEnv,
   user: DbUserRow,
   request: FinalizeWritingSubmissionRequest & { manualTranscript?: string },
+  logContext?: AiUsageLogContext,
 ): Promise<WritingSubmissionDetailResponse> => {
   guardWritingAccess(user);
   const assignmentRow = await getAssignmentRowOrThrow(env, request.assignmentId);
@@ -343,8 +362,15 @@ export const handleFinalizeWritingSubmission = async (
   if (!attemptNo || attemptNo > Number(assignmentRow.max_attempts || 2)) {
     throw new HttpError(400, '提出回数が不正です。');
   }
+  const existingSubmission = await readSubmissionRowByAssignmentAttempt(env, request.assignmentId, attemptNo);
+  if (existingSubmission) {
+    throw new HttpError(409, 'この提出はすでに処理済みです。');
+  }
   if (request.assetIds.length === 0) {
     throw new HttpError(400, '提出ファイルを1つ以上選択してください。');
+  }
+  if (assignmentRow.status !== AssignmentStatus.ISSUED && assignmentRow.status !== AssignmentStatus.REVISION_REQUESTED) {
+    throw new HttpError(400, '現在の状態では提出できません。');
   }
 
   const assetRows = await readSubmissionAssetRowsByIdsForAttempt(
@@ -369,9 +395,21 @@ export const handleFinalizeWritingSubmission = async (
         console.warn('Falling back to fixture OCR because asset loading failed.', error);
         return [];
       });
-  const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript);
+  const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript, logContext);
   const now = Date.now();
-  const submissionId = await createSubmissionRecord(env, {
+  const submissionId = crypto.randomUUID();
+  const assignmentWithSubmission = await readAssignmentResponse(env, request.assignmentId);
+  const evaluations = await runWritingEvaluations(
+    env,
+    user,
+    assignmentWithSubmission,
+    ocrResult.transcript,
+    logContext,
+  );
+  const selectedEvaluation = evaluations.find((evaluation) => evaluation.isDefault) || evaluations[0];
+
+  await commitFinalizedSubmission(env, {
+    submissionId,
     assignmentId: request.assignmentId,
     attemptNo,
     source: request.source,
@@ -380,34 +418,10 @@ export const handleFinalizeWritingSubmission = async (
     transcriptConfidence: ocrResult.confidence,
     ocrProvider: ocrResult.provider,
     ocrProvenance: ocrResult.provenance,
-    now,
-  });
-  await linkSubmissionAssets(env, {
-    submissionId,
-    assignmentId: request.assignmentId,
-    attemptNo,
     assetRows,
-    now,
-  });
-
-  const assignmentWithSubmission = await readAssignmentResponse(env, request.assignmentId);
-  const evaluations = await runWritingEvaluations(env, user, assignmentWithSubmission, ocrResult.transcript);
-  const selectedEvaluation = evaluations.find((evaluation) => evaluation.isDefault) || evaluations[0];
-
-  await insertSubmissionEvaluations(env, {
-    submissionId,
     evaluations,
-    promptSnapshot: assignmentRow.prompt_snapshot,
-    now,
-  });
-  await setSubmissionSelectedEvaluation(env, {
-    submissionId,
     selectedEvaluationId: selectedEvaluation.id,
-    now,
-  });
-  await setAssignmentReviewReady(env, {
-    assignmentId: request.assignmentId,
-    attemptNo,
+    promptSnapshot: assignmentRow.prompt_snapshot,
     now,
   });
   await syncWritingActivitySideEffects(env, {
@@ -439,24 +453,20 @@ const applyTeacherReview = async (
 
   const now = Date.now();
   const reviewId = detail.submission.teacherReview?.id || crypto.randomUUID();
-  await upsertTeacherReviewRecord(env, {
-    submissionId,
-    reviewId,
-    reviewerUserId: user.id,
-    payload,
-    decision,
-    now,
-  });
-
   const nextStatus = resolveAssignmentStatusForTeacherDecision(
     decision,
     detail.submission.attemptNo,
     detail.assignment.maxAttempts,
   );
 
-  await setAssignmentTeacherDecision(env, {
+  await commitTeacherReviewDecision(env, {
+    submissionId,
+    reviewId,
+    reviewerUserId: user.id,
+    payload,
+    decision,
     assignmentId: detail.assignment.id,
-    status: nextStatus,
+    assignmentStatus: nextStatus,
     now,
   });
   await syncWritingActivitySideEffects(env, {
