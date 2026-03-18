@@ -31,12 +31,12 @@ describe('resolveStorageMode', () => {
         commercial: {
           available: false,
           provider: 'unavailable',
-          usesMockData: false,
+          usesMockData: true,
         },
         announcements: {
           available: false,
           provider: 'unavailable',
-          usesMockData: false,
+          usesMockData: true,
         },
       }),
     }));

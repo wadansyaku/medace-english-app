@@ -817,9 +817,10 @@ class IndexedDBStorageService implements IStorageService {
       throw new Error('進行中の申請があるため、新しい申請は作成できません。');
     }
 
+    const nextRequestId = await this.getNextCommercialRequestId();
     const store = await this.getStore(STORES.COMMERCIAL_REQUESTS, 'readwrite');
     const nextRequest: CommercialRequest = {
-      id: await this.getNextCommercialRequestId(),
+      id: nextRequestId,
       kind: payload.kind,
       status: CommercialRequestStatus.OPEN,
       contactName: payload.contactName.trim(),
@@ -885,10 +886,13 @@ class IndexedDBStorageService implements IStorageService {
   async markAnnouncementSeen(announcementId: string): Promise<void> {
     const sessionUser = await this.getSession();
     if (!sessionUser) return;
-    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
     const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
-    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(store, receiptId);
+    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(
+      await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS),
+      receiptId,
+    );
     const nextSeenAt = current?.seenAt || Date.now();
+    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
     await requestToPromise(store.put({
       id: receiptId,
       announcementId,
@@ -902,10 +906,13 @@ class IndexedDBStorageService implements IStorageService {
   async acknowledgeAnnouncement(announcementId: string): Promise<void> {
     const sessionUser = await this.getSession();
     if (!sessionUser) return;
-    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
     const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
-    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(store, receiptId);
+    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(
+      await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS),
+      receiptId,
+    );
     const now = Date.now();
+    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
     await requestToPromise(store.put({
       id: receiptId,
       announcementId,

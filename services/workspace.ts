@@ -52,21 +52,23 @@ const unavailableWorkspaceService: WorkspaceService = {
 };
 
 const previewWorkspaceService: WorkspaceService = {
-  assignStudentInstructor: unavailable,
-  assignWeeklyMission: unavailable,
-  createWeeklyMission: unavailable,
+  assignStudentInstructor: (...args) => storage.assignStudentInstructor(...args),
+  assignWeeklyMission: (...args) => storage.assignWeeklyMission(...args),
+  createWeeklyMission: (...args) => storage.createWeeklyMission(...args),
   getAllStudentsProgress: (...args) => storage.getAllStudentsProgress(...args),
   getBooks: (...args) => storage.getBooks(...args),
   getOrganizationDashboardSnapshot: (...args) => storage.getOrganizationDashboardSnapshot(...args),
   getOrganizationSettingsSnapshot: (...args) => storage.getOrganizationSettingsSnapshot(...args),
   getStudentWorksheetSnapshot: (...args) => storage.getStudentWorksheetSnapshot(...args),
   getWeeklyMissionBoard: (...args) => storage.getWeeklyMissionBoard(...args),
-  sendInstructorNotification: unavailable,
-  setInstructorCohorts: unavailable,
-  setStudentCohort: unavailable,
-  updateMissionProgress: (_assignmentId: string, _eventType: MissionProgressEventType) => unavailable(),
-  updateOrganizationProfile: unavailable,
-  upsertOrganizationCohort: unavailable,
+  sendInstructorNotification: (...args) => storage.sendInstructorNotification(...args),
+  setInstructorCohorts: (...args) => storage.setInstructorCohorts(...args),
+  setStudentCohort: (...args) => storage.setStudentCohort(...args),
+  updateMissionProgress: (assignmentId: string, eventType: MissionProgressEventType) => (
+    storage.updateMissionProgress(assignmentId, eventType)
+  ),
+  updateOrganizationProfile: (...args) => storage.updateOrganizationProfile(...args),
+  upsertOrganizationCohort: (...args) => storage.upsertOrganizationCohort(...args),
 };
 
 export const workspaceService: WorkspaceService = workspaceAvailable

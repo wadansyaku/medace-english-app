@@ -4,6 +4,7 @@ import { apiPost } from './apiClient';
 import { resolveStorageMode } from '../shared/storageMode';
 import { CloudflareStorageService } from './cloudflare';
 import type { CommercialRequestUpdatePayload } from '../contracts/storage';
+import { storage } from './storage';
 
 export const submitPublicCommercialRequest = async (
   payload: CommercialRequestPayload,
@@ -13,11 +14,13 @@ export const submitPublicCommercialRequest = async (
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const commercialApiAvailable = storageMode.capabilities.commercial.available;
-const unavailableCommercialMessage = '導入申請機能は Cloudflare storage mode でのみ利用できます。';
+const commercialMockAvailable = storageMode.capabilities.commercial.usesMockData;
+const unavailableCommercialMessage = '導入申請機能はこの storage mode では利用できません。';
 const cloudflareStorage = new CloudflareStorageService();
+const commercialService = commercialApiAvailable ? cloudflareStorage : storage;
 
 const assertCommercialAvailable = (): void => {
-  if (!commercialApiAvailable) {
+  if (!commercialApiAvailable && !commercialMockAvailable) {
     throw new Error(unavailableCommercialMessage);
   }
 };
@@ -26,17 +29,17 @@ export const submitCommercialRequest = async (
   payload: CommercialRequestPayload,
 ): Promise<CommercialRequest> => {
   assertCommercialAvailable();
-  return cloudflareStorage.submitCommercialRequest(payload);
+  return commercialService.submitCommercialRequest(payload);
 };
 
 export const listCommercialRequests = async (): Promise<CommercialRequest[]> => {
   assertCommercialAvailable();
-  return cloudflareStorage.listCommercialRequests();
+  return commercialService.listCommercialRequests();
 };
 
 export const updateCommercialRequest = async (
   payload: CommercialRequestUpdatePayload,
 ): Promise<CommercialRequest> => {
   assertCommercialAvailable();
-  return cloudflareStorage.updateCommercialRequest(payload);
+  return commercialService.updateCommercialRequest(payload);
 };

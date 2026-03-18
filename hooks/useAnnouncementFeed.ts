@@ -14,7 +14,8 @@ const EMPTY_FEED: ProductAnnouncementFeed = {
   unreadCount: 0,
 };
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
-const canUseAnnouncementApi = storageMode.capabilities.announcements.available;
+const canUseAnnouncementFeed = storageMode.capabilities.announcements.available
+  || storageMode.capabilities.announcements.usesMockData;
 
 export interface AnnouncementFeedController {
   feed: ProductAnnouncementFeed;
@@ -33,7 +34,7 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
       setFeed(EMPTY_FEED);
       return;
     }
-    if (!canUseAnnouncementApi) {
+    if (!canUseAnnouncementFeed) {
       setFeed(EMPTY_FEED);
       return;
     }
@@ -55,13 +56,13 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
   }, [refresh]);
 
   const markSeen = useCallback(async (announcementId: string) => {
-    if (!canUseAnnouncementApi) return;
+    if (!canUseAnnouncementFeed) return;
     await markAnnouncementSeen(announcementId);
     await refresh();
   }, [refresh]);
 
   const acknowledge = useCallback(async (announcementId: string) => {
-    if (!canUseAnnouncementApi) return;
+    if (!canUseAnnouncementFeed) return;
     await acknowledgeAnnouncement(announcementId);
     await refresh();
   }, [refresh]);

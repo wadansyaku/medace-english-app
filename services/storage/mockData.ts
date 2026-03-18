@@ -117,7 +117,7 @@ export const IDB_MOCK_PRODUCT_ANNOUNCEMENTS: ProductAnnouncement[] = [
     id: 'mock-major-business',
     title: '学校・教室向けワークスペースを更新しました',
     body: '講師フォロー、添削キュー、導入相談の運用を 1 つの導線で確認できます。',
-    severity: AnnouncementSeverity.MAJOR,
+    severity: AnnouncementSeverity.UPDATE,
     subscriptionPlans: [SubscriptionPlan.TOB_FREE, SubscriptionPlan.TOB_PAID],
     audienceRoles: [AnnouncementAudienceRole.INSTRUCTOR, AnnouncementAudienceRole.GROUP_ADMIN, AnnouncementAudienceRole.ADMIN],
     publishedAt: Date.now() - 2 * 3600 * 1000,
