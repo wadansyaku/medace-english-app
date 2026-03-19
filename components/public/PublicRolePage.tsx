@@ -30,12 +30,17 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
   onDemoLogin,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
+  const previewSectionRef = useRef<HTMLDivElement | null>(null);
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
   const role = useMemo(() => getPublicBusinessRoleConfig(roleKey), [roleKey]);
   const primaryAction = useMemo(
     () => getPublicBusinessRolePrimaryAction(roleKey, runtimeFlags),
     [roleKey, runtimeFlags],
   );
+
+  const openPreview = () => {
+    previewSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const openConsultation = () => {
     requestSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -44,6 +49,10 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
   const handlePrimaryAction = () => {
     if (primaryAction.kind === 'demo') {
       onDemoLogin(role.demoRole, role.demoOrganizationRole);
+      return;
+    }
+    if (primaryAction.kind === 'preview') {
+      openPreview();
       return;
     }
     openConsultation();
@@ -86,10 +95,13 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold ${
                 primaryAction.kind === 'demo'
                   ? 'bg-medace-600 text-white'
-                  : 'border border-slate-200 bg-white text-slate-700'
+                  : primaryAction.kind === 'preview'
+                    ? 'border border-medace-200 bg-white text-medace-700'
+                    : 'border border-slate-200 bg-white text-slate-700'
               }`}
             >
               {primaryAction.kind === 'request' && <Lock className="h-4 w-4" />}
+              {primaryAction.kind === 'preview' && <Settings className="h-4 w-4" />}
               {primaryAction.label}
             </button>
             <button
@@ -117,6 +129,39 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               ))}
             </div>
           </section>
+
+          {role.previewPanels && role.previewPanels.length > 0 && (
+            <section
+              ref={previewSectionRef}
+              data-testid={`public-role-preview-${role.key}`}
+              className="rounded-[28px] border border-medace-100 bg-gradient-to-br from-white via-medace-50/60 to-slate-50 px-6 py-6 shadow-[0_18px_44px_rgba(255,130,22,0.10)]"
+            >
+              <p className="text-sm font-bold tracking-[0.12em] text-medace-700">Role UI Preview</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">実権限を開かずに画面構成だけ確認できます</h2>
+              <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
+                本番公開環境では service admin の実データや更新操作には入れません。代わりに、導入相談、配信、お知らせ運用で見る代表 UI をこの場で確認できます。
+              </p>
+              <div className="mt-6 grid gap-4 xl:grid-cols-3">
+                {role.previewPanels.map((panel) => (
+                  <div key={panel.title} className="rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{panel.eyebrow}</p>
+                    <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{panel.title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">{panel.body}</p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {panel.metrics.map((metric) => (
+                        <span
+                          key={metric}
+                          className="inline-flex items-center rounded-full border border-medace-100 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700"
+                        >
+                          {metric}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="rounded-[28px] border border-slate-200 bg-slate-50 px-6 py-5">
             <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Demo Policy</p>

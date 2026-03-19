@@ -7,6 +7,7 @@ import { getManagedRobotsContent } from '../components/Layout';
 import PublicInfoPage from '../components/PublicInfoPage';
 import {
   PUBLIC_BUSINESS_ROLE_CONFIGS,
+  getPublicBusinessRoleConfig,
   getPublicBusinessRolePrimaryAction,
 } from '../shared/publicBusinessRoles';
 import { resolveRuntimeFlags } from '../shared/runtimeFlags';
@@ -82,13 +83,24 @@ describe('public business role entrypoints', () => {
       label: 'この役割を試す',
     });
     expect(getPublicBusinessRolePrimaryAction('service-admin', localFlags)).toMatchObject({
-      kind: 'request',
-      label: '導入相談へ進む',
+      kind: 'preview',
+      label: '管理画面プレビューを見る',
     });
     expect(getPublicBusinessRolePrimaryAction('group-admin', productionFlags)).toMatchObject({
-      kind: 'request',
-      label: '導入相談へ進む',
+      kind: 'demo',
+      label: 'この役割を試す',
     });
+    expect(getPublicBusinessRolePrimaryAction('service-admin', productionFlags)).toMatchObject({
+      kind: 'preview',
+      label: '管理画面プレビューを見る',
+    });
+  });
+
+  it('keeps a dedicated service-admin preview dataset for production-safe browsing', () => {
+    const serviceAdminConfig = getPublicBusinessRoleConfig('service-admin');
+
+    expect(serviceAdminConfig.previewPanels?.length).toBeGreaterThan(0);
+    expect(serviceAdminConfig.previewPanels?.map((panel) => panel.title)).toContain('導入相談を運用タスクとして並べる');
   });
 
   it('applies noindex only for preview deployments or explicit role pages', () => {

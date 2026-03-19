@@ -14,6 +14,13 @@ export interface PublicBusinessRoleHighlight {
   detail: string;
 }
 
+export interface PublicBusinessRolePreviewPanel {
+  eyebrow: string;
+  title: string;
+  body: string;
+  metrics: string[];
+}
+
 export interface PublicBusinessRoleConfig {
   key: PublicBusinessRoleKey;
   slug: PublicBusinessRoleKey;
@@ -29,6 +36,7 @@ export interface PublicBusinessRoleConfig {
   summary: string;
   primaryActionSummary: string;
   highlights: PublicBusinessRoleHighlight[];
+  previewPanels?: PublicBusinessRolePreviewPanel[];
   demoRole: UserRole;
   demoOrganizationRole?: OrganizationRole;
   requestSource: string;
@@ -37,7 +45,7 @@ export interface PublicBusinessRoleConfig {
 }
 
 export interface PublicBusinessRolePrimaryAction {
-  kind: 'demo' | 'request';
+  kind: 'demo' | 'preview' | 'request';
   label: string;
   note: string;
 }
@@ -173,6 +181,26 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
         detail: '教材カタログや運用設定の変更を、サービス全体への影響を見ながら扱えます。',
       },
     ],
+    previewPanels: [
+      {
+        eyebrow: 'Commercial Queue',
+        title: '導入相談を運用タスクとして並べる',
+        body: '学校・教室から届いた相談を、担当、温度感、次アクション付きで一覧管理する想定です。',
+        metrics: ['新着 4 件', '今週の初回返信 92%', '未対応 1 件'],
+      },
+      {
+        eyebrow: 'Announcements',
+        title: '対象ロール別に配信を切り替える',
+        body: '全体告知と、講師・学校管理者向けの運用連絡を分けて配信する画面を想定しています。',
+        metrics: ['全体配信 2 件', '講師向け下書き 1 件', '既読率 78%'],
+      },
+      {
+        eyebrow: 'Catalog Ops',
+        title: '教材更新を横断で管理する',
+        body: '教材カタログ、公開状態、更新メモを 1 画面で確認しながら保守する想定です。',
+        metrics: ['要更新教材 3 冊', '公開中 28 冊', '保留中 2 件'],
+      },
+    ],
     demoRole: UserRole.ADMIN,
     requestSource: 'PUBLIC_ROLE_SERVICE_ADMIN',
     requestTitle: 'サービス管理画面について相談する',
@@ -227,6 +255,12 @@ export const getPublicBusinessRolePrimaryAction = (
           ? '管理用デモはパスワード確認のあとに開始します。'
           : 'ページ訪問時には自動ログインせず、クリックで体験を開始します。',
       }
+    : roleKey === 'service-admin'
+      ? {
+          kind: 'preview',
+          label: '管理画面プレビューを見る',
+          note: '本番公開環境では実データへ入らず、service admin 向け UI プレビューをこのページ内で確認できます。',
+        }
     : {
         kind: 'request',
         label: '導入相談へ進む',
