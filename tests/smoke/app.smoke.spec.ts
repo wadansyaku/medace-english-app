@@ -715,7 +715,7 @@ test('group admin can open settings and organization rename survives reload acro
 
   await adminPage.getByTestId('organization-settings-name-input').fill(renamedOrganization);
   await adminPage.getByTestId('organization-settings-save').click();
-  await expect(adminPage.getByText('組織表示名を更新しました。')).toBeVisible();
+  await expect(adminPage.getByText(renamedOrganization).first()).toBeVisible();
 
   await adminPage.reload();
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
