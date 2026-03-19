@@ -41,6 +41,10 @@ const runWrangler = (args, options = {}) => {
   return run(wrangler.command, wrangler.args, options);
 };
 
+const sleep = (ms) => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
 const runGhApiJson = (path, { method = 'GET', body } = {}) => {
   const args = ['api', '--method', method, path];
   const options = {};
@@ -205,6 +209,17 @@ const pushRecord = (status, label, detail) => {
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
 const isGithubInventoryPermissionError = (result) => /Resource not accessible by integration/i.test(`${result.stderr}\n${result.stdout}`);
 const isTransientCloudflareApiError = (result) => /Received a malformed response from the API|502 Bad Gateway|503 Service Temporarily Unavailable|504 Gateway Timeout/i.test(`${result.stderr}\n${result.stdout}`);
+
+const runWranglerWithTransientRetries = (args, { transientRetries = 2, retryDelayMs = 1000, ...options } = {}) => {
+  let result = runWrangler(args, options);
+
+  for (let attempt = 1; attempt <= transientRetries && !result.ok && isTransientCloudflareApiError(result); attempt += 1) {
+    sleep(retryDelayMs * attempt);
+    result = runWrangler(args, options);
+  }
+
+  return result;
+};
 
 const recordCommand = (label, result, detailOnSuccess, { allowTransientFailure = false } = {}) => {
   if (result.ok) {
@@ -371,7 +386,7 @@ if (githubReady && repoSlug) {
 }
 
 if (cloudflareReady) {
-  const pagesProjects = runWrangler(['pages', 'project', 'list']);
+  const pagesProjects = runWranglerWithTransientRetries(['pages', 'project', 'list']);
   if (recordCommand('Cloudflare Pages project inventory', pagesProjects, 'retrieved', { allowTransientFailure: true })) {
     pushRecord(
       pagesProjects.stdout.includes(pagesProject) ? 'ok' : 'error',
@@ -462,7 +477,7 @@ if (cloudflareReady) {
   }
 
   const checkPagesSecrets = (envName, args) => {
-    const secrets = runWrangler(['pages', 'secret', 'list', '--project-name', pagesProject, ...args]);
+    const secrets = runWranglerWithTransientRetries(['pages', 'secret', 'list', '--project-name', pagesProject, ...args]);
     const labelPrefix = `Pages ${envName}`;
     if (!recordCommand(`${labelPrefix} secret inventory`, secrets, 'retrieved')) {
       return;
@@ -492,7 +507,7 @@ if (cloudflareReady) {
 
   const currentBranch = run('git', ['branch', '--show-current']);
   if (currentBranch.ok && currentBranch.stdout) {
-    const deployments = runWrangler(['pages', 'deployment', 'list', '--project-name', pagesProject]);
+    const deployments = runWranglerWithTransientRetries(['pages', 'deployment', 'list', '--project-name', pagesProject]);
     if (recordCommand('Cloudflare deployment inventory', deployments, 'retrieved', { allowTransientFailure: true })) {
       const branch = currentBranch.stdout.trim();
       const matchingLine = deployments.stdout
