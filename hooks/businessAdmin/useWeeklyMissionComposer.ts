@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { storage } from '../../services/storage';
+import { workspaceService } from '../../services/workspace';
 import { buildWeaknessMissionRationale, getWeaknessMissionDefaults } from '../../shared/weakness';
 import {
   LearningTrack,
@@ -87,7 +87,7 @@ export const useWeeklyMissionComposer = ({
 
     try {
       const selectedBook = books.find((book) => book.id === missionBookId);
-      const mission = await storage.createWeeklyMission({
+      const mission = await workspaceService.createWeeklyMission({
         learningTrack: missionTrack,
         title: `${selectedAssignmentStudent.name}向け 今週ミッション`,
         rationale: buildWeaknessMissionRationale({
@@ -102,7 +102,7 @@ export const useWeeklyMissionComposer = ({
         writingAssignmentId: missionWritingAssignmentId || undefined,
         dueAt: missionDueDate ? Date.parse(`${missionDueDate}T23:59:59+09:00`) : undefined,
       });
-      await storage.assignWeeklyMission(mission.id, selectedAssignmentStudent.uid);
+      await workspaceService.assignWeeklyMission(mission.id, selectedAssignmentStudent.uid);
       setNotice({
         tone: 'success',
         message: `${selectedAssignmentStudent.name}さんへ今週ミッションを配布しました。`,

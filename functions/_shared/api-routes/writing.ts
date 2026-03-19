@@ -2,6 +2,7 @@ import { requireUser } from '../auth';
 import { handleWritingAssetUpload, handleWritingRequest } from '../writing-actions';
 import {
   ApiRouteDefinition,
+  createApiRequestLogContext,
 } from './runtime';
 
 export const writingRoutes: ApiRouteDefinition[] = [
@@ -17,7 +18,16 @@ export const writingRoutes: ApiRouteDefinition[] = [
       const user = await requireUser(env, request);
       return {
         logUser: user,
-        response: await handleWritingRequest(env, user, request, pathname.replace(/^writing/, '')),
+        response: await handleWritingRequest(
+          env,
+          user,
+          request,
+          pathname.replace(/^writing/, ''),
+          {
+            ...createApiRequestLogContext(request, env, pathname || 'writing'),
+            source: 'writing',
+          },
+        ),
       };
     },
   },

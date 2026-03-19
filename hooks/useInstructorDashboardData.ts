@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { storage } from '../services/storage';
+import { workspaceService } from '../services/workspace';
 import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
+import { resolveStorageMode } from '../shared/storageMode';
 import type {
   StudentSummary,
   WritingAssignment,
   WritingQueueItem,
 } from '../types';
+
+const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
+const canUseInstructorWorkspaceApi = storageMode.capabilities.organization.available;
+const canUseInstructorWorkspacePreview = storageMode.capabilities.organization.usesMockData;
 
 export const useInstructorDashboardData = () => {
   const [students, setStudents] = useState<StudentSummary[]>([]);
@@ -19,9 +24,18 @@ export const useInstructorDashboardData = () => {
     setLoading(true);
     setError(null);
 
+    if (!canUseInstructorWorkspaceApi && !canUseInstructorWorkspacePreview) {
+      setStudents([]);
+      setWritingAssignments([]);
+      setWritingQueue([]);
+      setLoading(false);
+      setError('講師ワークスペースは Cloudflare storage mode でのみ利用できます。');
+      return;
+    }
+
     try {
       const [studentRows, assignmentResponse, queueResponse] = await Promise.all([
-        storage.getAllStudentsProgress(),
+        workspaceService.getAllStudentsProgress(),
         listWritingAssignments('organization'),
         listWritingReviewQueue('QUEUE'),
       ]);

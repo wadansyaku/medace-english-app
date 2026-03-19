@@ -17,6 +17,7 @@ import {
   assertAiActionAllowed,
   assertBudgetAvailable,
   recordAiUsageEvent,
+  type AiUsageLogContext,
 } from './ai-metering';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
@@ -122,12 +123,14 @@ const recordWritingUsage = async (
   action: 'generateWritingPrompt' | 'ocrWritingSubmission' | 'evaluateWritingSubmission',
   provenance: WritingAiExecutionProvenance,
   usedAi: boolean,
+  logContext?: AiUsageLogContext,
 ): Promise<void> => {
   await recordAiUsageEvent(env, user, {
     action,
     provider: provenance.provider,
     model: provenance.model,
     usedAi,
+    ...(logContext ? { logContext } : {}),
   });
 };
 
@@ -531,7 +534,11 @@ const runLiveEvaluation = async (
   }
 };
 
-export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiAdapter => {
+export const createWritingAiAdapter = (
+  env: AppEnv,
+  user: DbUserRow,
+  logContext?: AiUsageLogContext,
+): WritingAiAdapter => {
   const mode = resolveWritingAiMode(env);
 
   const withPromptFallback = async (
@@ -553,7 +560,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
           model: 'fixture-writing-prompt',
         }),
       );
-      await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, false);
+      await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, false, logContext);
       return result;
     };
 
@@ -561,7 +568,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
     try {
       await assertBudgetAvailable(env, user, 'generateWritingPrompt');
       const result = await runLivePrompt(env, user, template, studentName, topicHint, notes);
-      await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, true);
+      await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, true, logContext);
       return result;
     } catch (error) {
       if (mode === 'live' || !isFallbackEligibleError(error)) throw error;
@@ -588,7 +595,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
               notes: 'manual-transcript',
             }),
           };
-      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, false);
+      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, false, logContext);
       return result;
     }
 
@@ -598,7 +605,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
         mode === 'fixture' ? 'fixture' : 'hybrid-fallback',
         fallbackReason,
       );
-      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, false);
+      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, false, logContext);
       return result;
     };
 
@@ -606,7 +613,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
     try {
       await assertBudgetAvailable(env, user, 'ocrWritingSubmission');
       const result = await runLiveOcr(env, user, assignment, assets, manualTranscript);
-      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, true);
+      await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, true, logContext);
       return result;
     } catch (error) {
       if (mode === 'live' || !isFallbackEligibleError(error)) throw error;
@@ -632,7 +639,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
           model: 'fixture-writing-evaluation',
         }),
       );
-      await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, false);
+      await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, false, logContext);
       return result;
     };
 
@@ -642,7 +649,7 @@ export const createWritingAiAdapter = (env: AppEnv, user: DbUserRow): WritingAiA
     try {
       await assertBudgetAvailable(env, user, 'evaluateWritingSubmission');
       const result = await runLiveEvaluation(env, user, provider, assignment, transcript);
-      await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, true);
+      await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, true, logContext);
       return result;
     } catch (error) {
       if (mode === 'live' || !isFallbackEligibleError(error)) throw error;

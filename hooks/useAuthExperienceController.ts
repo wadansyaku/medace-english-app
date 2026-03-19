@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { storage } from '../services/storage';
+import { sessionService } from '../services/session';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
@@ -66,7 +66,7 @@ export const useAuthExperienceController = ({
   useEffect(() => {
     const initSession = async () => {
       try {
-        const sessionUser = await storage.getSession();
+        const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);
           const homeView = getHomeAppRoute(sessionUser);
@@ -102,7 +102,7 @@ export const useAuthExperienceController = ({
     setAuthError(null);
     setAuthLoading(true);
     try {
-      const loggedInUser = await storage.login(role, demoPassword, organizationRole);
+      const loggedInUser = await sessionService.login(role, demoPassword, organizationRole);
       if (!loggedInUser) {
         setAuthError('ログインに失敗しました。');
         return;
@@ -178,7 +178,7 @@ export const useAuthExperienceController = ({
 
     setAuthLoading(true);
     try {
-      const loggedInUser = await storage.authenticate(
+      const loggedInUser = await sessionService.authenticate(
         email,
         password,
         authMode === 'SIGNUP',
@@ -208,7 +208,7 @@ export const useAuthExperienceController = ({
 
   const handleLogout = async () => {
     setUser(null);
-    await storage.clearSession();
+    await sessionService.clearSession();
     dispatchNavigation({ type: 'reset' });
     setDisplayName('');
     setEmail('');

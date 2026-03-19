@@ -1,17 +1,16 @@
 import { handleError, HttpError } from './http';
 import { apiRoutes } from './api-routes';
 import type { ApiLogUser } from './api-routes/runtime';
+import { createApiRequestLogContext } from './api-routes/runtime';
 import getServerRuntimeFlags from './runtime';
 import type { AppEnv } from './types';
 
-const getDeploymentLabel = (request: Request, env: AppEnv) => {
-  const deployment = getServerRuntimeFlags(request, env).deployment;
-  if (deployment.isLocalhost) return 'local';
-  if (deployment.isPagesPreviewHost) return 'preview';
-  return 'production';
-};
-
-const finalizeApiResponse = (request: Request, env: AppEnv, response: Response): Response => {
+const finalizeApiResponse = (
+  request: Request,
+  env: AppEnv,
+  response: Response,
+  logContext: ReturnType<typeof createApiRequestLogContext>,
+): Response => {
   const headers = new Headers(response.headers);
   if (getServerRuntimeFlags(request, env).deployment.isPagesPreviewHost) {
     headers.set('X-Robots-Tag', 'noindex, nofollow');
@@ -19,6 +18,7 @@ const finalizeApiResponse = (request: Request, env: AppEnv, response: Response):
   if (env.DEPLOYMENT_SHA) {
     headers.set('X-Deployment-Sha', env.DEPLOYMENT_SHA);
   }
+  headers.set('X-Request-Id', logContext.requestId);
 
   return new Response(response.body, {
     status: response.status,
@@ -29,21 +29,20 @@ const finalizeApiResponse = (request: Request, env: AppEnv, response: Response):
 
 const logApiResponse = (
   request: Request,
-  env: AppEnv,
-  pathname: string,
+  logContext: ReturnType<typeof createApiRequestLogContext>,
   response: Response,
   user: ApiLogUser,
   error?: unknown,
 ) => {
   const logPayload = {
     type: 'api_request',
-    method: request.method,
-    pathname: pathname || '/',
+    method: logContext.method,
+    pathname: logContext.pathname,
     hostname: new URL(request.url).hostname,
     status: response.status,
-    deployment: getDeploymentLabel(request, env),
-    deploymentSha: env.DEPLOYMENT_SHA || null,
-    requestId: request.headers.get('cf-ray') || crypto.randomUUID(),
+    deployment: logContext.deployment,
+    deploymentSha: logContext.deploymentSha,
+    requestId: logContext.requestId,
     userId: user?.id || null,
     role: user?.role || null,
     organizationId: user?.organization_id || null,
@@ -57,11 +56,11 @@ const logApiResponse = (
 
 export const onRequest = async (context: { request: Request; env: AppEnv }): Promise<Response> => {
   const { request, env } = context;
-  let pathname = '';
+  const pathname = new URL(request.url).pathname.replace(/^\/api\/?/, '');
+  const logContext = createApiRequestLogContext(request, env, pathname);
   let logUser: ApiLogUser = null;
 
   try {
-    pathname = new URL(request.url).pathname.replace(/^\/api\/?/, '');
     const route = apiRoutes.find((candidate) => candidate.matches({ env, request, pathname }));
     if (!route) {
       throw new HttpError(404, 'APIエンドポイントが見つかりません。');
@@ -70,12 +69,12 @@ export const onRequest = async (context: { request: Request; env: AppEnv }): Pro
     const result = await route.handle({ env, request, pathname });
     logUser = result.logUser ?? null;
 
-    const response = finalizeApiResponse(request, env, result.response);
-    logApiResponse(request, env, pathname, response, logUser);
+    const response = finalizeApiResponse(request, env, result.response, logContext);
+    logApiResponse(request, logContext, response, logUser);
     return response;
   } catch (error) {
-    const response = finalizeApiResponse(request, env, handleError(error));
-    logApiResponse(request, env, pathname, response, logUser, error);
+    const response = finalizeApiResponse(request, env, handleError(error), logContext);
+    logApiResponse(request, logContext, response, logUser, error);
     return response;
   }
 };

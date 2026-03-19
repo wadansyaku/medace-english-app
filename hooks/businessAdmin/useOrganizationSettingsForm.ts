@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { storage } from '../../services/storage';
+import { workspaceService } from '../../services/workspace';
 import type { OrganizationSettingsSnapshot } from '../../types';
 
 interface NoticeState {
@@ -47,7 +47,7 @@ export const useOrganizationSettingsForm = ({
     setNotice(null);
 
     try {
-      await storage.updateOrganizationProfile(organizationDisplayName);
+      await workspaceService.updateOrganizationProfile(organizationDisplayName);
       setNotice({
         tone: 'success',
         message: '組織表示名を更新しました。',
@@ -81,7 +81,7 @@ export const useOrganizationSettingsForm = ({
     setNotice(null);
 
     try {
-      await storage.upsertOrganizationCohort(cohortId, draftName);
+      await workspaceService.upsertOrganizationCohort(cohortId, draftName);
       if (!cohortId) {
         setNewCohortName('');
       }
@@ -125,7 +125,7 @@ export const useOrganizationSettingsForm = ({
     setNotice(null);
 
     try {
-      await storage.setInstructorCohorts(instructorUid, instructorCohortDrafts[instructorUid] || []);
+      await workspaceService.setInstructorCohorts(instructorUid, instructorCohortDrafts[instructorUid] || []);
       setNotice({
         tone: 'success',
         message: '講師のクラス/担当グループ範囲を更新しました。',

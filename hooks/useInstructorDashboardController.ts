@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { generateInstructorFollowUp } from '../services/gemini';
-import { storage } from '../services/storage';
+import { workspaceService } from '../services/workspace';
 import {
   InterventionKind,
   InterventionOutcome,
@@ -158,7 +158,7 @@ export const useInstructorDashboardController = ({
 
     setSending(true);
     try {
-      await storage.sendInstructorNotification(
+      await workspaceService.sendInstructorNotification(
         selectedStudent.uid,
         messageDraft.trim(),
         getTriggerReason(selectedStudent),

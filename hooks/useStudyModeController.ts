@@ -1,7 +1,7 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { EnglishLevel, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
-import { storage } from '../services/storage';
+import { learningService } from '../services/learning';
 import { type GeneratedContext, generateGeminiSentence, generateWordImage } from '../services/gemini';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
@@ -158,11 +158,11 @@ export const useStudyModeController = ({
         let data: WordData[] = [];
         const smartSession = getSmartSessionConfig(bookId);
         if (smartSession) {
-          data = await storage.getDailySessionWords(user.uid, taskIntent?.limit || smartSession.limit, taskIntent || undefined);
+          data = await learningService.getDailySessionWords(user.uid, taskIntent?.limit || smartSession.limit, taskIntent || undefined);
           setIsBookOwner(false);
         } else {
-          data = await storage.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined);
-          const books = await storage.getBooks();
+          data = await learningService.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined);
+          const books = await learningService.getBooks();
           const currentBook = books.find((book) => book.id === bookId);
           if (currentBook) {
             setBookContext(currentBook.sourceContext);
@@ -216,7 +216,7 @@ export const useStudyModeController = ({
           contextCache.current.set(current.id, context);
           if (!cancelled) setAiContext(context ?? null);
           if (context) {
-            await storage.updateWordCache(current.id, context.english, context.japanese);
+            await learningService.updateWordCache(current.id, context.english, context.japanese);
           }
         } finally {
           if (!cancelled) setAiContextLoading(false);
@@ -238,7 +238,7 @@ export const useStudyModeController = ({
         .then((context) => {
           contextCache.current.set(nextWord.id, context);
           if (context) {
-            return storage.updateWordCache(nextWord.id, context.english, context.japanese);
+            return learningService.updateWordCache(nextWord.id, context.english, context.japanese);
           }
           return undefined;
         })
@@ -299,7 +299,7 @@ export const useStudyModeController = ({
     event.stopPropagation();
     if (!currentWord || !editWord.trim() || !editDef.trim()) return;
     const updated: WordData = { ...currentWord, word: editWord, definition: editDef };
-    await storage.updateWord(updated);
+    await learningService.updateWord(updated);
     const nextQueue = [...queue];
     nextQueue[currentIndex] = updated;
     setQueue(nextQueue);
@@ -308,7 +308,7 @@ export const useStudyModeController = ({
 
   const submitReport = async () => {
     if (!currentWord || !reportReason.trim()) return;
-    await storage.reportWord(currentWord.id, reportReason);
+    await learningService.reportWord(currentWord.id, reportReason);
     setShowReportModal(false);
     setReportReason('');
     setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
@@ -316,7 +316,7 @@ export const useStudyModeController = ({
 
   const handleRating = async (rating: number) => {
     if (!currentWord || isAdvancingCard) return;
-    await storage.saveSRSHistory(
+    await learningService.saveSRSHistory(
       user.uid,
       currentWord,
       rating,
@@ -350,9 +350,9 @@ export const useStudyModeController = ({
       const bonusMultiplier = Math.min(currentStreak, 10) * 0.1;
       const bonusXP = Math.round(baseXP * bonusMultiplier);
       const totalXP = baseXP + bonusXP;
-      const result = await storage.addXP(user, totalXP);
+      const result = await learningService.addXP(user, totalXP);
       try {
-        const snapshot = await storage.getDashboardSnapshot(user.uid);
+        const snapshot = await learningService.getDashboardSnapshot(user.uid);
         setWeaknessSummary(buildWeaknessSessionSummary(snapshot.weaknessProfile));
       } catch {
         setWeaknessSummary(buildWeaknessSessionSummary(null));

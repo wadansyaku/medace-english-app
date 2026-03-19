@@ -2,25 +2,9 @@ import type { StorageAction, StorageActionRequest } from '../../contracts/storag
 import { HttpError } from './http';
 import { requireRole } from './auth';
 import getServerRuntimeFlags from './runtime';
-import { announcementStorageActionDefinitions } from './storage-action-registry/announcements';
-import { catalogStorageActionDefinitions } from './storage-action-registry/catalog';
-import { commercialStorageActionDefinitions } from './storage-action-registry/commercial';
-import { dashboardStorageActionDefinitions } from './storage-action-registry/dashboard';
-import { learningStorageActionDefinitions } from './storage-action-registry/learning';
-import { missionStorageActionDefinitions } from './storage-action-registry/missions';
-import { organizationStorageActionDefinitions } from './storage-action-registry/organization';
-import { readRawPayload, type StorageActionDefinitionMap } from './storage-action-runtime';
+import { resolveStorageActionDefinition } from './storage-action-domains';
+import { readRawPayload } from './storage-action-runtime';
 import type { AppEnv, DbUserRow } from './types';
-
-const storageActionDefinitions = {
-  ...catalogStorageActionDefinitions,
-  ...learningStorageActionDefinitions,
-  ...dashboardStorageActionDefinitions,
-  ...organizationStorageActionDefinitions,
-  ...missionStorageActionDefinitions,
-  ...commercialStorageActionDefinitions,
-  ...announcementStorageActionDefinitions,
-} satisfies StorageActionDefinitionMap;
 
 export const handleStorageAction = async (
   env: AppEnv,
@@ -33,7 +17,7 @@ export const handleStorageAction = async (
   }
 
   const action = body.action as StorageAction;
-  const definition = storageActionDefinitions[action];
+  const definition = resolveStorageActionDefinition(action);
   if (!definition) {
     throw new HttpError(404, `未対応のストレージ操作です: ${String(action)}`);
   }

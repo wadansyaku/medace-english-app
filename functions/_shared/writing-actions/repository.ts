@@ -123,6 +123,20 @@ export const readSubmissionRow = async (env: AppEnv, submissionId: string): Prom
   submissionId,
 );
 
+export const readSubmissionRowByAssignmentAttempt = async (
+  env: AppEnv,
+  assignmentId: string,
+  attemptNo: number,
+): Promise<DbWritingSubmissionRow | null> => readFirst(
+  env,
+  `SELECT *
+   FROM writing_submissions
+   WHERE assignment_id = ?
+     AND attempt_no = ?`,
+  assignmentId,
+  attemptNo,
+);
+
 export const readSubmissionDetailBaseRow = async (
   env: AppEnv,
   submissionId: string,

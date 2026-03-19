@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { storage } from '../services/storage';
+import { dashboardService } from '../services/dashboard';
 import type { AdminDashboardSnapshot } from '../types';
 
 export const useAdminDashboardSnapshot = () => {
@@ -12,7 +12,7 @@ export const useAdminDashboardSnapshot = () => {
     setError(null);
 
     try {
-      const nextSnapshot = await storage.getAdminDashboardSnapshot();
+      const nextSnapshot = await dashboardService.getAdminDashboardSnapshot();
       setSnapshot(nextSnapshot);
     } catch (loadError) {
       console.error(loadError);

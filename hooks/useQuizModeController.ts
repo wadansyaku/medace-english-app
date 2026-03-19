@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import { storage } from '../services/storage';
+import { learningService } from '../services/learning';
 import type {
   LearningTaskIntent,
   QuizSessionConfig,
@@ -173,13 +173,13 @@ export const useQuizModeController = ({
           autoStart
             ? (
               isSmartSessionBookId(bookId)
-                ? storage.getDailySessionWords(user.uid, taskIntent?.limit || 10, taskIntent || undefined)
-                : storage.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined)
+                ? learningService.getDailySessionWords(user.uid, taskIntent?.limit || 10, taskIntent || undefined)
+                : learningService.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined)
             )
-            : storage.getWordsByBook(bookId),
+            : learningService.getWordsByBook(bookId),
           isSmartSessionBookId(bookId)
             ? Promise.resolve<string[]>([])
-            : storage.getStudiedWordIdsByBook(user.uid, bookId).catch(() => []),
+            : learningService.getStudiedWordIdsByBook(user.uid, bookId).catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -302,7 +302,7 @@ export const useQuizModeController = ({
     setPendingAttempt({ correct, responseTimeMs });
 
     try {
-      await storage.recordQuizAttempt(
+      await learningService.recordQuizAttempt(
         user.uid,
         question.wordId,
         question.bookId,

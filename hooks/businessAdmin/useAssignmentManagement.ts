@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { storage } from '../../services/storage';
+import { workspaceService } from '../../services/workspace';
 import type { OrganizationDashboardSnapshot } from '../../types';
 import {
   filterAssignmentStudents,
@@ -58,7 +58,7 @@ export const useAssignmentManagement = ({
     setNotice(null);
 
     try {
-      await storage.assignStudentInstructor(studentUid, instructorUid || null);
+      await workspaceService.assignStudentInstructor(studentUid, instructorUid || null);
       const instructorName = snapshot.instructors.find((instructor) => instructor.uid === instructorUid)?.displayName;
       setNotice({
         tone: 'success',
@@ -83,7 +83,7 @@ export const useAssignmentManagement = ({
     setNotice(null);
 
     try {
-      await storage.setStudentCohort(studentUid, cohortId || null);
+      await workspaceService.setStudentCohort(studentUid, cohortId || null);
       setNotice({
         tone: 'success',
         message: cohortId

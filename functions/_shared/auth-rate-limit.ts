@@ -34,9 +34,9 @@ const readAttemptLimit = async (
     SELECT failure_count, blocked_until
     FROM auth_attempt_limits
     WHERE scope_key = ?
-  `).bind(scopeKey).first();
+  `).bind(scopeKey).first<AuthAttemptLimitRow>();
 
-  return (row as AuthAttemptLimitRow | null) ?? null;
+  return row ?? null;
 };
 
 export const createAuthAttemptScopeKey = (

@@ -3,6 +3,7 @@ import { handleAiAction } from '../ai-actions';
 import { readJson } from '../http';
 import {
   ApiRouteDefinition,
+  createApiRequestLogContext,
   createJsonResponse,
 } from './runtime';
 
@@ -12,7 +13,10 @@ export const aiRoutes: ApiRouteDefinition[] = [
     handle: async ({ env, request }) => {
       const user = await requireUser(env, request);
       const body = await readJson<{ action: string; payload?: unknown }>(request);
-      const result = await handleAiAction(env, user, body);
+      const result = await handleAiAction(env, user, body, {
+        ...createApiRequestLogContext(request, env, 'ai'),
+        source: 'api.ai',
+      });
       return {
         logUser: user,
         response: createJsonResponse(result),

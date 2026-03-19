@@ -185,7 +185,7 @@ const handleProfileUpdate = async (
     currentUser.id,
   ).run();
 
-  const updated = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(currentUser.id).first();
+  const updated = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(currentUser.id).first<DbUserRow>();
   return {
     logUser: currentUser,
     response: createJsonResponse(mapUserRowToProfile(updated)),

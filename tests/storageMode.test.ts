@@ -18,6 +18,26 @@ describe('resolveStorageMode', () => {
           provider: 'unavailable',
           usesMockData: false,
         },
+        organization: {
+          available: false,
+          provider: 'unavailable',
+          usesMockData: true,
+        },
+        missions: {
+          available: false,
+          provider: 'unavailable',
+          usesMockData: true,
+        },
+        commercial: {
+          available: false,
+          provider: 'unavailable',
+          usesMockData: true,
+        },
+        announcements: {
+          available: false,
+          provider: 'unavailable',
+          usesMockData: true,
+        },
       }),
     }));
   });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { storage } from '../services/storage';
+import { dashboardService } from '../services/dashboard';
 import type { DashboardSnapshot, LearningPlan, LearningPreference } from '../types';
 
 export const useDashboardData = (uid?: string) => {
@@ -11,7 +11,7 @@ export const useDashboardData = (uid?: string) => {
 
     try {
       setLoading(true);
-      const nextSnapshot = await storage.getDashboardSnapshot(uid);
+      const nextSnapshot = await dashboardService.getDashboardSnapshot(uid);
       setSnapshot(nextSnapshot);
     } catch (error) {
       console.error('Failed to load dashboard data', error);

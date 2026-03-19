@@ -34,6 +34,7 @@ export interface CreateWritingUploadUrlResponse {
   method: 'PUT';
   headers: Record<string, string>;
   attemptNo: number;
+  expiresAt: number;
 }
 
 export interface FinalizeWritingSubmissionRequest {

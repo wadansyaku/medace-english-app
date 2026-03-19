@@ -4,7 +4,7 @@ import {
   BookMetadata,
   UserProfile,
 } from '../types';
-import { storage } from '../services/storage';
+import { dashboardService } from '../services/dashboard';
 import { AlertCircle, BookOpen, Library, Loader2, Play } from 'lucide-react';
 
 interface OfficialCatalogAccessPanelProps {
@@ -38,7 +38,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
       setLoading(true);
       setError(null);
       try {
-        const nextBooks = await storage.getBooks();
+        const nextBooks = await dashboardService.getBooks();
         setBooks(nextBooks);
       } catch (loadError) {
         console.error(loadError);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { storage } from '../services/storage';
 import type { CommercialRequestUpdatePayload, ProductAnnouncementUpsertPayload } from '../contracts/storage';
+import { listCommercialRequests, updateCommercialRequest } from '../services/commercial';
+import { listProductAnnouncementsAdmin, upsertProductAnnouncement } from '../services/announcements';
 import type { CommercialRequest, ProductAnnouncement } from '../types';
 
 export const useAdminCommercialOps = () => {
@@ -14,8 +15,8 @@ export const useAdminCommercialOps = () => {
     setError(null);
     try {
       const [nextRequests, nextAnnouncements] = await Promise.all([
-        storage.listCommercialRequests(),
-        storage.listProductAnnouncementsAdmin(),
+        listCommercialRequests(),
+        listProductAnnouncementsAdmin(),
       ]);
       setRequests(nextRequests);
       setAnnouncements(nextAnnouncements);
@@ -32,12 +33,12 @@ export const useAdminCommercialOps = () => {
   }, [refresh]);
 
   const updateRequest = useCallback(async (payload: CommercialRequestUpdatePayload) => {
-    await storage.updateCommercialRequest(payload);
+    await updateCommercialRequest(payload);
     await refresh();
   }, [refresh]);
 
   const upsertAnnouncement = useCallback(async (payload: ProductAnnouncementUpsertPayload) => {
-    await storage.upsertProductAnnouncement(payload);
+    await upsertProductAnnouncement(payload);
     await refresh();
   }, [refresh]);
 

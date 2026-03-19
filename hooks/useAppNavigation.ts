@@ -3,13 +3,18 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { getHomeViewForUser } from '../config/access';
 import type { LearningTaskIntent, UserProfile } from '../types';
 import {
+  getPublicBusinessRolePath,
+  parsePublicBusinessRoleKey,
+  type PublicBusinessRoleKey,
+} from '../shared/publicBusinessRoles';
+import {
   buildTaskQueryString,
   createDefaultTaskIntentFromRoute,
   getTaskRouteBookId,
   parseTaskIntentFromSearch,
 } from '../shared/learningTask';
 
-export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo';
+export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 
@@ -17,6 +22,7 @@ export interface AppNavigationState {
   currentView: AppRoute;
   returnView: HomeAppRoute;
   selectedTask: LearningTaskIntent | null;
+  publicRole: PublicBusinessRoleKey | null;
 }
 
 export type AppNavigationAction =
@@ -25,13 +31,16 @@ export type AppNavigationAction =
   | { type: 'open-task'; task: LearningTaskIntent; historyMode?: NavigationHistoryMode }
   | { type: 'finish-book-view'; historyMode?: NavigationHistoryMode }
   | { type: 'open-public-info'; historyMode?: NavigationHistoryMode }
+  | { type: 'open-public-role'; role: PublicBusinessRoleKey; historyMode?: NavigationHistoryMode }
   | { type: 'close-public-info'; historyMode?: NavigationHistoryMode }
+  | { type: 'close-public-role'; historyMode?: NavigationHistoryMode }
   | { type: 'sync-from-location'; state: AppNavigationState; historyMode?: NavigationHistoryMode };
 
 const initialNavigationState: AppNavigationState = {
   currentView: 'login',
   returnView: 'dashboard',
   selectedTask: null,
+  publicRole: null,
 };
 
 const normalizePathname = (pathname: string): string => {
@@ -44,6 +53,7 @@ const buildHomeState = (view: HomeAppRoute): AppNavigationState => ({
   currentView: view,
   returnView: view,
   selectedTask: null,
+  publicRole: null,
 });
 
 export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
@@ -58,8 +68,23 @@ export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
 export const parseNavigationPath = (pathname: string, search = ''): AppNavigationState => {
   const normalizedPath = normalizePathname(pathname);
   const segments = normalizedPath.split('/').filter(Boolean);
-  const [root, bookId] = segments;
+  const [root, bookId, roleSlug] = segments;
   const taskFromSearch = parseTaskIntentFromSearch(search);
+
+  if (root === 'public' && bookId === 'roles' && roleSlug) {
+    const publicRole = parsePublicBusinessRoleKey(roleSlug);
+    if (publicRole) {
+      return {
+        ...initialNavigationState,
+        currentView: 'publicRole',
+        publicRole,
+      };
+    }
+    return {
+      ...initialNavigationState,
+      currentView: 'publicInfo',
+    };
+  }
 
   if (normalizedPath === '/public') {
     return {
@@ -78,6 +103,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
       currentView: 'study',
       returnView: 'dashboard',
       selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'study'),
+      publicRole: null,
     };
   }
 
@@ -87,6 +113,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
       currentView: 'quiz',
       returnView: 'dashboard',
       selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'quiz'),
+      publicRole: null,
     };
   }
 
@@ -97,6 +124,8 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
   switch (state.currentView) {
     case 'publicInfo':
       return '/public';
+    case 'publicRole':
+      return state.publicRole ? getPublicBusinessRolePath(state.publicRole) : '/public';
     case 'dashboard':
       return '/dashboard';
     case 'instructor':
@@ -122,6 +151,7 @@ const getDefaultHistoryMode = (action: AppNavigationAction): NavigationHistoryMo
     case 'reset':
     case 'finish-book-view':
     case 'close-public-info':
+    case 'close-public-role':
       return 'replace';
     case 'sync-from-location':
       return 'none';
@@ -142,28 +172,43 @@ const navigationReducer = (
         currentView: action.view,
         returnView: action.view,
         selectedTask: null,
+        publicRole: null,
       };
     case 'open-task':
       return {
         currentView: action.task.mode,
         returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
         selectedTask: action.task,
+        publicRole: null,
       };
     case 'finish-book-view':
       return {
         ...state,
         currentView: state.returnView,
         selectedTask: null,
+        publicRole: null,
       };
     case 'open-public-info':
       return {
         ...state,
         currentView: 'publicInfo',
+        publicRole: null,
+      };
+    case 'open-public-role':
+      return {
+        ...state,
+        currentView: 'publicRole',
+        publicRole: action.role,
       };
     case 'close-public-info':
       return {
+        ...initialNavigationState,
+      };
+    case 'close-public-role':
+      return {
         ...state,
-        currentView: 'login',
+        currentView: 'publicInfo',
+        publicRole: null,
       };
     case 'sync-from-location':
       return action.state;

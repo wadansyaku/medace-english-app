@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { storage } from '../services/storage';
+import {
+  acknowledgeAnnouncement,
+  listProductAnnouncements,
+  markAnnouncementSeen,
+} from '../services/announcements';
+import { resolveStorageMode } from '../shared/storageMode';
 import type { ProductAnnouncementFeed } from '../types';
 
 const EMPTY_FEED: ProductAnnouncementFeed = {
@@ -8,6 +13,9 @@ const EMPTY_FEED: ProductAnnouncementFeed = {
   stickyBanner: null,
   unreadCount: 0,
 };
+const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
+const canUseAnnouncementFeed = storageMode.capabilities.announcements.available
+  || storageMode.capabilities.announcements.usesMockData;
 
 export interface AnnouncementFeedController {
   feed: ProductAnnouncementFeed;
@@ -26,10 +34,14 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
       setFeed(EMPTY_FEED);
       return;
     }
+    if (!canUseAnnouncementFeed) {
+      setFeed(EMPTY_FEED);
+      return;
+    }
 
     setLoading(true);
     try {
-      const nextFeed = await storage.listProductAnnouncements();
+      const nextFeed = await listProductAnnouncements();
       setFeed(nextFeed);
     } catch (error) {
       console.error('Failed to load announcement feed', error);
@@ -44,12 +56,14 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
   }, [refresh]);
 
   const markSeen = useCallback(async (announcementId: string) => {
-    await storage.markAnnouncementSeen(announcementId);
+    if (!canUseAnnouncementFeed) return;
+    await markAnnouncementSeen(announcementId);
     await refresh();
   }, [refresh]);
 
   const acknowledge = useCallback(async (announcementId: string) => {
-    await storage.acknowledgeAnnouncement(announcementId);
+    if (!canUseAnnouncementFeed) return;
+    await acknowledgeAnnouncement(announcementId);
     await refresh();
   }, [refresh]);
 

@@ -2,8 +2,6 @@ import React from 'react';
 import {
   ArrowRight,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Lock,
   LogIn,
   Mail,
@@ -18,48 +16,13 @@ import { getDemoAccessWindowLabel } from '../../utils/demo';
 import BusinessRolePreviewSection from '../commercial/BusinessRolePreviewSection';
 import PublicMotivationPanel from '../PublicMotivationPanel';
 import PublicInfoPage from '../PublicInfoPage';
+import PublicRolePage from '../public/PublicRolePage';
 import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../../types';
-
-const BUSINESS_DEMO_OPTIONS: Array<{
-  title: string;
-  description: string;
-  role: UserRole;
-  organizationRole?: OrganizationRole;
-  compact?: boolean;
-  testId: string;
-}> = [
-  {
-    title: 'ビジネス版 生徒体験',
-    description: '既存の公式単語帳を開き、学習とテスト導線をそのまま確認できます。',
-    role: UserRole.STUDENT,
-    organizationRole: OrganizationRole.STUDENT,
-    testId: 'demo-login-business-student',
-  },
-  {
-    title: '先生',
-    description: '講師フォロー導線に加えて、既存単語帳の中身とテスト導線まで確認できます。',
-    role: UserRole.INSTRUCTOR,
-    organizationRole: OrganizationRole.INSTRUCTOR,
-    testId: 'demo-login-instructor',
-  },
-  {
-    title: '学校管理者',
-    description: '組織ダッシュボード、担当割当、既存単語帳へのアクセスをまとめて確認できます。',
-    role: UserRole.INSTRUCTOR,
-    organizationRole: OrganizationRole.GROUP_ADMIN,
-    testId: 'demo-login-group-admin',
-  },
-  {
-    title: 'サービス管理者',
-    description: '教材カタログ全体とサービス運用画面を確認できます。',
-    role: UserRole.ADMIN,
-    compact: true,
-    testId: 'demo-login-admin',
-  },
-];
+import type { PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 interface AuthExperienceScreenProps {
-  currentView: 'login' | 'publicInfo';
+  currentView: 'login' | 'publicInfo' | 'publicRole';
+  publicRole: PublicBusinessRoleKey | null;
   authMode: 'LOGIN' | 'SIGNUP';
   displayName: string;
   email: string;
@@ -80,10 +43,13 @@ interface AuthExperienceScreenProps {
   onToggleAlternateAccess: () => void;
   onOpenPublicInfo: () => void;
   onClosePublicInfo: () => void;
+  onOpenPublicRole: (roleKey: PublicBusinessRoleKey) => void;
+  onClosePublicRole: () => void;
 }
 
 const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   currentView,
+  publicRole,
   authMode,
   displayName,
   email,
@@ -104,12 +70,21 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   onToggleAlternateAccess,
   onOpenPublicInfo,
   onClosePublicInfo,
+  onOpenPublicRole,
+  onClosePublicRole,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
   const isMobileViewport = useIsMobileViewport();
-  const businessDemoOptions = BUSINESS_DEMO_OPTIONS.filter((option) => (
-    runtimeFlags.enableAdminDemo || option.role !== UserRole.ADMIN
-  ));
+
+  if (currentView === 'publicRole' && publicRole) {
+    return (
+      <PublicRolePage
+        roleKey={publicRole}
+        onBack={onClosePublicRole}
+        onDemoLogin={onDemoLogin}
+      />
+    );
+  }
 
   if (currentView === 'publicInfo') {
     return (
@@ -118,7 +93,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
         motivationSnapshot={motivationSnapshot}
         motivationLoading={motivationLoading}
         motivationError={motivationError}
-        onDemoLogin={onDemoLogin}
+        onOpenRole={onOpenPublicRole}
       />
     );
   }
@@ -366,10 +341,8 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
       {isMobileViewport ? authCard : motivationPanel}
       {isMobileViewport ? motivationPanel : authCard}
       <BusinessRolePreviewSection
-        enableLiveDemo={runtimeFlags.enablePublicBusinessDemo}
-        enableAdminDemo={runtimeFlags.enableAdminDemo}
         onOpenGuide={onOpenPublicInfo}
-        onDemoLogin={onDemoLogin}
+        onOpenRole={onOpenPublicRole}
       />
     </div>
   );

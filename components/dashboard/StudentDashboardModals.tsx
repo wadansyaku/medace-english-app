@@ -8,7 +8,7 @@ import DashboardDeleteBookDialog from './DashboardDeleteBookDialog';
 import DashboardSettingsModal from './DashboardSettingsModal';
 import PhrasebookCreateModal from './PhrasebookCreateModal';
 import PlanEditorModal from './PlanEditorModal';
-import type { storage } from '../../services/storage';
+import type { CommercialRequestPayload } from '../../contracts/storage';
 
 type StudentDashboardController = ReturnType<typeof useStudentDashboardController>;
 type StudentDashboardViewModel = ReturnType<typeof useStudentDashboardViewModel>;
@@ -20,7 +20,7 @@ interface StudentDashboardModalsProps {
   viewModel: StudentDashboardViewModel;
   isMobileViewport: boolean;
   onUserUpdate: (user: UserProfile) => void;
-  onSubmitCommercialRequest: (payload: Parameters<typeof storage.submitCommercialRequest>[0]) => Promise<void>;
+  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
 
 export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({

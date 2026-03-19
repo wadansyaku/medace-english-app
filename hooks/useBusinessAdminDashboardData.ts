@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { storage } from '../services/storage';
+import { workspaceService } from '../services/workspace';
 import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
 import { resolveStorageMode } from '../shared/storageMode';
 import type {
@@ -14,6 +14,10 @@ import type {
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const canUseWritingApi = storageMode.capabilities.writing.available;
+const canUseBusinessWorkspaceApi = storageMode.capabilities.organization.available
+  && storageMode.capabilities.missions.available;
+const canUseBusinessWorkspacePreview = storageMode.capabilities.organization.usesMockData
+  && storageMode.capabilities.missions.usesMockData;
 
 export const useBusinessAdminDashboardData = () => {
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
@@ -29,12 +33,24 @@ export const useBusinessAdminDashboardData = () => {
     setLoading(true);
     setError(null);
 
+    if (!canUseBusinessWorkspaceApi && !canUseBusinessWorkspacePreview) {
+      setSnapshot(null);
+      setSettingsSnapshot(null);
+      setMissionBoard(null);
+      setBooks([]);
+      setWritingAssignments([]);
+      setWritingQueue([]);
+      setLoading(false);
+      setError('組織ダッシュボードとミッション機能は Cloudflare storage mode でのみ利用できます。');
+      return;
+    }
+
     try {
       const [nextSnapshot, nextSettingsSnapshot, nextMissionBoard, nextBooks, nextWritingAssignments, nextWritingQueue] = await Promise.all([
-        storage.getOrganizationDashboardSnapshot(),
-        storage.getOrganizationSettingsSnapshot(),
-        storage.getWeeklyMissionBoard(),
-        storage.getBooks(),
+        workspaceService.getOrganizationDashboardSnapshot(),
+        workspaceService.getOrganizationSettingsSnapshot(),
+        workspaceService.getWeeklyMissionBoard(),
+        workspaceService.getBooks(),
         !canUseWritingApi
           ? Promise.resolve<WritingAssignment[]>([])
           : listWritingAssignments('organization').then((response) => response.assignments),

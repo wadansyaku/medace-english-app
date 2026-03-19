@@ -26,7 +26,7 @@ const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
   const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
   const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
-  const { currentView, selectedTask } = navigationState;
+  const { currentView, publicRole, selectedTask } = navigationState;
   const {
     user,
     setCurrentUser,
@@ -76,10 +76,13 @@ const App: React.FC = () => {
     if (!user) {
       return (
         <AuthExperienceScreen
-          currentView={currentView === 'publicInfo' ? 'publicInfo' : 'login'}
+          currentView={currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
+          publicRole={publicRole}
           {...authExperienceProps}
           onOpenPublicInfo={() => dispatchNavigation({ type: 'open-public-info' })}
           onClosePublicInfo={() => dispatchNavigation({ type: 'close-public-info' })}
+          onOpenPublicRole={(roleKey) => dispatchNavigation({ type: 'open-public-role', role: roleKey })}
+          onClosePublicRole={() => dispatchNavigation({ type: 'close-public-role' })}
         />
       );
     }
@@ -163,6 +166,10 @@ const App: React.FC = () => {
     setInstructorWorkspaceView(section as InstructorWorkspaceView);
   };
   const handleChangeView = (view: string) => {
+    if (!user) {
+      dispatchNavigation({ type: 'close-public-info' });
+      return;
+    }
     if (view === 'login') {
       dispatchNavigation({ type: 'close-public-info' });
       return;
@@ -182,6 +189,7 @@ const App: React.FC = () => {
         workspaceSections={workspaceSections}
         activeWorkspaceSection={activeWorkspaceSection}
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
+        forceNoIndex={currentView === 'publicRole'}
       >
         <Suspense
           fallback={

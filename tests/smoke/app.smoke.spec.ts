@@ -4,6 +4,12 @@ import {
   MOBILE_FLOW_TEST_IDS,
   MOBILE_FLOW_WRITING,
 } from '../../config/mobileFlow.js';
+import {
+  PUBLIC_BUSINESS_ROLE_KEYS,
+  getPublicBusinessRoleConfig,
+  getPublicBusinessRolePath,
+  type PublicBusinessRoleKey,
+} from '../../shared/publicBusinessRoles';
 
 const mobileViewport = { width: 390, height: 844 };
 const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -303,6 +309,39 @@ const openBusinessPreview = async (page: Page) => {
   await page.getByTestId('business-role-preview-section').scrollIntoViewIfNeeded();
 };
 
+const openBusinessRolePage = async (
+  page: Page,
+  roleKey: PublicBusinessRoleKey,
+  surface: 'login' | 'public' = 'login',
+) => {
+  const role = getPublicBusinessRoleConfig(roleKey);
+  if (surface === 'public') {
+    await page.goto('/public');
+    await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+  } else {
+    await openBusinessPreview(page);
+  }
+  await page.getByTestId(role.cardActionTestId).click();
+  await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRolePath(roleKey)}$`));
+  await expect(page.getByTestId(role.pageTestId)).toBeVisible();
+  return role;
+};
+
+const loginBusinessStudentDemo = async (page: Page) => {
+  const role = await openBusinessRolePage(page, 'student');
+  await page.getByTestId(role.primaryActionTestId).click();
+};
+
+const loginInstructorDemo = async (page: Page) => {
+  const role = await openBusinessRolePage(page, 'instructor');
+  await page.getByTestId(role.primaryActionTestId).click();
+};
+
+const loginGroupAdminDemo = async (page: Page) => {
+  const role = await openBusinessRolePage(page, 'group-admin');
+  await page.getByTestId(role.primaryActionTestId).click();
+};
+
 const getInstructorSegmentLabel = (student: {
   riskLevel?: string;
   latestInterventionAt?: number;
@@ -330,8 +369,8 @@ const getInstructorSegmentLabel = (student: {
 };
 
 const loginAdminDemo = async (page: Page) => {
-  await openBusinessPreview(page);
-  await page.getByTestId('demo-login-admin').click();
+  const role = await openBusinessRolePage(page, 'service-admin');
+  await page.getByTestId(role.primaryActionTestId).click();
   await expect(page.getByTestId('admin-demo-password')).toBeVisible();
   await page.getByTestId('admin-demo-password').fill('admin');
   await page.getByTestId('admin-demo-submit').click();
@@ -564,8 +603,34 @@ test('public guide keeps the business role previews visible', async ({ page }) =
   await page.getByRole('button', { name: 'アプリの説明・料金を見る' }).click();
   await expect(page).toHaveURL(/\/public$/);
   await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+  await expect(page.getByTestId('business-role-preview-student')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-instructor')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-admin')).toBeVisible();
+  await expect(page.getByTestId('business-role-preview-service-admin')).toBeVisible();
+});
+
+test('public guide links every business role card to its dedicated route and browser back returns to the hub', async ({ page }) => {
+  await page.goto('/public');
+  await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+
+  for (const roleKey of PUBLIC_BUSINESS_ROLE_KEYS) {
+    const role = getPublicBusinessRoleConfig(roleKey);
+    await page.getByTestId(role.cardActionTestId).click();
+    await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRolePath(roleKey)}$`));
+    await expect(page.getByTestId(role.pageTestId)).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/public$/);
+    await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+  }
+});
+
+test('public role pages always emit a noindex robots tag and service admin demo opens the password gate', async ({ page }) => {
+  await page.goto('/public/roles/service-admin');
+
+  await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
+  await page.getByTestId('demo-login-admin').click();
+  await expect(page.getByTestId('admin-demo-password')).toBeVisible();
 });
 
 test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {
@@ -614,8 +679,7 @@ test('study routes survive reload and finish back on the dashboard path', async 
 });
 
 test('group admin can open the organization dashboard and update an assignment', async ({ page }) => {
-  await openBusinessPreview(page);
-  await page.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(page);
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
   await expect(page.getByTestId('organization-kpi-trend-section')).toBeVisible();
@@ -636,19 +700,16 @@ test('group admin can open settings and organization rename survives reload acro
   const studentPage = await studentContext.newPage();
   const renamedOrganization = 'Smoke Rename Academy';
 
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
   await adminPage.getByTestId('workspace-tab-settings').click();
   await expect(adminPage.getByTestId('organization-members-section')).toBeVisible();
   await expect(adminPage.getByTestId('organization-audit-section')).toBeVisible();
 
-  await openBusinessPreview(instructorPage);
-  await instructorPage.getByTestId('demo-login-instructor').click();
+  await loginInstructorDemo(instructorPage);
   await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
 
-  await openBusinessPreview(studentPage);
-  await studentPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
@@ -689,8 +750,7 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
   const studentBPage = await studentBContext.newPage();
 
   await loginAdminDemo(platformAdminPage);
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
 
   await instructorPage.goto('/');
@@ -702,13 +762,11 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
     displayName: 'Smoke Cohort Instructor',
   });
 
-  await openBusinessPreview(studentAPage);
-  await studentAPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentAPage);
   await maybeCompleteOnboarding(studentAPage);
   await expect(studentAPage.getByTestId('student-dashboard')).toBeVisible();
 
-  await openBusinessPreview(studentBPage);
-  await studentBPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentBPage);
   await maybeCompleteOnboarding(studentBPage);
   await expect(studentBPage.getByTestId('student-dashboard')).toBeVisible();
 
@@ -806,16 +864,13 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   const instructorPage = await instructorContext.newPage();
   const studentPage = await studentContext.newPage();
 
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
 
-  await openBusinessPreview(instructorPage);
-  await instructorPage.getByTestId('demo-login-instructor').click();
+  await loginInstructorDemo(instructorPage);
   await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
 
-  await openBusinessPreview(studentPage);
-  await studentPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
@@ -858,16 +913,13 @@ test('admin reload sees organization KPI changes after notification and study', 
   const instructorPage = await instructorContext.newPage();
   const studentPage = await studentContext.newPage();
 
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
 
-  await openBusinessPreview(instructorPage);
-  await instructorPage.getByTestId('demo-login-instructor').click();
+  await loginInstructorDemo(instructorPage);
   await expect(instructorPage.getByTestId('instructor-dashboard')).toBeVisible();
 
-  await openBusinessPreview(studentPage);
-  await studentPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
@@ -924,12 +976,10 @@ test('group admin can issue a weekly mission and student can restart it from the
   const adminPage = await adminContext.newPage();
   const studentPage = await studentContext.newPage();
 
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
 
-  await openBusinessPreview(studentPage);
-  await studentPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
@@ -985,14 +1035,12 @@ test('group admin and business student can complete the writing workflow with on
   const adminPage = await adminContext.newPage();
   const studentPage = await studentContext.newPage();
 
-  await openBusinessPreview(adminPage);
-  await adminPage.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
   await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
-  await openBusinessPreview(studentPage);
-  await studentPage.getByTestId('demo-login-business-student').click();
+  await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
@@ -1072,8 +1120,7 @@ test('group admin and business student can complete the writing workflow with on
 });
 
 test('idb mode keeps the B2B warning banner and hides KPI trend cards', async ({ page }) => {
-  await openBusinessPreview(page);
-  await page.getByTestId('demo-login-group-admin').click();
+  await loginGroupAdminDemo(page);
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
   await expect(page.getByTestId('b2b-storage-mode-banner')).toBeVisible();
@@ -1642,13 +1689,11 @@ test('student weakness focus card populates after the first smart-session on mob
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
 
-    await openBusinessPreview(adminPage);
-    await adminPage.getByTestId('demo-login-group-admin').click();
+    await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    await openBusinessPreview(studentPage);
-    await studentPage.getByTestId('demo-login-business-student').click();
+    await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
@@ -1703,13 +1748,11 @@ test('student weakness focus card populates after the first smart-session on mob
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
 
-    await openBusinessPreview(adminPage);
-    await adminPage.getByTestId('demo-login-group-admin').click();
+    await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
     await adminPage.getByTestId('workspace-tab-writing').click();
 
-    await openBusinessPreview(studentPage);
-    await studentPage.getByTestId('demo-login-business-student').click();
+    await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
-import { storage } from '../services/storage';
+import { workspaceService } from '../services/workspace';
 import {
   approveWritingReturn,
   completeWritingAssignment,
@@ -68,7 +68,7 @@ export const useWritingOpsController = () => {
     try {
       const [templateResponse, studentRows, assignmentResponse, queueResponse, historyResponse] = await Promise.all([
         listWritingTemplates(),
-        storage.getAllStudentsProgress(),
+        workspaceService.getAllStudentsProgress(),
         listWritingAssignments('organization'),
         listWritingReviewQueue('QUEUE'),
         listWritingReviewQueue('HISTORY'),
