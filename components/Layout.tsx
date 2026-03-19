@@ -17,10 +17,23 @@ interface LayoutProps {
   onResetDemo?: () => void;
   currentView: string;
   onChangeView: (view: string) => void;
+  forceNoIndex?: boolean;
   workspaceSections?: WorkspaceSectionDefinition[];
   activeWorkspaceSection?: string;
   onSelectWorkspaceSection?: (section: string) => void;
 }
+
+export const getManagedRobotsContent = ({
+  isPreviewDeployment,
+  forceNoIndex,
+}: {
+  isPreviewDeployment: boolean;
+  forceNoIndex: boolean;
+}): string | null => (
+  isPreviewDeployment || forceNoIndex
+    ? 'noindex, nofollow, noarchive'
+    : null
+);
 
 const Layout: React.FC<LayoutProps> = ({
   children,
@@ -29,6 +42,7 @@ const Layout: React.FC<LayoutProps> = ({
   onResetDemo,
   currentView,
   onChangeView,
+  forceNoIndex = false,
   workspaceSections = [],
   activeWorkspaceSection,
   onSelectWorkspaceSection,
@@ -65,27 +79,31 @@ const Layout: React.FC<LayoutProps> = ({
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    const managedMetaSelector = 'meta[data-runtime-managed="preview-robots"]';
+    const managedMetaSelector = 'meta[data-runtime-managed="runtime-robots"]';
     const existing = document.head.querySelector<HTMLMetaElement>(managedMetaSelector);
-    if (!isPreviewDeployment) {
+    const robotsContent = getManagedRobotsContent({
+      isPreviewDeployment,
+      forceNoIndex,
+    });
+
+    if (!robotsContent) {
       existing?.remove();
       return;
     }
 
     const robotsMeta = existing || document.createElement('meta');
     robotsMeta.setAttribute('name', 'robots');
-    robotsMeta.setAttribute('content', 'noindex, nofollow, noarchive');
-    robotsMeta.setAttribute('data-runtime-managed', 'preview-robots');
+    robotsMeta.setAttribute('content', robotsContent);
+    robotsMeta.setAttribute('data-runtime-managed', 'runtime-robots');
     if (!existing) {
       document.head.appendChild(robotsMeta);
     }
 
     return () => {
-      if (!isPreviewDeployment) return;
       const current = document.head.querySelector<HTMLMetaElement>(managedMetaSelector);
       current?.remove();
     };
-  }, [isPreviewDeployment]);
+  }, [forceNoIndex, isPreviewDeployment]);
 
   return (
     <div className="min-h-screen bg-medace-50/40 flex flex-col font-sans">

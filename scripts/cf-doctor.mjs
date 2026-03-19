@@ -2,6 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
+import {
+  MAIN_MERGE_GATE_RULESET_NAME,
+  isMainMergeGateRulesetCompliant,
+  normalizeMainMergeGateRuleset,
+} from './_shared/github-rulesets.mjs';
 
 const cwd = process.cwd();
 const includeDeferred = process.argv.includes('--include-deferred');
@@ -34,6 +39,55 @@ const run = (command, args, options = {}) => {
 const runWrangler = (args, options = {}) => {
   const wrangler = createNodeToolCommand('wrangler', args);
   return run(wrangler.command, wrangler.args, options);
+};
+
+const runGhApiJson = (path, { method = 'GET', body } = {}) => {
+  const args = ['api', '--method', method, path];
+  const options = {};
+  if (body) {
+    args.push('--input', '-');
+    options.input = JSON.stringify(body);
+  }
+  const result = run('gh', args, options);
+  if (!result.ok) {
+    return {
+      ok: false,
+      result: null,
+      stderr: result.stderr || result.stdout || `exit ${result.status}`,
+    };
+  }
+  try {
+    return {
+      ok: true,
+      result: result.stdout ? JSON.parse(result.stdout) : null,
+      stderr: '',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      result: null,
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
+const fetchNamedRepoRuleset = (repoSlug, rulesetName) => {
+  const rulesetsResponse = runGhApiJson(`repos/${repoSlug}/rulesets`);
+  if (!rulesetsResponse.ok) {
+    return rulesetsResponse;
+  }
+
+  const rulesets = Array.isArray(rulesetsResponse.result) ? rulesetsResponse.result : [];
+  const summaryRuleset = rulesets.find((entry) => entry?.name === rulesetName) || null;
+  if (!summaryRuleset?.id) {
+    return {
+      ok: true,
+      result: null,
+      stderr: '',
+    };
+  }
+
+  return runGhApiJson(`repos/${repoSlug}/rulesets/${summaryRuleset.id}`);
 };
 
 const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
@@ -204,6 +258,19 @@ try {
 }
 
 if (githubReady && repoSlug) {
+  const rulesetsResponse = fetchNamedRepoRuleset(repoSlug, MAIN_MERGE_GATE_RULESET_NAME);
+  if (!rulesetsResponse.ok) {
+    pushRecord('error', `GitHub ruleset ${MAIN_MERGE_GATE_RULESET_NAME}`, rulesetsResponse.stderr);
+  } else {
+    const ruleset = rulesetsResponse.result;
+    const normalizedRuleset = normalizeMainMergeGateRuleset(ruleset);
+    pushRecord(
+      isMainMergeGateRulesetCompliant(ruleset) ? 'ok' : 'error',
+      `GitHub ruleset ${MAIN_MERGE_GATE_RULESET_NAME}`,
+      JSON.stringify(normalizedRuleset),
+    );
+  }
+
   const ghSecrets = run('gh', ['secret', 'list', '--repo', repoSlug]);
   if (!ghSecrets.ok && isGitHubActions && isGithubInventoryPermissionError(ghSecrets)) {
     pushRecord('warn', 'GitHub secret inventory', 'skipped: workflow token cannot list repository secrets');

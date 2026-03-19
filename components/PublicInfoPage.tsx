@@ -2,18 +2,19 @@ import React, { useRef } from 'react';
 import { AlertTriangle, ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
 import getClientRuntimeFlags from '../config/runtime';
 import { getSubscriptionPolicy } from '../config/subscription';
-import { CommercialRequestKind, type PublicMotivationSnapshot, SubscriptionPlan, type OrganizationRole, UserRole } from '../types';
+import { CommercialRequestKind, type PublicMotivationSnapshot, SubscriptionPlan } from '../types';
 import PublicMotivationPanel from './PublicMotivationPanel';
 import BusinessRolePreviewSection from './commercial/BusinessRolePreviewSection';
 import CommercialRequestForm from './commercial/CommercialRequestForm';
 import { submitPublicCommercialRequest } from '../services/commercial';
+import type { PublicBusinessRoleKey } from '../shared/publicBusinessRoles';
 
 interface PublicInfoPageProps {
   onBack: () => void;
   motivationSnapshot: PublicMotivationSnapshot | null;
   motivationLoading: boolean;
   motivationError: string | null;
-  onDemoLogin: (role: UserRole, organizationRole?: OrganizationRole) => void;
+  onOpenRole: (roleKey: PublicBusinessRoleKey) => void;
 }
 
 const PLAN_PREVIEWS = [
@@ -45,7 +46,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   motivationSnapshot,
   motivationLoading,
   motivationError,
-  onDemoLogin,
+  onOpenRole,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
   const requestSectionRef = useRef<HTMLDivElement | null>(null);
@@ -119,10 +120,8 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
 
         <div className="space-y-8 p-6 md:p-8">
           <BusinessRolePreviewSection
-            enableLiveDemo={runtimeFlags.enablePublicBusinessDemo}
-            enableAdminDemo={runtimeFlags.enableAdminDemo}
             onOpenGuide={() => requestSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            onDemoLogin={onDemoLogin}
+            onOpenRole={onOpenRole}
           />
 
           <section>
