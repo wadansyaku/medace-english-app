@@ -464,7 +464,7 @@ if (cloudflareReady) {
   const checkPagesSecrets = (envName, args) => {
     const secrets = runWrangler(['pages', 'secret', 'list', '--project-name', pagesProject, ...args]);
     const labelPrefix = `Pages ${envName}`;
-    if (!recordCommand(`${labelPrefix} secret inventory`, secrets, 'retrieved')) {
+    if (!recordCommand(`${labelPrefix} secret inventory`, secrets, 'retrieved', { allowTransientFailure: true })) {
       return;
     }
 
