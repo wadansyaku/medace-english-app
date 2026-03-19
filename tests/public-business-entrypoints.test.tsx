@@ -86,8 +86,8 @@ describe('public business role entrypoints', () => {
       label: '導入相談へ進む',
     });
     expect(getPublicBusinessRolePrimaryAction('group-admin', productionFlags)).toMatchObject({
-      kind: 'request',
-      label: '導入相談へ進む',
+      kind: 'demo',
+      label: 'この役割を試す',
     });
   });
 

@@ -67,11 +67,11 @@ export const resolveRuntimeFlags = ({
     deployment,
     enableAdminDemo: parseBooleanFlag(
       env.enableAdminDemo,
-      !deployment.isProductionLike,
+      true,
     ),
     enablePublicBusinessDemo: parseBooleanFlag(
       env.enablePublicBusinessDemo,
-      !deployment.isProductionLike,
+      true,
     ),
     appOnlineOnly: parseBooleanFlag(env.appOnlineOnly, false),
     enableDestructiveAdminActions: parseBooleanFlag(
