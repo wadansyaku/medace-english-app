@@ -63,8 +63,8 @@ jobs:
       - name: API integration tests
         run: npm run test:api
 
-      - name: Browser smoke tests
-        run: npm run test:smoke
+      - name: Full smoke suite
+        run: node scripts/run-smoke-tests.mjs --suite full
 
       - name: Verify GitHub and Cloudflare configuration
         env:
@@ -159,7 +159,7 @@ jobs:
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: typecheck + unit tests + API integration tests + browser smoke + cf:doctor"
+            echo "- Verification: typecheck + unit tests + API integration tests + full smoke suite + cf:doctor"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Preview Secrets: \`${{ steps.preview-secrets.outputs.names }}\`"
             echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"
@@ -199,7 +199,7 @@ jobs:
               `- Preview Secrets: \`${process.env.PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Required Preview Secrets: \`${process.env.MISSING_REQUIRED_PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Optional Preview Secrets: \`${process.env.MISSING_OPTIONAL_PREVIEW_SECRETS || '(none)'}\``,
-              '- Verification: typecheck + unit tests + API integration tests + browser smoke + cf:doctor',
+              '- Verification: typecheck + unit tests + API integration tests + full smoke suite + cf:doctor',
               '- Schema: remote preview D1 migrations applied before deploy.',
             ].join('\n');
 

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import { workspaceService } from '../services/workspace';
 import {
+  calculateWritingAssetSha256Base64,
   approveWritingReturn,
   completeWritingAssignment,
   createWritingUploadUrl,
@@ -300,6 +301,7 @@ export const useWritingOpsController = () => {
           fileName: file.name,
           mimeType: file.type,
           byteSize: file.size,
+          sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,
           attemptNo: scannerTarget.attemptCount + 1,
         });

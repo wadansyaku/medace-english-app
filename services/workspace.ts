@@ -1,26 +1,29 @@
 import type { MissionProgressEventType } from '../types';
 import { resolveStorageMode } from '../shared/storageMode';
 import { CloudflareStorageService } from './cloudflare';
-import type { IStorageService } from './storage';
+import type { CatalogClient, MissionClient, OrganizationClient } from './clients';
 import { storage } from './storage';
 
-export type WorkspaceService = Pick<IStorageService,
+export type WorkspaceService =
+  & Pick<OrganizationClient,
   | 'assignStudentInstructor'
-  | 'assignWeeklyMission'
-  | 'createWeeklyMission'
   | 'getAllStudentsProgress'
-  | 'getBooks'
   | 'getOrganizationDashboardSnapshot'
   | 'getOrganizationSettingsSnapshot'
   | 'getStudentWorksheetSnapshot'
-  | 'getWeeklyMissionBoard'
   | 'sendInstructorNotification'
   | 'setInstructorCohorts'
   | 'setStudentCohort'
-  | 'updateMissionProgress'
   | 'updateOrganizationProfile'
   | 'upsertOrganizationCohort'
->;
+>
+  & Pick<CatalogClient, 'getBooks'>
+  & Pick<MissionClient,
+    | 'assignWeeklyMission'
+    | 'createWeeklyMission'
+    | 'getWeeklyMissionBoard'
+    | 'updateMissionProgress'
+  >;
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const workspaceAvailable = storageMode.capabilities.organization.available

@@ -5,7 +5,15 @@ import type {
   GenerateWritingAssignmentRequest,
   RequestWritingRevisionRequest,
 } from '../../../contracts/writing';
-import { expectObject, expectOptionalString, expectString, expectStringArray, expectTrimmedString } from '../request-validation';
+import {
+  expectIntegerInRange,
+  expectObject,
+  expectOptionalSha256Base64,
+  expectOptionalString,
+  expectString,
+  expectStringArray,
+  expectTrimmedString,
+} from '../validators';
 
 export const parseGenerateWritingAssignmentRequest = (value: unknown): GenerateWritingAssignmentRequest => {
   const record = expectObject(value);
@@ -30,9 +38,10 @@ export const parseCreateWritingUploadUrlRequest = (value: unknown): CreateWritin
     assignmentId: expectString(record, 'assignmentId'),
     fileName: expectTrimmedString(record, 'fileName'),
     mimeType: expectTrimmedString(record, 'mimeType'),
-    byteSize: Number(record.byteSize || 0),
-    assetOrder: Number(record.assetOrder || 0),
-    attemptNo: typeof record.attemptNo === 'number' ? record.attemptNo : undefined,
+    byteSize: expectIntegerInRange(record, 'byteSize', { min: 1, max: 20 * 1024 * 1024 }) as number,
+    sha256Base64: expectOptionalSha256Base64(record, 'sha256Base64'),
+    assetOrder: expectIntegerInRange(record, 'assetOrder', { min: 1, max: 4 }) as number,
+    attemptNo: expectIntegerInRange(record, 'attemptNo', { min: 1, max: 2, optional: true }),
   };
 };
 
@@ -42,7 +51,7 @@ export const parseFinalizeWritingSubmissionRequest = (value: unknown): FinalizeW
     assignmentId: expectString(record, 'assignmentId'),
     source: expectString(record, 'source') as FinalizeWritingSubmissionRequest['source'],
     assetIds: expectStringArray(record, 'assetIds'),
-    attemptNo: Number(record.attemptNo || 0),
+    attemptNo: expectIntegerInRange(record, 'attemptNo', { min: 1, max: 2 }) as number,
     manualTranscript: expectOptionalString(record, 'manualTranscript'),
   };
 };

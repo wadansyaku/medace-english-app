@@ -58,7 +58,7 @@ import {
   resolveAssignmentStatusForTeacherDecision,
   setAssignmentCompleted,
 } from './mutation-state';
-import { syncWritingActivitySideEffects } from './mutation-side-effects';
+import { enqueueWritingActivitySideEffect, runSideEffectJobById } from '../side-effect-jobs';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
@@ -74,6 +74,30 @@ const encodeBase64 = (buffer: ArrayBuffer): string => {
   }
 
   return btoa(binary);
+};
+
+const flushWritingActivitySideEffect = async (
+  env: AppEnv,
+  payload: {
+    studentUid: string;
+    writingAssignmentId: string;
+    organizationId?: string | null;
+    activityAt: number;
+  },
+): Promise<void> => {
+  const job = await enqueueWritingActivitySideEffect(env, payload);
+  const result = await runSideEffectJobById(env, job.id);
+  if (result.status === 'FAILED') {
+    console.error(JSON.stringify({
+      type: 'side_effect_job_failed',
+      jobId: result.jobId,
+      status: result.status,
+      attemptCount: result.attemptCount,
+      lastError: result.lastError || null,
+      writingAssignmentId: payload.writingAssignmentId,
+      studentUid: payload.studentUid,
+    }));
+  }
 };
 
 const readAiAssetsForOcr = async (
@@ -275,9 +299,9 @@ export const handleCreateWritingUploadUrl = async (
 
   await env.DB.prepare(`
     INSERT INTO writing_submission_assets (
-      id, assignment_id, submission_id, attempt_no, asset_order, file_name, mime_type, byte_size, r2_key, upload_token,
-      upload_expires_at, created_at, updated_at
-    ) VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+      id, assignment_id, submission_id, attempt_no, asset_order, file_name, mime_type, byte_size, expected_byte_size,
+      expected_sha256_base64, r2_key, upload_token, upload_expires_at, created_at, updated_at
+    ) VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     assetId,
     request.assignmentId,
@@ -285,6 +309,8 @@ export const handleCreateWritingUploadUrl = async (
     request.assetOrder,
     request.fileName,
     mimeType,
+    request.byteSize,
+    request.sha256Base64 || null,
     r2Key,
     uploadToken,
     expiresAt,
@@ -326,6 +352,20 @@ export const handleWritingAssetUpload = async (
   }
 
   const body = await request.arrayBuffer();
+  const contentType = request.headers.get('Content-Type');
+  if (contentType && contentType !== assetRow.mime_type) {
+    throw new HttpError(400, '予約時と異なる MIME type ではアップロードできません。');
+  }
+  if (assetRow.expected_byte_size && body.byteLength !== Number(assetRow.expected_byte_size || 0)) {
+    throw new HttpError(400, '予約時と異なるファイルサイズではアップロードできません。');
+  }
+  const uploadedSha256Base64 = encodeBase64(await crypto.subtle.digest('SHA-256', body));
+  if (
+    assetRow.expected_sha256_base64
+    && uploadedSha256Base64 !== assetRow.expected_sha256_base64
+  ) {
+    throw new HttpError(400, 'アップロードファイルのチェックサムが一致しません。');
+  }
   const object = await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
     httpMetadata: {
       contentType: assetRow.mime_type,
@@ -334,13 +374,14 @@ export const handleWritingAssetUpload = async (
 
   await env.DB.prepare(`
     UPDATE writing_submission_assets
-    SET byte_size = ?, uploaded_at = ?, upload_consumed_at = ?, uploaded_etag = ?, updated_at = ?
+    SET byte_size = ?, uploaded_at = ?, upload_consumed_at = ?, uploaded_etag = ?, uploaded_sha256_base64 = ?, updated_at = ?
     WHERE id = ?
   `).bind(
     body.byteLength,
     now,
     now,
     object?.etag || null,
+    uploadedSha256Base64,
     now,
     assetRow.id,
   ).run();
@@ -424,7 +465,7 @@ export const handleFinalizeWritingSubmission = async (
     promptSnapshot: assignmentRow.prompt_snapshot,
     now,
   });
-  await syncWritingActivitySideEffects(env, {
+  await flushWritingActivitySideEffect(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
     organizationId: assignmentRow.organization_id,
@@ -469,7 +510,7 @@ const applyTeacherReview = async (
     assignmentStatus: nextStatus,
     now,
   });
-  await syncWritingActivitySideEffects(env, {
+  await flushWritingActivitySideEffect(env, {
     studentUid: detail.assignment.studentUid,
     writingAssignmentId: detail.assignment.id,
     organizationId: detail.assignment.organizationId,
@@ -511,7 +552,7 @@ export const handleCompleteWritingAssignment = async (
   const now = Date.now();
 
   await setAssignmentCompleted(env, { assignmentId, now });
-  await syncWritingActivitySideEffects(env, {
+  await flushWritingActivitySideEffect(env, {
     studentUid: row.student_user_id,
     writingAssignmentId: assignmentId,
     organizationId: row.organization_id,

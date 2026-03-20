@@ -95,12 +95,15 @@ export interface DbWritingAssetRow {
   file_name: string;
   mime_type: string;
   byte_size: number;
+  expected_byte_size: number | null;
+  expected_sha256_base64: string | null;
   r2_key: string;
   upload_token: string | null;
   upload_expires_at: number | null;
   upload_consumed_at: number | null;
   uploaded_at: number | null;
   uploaded_etag: string | null;
+  uploaded_sha256_base64: string | null;
 }
 
 export interface DbWritingEvaluationRow {

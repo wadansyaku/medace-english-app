@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import {
+  calculateWritingAssetSha256Base64,
   createWritingUploadUrl,
   finalizeWritingSubmission,
   getWritingPrintableFeedback,
@@ -107,6 +108,7 @@ export const useWritingStudentController = (user: UserProfile) => {
           fileName: file.name,
           mimeType: file.type,
           byteSize: file.size,
+          sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,
           attemptNo: submitTarget.attemptCount + 1,
         });

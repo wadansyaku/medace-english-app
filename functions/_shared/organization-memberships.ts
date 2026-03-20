@@ -100,6 +100,32 @@ export const readActiveOrganizationContextForUser = async (
   };
 };
 
+export const hydrateUserOrganizationFromMembership = async (
+  env: AppEnv,
+  user: DbUserRow,
+): Promise<DbUserRow> => {
+  const context = await readActiveOrganizationContextForUser(env, user.id);
+  if (!context) {
+    if (!user.organization_id && !user.organization_name && !user.organization_role) {
+      return user;
+    }
+    return {
+      ...user,
+      organization_id: null,
+      organization_name: null,
+      organization_role: null,
+    };
+  }
+
+  return {
+    ...user,
+    organization_id: context.organizationId,
+    organization_name: context.organizationName,
+    organization_role: context.organizationRole,
+    subscription_plan: context.subscriptionPlan,
+  };
+};
+
 export const requireActiveOrganizationContext = async (
   env: AppEnv,
   user: DbUserRow,

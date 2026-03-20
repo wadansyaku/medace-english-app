@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
@@ -22,6 +23,24 @@ const TOKYO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', {
 });
 
 const toTokyoDateKey = (value) => TOKYO_DATE_FORMATTER.format(new Date(value));
+
+const toSha256Base64 = (value) => createHash('sha256').update(value).digest('base64');
+
+const requestWritingUpload = async (client, pathname, payload, body) => client.post(pathname, {
+  ...payload,
+  byteSize: body.byteLength,
+  sha256Base64: toSha256Base64(body),
+});
+
+const uploadWritingAsset = async (baseUrl, upload, body, mimeType) => fetch(`${baseUrl}${upload.uploadUrl}`, {
+  method: 'PUT',
+  headers: {
+    'Content-Type': mimeType,
+    'Origin': baseUrl,
+    'X-Content-SHA256': toSha256Base64(body),
+  },
+  body,
+});
 
 const runCommand = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
@@ -523,6 +542,25 @@ const main = async () => {
     });
     assert(anonymousRateLimited.status === 429, 'anonymous commercial request should enforce a short-term rate limit');
 
+    const orgSessionAfterLogin = await orgStudent.get('/api/session');
+    assert(orgSessionAfterLogin.uid === orgStudentUser.uid, 'business student session should be readable immediately after demo login');
+
+    const updatedOrgProfile = await orgStudent.post('/api/profile', {
+      user: {
+        grade: 'SHS1',
+        englishLevel: 'B1',
+        studyMode: 'FOCUS',
+      },
+    });
+    assert(updatedOrgProfile.englishLevel === 'B1', 'business student profile update should persist onboarding placement');
+
+    const orgSessionAfterProfile = await orgStudent.get('/api/session');
+    assert(orgSessionAfterProfile.uid === orgStudentUser.uid, 'business student session should remain readable after profile save');
+    assert(orgSessionAfterProfile.englishLevel === 'B1', 'business student session should expose the saved onboarding placement');
+
+    const orgWritingAssignmentsBeforeIssue = await orgStudent.get('/api/writing/assignments?scope=mine');
+    assert(Array.isArray(orgWritingAssignmentsBeforeIssue.assignments), 'business student should be able to load writing assignments after onboarding profile save');
+
     const orgBooks = await orgStudent.storage('getBooks');
     const orgBookTitles = orgBooks.map((book) => book.title);
     assert(orgBookTitles.includes('Starter 120'), 'business student should see ALL_PLANS official books');
@@ -932,19 +970,15 @@ const main = async () => {
     });
     assert(hiddenIssuedAssignment.status === 'ISSUED', 'hidden cohort writing assignment should move to ISSUED');
 
-    const hiddenUpload = await otherCohortStudent.post('/api/writing/upload-url', {
+    const hiddenUploadBody = Buffer.from('cohort-hidden-binary');
+    const hiddenUpload = await requestWritingUpload(otherCohortStudent, '/api/writing/upload-url', {
       assignmentId: hiddenIssuedAssignment.id,
       fileName: 'cohort-hidden.png',
       mimeType: 'image/png',
-      byteSize: 18,
       assetOrder: 1,
       attemptNo: 1,
-    });
-    const hiddenUploadResponse = await fetch(`${baseUrl}${hiddenUpload.uploadUrl}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: Buffer.from('cohort-hidden-binary'),
-    });
+    }, hiddenUploadBody);
+    const hiddenUploadResponse = await uploadWritingAsset(baseUrl, hiddenUpload, hiddenUploadBody, 'image/png');
     assert(hiddenUploadResponse.status === 204, 'hidden cohort upload should succeed');
 
     const hiddenFinalize = await otherCohortStudent.post('/api/writing/submissions/finalize', {
@@ -1001,14 +1035,14 @@ const main = async () => {
     const assignedWriting = studentAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
     assert(assignedWriting, 'student should receive the issued writing assignment');
 
-    const expiredUpload = await orgStudent.post('/api/writing/upload-url', {
+    const expiredUploadBody = Buffer.from('expired-upload-binary');
+    const expiredUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
       assignmentId: issuedAssignment.id,
       fileName: 'expired-attempt-1.png',
       mimeType: 'image/png',
-      byteSize: 12,
       assetOrder: 1,
       attemptNo: 1,
-    });
+    }, expiredUploadBody);
     assert(expiredUpload.expiresAt > Date.now(), 'upload url response should include a future expiry timestamp');
     await executeLocalSql(
       persistDir,
@@ -1016,33 +1050,22 @@ const main = async () => {
        SET upload_expires_at = ${Date.now() - 1_000}
        WHERE id = '${expiredUpload.assetId}'`,
     );
-    const expiredUploadResponse = await fetch(`${baseUrl}${expiredUpload.uploadUrl}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: Buffer.from('expired-upload-binary'),
-    });
+    const expiredUploadResponse = await uploadWritingAsset(baseUrl, expiredUpload, expiredUploadBody, 'image/png');
     assert(expiredUploadResponse.status === 410, 'expired upload token should return 410');
 
-    const firstUpload = await orgStudent.post('/api/writing/upload-url', {
+    const firstUploadBody = Buffer.from('fake-image-binary');
+    const replayedFirstUploadBody = Buffer.from('fake-image-binary-retry');
+    const firstUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
       assignmentId: issuedAssignment.id,
       fileName: 'attempt-1.png',
       mimeType: 'image/png',
-      byteSize: 16,
       assetOrder: 1,
       attemptNo: 1,
-    });
+    }, firstUploadBody);
     assert(firstUpload.expiresAt > Date.now(), 'writing upload url should expose expiry metadata');
-    const firstUploadResponse = await fetch(`${baseUrl}${firstUpload.uploadUrl}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: Buffer.from('fake-image-binary'),
-    });
+    const firstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, firstUploadBody, 'image/png');
     assert(firstUploadResponse.status === 204, 'first writing upload should succeed');
-    const replayedFirstUploadResponse = await fetch(`${baseUrl}${firstUpload.uploadUrl}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: Buffer.from('fake-image-binary-retry'),
-    });
+    const replayedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, replayedFirstUploadBody, 'image/png');
     assert(replayedFirstUploadResponse.status === 409, 'replayed upload token should return 409');
 
     const firstFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
@@ -1117,19 +1140,15 @@ const main = async () => {
     const revisedAssignment = revisedAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
     assert(revisedAssignment?.status === 'REVISION_REQUESTED', 'student should see revision requested status after teacher review');
 
-    const secondUpload = await orgStudent.post('/api/writing/upload-url', {
+    const secondUploadBody = Buffer.from('fake-image-binary-2');
+    const secondUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
       assignmentId: issuedAssignment.id,
       fileName: 'attempt-2.png',
       mimeType: 'image/png',
-      byteSize: 24,
       assetOrder: 1,
       attemptNo: 2,
-    });
-    const secondUploadResponse = await fetch(`${baseUrl}${secondUpload.uploadUrl}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: Buffer.from('fake-image-binary-2'),
-    });
+    }, secondUploadBody);
+    const secondUploadResponse = await uploadWritingAsset(baseUrl, secondUpload, secondUploadBody, 'image/png');
     assert(secondUploadResponse.status === 204, 'second writing upload should succeed');
 
     const secondFinalize = await orgStudent.post('/api/writing/submissions/finalize', {

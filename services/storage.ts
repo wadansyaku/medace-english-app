@@ -56,6 +56,7 @@ import type {
   MissionStorageService,
   OrganizationOpsStorageService,
   SessionStorageService,
+  StorageClientMap,
 } from './storage/types';
 import { buildAnnouncementFeed, getEffectiveAudienceRole, isAnnouncementVisibleToUser } from '../shared/announcements';
 import { hasDuplicateOpenRequest } from '../shared/commercial';
@@ -999,16 +1000,26 @@ class IndexedDBStorageService implements IStorageService {
 }
 
 export type {
+  AdminClient,
   AdminStorageService,
+  AnnouncementClient,
   AnnouncementStorageService,
+  CatalogClient,
   CatalogStorageService,
+  CommercialClient,
   CommercialStorageService,
+  DashboardClient,
   DashboardStorageService,
   IStorageService,
+  LearningClient,
   LearningStorageService,
+  MissionClient,
   MissionStorageService,
+  OrganizationClient,
   OrganizationOpsStorageService,
+  SessionClient,
   SessionStorageService,
+  StorageClientMap,
 } from './storage/types';
 
 export const storageModeSummary = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
@@ -1028,3 +1039,14 @@ export const missionStorage: MissionStorageService = storage;
 export const commercialStorage: CommercialStorageService = storage;
 export const announcementStorage: AnnouncementStorageService = storage;
 export const adminStorage: AdminStorageService = storage;
+
+export const storageClients: StorageClientMap = {
+  announcements: announcementStorage,
+  catalog: catalogStorage,
+  commercial: commercialStorage,
+  dashboard: dashboardStorage,
+  learning: learningStorage,
+  missions: missionStorage,
+  organization: organizationOpsStorage,
+  session: sessionStorage,
+};

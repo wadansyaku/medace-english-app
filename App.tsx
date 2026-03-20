@@ -1,7 +1,7 @@
 
 import React, { Suspense, lazy, useState } from 'react';
 import Layout from './components/Layout';
-import { OrganizationRole, UserRole, UserProfile, type LearningTaskIntent } from './types';
+import { type LearningTaskIntent, type UserProfile } from './types';
 import { BusinessAdminWorkspaceView, InstructorWorkspaceView } from './types';
 import { isGroupAdmin } from './config/access';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from './config/workspace';
@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
-import { getHomeAppRoute, isHomeAppRoute, type HomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
+import { canAccessAppView, isHomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
@@ -45,6 +45,14 @@ const App: React.FC = () => {
     },
   });
   const announcementFeed = useAnnouncementFeed(Boolean(user));
+  const isGroupAdminUser = isGroupAdmin(user);
+  const isInstructorWorkspace = Boolean(user && currentView === 'instructor');
+  const workspaceSections = isInstructorWorkspace
+    ? (isGroupAdminUser ? BUSINESS_ADMIN_WORKSPACE_SECTIONS : INSTRUCTOR_WORKSPACE_SECTIONS)
+    : [];
+  const activeWorkspaceSection = isInstructorWorkspace
+    ? (isGroupAdminUser ? businessAdminWorkspaceView : instructorWorkspaceView)
+    : undefined;
 
   const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
     dispatchNavigation({
@@ -62,7 +70,110 @@ const App: React.FC = () => {
     dispatchNavigation({ type: 'finish-book-view' });
   };
 
-  // --- Render Views ---
+  const handleSelectWorkspaceSection = (section: string) => {
+    if (!user || currentView !== 'instructor') return;
+    if (isGroupAdminUser) {
+      setBusinessAdminWorkspaceView(section as BusinessAdminWorkspaceView);
+      return;
+    }
+    setInstructorWorkspaceView(section as InstructorWorkspaceView);
+  };
+
+  const handleChangeView = (view: string) => {
+    if (!user) {
+      dispatchNavigation({ type: 'close-public-info' });
+      return;
+    }
+    if (view === 'login') {
+      dispatchNavigation({ type: 'close-public-info' });
+      return;
+    }
+    if (!isHomeAppRoute(view)) return;
+    dispatchNavigation({ type: 'go-home', view });
+  };
+
+  const renderHomeContent = () => {
+    if (!user) {
+      return null;
+    }
+
+    if (user.needsOnboarding) {
+      return (
+        <Onboarding
+          user={user}
+          onComplete={(updated) => {
+            setCurrentUser(updated);
+            dispatchNavigation({ type: 'go-home', view: 'dashboard', historyMode: 'replace' });
+          }}
+        />
+      );
+    }
+
+    if (!canAccessAppView(user, currentView)) {
+      return <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
+    }
+
+    switch (currentView) {
+      case 'dashboard':
+        return (
+          <Dashboard
+            user={user}
+            announcementFeed={announcementFeed}
+            onSelectBook={handleBookSelect}
+            onStartTask={handleTaskSelect}
+            onUserUpdate={setCurrentUser}
+          />
+        );
+      case 'study':
+        return selectedTask ? (
+          <StudyMode
+            user={user}
+            bookId={getTaskRouteBookId(selectedTask)}
+            taskIntent={selectedTask}
+            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
+            onSessionComplete={handleSessionComplete}
+          />
+        ) : null;
+      case 'quiz':
+        return selectedTask ? (
+          <QuizMode
+            user={user}
+            bookId={getTaskRouteBookId(selectedTask)}
+            taskIntent={selectedTask}
+            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
+          />
+        ) : null;
+      case 'admin':
+        return <AdminPanel />;
+      case 'instructor':
+        return isGroupAdminUser ? (
+          <BusinessAdminDashboard
+            user={user}
+            onSelectBook={handleBookSelect}
+            activeView={businessAdminWorkspaceView}
+            onChangeView={setBusinessAdminWorkspaceView}
+          />
+        ) : (
+          <InstructorDashboard
+            user={user}
+            onSelectBook={handleBookSelect}
+            activeView={instructorWorkspaceView}
+            onChangeView={setInstructorWorkspaceView}
+          />
+        );
+      default:
+        return (
+          <Dashboard
+            user={user}
+            announcementFeed={announcementFeed}
+            onSelectBook={handleBookSelect}
+            onStartTask={handleTaskSelect}
+            onUserUpdate={setCurrentUser}
+          />
+        );
+    }
+  };
+
   const renderContent = () => {
     if (authLoading) {
       return (
@@ -86,96 +197,7 @@ const App: React.FC = () => {
         />
       );
     }
-
-    // --- Onboarding Check ---
-    if (user.needsOnboarding) {
-      return (
-        <Onboarding 
-          user={user} 
-          onComplete={(updated) => {
-            setCurrentUser(updated);
-            dispatchNavigation({ type: 'go-home', view: 'dashboard', historyMode: 'replace' });
-          }} 
-        />
-      );
-    }
-
-    switch (currentView) {
-      case 'dashboard':
-        return (
-          <Dashboard
-            user={user}
-            announcementFeed={announcementFeed}
-            onSelectBook={handleBookSelect}
-            onStartTask={handleTaskSelect}
-            onUserUpdate={setCurrentUser}
-          />
-        );
-      case 'study':
-        return selectedTask ? (
-          <StudyMode 
-            user={user} 
-            bookId={getTaskRouteBookId(selectedTask)}
-            taskIntent={selectedTask}
-            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
-            onSessionComplete={handleSessionComplete}
-          />
-        ) : null;
-      case 'quiz':
-        return selectedTask ? (
-          <QuizMode 
-            user={user} 
-            bookId={getTaskRouteBookId(selectedTask)}
-            taskIntent={selectedTask}
-            onBack={() => dispatchNavigation({ type: 'finish-book-view' })} 
-          />
-        ) : null;
-      case 'admin':
-        return user.role === UserRole.ADMIN ? <AdminPanel /> : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
-      case 'instructor':
-        return user.role === UserRole.INSTRUCTOR
-          ? (isGroupAdmin(user)
-            ? <BusinessAdminDashboard user={user} onSelectBook={handleBookSelect} activeView={businessAdminWorkspaceView} onChangeView={setBusinessAdminWorkspaceView} />
-            : <InstructorDashboard user={user} onSelectBook={handleBookSelect} activeView={instructorWorkspaceView} onChangeView={setInstructorWorkspaceView} />)
-          : <div className="p-8 text-center text-red-500">アクセス権限がありません</div>;
-      default:
-        return (
-          <Dashboard
-            user={user}
-            announcementFeed={announcementFeed}
-            onSelectBook={handleBookSelect}
-            onStartTask={handleTaskSelect}
-            onUserUpdate={setCurrentUser}
-          />
-        );
-    }
-  };
-
-  const workspaceSections = user && currentView === 'instructor'
-    ? (isGroupAdmin(user) ? BUSINESS_ADMIN_WORKSPACE_SECTIONS : INSTRUCTOR_WORKSPACE_SECTIONS)
-    : [];
-  const activeWorkspaceSection = user && currentView === 'instructor'
-    ? (isGroupAdmin(user) ? businessAdminWorkspaceView : instructorWorkspaceView)
-    : undefined;
-  const handleSelectWorkspaceSection = (section: string) => {
-    if (!user || currentView !== 'instructor') return;
-    if (isGroupAdmin(user)) {
-      setBusinessAdminWorkspaceView(section as BusinessAdminWorkspaceView);
-      return;
-    }
-    setInstructorWorkspaceView(section as InstructorWorkspaceView);
-  };
-  const handleChangeView = (view: string) => {
-    if (!user) {
-      dispatchNavigation({ type: 'close-public-info' });
-      return;
-    }
-    if (view === 'login') {
-      dispatchNavigation({ type: 'close-public-info' });
-      return;
-    }
-    if (!isHomeAppRoute(view)) return;
-    dispatchNavigation({ type: 'go-home', view });
+    return renderHomeContent();
   };
 
   return (

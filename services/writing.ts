@@ -47,13 +47,33 @@ export const createWritingUploadUrl = async (
   return apiPost('/api/writing/upload-url', request);
 };
 
+const encodeBase64 = (value: ArrayBuffer): string => {
+  const bytes = new Uint8Array(value);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+};
+
+export const calculateWritingAssetSha256Base64 = async (file: Blob): Promise<string> => {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return encodeBase64(digest);
+};
+
 export const uploadWritingAsset = async (
   upload: CreateWritingUploadUrlResponse,
   file: File,
 ): Promise<void> => {
+  const sha256Base64 = await calculateWritingAssetSha256Base64(file);
   const response = await fetch(upload.uploadUrl, {
     method: upload.method,
-    headers: upload.headers,
+    headers: {
+      ...upload.headers,
+      'X-Content-SHA256': sha256Base64,
+    },
     body: file,
     credentials: 'include',
   });

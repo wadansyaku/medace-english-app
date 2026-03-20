@@ -1,28 +1,38 @@
-import { storage, type IStorageService } from './storage';
+import { learningClient, catalogClient, dashboardClient, sessionClient, type LearningClient, type CatalogClient, type DashboardClient, type SessionClient } from './clients';
 
-export type LearningService = Pick<IStorageService,
-  | 'addXP'
+type LearningSurface = Pick<LearningClient,
   | 'getBookSession'
-  | 'getBooks'
   | 'getDailySessionWords'
-  | 'getDashboardSnapshot'
   | 'getStudiedWordIdsByBook'
-  | 'getWordsByBook'
   | 'recordQuizAttempt'
-  | 'reportWord'
   | 'saveSRSHistory'
+>;
+
+type LearningCatalogSurface = Pick<CatalogClient,
+  | 'getBooks'
+  | 'getWordsByBook'
+  | 'reportWord'
   | 'updateWord'
   | 'updateWordCache'
 >;
 
+type LearningDashboardSurface = Pick<DashboardClient, 'getDashboardSnapshot'>;
+type LearningSessionSurface = Pick<SessionClient, 'addXP'>;
+
+export type LearningService =
+  & LearningSurface
+  & LearningCatalogSurface
+  & LearningDashboardSurface
+  & LearningSessionSurface;
+
 export const learningService: LearningService = {
-  addXP: (user, amount) => storage.addXP(user, amount),
-  getBookSession: (uid, bookId, limit, taskIntent) => storage.getBookSession(uid, bookId, limit, taskIntent),
-  getBooks: () => storage.getBooks(),
-  getDailySessionWords: (uid, limit, taskIntent) => storage.getDailySessionWords(uid, limit, taskIntent),
-  getDashboardSnapshot: (uid) => storage.getDashboardSnapshot(uid),
-  getStudiedWordIdsByBook: (uid, bookId) => storage.getStudiedWordIdsByBook(uid, bookId),
-  getWordsByBook: (bookId) => storage.getWordsByBook(bookId),
+  addXP: (user, amount) => sessionClient.addXP(user, amount),
+  getBookSession: (uid, bookId, limit, taskIntent) => learningClient.getBookSession(uid, bookId, limit, taskIntent),
+  getBooks: () => catalogClient.getBooks(),
+  getDailySessionWords: (uid, limit, taskIntent) => learningClient.getDailySessionWords(uid, limit, taskIntent),
+  getDashboardSnapshot: (uid) => dashboardClient.getDashboardSnapshot(uid),
+  getStudiedWordIdsByBook: (uid, bookId) => learningClient.getStudiedWordIdsByBook(uid, bookId),
+  getWordsByBook: (bookId) => catalogClient.getWordsByBook(bookId),
   recordQuizAttempt: (
     uid,
     wordId,
@@ -32,7 +42,7 @@ export const learningService: LearningService = {
     responseTimeMs,
     missionAssignmentId,
     taskIntentType,
-  ) => storage.recordQuizAttempt(
+  ) => learningClient.recordQuizAttempt(
     uid,
     wordId,
     bookId,
@@ -42,12 +52,12 @@ export const learningService: LearningService = {
     missionAssignmentId,
     taskIntentType,
   ),
-  reportWord: (wordId, reason) => storage.reportWord(wordId, reason),
+  reportWord: (wordId, reason) => catalogClient.reportWord(wordId, reason),
   saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType) => (
-    storage.saveSRSHistory(uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType)
+    learningClient.saveSRSHistory(uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType)
   ),
-  updateWord: (word) => storage.updateWord(word),
-  updateWordCache: (wordId, sentence, translation) => storage.updateWordCache(wordId, sentence, translation),
+  updateWord: (word) => catalogClient.updateWord(word),
+  updateWordCache: (wordId, sentence, translation) => catalogClient.updateWordCache(wordId, sentence, translation),
 };
 
 export default learningService;
