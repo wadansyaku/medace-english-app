@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { WritingEvaluation } from '../types';
 import {
+  appendWritingSideEffectWarning,
   buildRubric,
   choosePreferredEvaluation,
   decodeSubmissionMarker,
   encodeSubmissionMarker,
+  getWritingSideEffectWarningMessage,
 } from '../utils/writing';
 
 const makeEvaluation = (overrides: Partial<WritingEvaluation>): WritingEvaluation => ({
@@ -54,5 +56,26 @@ describe('writing utils', () => {
 
     expect(rubric.map((item) => item.key)).toEqual(['task', 'organization', 'vocabulary', 'grammar']);
     expect(rubric.every((item) => item.score >= 1 && item.score <= item.maxScore)).toBe(true);
+  });
+
+  it('returns no warning when writing side effects were persisted successfully', () => {
+    expect(getWritingSideEffectWarningMessage(null)).toBeNull();
+    expect(getWritingSideEffectWarningMessage({
+      sideEffectJob: undefined,
+    })).toBeNull();
+  });
+
+  it('appends a dashboard sync warning when a writing side effect job fails', () => {
+    const message = appendWritingSideEffectWarning('答案を提出しました。', {
+      sideEffectJob: {
+        jobId: 'job-1',
+        status: 'FAILED',
+        attemptCount: 2,
+        lastError: 'D1 unavailable',
+      },
+    });
+
+    expect(message).toContain('答案を提出しました。');
+    expect(message).toContain('ダッシュボード反映が遅れる可能性があります');
   });
 });

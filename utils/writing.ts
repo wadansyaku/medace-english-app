@@ -282,3 +282,8 @@ export const buildPrintableFeedbackHtml = (
     </body>
   </html>`;
 };
+
+export {
+  appendWritingSideEffectWarning,
+  getWritingSideEffectWarningMessage,
+} from './writingSideEffects';

@@ -1,5 +1,6 @@
 import type {
   ApproveWritingReturnRequest,
+  WritingAssignmentMutationResponse,
   CreateWritingUploadUrlRequest,
   CreateWritingUploadUrlResponse,
   FinalizeWritingSubmissionRequest,
@@ -120,7 +121,7 @@ export const requestWritingRevision = async (
 
 export const completeWritingAssignment = async (
   assignmentId: string,
-): Promise<WritingSubmissionDetailResponse['assignment']> => {
+): Promise<WritingAssignmentMutationResponse> => {
   return apiPost('/api/writing/assignments/complete', { assignmentId });
 };
 
