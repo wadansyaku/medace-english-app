@@ -11,6 +11,7 @@ import { useBusinessAdminDashboardController } from '../hooks/useBusinessAdminDa
 import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import BusinessAdminDashboardSections from './dashboard/BusinessAdminDashboardSections';
+import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
 
 interface BusinessAdminDashboardProps {
   user: UserProfile;
@@ -105,8 +106,9 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   const isLocalMockData = storageMode.capabilities.organization.usesMockData;
 
   return (
-    <div data-testid="business-admin-dashboard" className="space-y-8 pb-12">
-      {controller.notice && (
+    <WorkspaceDashboardShell
+      testId="business-admin-dashboard"
+      notice={controller.notice && (
         <div className={`rounded-[24px] border px-5 py-4 text-sm font-medium ${
           controller.notice.tone === 'success'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -115,73 +117,52 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
           {controller.notice.message}
         </div>
       )}
-
-      {isLocalMockData && <B2BStorageModeBanner />}
-
-      <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]"></div>
-        <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-                {SUBSCRIPTION_PLAN_LABELS[snapshot.subscriptionPlan]}
-              </span>
-              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-                グループ管理者
-              </span>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-              {user.displayName}
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-3 text-medace-100">
-            <Building2 className="h-5 w-5" />
-            <span className="text-sm font-bold">{snapshot.organizationName}</span>
-          </div>
-          <div className="mt-6 max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">{viewCopy.eyebrow}</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight">{viewCopy.title}</h2>
-            <p className="mt-4 text-sm leading-relaxed text-white/75">{viewCopy.body}</p>
-          </div>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50"
-            >
-              <Users className="h-4 w-4" />
-              割当を確認する
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeView(BusinessAdminWorkspaceView.INSTRUCTORS)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              講師負荷を見る
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeView(BusinessAdminWorkspaceView.WRITING)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              作文進捗を見る
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeView(BusinessAdminWorkspaceView.SETTINGS)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-            >
-              <Building2 className="h-4 w-4" />
-              組織設定を開く
-            </button>
-          </div>
+      banner={isLocalMockData ? <B2BStorageModeBanner /> : undefined}
+      context={(
+        <>
+          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+            {SUBSCRIPTION_PLAN_LABELS[snapshot.subscriptionPlan]}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+            グループ管理者
+          </span>
+        </>
+      )}
+      userBadge={(
+        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          {user.displayName}
         </div>
-      </section>
-
+      )}
+      eyebrow={viewCopy.eyebrow}
+      title={viewCopy.title}
+      body={viewCopy.body}
+      actions={[
+        {
+          label: '割当を確認する',
+          icon: Users,
+          onClick: () => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS),
+          variant: 'primary',
+        },
+        {
+          label: '講師負荷を見る',
+          icon: ShieldCheck,
+          onClick: () => onChangeView(BusinessAdminWorkspaceView.INSTRUCTORS),
+          variant: 'secondary',
+        },
+        {
+          label: '作文進捗を見る',
+          icon: CheckCircle2,
+          onClick: () => onChangeView(BusinessAdminWorkspaceView.WRITING),
+          variant: 'secondary',
+        },
+        {
+          label: '組織設定を開く',
+          icon: Building2,
+          onClick: () => onChangeView(BusinessAdminWorkspaceView.SETTINGS),
+          variant: 'secondary',
+        },
+      ]}
+    >
       <BusinessAdminDashboardSections
         user={user}
         onSelectBook={onSelectBook}
@@ -195,7 +176,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
         writingQueue={writingQueue}
         isLocalMockData={isLocalMockData}
       />
-    </div>
+    </WorkspaceDashboardShell>
   );
 };
 

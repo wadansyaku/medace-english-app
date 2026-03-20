@@ -19,6 +19,7 @@ import {
   recordAuthFailure,
 } from '../auth-rate-limit';
 import { HttpError, noContent, readJson } from '../http';
+import { assertSameOriginMutation } from '../request-guards';
 import getServerRuntimeFlags from '../runtime';
 import type { DbUserRow } from '../types';
 import {
@@ -196,6 +197,7 @@ export const authProfileRoutes: ApiRouteDefinition[] = [
   {
     matches: ({ pathname, request }) => pathname === 'auth' && request.method === 'POST',
     handle: async (context) => {
+      assertSameOriginMutation(context.request);
       const body = await readJson<AuthRequest>(context.request);
       if (body.action === 'demo-login') {
         return handleDemoLogin(context, body);
@@ -219,6 +221,7 @@ export const authProfileRoutes: ApiRouteDefinition[] = [
   {
     matches: ({ pathname, request }) => pathname === 'session' && request.method === 'DELETE',
     handle: async ({ env, request }) => {
+      assertSameOriginMutation(request);
       const cookie = await clearSession(env, request);
       return {
         response: noContent({ headers: { 'Set-Cookie': cookie } }),
@@ -228,6 +231,7 @@ export const authProfileRoutes: ApiRouteDefinition[] = [
   {
     matches: ({ pathname, request }) => pathname === 'profile' && request.method === 'POST',
     handle: async (context) => {
+      assertSameOriginMutation(context.request);
       const user = await requireUser(context.env, context.request);
       return handleProfileUpdate(context, user);
     },

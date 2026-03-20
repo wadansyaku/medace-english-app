@@ -1,7 +1,16 @@
-name: Browser Smoke
+name: Smoke Sentinel
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Smoke suite
+        required: false
+        default: sentinel
+        type: choice
+        options:
+          - sentinel
+          - full
   pull_request:
     branches:
       - main
@@ -27,7 +36,7 @@ jobs:
         run: node node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Run browser smoke tests
-        run: npm run test:smoke
+        run: node scripts/run-smoke-tests.mjs --suite "${{ inputs.suite || 'sentinel' }}"
 
       - name: Upload smoke artifacts
         if: failure()

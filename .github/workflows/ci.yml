@@ -37,6 +37,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Install Playwright browser for sentinel smoke
+        if: github.event_name == 'push'
+        run: node node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Run smoke sentinel
+        if: github.event_name == 'push'
+        env:
+          SMOKE_SKIP_BUILD: '1'
+        run: node scripts/run-smoke-tests.mjs --suite sentinel
+
       - name: API integration tests
         run: npm run test:api
 

@@ -3,7 +3,9 @@ import { getRelativeDateKey, getTodayDateKey } from '../../utils/date';
 import { buildDemoEmail, DEMO_RETENTION_TTL_MS, getDemoDisplayName } from '../../utils/demo';
 import { HttpError } from './http';
 import {
+  hydrateUserOrganizationFromMembership,
   isBusinessSubscriptionPlan,
+  maybeSyncBusinessMembershipFromUser,
   resolveOrCreateOrganization,
   upsertActiveOrganizationMembership,
 } from './organization-memberships';
@@ -13,6 +15,7 @@ const SESSION_COOKIE_NAME = 'medace_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const PBKDF2_ITERATIONS = 100000;
 const DAY_MS = 86400000;
+const SESSION_TOKEN_DELIMITER = '.';
 const DEMO_ORGANIZATION_NAME = 'Steady Study Demo Academy';
 const DEMO_ORGANIZATION_STAFF: Array<{
   email: string;
@@ -111,6 +114,42 @@ const buildCookie = (request: Request, token: string, maxAgeSeconds: number): st
   return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
 };
 
+const hashSessionToken = async (token: string): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  return encodeBase64(digest);
+};
+
+const parseSessionCredential = (
+  value: string | undefined,
+): { sessionId: string; rawToken: string; isLegacy: boolean } | null => {
+  if (!value) return null;
+
+  const delimiterIndex = value.indexOf(SESSION_TOKEN_DELIMITER);
+  if (delimiterIndex === -1) {
+    return {
+      sessionId: value,
+      rawToken: value,
+      isLegacy: true,
+    };
+  }
+
+  const sessionId = value.slice(0, delimiterIndex);
+  const secret = value.slice(delimiterIndex + 1);
+  if (!sessionId || !secret) {
+    return {
+      sessionId: value,
+      rawToken: value,
+      isLegacy: true,
+    };
+  }
+
+  return {
+    sessionId,
+    rawToken: value,
+    isLegacy: false,
+  };
+};
+
 const normalizeStats = (row: DbUserRow): UserStats => ({
   xp: row.stats_xp ?? 0,
   level: row.stats_level ?? 1,
@@ -196,11 +235,17 @@ export const verifyPassword = async (password: string, storedHash: string | null
 };
 
 export const findUserByEmail = async (env: AppEnv, email: string): Promise<DbUserRow | null> => {
-  return env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first() as Promise<DbUserRow | null>;
+  const row = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<DbUserRow>();
+  if (!row) return null;
+  await maybeSyncBusinessMembershipFromUser(env, row);
+  return hydrateUserOrganizationFromMembership(env, row);
 };
 
 export const findUserById = async (env: AppEnv, userId: string): Promise<DbUserRow | null> => {
-  return env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first() as Promise<DbUserRow | null>;
+  const row = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first<DbUserRow>();
+  if (!row) return null;
+  await maybeSyncBusinessMembershipFromUser(env, row);
+  return hydrateUserOrganizationFromMembership(env, row);
 };
 
 export const createUser = async (
@@ -431,28 +476,37 @@ export const touchUserStreak = async (env: AppEnv, row: DbUserRow): Promise<DbUs
   return updated;
 };
 
+const deleteExpiredSessions = async (env: AppEnv): Promise<void> => {
+  await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(Date.now()).run();
+};
+
 export const createSession = async (
   env: AppEnv,
   request: Request,
   userId: string,
   ttlMs: number = SESSION_TTL_MS
 ): Promise<string> => {
-  const token = crypto.randomUUID();
+  await deleteExpiredSessions(env);
+
+  const sessionId = crypto.randomUUID();
+  const sessionSecret = crypto.randomUUID();
+  const token = `${sessionId}${SESSION_TOKEN_DELIMITER}${sessionSecret}`;
+  const tokenHash = await hashSessionToken(token);
   const expiresAt = Date.now() + ttlMs;
 
   await env.DB.prepare(`
-    INSERT INTO sessions (token, user_id, expires_at, created_at)
-    VALUES (?, ?, ?, ?)
-  `).bind(token, userId, expiresAt, Date.now()).run();
+    INSERT INTO sessions (token, token_hash, user_id, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(sessionId, tokenHash, userId, expiresAt, Date.now()).run();
 
   return buildCookie(request, token, Math.floor(ttlMs / 1000));
 };
 
 export const clearSession = async (env: AppEnv, request: Request): Promise<string> => {
   const cookies = parseCookies(request);
-  const token = cookies[SESSION_COOKIE_NAME];
-  if (token) {
-    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+  const credential = parseSessionCredential(cookies[SESSION_COOKIE_NAME]);
+  if (credential) {
+    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
   }
 
   return buildCookie(request, '', 0);
@@ -460,22 +514,34 @@ export const clearSession = async (env: AppEnv, request: Request): Promise<strin
 
 export const getSessionUser = async (env: AppEnv, request: Request): Promise<DbUserRow | null> => {
   const cookies = parseCookies(request);
-  const token = cookies[SESSION_COOKIE_NAME];
-  if (!token) return null;
+  const credential = parseSessionCredential(cookies[SESSION_COOKIE_NAME]);
+  if (!credential) return null;
+
+  await deleteExpiredSessions(env);
 
   const row = await env.DB.prepare(`
-    SELECT u.*
+    SELECT s.token_hash AS session_token_hash, u.*
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > ?
-  `).bind(token, Date.now()).first() as DbUserRow | null;
+  `).bind(credential.sessionId, Date.now()).first() as (DbUserRow & { session_token_hash?: string | null }) | null;
 
   if (!row) {
-    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
     return null;
   }
 
-  return touchUserStreak(env, row);
+  if (!credential.isLegacy) {
+    const expectedHash = row.session_token_hash;
+    if (!expectedHash || expectedHash !== await hashSessionToken(credential.rawToken)) {
+      await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
+      return null;
+    }
+  }
+
+  await maybeSyncBusinessMembershipFromUser(env, row);
+  const hydrated = await hydrateUserOrganizationFromMembership(env, row);
+  return touchUserStreak(env, hydrated);
 };
 
 export const requireUser = async (env: AppEnv, request: Request): Promise<DbUserRow> => {
@@ -500,7 +566,7 @@ export const requireOrganizationRole = (row: DbUserRow, roles: OrganizationRole[
 };
 
 export const ensureDemoUser = async (env: AppEnv, role: UserRole, organizationRole?: OrganizationRole): Promise<DbUserRow> => {
-  await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(Date.now()).run();
+  await deleteExpiredSessions(env);
   await env.DB.prepare(`
     DELETE FROM users
     WHERE email GLOB 'demo_*@medace.app'

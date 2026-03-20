@@ -1,33 +1,62 @@
-import { storage, type IStorageService } from './storage';
+import {
+  adminClient,
+  catalogClient,
+  dashboardClient,
+  learningClient,
+  sessionClient,
+  type CatalogClient,
+  type DashboardClient,
+  type LearningClient,
+  type SessionClient,
+} from './clients';
 
-export type DashboardService = Pick<IStorageService,
+type DashboardSurface = Pick<DashboardClient,
+  | 'getAdminDashboardSnapshot'
+  | 'getDashboardSnapshot'
+>;
+
+type DashboardCatalogSurface = Pick<CatalogClient,
   | 'batchImportWords'
   | 'deleteBook'
-  | 'getAdminDashboardSnapshot'
   | 'getBooks'
-  | 'getDashboardSnapshot'
+>;
+
+type DashboardLearningSurface = Pick<LearningClient,
   | 'getLearningPlan'
   | 'getLearningPreference'
-  | 'getSession'
-  | 'resetAllData'
   | 'saveLearningPlan'
   | 'saveLearningPreference'
+>;
+
+type DashboardSessionSurface = Pick<SessionClient,
+  | 'getSession'
   | 'updateSessionUser'
 >;
 
+type DashboardAdminSurface = {
+  resetAllData: () => Promise<void>;
+};
+
+export type DashboardService =
+  & DashboardSurface
+  & DashboardCatalogSurface
+  & DashboardLearningSurface
+  & DashboardSessionSurface
+  & DashboardAdminSurface;
+
 export const dashboardService: DashboardService = {
-  batchImportWords: (request, onProgress) => storage.batchImportWords(request, onProgress),
-  deleteBook: (bookId) => storage.deleteBook(bookId),
-  getAdminDashboardSnapshot: () => storage.getAdminDashboardSnapshot(),
-  getBooks: () => storage.getBooks(),
-  getDashboardSnapshot: (uid) => storage.getDashboardSnapshot(uid),
-  getLearningPlan: (uid) => storage.getLearningPlan(uid),
-  getLearningPreference: (uid) => storage.getLearningPreference(uid),
-  getSession: () => storage.getSession(),
-  resetAllData: () => storage.resetAllData(),
-  saveLearningPlan: (plan) => storage.saveLearningPlan(plan),
-  saveLearningPreference: (preference) => storage.saveLearningPreference(preference),
-  updateSessionUser: (user) => storage.updateSessionUser(user),
+  batchImportWords: (request, onProgress) => catalogClient.batchImportWords(request, onProgress),
+  deleteBook: (bookId) => catalogClient.deleteBook(bookId),
+  getAdminDashboardSnapshot: () => dashboardClient.getAdminDashboardSnapshot(),
+  getBooks: () => catalogClient.getBooks(),
+  getDashboardSnapshot: (uid) => dashboardClient.getDashboardSnapshot(uid),
+  getLearningPlan: (uid) => learningClient.getLearningPlan(uid),
+  getLearningPreference: (uid) => learningClient.getLearningPreference(uid),
+  getSession: () => sessionClient.getSession(),
+  resetAllData: () => adminClient.resetAllData(),
+  saveLearningPlan: (plan) => learningClient.saveLearningPlan(plan),
+  saveLearningPreference: (preference) => learningClient.saveLearningPreference(preference),
+  updateSessionUser: (user) => sessionClient.updateSessionUser(user),
 };
 
 export default dashboardService;

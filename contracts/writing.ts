@@ -23,6 +23,7 @@ export interface CreateWritingUploadUrlRequest {
   fileName: string;
   mimeType: string;
   byteSize: number;
+  sha256Base64?: string;
   assetOrder: number;
   attemptNo?: number;
 }

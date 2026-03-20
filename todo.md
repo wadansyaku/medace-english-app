@@ -1,22 +1,22 @@
 
 # Todo List
 
-## 1. Current Focus: Social Features & Stability
-**Priority: High** (社会的機能と安定性)
-- [ ] **Leaderboard Logic**: 現在はモックまたは単純な全期間XP。週間ランキングのロジック（DBスキーマ変更含む）を検討する。
-- [ ] **Data Sync**: オフラインモード(IndexedDB)と Cloudflare D1 / Pages Functions の同期ロジック強化。
-- [ ] **Assignment Ops**: 担当講師割当の履歴化と、クラス単位権限までの拡張。
-- [ ] **BtoB KPI**: 通知後再開率、割当率、学習プラン浸透率を継続計測できるようにする。
+## 1. Current Focus: B2B Ops & Stability
+**Priority: High** (B2B運用基盤の安定化を優先)
+- [ ] **Assignment Ops**: 担当講師割当の履歴化を UI / 運用フローまで仕上げ、cohort 単位権限へ拡張する。
+- [ ] **BtoB KPI**: 通知後再開率、割当率、学習プラン浸透率を継続計測できるようにし、監査性も強化する。
+- [ ] **Cloudflare Data Sync**: Cloudflare を正史として session / storage の整合性確認を継続し、IndexedDB は demo / offline fallback に限定する。
+- [ ] **Facade Split**: `components/dashboard/BusinessAdminDashboardSections.tsx` と `services/storage.ts` の分割を進める。
 
 ## 2. Next Up: Mobile App Experience
-- [ ] **PWA Manifest**: `manifest.json` の作成とアイコン設定 (HTML metaタグは設定済み)。
 - [ ] **Touch Gestures**: Study Modeでのスワイプ操作（Tinder風UI）の導入検討。
+- [ ] **Leaderboard Logic**: 個人向け週間ランキングのロジック（DBスキーマ変更含む）は B2B 安定化後に再開する。
 
 ## 3. Completed Features (Done)
 ### Visual Polish & Social Features
 - [x] **Graph Improvement**: 週間学習記録に「目標ライン」と「目標達成カラー」を追加。
 - [x] **Leaderboard Enhancement**: ユーザーレベルに応じた「リーグ（Bronze/Silver/Gold）」バッジの実装。
-- [x] **Mobile App Basics**: PWA用メタタグ（theme-color, apple-touch-icon）の設定。
+- [x] **Mobile App Basics**: PWA用メタタグ（theme-color, apple-touch-icon）と `public/manifest.webmanifest` の設定。
 
 ### UX / UI Polish
 - [x] **UI Localization**: Dashboard, StudyModeの日本語化完了。
@@ -28,6 +28,7 @@
 - [x] **Fix Learning Algorithm**: 学習コース進捗ロジック修正。
 - [x] **AI Content Persistence**: 例文・訳のDB保存とキャッシュ。
 - [x] **Error Handling**: Gemini API 429エラー対策。
+- [x] **Writing Smoke Stabilization**: `demo login -> onboarding/profile save -> writing section` の session persistence を固定し、 browser smoke / API integration の回帰確認を追加。
 
 ### Personalization & Content
 - [x] **Dynamic Learning Plan**: プラン作成後の編集機能実装済み。

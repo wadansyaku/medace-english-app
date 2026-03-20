@@ -7,10 +7,29 @@ import { getAvailablePort } from './_shared/ports.mjs';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
-const extraArgs = process.argv.slice(2);
+const cliArgs = process.argv.slice(2);
 const { FORCE_COLOR: _forceColor, ...baseEnv } = process.env;
 const externalBaseUrl = process.env.PLAYWRIGHT_BASE_URL || '';
 const isExternalTarget = externalBaseUrl.length > 0;
+const skipBuild = process.env.SMOKE_SKIP_BUILD === '1';
+let suiteMode = process.env.SMOKE_SUITE || 'full';
+const extraArgs = [];
+
+for (let index = 0; index < cliArgs.length; index += 1) {
+  const arg = cliArgs[index];
+  if (arg === '--suite') {
+    suiteMode = cliArgs[index + 1] || suiteMode;
+    index += 1;
+    continue;
+  }
+  if (arg.startsWith('--suite=')) {
+    suiteMode = arg.slice('--suite='.length) || suiteMode;
+    continue;
+  }
+  extraArgs.push(arg);
+}
+
+suiteMode = suiteMode === 'sentinel' ? 'sentinel' : 'full';
 
 const runCommand = (command, args, env) => new Promise((resolve) => {
   const child = spawn(command, args, {
@@ -106,43 +125,54 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
   });
 };
 
-const suites = isExternalTarget
+const sentinelFiles = [
+  'tests/smoke/public.smoke.spec.ts',
+  'tests/smoke/student.smoke.spec.ts',
+];
+
+const cloudflareFiles = [
+  'tests/smoke/public.smoke.spec.ts',
+  'tests/smoke/student.smoke.spec.ts',
+  'tests/smoke/organization.smoke.spec.ts',
+  'tests/smoke/commercial.smoke.spec.ts',
+  'tests/smoke/writing.smoke.spec.ts',
+  'tests/smoke/mobile.smoke.spec.ts',
+];
+
+const suites = suiteMode === 'sentinel'
   ? [
       {
-        name: 'remote-core',
-        args: ['--grep-invert', 'writing|idb mode'],
-        env: {},
-      },
-      {
-        name: 'remote-writing',
-        args: ['--grep', 'writing'],
+        name: 'sentinel',
+        files: sentinelFiles,
         env: {},
       },
     ]
   : [
       {
-        name: 'core',
-        args: ['--grep-invert', 'writing|idb mode'],
+        name: isExternalTarget ? 'remote-full' : 'full',
+        files: cloudflareFiles,
         env: {},
       },
-      {
-        name: 'writing',
-        args: ['--grep', 'writing'],
-        env: {},
-      },
-      {
-        name: 'idb',
-        args: ['--grep', 'idb mode'],
-        env: {
-          VITE_STORAGE_MODE: 'idb',
-        },
-      },
+      ...(
+        isExternalTarget
+          ? []
+          : [{
+            name: 'idb',
+            files: ['tests/smoke/idb.smoke.spec.ts'],
+            env: {
+              VITE_STORAGE_MODE: 'idb',
+            },
+          }]
+      ),
     ];
 
 let exitCode = 0;
 const buildCache = new Set();
 
 const runBuildForEnv = async (suiteEnv, buildKey) => {
+  if (skipBuild) {
+    return 0;
+  }
   if (buildCache.has(buildKey)) {
     return 0;
   }
@@ -188,7 +218,7 @@ for (const suite of suites) {
       await waitForServer(baseUrl);
     }
 
-    const playwrightCommand = createNodeToolCommand('playwright', ['test', '--config=playwright.smoke.config.ts', ...suite.args, ...extraArgs]);
+    const playwrightCommand = createNodeToolCommand('playwright', ['test', '--config=playwright.smoke.config.ts', ...suite.files, ...extraArgs]);
     const suiteExitCode = await runCommand(
       playwrightCommand.command,
       playwrightCommand.args,

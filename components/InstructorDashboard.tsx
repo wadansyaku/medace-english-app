@@ -11,6 +11,7 @@ import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import InstructorDashboardModals from './dashboard/InstructorDashboardModals';
 import InstructorDashboardSections from './dashboard/InstructorDashboardSections';
+import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
 
 interface InstructorDashboardProps {
   user: UserProfile;
@@ -83,70 +84,57 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   }
 
   return (
-    <div data-testid="instructor-dashboard" className="space-y-8 animate-in fade-in pb-12">
-      <InstructorDashboardModals userDisplayName={user.displayName} controller={controller} />
-
-      {controller.notice && (
+    <WorkspaceDashboardShell
+      testId="instructor-dashboard"
+      className="animate-in fade-in"
+      notice={controller.notice && (
         <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
           {controller.notice}
         </div>
       )}
-
-      {isLocalMockData && <B2BStorageModeBanner />}
-
-      <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]"></div>
-        <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-                グループ講師
-              </span>
-              {user.organizationName && (
-                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-                  {user.organizationName}
-                </span>
-              )}
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-              {user.displayName}
-            </div>
-          </div>
-
-          <div className="mt-6 max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">{viewCopy.eyebrow}</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight">{viewCopy.title}</h2>
-            <p className="mt-4 text-sm leading-relaxed text-white/78">{viewCopy.body}</p>
-          </div>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => onChangeView(InstructorWorkspaceView.STUDENTS)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50"
-            >
-              <Bell className="h-4 w-4" />
-              優先生徒を見る
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeView(InstructorWorkspaceView.WRITING)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-            >
-              <ScanText className="h-4 w-4" />
-              作文を進める
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeView(InstructorWorkspaceView.WORKSHEETS)}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-white/15"
-            >
-              <FileStack className="h-4 w-4" />
-              問題を印刷する
-            </button>
-          </div>
+      banner={isLocalMockData ? <B2BStorageModeBanner /> : undefined}
+      context={(
+        <>
+          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+            グループ講師
+          </span>
+          {user.organizationName && (
+            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+              {user.organizationName}
+            </span>
+          )}
+        </>
+      )}
+      userBadge={(
+        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          {user.displayName}
         </div>
-      </section>
+      )}
+      eyebrow={viewCopy.eyebrow}
+      title={viewCopy.title}
+      body={viewCopy.body}
+      actions={[
+        {
+          label: '優先生徒を見る',
+          icon: Bell,
+          onClick: () => onChangeView(InstructorWorkspaceView.STUDENTS),
+          variant: 'primary',
+        },
+        {
+          label: '作文を進める',
+          icon: ScanText,
+          onClick: () => onChangeView(InstructorWorkspaceView.WRITING),
+          variant: 'secondary',
+        },
+        {
+          label: '問題を印刷する',
+          icon: FileStack,
+          onClick: () => onChangeView(InstructorWorkspaceView.WORKSHEETS),
+          variant: 'secondary',
+        },
+      ]}
+    >
+      <InstructorDashboardModals userDisplayName={user.displayName} controller={controller} />
 
       <InstructorDashboardSections
         user={user}
@@ -158,7 +146,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
       />
-    </div>
+    </WorkspaceDashboardShell>
   );
 };
 

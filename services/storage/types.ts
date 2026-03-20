@@ -152,6 +152,27 @@ export interface AdminStorageService {
   resetAllData(): Promise<void>;
 }
 
+export type SessionClient = SessionStorageService;
+export type CatalogClient = CatalogStorageService;
+export type LearningClient = LearningStorageService;
+export type DashboardClient = DashboardStorageService;
+export type OrganizationClient = OrganizationOpsStorageService;
+export type MissionClient = MissionStorageService;
+export type CommercialClient = CommercialStorageService;
+export type AnnouncementClient = AnnouncementStorageService;
+export type AdminClient = AdminStorageService;
+
+export interface StorageClientMap {
+  session: SessionClient;
+  catalog: CatalogClient;
+  learning: LearningClient;
+  dashboard: DashboardClient;
+  organization: OrganizationClient;
+  missions: MissionClient;
+  commercial: CommercialClient;
+  announcements: AnnouncementClient;
+}
+
 export type IStorageService =
   & SessionStorageService
   & CatalogStorageService

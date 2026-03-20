@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { getHomeViewForUser } from '../config/access';
-import type { LearningTaskIntent, UserProfile } from '../types';
+import { UserRole, type LearningTaskIntent, type UserProfile } from '../types';
 import {
   getPublicBusinessRolePath,
   parsePublicBusinessRoleKey,
@@ -63,6 +63,22 @@ export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
 export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
   const view = getHomeViewForUser(user);
   return view === 'admin' || view === 'instructor' ? view : 'dashboard';
+};
+
+export const canAccessAppView = (user: UserProfile | null, view: AppRoute): boolean => {
+  if (view === 'login' || view === 'publicInfo' || view === 'publicRole') {
+    return true;
+  }
+  if (!user) {
+    return false;
+  }
+  if (view === 'admin') {
+    return user.role === UserRole.ADMIN;
+  }
+  if (view === 'instructor') {
+    return user.role === UserRole.INSTRUCTOR;
+  }
+  return true;
 };
 
 export const parseNavigationPath = (pathname: string, search = ''): AppNavigationState => {

@@ -9,10 +9,48 @@ import {
   StorageResponse,
 } from '../contracts/storage';
 import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
-import { apiDelete, apiGet, apiPost } from './apiClient';
+import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
 
+const SESSION_POLL_INTERVAL_MS = 150;
+const SESSION_POLL_TIMEOUT_MS = 4_000;
+
+const waitFor = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class CloudflareStorageService implements IStorageService {
+  private async waitForSession(
+    expectedUid?: string,
+    timeoutMs = SESSION_POLL_TIMEOUT_MS,
+  ): Promise<UserProfile | null> {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      const sessionUser = (await apiGet<UserProfile | null>('/api/session').catch((error) => {
+        if (error instanceof ApiError && error.status === 401) {
+          return null;
+        }
+        throw error;
+      })) ?? null;
+
+      if (sessionUser && (!expectedUid || sessionUser.uid === expectedUid)) {
+        return sessionUser;
+      }
+
+      await waitFor(SESSION_POLL_INTERVAL_MS);
+    }
+
+    return null;
+  }
+
+  private async requireSession(expectedUid: string, context: string): Promise<UserProfile> {
+    const sessionUser = await this.waitForSession(expectedUid);
+    if (sessionUser) {
+      return sessionUser;
+    }
+
+    throw new ApiError(`${context} の前にセッションを確認できませんでした。`, 401);
+  }
+
   private async callStorage<TAction extends StorageAction>(
     request: StorageActionRequest<TAction>,
   ): Promise<StorageResponse<TAction>> {
@@ -20,16 +58,17 @@ export class CloudflareStorageService implements IStorageService {
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
-    return apiPost<UserProfile | null>('/api/auth', {
+    const user = await apiPost<UserProfile | null>('/api/auth', {
       action: 'demo-login',
       role,
       demoPassword,
       organizationRole,
     });
+    return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
   }
 
   async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null> {
-    return apiPost<UserProfile | null>('/api/auth', {
+    const user = await apiPost<UserProfile | null>('/api/auth', {
       action: 'email-auth',
       email,
       password,
@@ -37,9 +76,11 @@ export class CloudflareStorageService implements IStorageService {
       role,
       displayName,
     });
+    return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
   }
 
   async saveSession(user: UserProfile): Promise<void> {
+    await this.requireSession(user.uid, 'プロフィール更新');
     await apiPost<void>('/api/profile', { user });
   }
 
@@ -52,7 +93,7 @@ export class CloudflareStorageService implements IStorageService {
   }
 
   async getSession(): Promise<UserProfile | null> {
-    return apiGet<UserProfile | null>('/api/session');
+    return (await apiGet<UserProfile | null>('/api/session')) ?? null;
   }
 
   async addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile; leveledUp: boolean; }> {
