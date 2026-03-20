@@ -19,6 +19,7 @@ import {
   canOpenWritingFeedback,
   canSubmitWritingAssignment,
 } from '../components/writing/studentSectionUtils';
+import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
 
 interface NoticeState {
   tone: 'success' | 'error';
@@ -116,7 +117,7 @@ export const useWritingStudentController = (user: UserProfile) => {
         uploadResults.push(upload.assetId);
       }
 
-      await finalizeWritingSubmission({
+      const detail = await finalizeWritingSubmission({
         assignmentId: submitTarget.id,
         source: WritingSubmissionSource.STUDENT_MOBILE,
         assetIds: uploadResults,
@@ -124,7 +125,10 @@ export const useWritingStudentController = (user: UserProfile) => {
         manualTranscript: manualTranscript.trim() || undefined,
       });
 
-      setNotice({ tone: 'success', message: '答案を提出しました。講師確認後に返却されます。' });
+      setNotice({
+        tone: 'success',
+        message: appendWritingSideEffectWarning('答案を提出しました。講師確認後に返却されます。', detail),
+      });
       resetSubmitDialog();
       await refresh();
     } catch (error) {

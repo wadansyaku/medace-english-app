@@ -31,6 +31,7 @@ import {
   resolveSelectedSubmissionId,
   type WritingOpsTab,
 } from '../utils/writingOps';
+import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
 
 interface NoticeState {
   tone: 'success' | 'error';
@@ -233,7 +234,10 @@ export const useWritingOpsController = () => {
       });
       setDetail(nextDetail);
       setSelectedEvaluationId(resolveSelectedEvaluationId(nextDetail, selectedEvaluationId));
-      setNotice({ tone: 'success', message: '講師確認後の返却内容を確定しました。' });
+      setNotice({
+        tone: 'success',
+        message: appendWritingSideEffectWarning('講師確認後の返却内容を確定しました。', nextDetail),
+      });
       await refresh();
     } catch (error) {
       console.error(error);
@@ -255,7 +259,10 @@ export const useWritingOpsController = () => {
       });
       setDetail(nextDetail);
       setSelectedEvaluationId(resolveSelectedEvaluationId(nextDetail, selectedEvaluationId));
-      setNotice({ tone: 'success', message: '再提出依頼を保存しました。' });
+      setNotice({
+        tone: 'success',
+        message: appendWritingSideEffectWarning('再提出依頼を保存しました。', nextDetail),
+      });
       await refresh();
     } catch (error) {
       console.error(error);
@@ -270,8 +277,11 @@ export const useWritingOpsController = () => {
 
     setBusyAction('review');
     try {
-      await completeWritingAssignment(detail.assignment.id);
-      setNotice({ tone: 'success', message: '課題を完了済みにしました。' });
+      const assignment = await completeWritingAssignment(detail.assignment.id);
+      setNotice({
+        tone: 'success',
+        message: appendWritingSideEffectWarning('課題を完了済みにしました。', assignment),
+      });
       await refresh();
     } catch (error) {
       console.error(error);
@@ -309,7 +319,7 @@ export const useWritingOpsController = () => {
         assetIds.push(upload.assetId);
       }
 
-      await finalizeWritingSubmission({
+      const detail = await finalizeWritingSubmission({
         assignmentId: scannerTarget.id,
         source: WritingSubmissionSource.STAFF_SCANNER,
         assetIds,
@@ -317,7 +327,10 @@ export const useWritingOpsController = () => {
         manualTranscript: scannerManualTranscript.trim() || undefined,
       });
 
-      setNotice({ tone: 'success', message: '校舎スキャナー経由の答案を登録しました。' });
+      setNotice({
+        tone: 'success',
+        message: appendWritingSideEffectWarning('校舎スキャナー経由の答案を登録しました。', detail),
+      });
       resetScanner();
       setTab('QUEUE');
       await refresh();

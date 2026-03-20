@@ -5,6 +5,8 @@ import type {
   FinalizeWritingSubmissionRequest,
   GenerateWritingAssignmentRequest,
   RequestWritingRevisionRequest,
+  WritingAssignmentMutationResponse,
+  WritingSideEffectJobResult,
   WritingSubmissionDetailResponse,
 } from '../../../contracts/writing';
 import {
@@ -58,7 +60,11 @@ import {
   resolveAssignmentStatusForTeacherDecision,
   setAssignmentCompleted,
 } from './mutation-state';
-import { enqueueWritingActivitySideEffect, runSideEffectJobById } from '../side-effect-jobs';
+import {
+  enqueueWritingActivitySideEffect,
+  runSideEffectJobById,
+  type SideEffectJobRunResult,
+} from '../side-effect-jobs';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
@@ -84,7 +90,7 @@ const flushWritingActivitySideEffect = async (
     organizationId?: string | null;
     activityAt: number;
   },
-): Promise<void> => {
+): Promise<WritingSideEffectJobResult | undefined> => {
   const job = await enqueueWritingActivitySideEffect(env, payload);
   const result = await runSideEffectJobById(env, job.id);
   if (result.status === 'FAILED') {
@@ -97,7 +103,23 @@ const flushWritingActivitySideEffect = async (
       writingAssignmentId: payload.writingAssignmentId,
       studentUid: payload.studentUid,
     }));
+    return toFailedWritingSideEffectJob(result);
   }
+  return undefined;
+};
+
+const toFailedWritingSideEffectJob = (
+  result: SideEffectJobRunResult,
+): WritingSideEffectJobResult | undefined => {
+  if (result.status !== 'FAILED') {
+    return undefined;
+  }
+  return {
+    jobId: result.jobId,
+    status: result.status,
+    attemptCount: result.attemptCount,
+    lastError: result.lastError,
+  };
 };
 
 const readAiAssetsForOcr = async (
@@ -465,14 +487,15 @@ export const handleFinalizeWritingSubmission = async (
     promptSnapshot: assignmentRow.prompt_snapshot,
     now,
   });
-  await flushWritingActivitySideEffect(env, {
+  const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
     organizationId: assignmentRow.organization_id,
     activityAt: now,
   });
 
-  return (await readSubmissionContext(env, submissionId)).detail;
+  const detail = (await readSubmissionContext(env, submissionId)).detail;
+  return sideEffectJob ? { ...detail, sideEffectJob } : detail;
 };
 
 const applyTeacherReview = async (
@@ -510,14 +533,15 @@ const applyTeacherReview = async (
     assignmentStatus: nextStatus,
     now,
   });
-  await flushWritingActivitySideEffect(env, {
+  const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: detail.assignment.studentUid,
     writingAssignmentId: detail.assignment.id,
     organizationId: detail.assignment.organizationId,
     activityAt: now,
   });
 
-  return (await readSubmissionContext(env, submissionId)).detail;
+  const nextDetail = (await readSubmissionContext(env, submissionId)).detail;
+  return sideEffectJob ? { ...nextDetail, sideEffectJob } : nextDetail;
 };
 
 export const handleApproveWritingReturn = async (
@@ -545,21 +569,22 @@ export const handleCompleteWritingAssignment = async (
   env: AppEnv,
   user: DbUserRow,
   assignmentId: string,
-): Promise<WritingAssignment> => {
+): Promise<WritingAssignmentMutationResponse> => {
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
   const now = Date.now();
 
   await setAssignmentCompleted(env, { assignmentId, now });
-  await flushWritingActivitySideEffect(env, {
+  const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: row.student_user_id,
     writingAssignmentId: assignmentId,
     organizationId: row.organization_id,
     activityAt: now,
   });
 
-  return readAssignmentResponse(env, assignmentId);
+  const assignment = await readAssignmentResponse(env, assignmentId);
+  return sideEffectJob ? { ...assignment, sideEffectJob } : assignment;
 };
 
 export const handleGetWritingAsset = async (

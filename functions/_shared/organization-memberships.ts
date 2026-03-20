@@ -106,11 +106,14 @@ export const hydrateUserOrganizationFromMembership = async (
 ): Promise<DbUserRow> => {
   const context = await readActiveOrganizationContextForUser(env, user.id);
   if (!context) {
-    if (!user.organization_id && !user.organization_name && !user.organization_role) {
+    const hasOrganizationShadow = Boolean(user.organization_id || user.organization_name || user.organization_role);
+    const hasStaleBusinessPlan = isBusinessSubscriptionPlan(user.subscription_plan);
+    if (!hasOrganizationShadow && !hasStaleBusinessPlan) {
       return user;
     }
     return {
       ...user,
+      subscription_plan: hasStaleBusinessPlan ? SubscriptionPlan.TOC_FREE : user.subscription_plan,
       organization_id: null,
       organization_name: null,
       organization_role: null,

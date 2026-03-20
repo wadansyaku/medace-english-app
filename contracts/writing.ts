@@ -75,9 +75,17 @@ export interface PrintableWritingFeedbackResponse {
   html: string;
 }
 
+export interface WritingSideEffectJobResult {
+  jobId: string;
+  status: 'FAILED';
+  attemptCount: number;
+  lastError?: string;
+}
+
 export interface WritingSubmissionDetailResponse {
   assignment: WritingAssignment;
   submission: WritingSubmission;
+  sideEffectJob?: WritingSideEffectJobResult;
 }
 
 export interface WritingListTemplateQuery {
@@ -87,3 +95,7 @@ export interface WritingListTemplateQuery {
 export interface WritingGetReviewQueueQuery {
   scope?: 'QUEUE' | 'HISTORY';
 }
+
+export type WritingAssignmentMutationResponse = WritingAssignment & {
+  sideEffectJob?: WritingSideEffectJobResult;
+};

@@ -8,6 +8,7 @@ declare namespace NodeJS {
     PLAYWRIGHT_VIDEO_MODE?: 'off' | 'on' | 'retain-on-failure' | 'on-first-retry';
     PLAYWRIGHT_SKIP_WEBSERVER?: '0' | '1';
     PLAYWRIGHT_EXPECT_PREVIEW?: '0' | '1';
+    VITE_STORAGE_MODE?: 'cloudflare' | 'idb';
   }
 }
 
