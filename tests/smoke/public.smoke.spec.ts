@@ -13,7 +13,7 @@ test('public home shows the live motivation board before login', async ({ page }
   await page.goto('/');
 
   await expect(page.getByText('みんなの学習ライブ')).toBeVisible();
-  await expect(page.getByText(/直近15分/)).toBeVisible();
+  await expect(page.getByText('直近15分', { exact: true })).toBeVisible();
   await expect(page.getByText(/いまの積み上がり/)).toBeVisible();
 });
 

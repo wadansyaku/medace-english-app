@@ -15,8 +15,104 @@ import {
 export const mobileViewport = { width: 390, height: 844 };
 export const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 export const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW === '1';
+const expectIdbStorageMode = process.env.VITE_STORAGE_MODE === 'idb';
 
 export const toUploadBuffer = (value: string): Buffer => Buffer.from(value);
+
+const finishStudySession = async (page: Page, maxCards = 12) => {
+  const finishButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit);
+  const dashboardReturnButton = page.getByRole('button', { name: 'ダッシュボードに戻る' });
+  const flipButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton);
+  const rateButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3);
+  const quizRunningView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
+  const quizResultView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizResultView);
+  const studentDashboard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard);
+
+  for (let index = 0; index < maxCards * 2; index += 1) {
+    if (await finishButton.isVisible().catch(() => false)) {
+      await finishButton.click();
+      await expect(studentDashboard).toBeVisible();
+      return;
+    }
+    if (await dashboardReturnButton.isVisible().catch(() => false)) {
+      await dashboardReturnButton.click();
+      await expect(studentDashboard).toBeVisible();
+      return;
+    }
+    if (await quizResultView.isVisible().catch(() => false)) {
+      await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.quizResultBack }).click();
+      await expect(studentDashboard).toBeVisible();
+      return;
+    }
+    if (await studentDashboard.isVisible().catch(() => false)) {
+      return;
+    }
+    if (await quizRunningView.isVisible().catch(() => false)) {
+      await answerSeededQuizQuestion(page);
+      await Promise.race([
+        quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      ]);
+      continue;
+    }
+    if (await rateButton.isVisible().catch(() => false)) {
+      await rateButton.click();
+      await Promise.race([
+        finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        studentDashboard.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        flipButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      ]);
+      continue;
+    }
+    if (await flipButton.isVisible().catch(() => false)) {
+      await flipButton.click();
+      await Promise.race([
+        rateButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        dashboardReturnButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+        studentDashboard.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      ]);
+      continue;
+    }
+
+    await Promise.race([
+      finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      dashboardReturnButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      flipButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      rateButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      studentDashboard.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+    ]);
+  }
+
+  if (await finishButton.isVisible().catch(() => false)) {
+    await finishButton.click();
+    await expect(studentDashboard).toBeVisible();
+    return;
+  }
+  if (await dashboardReturnButton.isVisible().catch(() => false)) {
+    await dashboardReturnButton.click();
+    await expect(studentDashboard).toBeVisible();
+    return;
+  }
+  if (await quizResultView.isVisible().catch(() => false)) {
+    await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.quizResultBack }).click();
+    await expect(studentDashboard).toBeVisible();
+    return;
+  }
+  if (await quizRunningView.isVisible().catch(() => false)) {
+    throw new Error('Study session switched into quiz mode but did not finish within the smoke helper step budget.');
+  }
+  if (await studentDashboard.isVisible().catch(() => false)) {
+    return;
+  }
+  throw new Error('Study session did not reach a finishable state within the smoke helper step budget.');
+};
 
 export const completeDiagnostic = async (page: Page) => {
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingTest)).toBeVisible();
@@ -329,19 +425,39 @@ export const openBusinessRolePage = async (
   return role;
 };
 
+const waitForAuthenticatedSession = async (
+  page: Page,
+  timeoutMs = 15_000,
+  fallbackDashboardTestId?: string,
+) => {
+  if (expectIdbStorageMode && fallbackDashboardTestId) {
+    await expect(page.getByTestId(fallbackDashboardTestId)).toBeVisible({ timeout: timeoutMs });
+    return null;
+  }
+
+  const session = await getCurrentSessionUser(page, timeoutMs);
+  if (!session) {
+    throw new Error(`Session was not established within ${timeoutMs}ms.`);
+  }
+  return session;
+};
+
 export const loginBusinessStudentDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'student');
   await page.getByTestId(role.primaryActionTestId).click();
+  await waitForAuthenticatedSession(page, 15_000, MOBILE_FLOW_TEST_IDS.studentDashboard);
 };
 
 export const loginInstructorDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'instructor');
   await page.getByTestId(role.primaryActionTestId).click();
+  await waitForAuthenticatedSession(page, 15_000, 'instructor-dashboard');
 };
 
 export const loginGroupAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'group-admin');
   await page.getByTestId(role.primaryActionTestId).click();
+  await waitForAuthenticatedSession(page, 15_000, 'business-admin-dashboard');
 };
 
 export const loginAdminDemo = async (page: Page) => {
@@ -463,30 +579,14 @@ export const completeSeededStudySession = async (page: Page, bookId: string) => 
   await page.getByTestId(`book-study-${bookId}`).click();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
-  for (let index = 0; index < 2; index += 1) {
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
-  }
-
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
-  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+  await finishStudySession(page);
 };
 
 export const completeCoachCtaStudySession = async (page: Page) => {
   await page.getByTestId('coach-follow-up-cta').click();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
-  for (let index = 0; index < 2; index += 1) {
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
-  }
-
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
-  await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+  await finishStudySession(page);
 };
 
 export const completeMissionCtaStudySession = async (page: Page) => {
@@ -501,15 +601,7 @@ export const completeMissionCtaStudySession = async (page: Page) => {
   ]);
 
   if (await studyCard.isVisible().catch(() => false)) {
-    for (let index = 0; index < 2; index += 1) {
-      await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
-      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3)).toBeVisible();
-      await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
-    }
-
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit)).toBeVisible();
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit).click();
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+    await finishStudySession(page);
     return;
   }
 

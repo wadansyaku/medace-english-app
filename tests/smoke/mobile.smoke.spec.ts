@@ -621,8 +621,8 @@ test.describe('student mobile ux', () => {
     await studentPage.reload();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
     await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
-    await expect(studentPage.getByText('講師コメント')).toBeVisible();
-    await expect(studentPage.getByText('訂正文例')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
 
     await adminContext.close();
     await studentContext.close();
