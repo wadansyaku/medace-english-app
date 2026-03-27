@@ -152,4 +152,17 @@ describe('word hint assets', () => {
     expect(result.failedCount).toBe(0);
     expect(generateContentMock).toHaveBeenCalledTimes(2);
   });
+
+  it('orders audit candidates by the stalest available asset timestamp', async () => {
+    readAllMock.mockResolvedValueOnce([]);
+
+    await runWordHintAuditSweep(createEnv(), {
+      limit: 1,
+      staleAfterHours: 168,
+    });
+
+    expect(readAllMock).toHaveBeenCalledTimes(1);
+    expect(String(readAllMock.mock.calls[0]?.[1] || '')).toContain('ORDER BY MIN(');
+    expect(String(readAllMock.mock.calls[0]?.[1] || '')).toContain('COALESCE(w.example_image_audited_at, w.example_image_generated_at)');
+  });
 });

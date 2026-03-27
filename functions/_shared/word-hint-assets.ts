@@ -458,7 +458,26 @@ export const runWordHintAuditSweep = async (
        AND w.example_image_content_type IS NOT NULL
        AND TRIM(w.example_image_content_type) != ''
      )
-     ORDER BY COALESCE(w.example_audited_at, w.example_generated_at, w.example_image_audited_at, w.example_image_generated_at, 0) ASC
+     ORDER BY MIN(
+       CASE
+         WHEN w.example_generated_at IS NOT NULL
+           AND w.example_sentence IS NOT NULL
+           AND TRIM(w.example_sentence) != ''
+           AND w.example_meaning IS NOT NULL
+           AND TRIM(w.example_meaning) != ''
+         THEN COALESCE(w.example_audited_at, w.example_generated_at)
+         ELSE 9223372036854775807
+       END,
+       CASE
+         WHEN w.example_image_generated_at IS NOT NULL
+           AND w.example_image_key IS NOT NULL
+           AND TRIM(w.example_image_key) != ''
+           AND w.example_image_content_type IS NOT NULL
+           AND TRIM(w.example_image_content_type) != ''
+         THEN COALESCE(w.example_image_audited_at, w.example_image_generated_at)
+         ELSE 9223372036854775807
+       END
+     ) ASC
      LIMIT ?`,
     limit * 4,
   );

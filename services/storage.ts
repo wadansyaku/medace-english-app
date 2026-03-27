@@ -562,57 +562,62 @@ class IndexedDBStorageService implements IStorageService {
     });
   }
 
-  async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
-    const store = await this.getStore(STORES.WORDS, 'readwrite');
+  private async readWordRecord(wordId: string): Promise<WordData | undefined> {
+    const store = await this.getStore(STORES.WORDS, 'readonly');
     return new Promise((resolve, reject) => {
-      const req = store.get(payload.wordId);
-      req.onsuccess = async () => {
-        const word = req.result as WordData | undefined;
-        if (!word) {
-          reject(new Error('対象の単語が見つかりません。'));
-          return;
-        }
-
-        try {
-          if (payload.assetType === WordHintAssetType.EXAMPLE) {
-            if (!payload.forceRefresh && word.exampleSentence?.trim() && word.exampleMeaning?.trim()) {
-              resolve(word);
-              return;
-            }
-
-            const generatedAt = Date.now();
-            const context = await generateGeminiSentence(word.word, word.definition)
-              || createLocalExampleHint(word.word, word.definition, generatedAt);
-            const nextSentence = 'english' in context ? context.english : context.sentence;
-            const nextTranslation = 'japanese' in context ? context.japanese : context.translation;
-
-            word.exampleSentence = nextSentence;
-            word.exampleMeaning = nextTranslation;
-            word.exampleGeneratedAt = generatedAt;
-            word.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
-          } else {
-            if (!payload.forceRefresh && word.exampleImageUrl?.trim()) {
-              resolve(word);
-              return;
-            }
-
-            const generatedAt = Date.now();
-            const imageUrl = await generateWordImage(word.word, word.definition)
-              || createWordImagePlaceholderDataUrl(word.word, word.definition);
-
-            word.exampleImageUrl = imageUrl;
-            word.exampleImageGeneratedAt = generatedAt;
-            word.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
-          }
-
-          store.put(word);
-          resolve(word);
-        } catch (error) {
-          reject(error);
-        }
-      };
+      const req = store.get(wordId);
+      req.onsuccess = () => resolve(req.result as WordData | undefined);
       req.onerror = () => reject(req.error || new Error('単語キャッシュの読み込みに失敗しました。'));
     });
+  }
+
+  private async writeWordRecord(word: WordData): Promise<void> {
+    const store = await this.getStore(STORES.WORDS, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.put(word);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error || new Error('単語キャッシュの保存に失敗しました。'));
+    });
+  }
+
+  async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
+    const word = await this.readWordRecord(payload.wordId);
+    if (!word) {
+      throw new Error('対象の単語が見つかりません。');
+    }
+
+    const nextWord: WordData = { ...word };
+    if (payload.assetType === WordHintAssetType.EXAMPLE) {
+      if (!payload.forceRefresh && nextWord.exampleSentence?.trim() && nextWord.exampleMeaning?.trim()) {
+        return nextWord;
+      }
+
+      const generatedAt = Date.now();
+      const context = await generateGeminiSentence(nextWord.word, nextWord.definition)
+        || createLocalExampleHint(nextWord.word, nextWord.definition, generatedAt);
+      const nextSentence = 'english' in context ? context.english : context.sentence;
+      const nextTranslation = 'japanese' in context ? context.japanese : context.translation;
+
+      nextWord.exampleSentence = nextSentence;
+      nextWord.exampleMeaning = nextTranslation;
+      nextWord.exampleGeneratedAt = generatedAt;
+      nextWord.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
+    } else {
+      if (!payload.forceRefresh && nextWord.exampleImageUrl?.trim()) {
+        return nextWord;
+      }
+
+      const generatedAt = Date.now();
+      const imageUrl = await generateWordImage(nextWord.word, nextWord.definition)
+        || createWordImagePlaceholderDataUrl(nextWord.word, nextWord.definition);
+
+      nextWord.exampleImageUrl = imageUrl;
+      nextWord.exampleImageGeneratedAt = generatedAt;
+      nextWord.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
+    }
+
+    await this.writeWordRecord(nextWord);
+    return nextWord;
   }
 
   async prepareBookExamples(bookId: string): Promise<import('../contracts/storage').PrepareBookExamplesResult> {
