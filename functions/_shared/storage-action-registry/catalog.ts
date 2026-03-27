@@ -1,6 +1,6 @@
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectEmptyPayload, expectNumber, expectObject, expectString, expectTrimmedString } from '../request-validation';
+import { expectEmptyPayload, expectEnum, expectNumber, expectObject, expectString, expectTrimmedString } from '../request-validation';
 import {
   handleBatchImportWords,
   handleDeleteBook,
@@ -13,6 +13,7 @@ import {
   handleUpdateWord,
   handleUpdateWordCache,
 } from '../storage-book-actions';
+import { handleGenerateWordHintAsset } from '../word-hint-assets';
 
 export const catalogStorageActionDefinitions = {
   batchImportWords: defineStorageAction({
@@ -83,6 +84,17 @@ export const catalogStorageActionDefinitions = {
       return null;
     },
   }),
+  generateWordHintAsset: defineStorageAction({
+    parse: (payload) => {
+      const record = expectObject(payload);
+      return {
+        wordId: expectString(record, 'wordId'),
+        assetType: expectEnum(record.assetType, ['EXAMPLE', 'IMAGE'], 'assetType'),
+        forceRefresh: typeof record.forceRefresh === 'boolean' ? record.forceRefresh : undefined,
+      } as never;
+    },
+    execute: ({ env, user }, payload) => handleGenerateWordHintAsset(env, user, payload),
+  }),
   prepareBookExamples: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
@@ -120,6 +132,7 @@ export const catalogStorageActionDefinitions = {
   | 'updateWord'
   | 'reportWord'
   | 'updateWordCache'
+  | 'generateWordHintAsset'
   | 'prepareBookExamples'
   | 'getDailySessionWords'
   | 'getBookSession'

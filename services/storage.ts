@@ -34,6 +34,8 @@ import {
   WeeklyMission,
   WeeklyMissionBoard,
   WordData,
+  WordHintAssetType,
+  GeneratedAssetAuditStatus,
 } from '../types';
 import {
   CatalogImportIssue,
@@ -42,9 +44,15 @@ import {
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  GenerateWordHintAssetPayload,
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
+import { generateGeminiSentence, generateWordImage } from './gemini';
+import {
+  createLocalExampleHint,
+  createWordImagePlaceholderDataUrl,
+} from '../shared/wordHintAssets';
 import type {
   AdminStorageService,
   AnnouncementStorageService,
@@ -544,11 +552,66 @@ class IndexedDBStorageService implements IStorageService {
         if (word) {
           word.exampleSentence = sentence;
           word.exampleMeaning = translation;
+          word.exampleGeneratedAt = Date.now();
+          word.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
           store.put(word);
         }
         resolve();
       };
       req.onerror = () => resolve();
+    });
+  }
+
+  async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
+    const store = await this.getStore(STORES.WORDS, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.get(payload.wordId);
+      req.onsuccess = async () => {
+        const word = req.result as WordData | undefined;
+        if (!word) {
+          reject(new Error('対象の単語が見つかりません。'));
+          return;
+        }
+
+        try {
+          if (payload.assetType === WordHintAssetType.EXAMPLE) {
+            if (!payload.forceRefresh && word.exampleSentence?.trim() && word.exampleMeaning?.trim()) {
+              resolve(word);
+              return;
+            }
+
+            const generatedAt = Date.now();
+            const context = await generateGeminiSentence(word.word, word.definition)
+              || createLocalExampleHint(word.word, word.definition, generatedAt);
+            const nextSentence = 'english' in context ? context.english : context.sentence;
+            const nextTranslation = 'japanese' in context ? context.japanese : context.translation;
+
+            word.exampleSentence = nextSentence;
+            word.exampleMeaning = nextTranslation;
+            word.exampleGeneratedAt = generatedAt;
+            word.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
+          } else {
+            if (!payload.forceRefresh && word.exampleImageUrl?.trim()) {
+              resolve(word);
+              return;
+            }
+
+            const generatedAt = Date.now();
+            const imageUrl = await generateWordImage(word.word, word.definition)
+              || createWordImagePlaceholderDataUrl(word.word, word.definition);
+
+            word.exampleImageUrl = imageUrl;
+            word.exampleImageGeneratedAt = generatedAt;
+            word.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
+          }
+
+          store.put(word);
+          resolve(word);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      req.onerror = () => reject(req.error || new Error('単語キャッシュの読み込みに失敗しました。'));
     });
   }
 
@@ -564,6 +627,8 @@ class IndexedDBStorageService implements IStorageService {
         if (current) {
           current.exampleSentence = current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`;
           current.exampleMeaning = current.exampleMeaning?.trim() || `今日の授業で「${current.word}」を学びます。`;
+          current.exampleGeneratedAt = Date.now();
+          current.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
           store.put(current);
         }
         resolve();

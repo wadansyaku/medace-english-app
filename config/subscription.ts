@@ -57,6 +57,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     monthlyAiBudgetMilliYen: 12000,
     allowedAiActions: [
       'generateGeminiSentence',
+      'generateWordImage',
       'generateAIQuiz',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',
@@ -80,6 +81,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     monthlyAiBudgetMilliYen: 8000,
     allowedAiActions: [
       'generateGeminiSentence',
+      'generateWordImage',
       'generateAIQuiz',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',
@@ -102,6 +104,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     monthlyAiBudgetMilliYen: 40000,
     allowedAiActions: [
       'generateGeminiSentence',
+      'generateWordImage',
       'generateAIQuiz',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',

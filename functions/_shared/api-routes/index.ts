@@ -4,6 +4,7 @@ import { authProfileRoutes } from './auth-profile';
 import { publicCommercialRoutes } from './public-commercial';
 import { runtimeAdminRoutes } from './runtime-admin';
 import { storageRoutes } from './storage';
+import { wordHintRoutes } from './word-hints';
 import { writingRoutes } from './writing';
 
 export const apiRoutes: ApiRouteDefinition[] = [
@@ -12,5 +13,6 @@ export const apiRoutes: ApiRouteDefinition[] = [
   ...runtimeAdminRoutes,
   ...writingRoutes,
   ...storageRoutes,
+  ...wordHintRoutes,
   ...aiRoutes,
 ];

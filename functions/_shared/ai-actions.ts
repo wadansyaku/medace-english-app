@@ -170,6 +170,24 @@ const generateWordImage = async (env: AppEnv, payload: any): Promise<string | nu
   }
 };
 
+export const generateMeteredWordImage = async (
+  env: AppEnv,
+  user: DbUserRow,
+  payload: {
+    word: string;
+    definition: string;
+  },
+  logContext?: AiUsageLogContext,
+): Promise<string | null> => {
+  return runMeteredAiAction(
+    env,
+    user,
+    'generateWordImage',
+    () => generateWordImage(env, payload),
+    logContext,
+  );
+};
+
 const generateAIQuiz = async (env: AppEnv, payload: any): Promise<AIQuizQuestion[]> => {
   const ai = getAiClient(env);
   const targetWords = (Array.isArray(payload.targetWords) ? payload.targetWords : []) as WordData[];

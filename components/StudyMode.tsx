@@ -5,7 +5,9 @@ import {
   Clock,
   Edit2,
   Flag,
+  Image as ImageIcon,
   Languages,
+  Loader2,
   RotateCw,
   Save,
   Sparkles,
@@ -16,6 +18,7 @@ import {
 
 import type { LearningTaskIntent, UserProfile } from '../types';
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
+import { getHintAuditTone } from '../shared/wordHintAssets';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { useStudyModeController } from '../hooks/useStudyModeController';
@@ -74,6 +77,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
   }
 
   if (!controller.currentWord) return null;
+
+  const exampleAuditTone = getHintAuditTone(controller.currentWord.exampleAuditStatus);
+  const imageAuditTone = getHintAuditTone(controller.currentWord.exampleImageAuditStatus);
 
   if (controller.isFinished) {
     return (
@@ -203,14 +209,38 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  {controller.aiContext ? (
+                  {controller.aiContextLoading ? (
+                    <div className="flex flex-col items-center gap-2 py-5 text-medace-200">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="text-xs">例文を作成中...</span>
+                    </div>
+                  ) : controller.aiContext ? (
                     <div className="text-center">
                       <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
                         <span className="flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
-                          保存済みの例文
+                          例文ヒント
                         </span>
-                        <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-white"><Volume2 className="h-4 w-4" /></button>
+                        <div className="flex items-center gap-2">
+                          {exampleAuditTone ? (
+                            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${exampleAuditTone.className}`}>
+                              {exampleAuditTone.label}
+                            </span>
+                          ) : null}
+                          <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-white"><Volume2 className="h-4 w-4" /></button>
+                          {controller.canGenerateExampleHint ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void controller.generateExampleHint(true);
+                              }}
+                              className="rounded-full border border-white/15 px-2 py-1 text-[10px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                            >
+                              新しく作る
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                       <p className="mb-3 text-lg font-semibold leading-relaxed text-white/92 sm:text-[1.45rem]">"{controller.aiContext.english}"</p>
 
@@ -227,16 +257,113 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                           <Languages className="h-3 w-3" /> 訳を表示
                         </button>
                       )}
+                      {controller.exampleError ? (
+                        <p className="mt-3 rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                          {controller.exampleError}
+                        </p>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="space-y-3 text-center">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">例文は準備中</div>
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">例文はまだありません</div>
                       <p className="text-base font-semibold leading-relaxed text-white/88 sm:text-lg">
-                        まずは意味と音声で定着させましょう。
+                        必要なときだけ、ここで新しく作れます。
                       </p>
                       <p className="text-sm leading-relaxed text-white/68">
                         「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
                       </p>
+                      {controller.exampleError ? (
+                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                          {controller.exampleError}
+                        </p>
+                      ) : null}
+                      {controller.canGenerateExampleHint ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void controller.generateExampleHint();
+                          }}
+                          className="mx-auto flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          例文を作る
+                        </button>
+                      ) : (
+                        <p className="text-xs text-white/60">このプランでは例文生成は利用できません。</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                  {controller.aiImageLoading ? (
+                    <div className="flex flex-col items-center gap-2 py-6 text-medace-200">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="text-xs text-center">画像ヒントを作成中...</span>
+                    </div>
+                  ) : controller.aiImage ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
+                        <span className="flex items-center gap-1">
+                          <ImageIcon className="h-3 w-3" />
+                          画像ヒント
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {imageAuditTone ? (
+                            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${imageAuditTone.className}`}>
+                              {imageAuditTone.label}
+                            </span>
+                          ) : null}
+                          {controller.canGenerateImageHint ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void controller.generateImageHint(true);
+                              }}
+                              className="rounded-full border border-white/15 px-2 py-1 text-[10px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                            >
+                              新しく作る
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-white/5">
+                        <img src={controller.aiImage} alt="視覚的な記憶補助" className="h-full w-full object-contain" />
+                      </div>
+                      {controller.imageError ? (
+                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                          {controller.imageError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-center">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">画像ヒントはまだありません</div>
+                      <p className="text-sm leading-relaxed text-white/72">
+                        画像はコストが高いので、必要なときだけ自分で作ります。
+                      </p>
+                      {controller.imageError ? (
+                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                          {controller.imageError}
+                        </p>
+                      ) : null}
+                      {controller.canGenerateImageHint ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void controller.generateImageHint();
+                          }}
+                          className="mx-auto flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                        >
+                          <ImageIcon className="h-4 w-4" />
+                          画像を作る
+                        </button>
+                      ) : (
+                        <p className="text-xs text-white/60">画像ヒントは上位プランで利用できます。</p>
+                      )}
                     </div>
                   )}
                 </div>

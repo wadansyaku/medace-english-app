@@ -3,6 +3,7 @@ import {
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  GenerateWordHintAssetPayload,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
   StorageAction,
@@ -153,6 +154,13 @@ export class CloudflareStorageService implements IStorageService {
     await this.callStorage({
       action: 'updateWordCache',
       payload: { wordId, sentence, translation },
+    });
+  }
+
+  async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
+    return this.callStorage({
+      action: 'generateWordHintAsset',
+      payload,
     });
   }
 
