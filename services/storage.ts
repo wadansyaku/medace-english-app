@@ -100,6 +100,7 @@ import {
   readStoreRecord,
   requestToPromise,
   STORES,
+  type GetStore,
   type StoredAnnouncementReceiptRecord,
   type StoredCommercialRequestRecord,
   type StoredProductAnnouncementRecord,
@@ -262,11 +263,19 @@ const mergeRecordsById = <T extends { id: string | number }>(seed: T[], stored: 
 
 const buildAnnouncementReceiptId = (announcementId: string, userUid: string): string => `${announcementId}:${userUid}`;
 
-class IndexedDBStorageService implements IStorageService {
-  private dbPromise: Promise<IDBDatabase>;
+interface IndexedDBStorageServiceOptions {
+  getStore?: GetStore;
+}
 
-  constructor() {
-    this.dbPromise = this.initDB();
+export class IndexedDBStorageService implements IStorageService {
+  private dbPromise: Promise<IDBDatabase>;
+  private readonly getStoreOverride?: GetStore;
+
+  constructor(options: IndexedDBStorageServiceOptions = {}) {
+    this.getStoreOverride = options.getStore;
+    this.dbPromise = this.getStoreOverride
+      ? Promise.resolve(null as IDBDatabase)
+      : this.initDB();
   }
 
   private initDB(): Promise<IDBDatabase> {
@@ -274,6 +283,9 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   private async getStore(storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
+    if (this.getStoreOverride) {
+      return this.getStoreOverride(storeName, mode);
+    }
     return getObjectStore(this.dbPromise, storeName, mode);
   }
 
