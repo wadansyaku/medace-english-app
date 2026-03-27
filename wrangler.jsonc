@@ -13,15 +13,13 @@
       "binding": "DB",
       "database_name": "medace-db",
       "database_id": "1b1c8b71-764c-4593-8a20-32a75b77ab11",
-      "preview_database_id": "d8e38fd6-775f-41be-8279-e3fed2b2d684",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "WRITING_ASSETS",
-      "bucket_name": "medace-writing-assets",
-      "preview_bucket_name": "medace-writing-assets-preview"
+      "bucket_name": "medace-writing-assets"
     }
   ],
   "env": {

@@ -176,6 +176,10 @@ const isPagesGitAutoDeployDisabled = (sourceConfig) => (
   )
 );
 
+const readPagesBindingValue = (deploymentConfig, kind, binding, field) => (
+  deploymentConfig?.[kind]?.[binding]?.[field] || ''
+);
+
 const getRepoSlug = () => {
   const result = run('git', ['remote', 'get-url', 'origin']);
   if (!result.ok || !result.stdout) return null;
@@ -213,17 +217,24 @@ const wranglerConfigPath = path.join(cwd, 'wrangler.jsonc');
 const wranglerRaw = await fs.readFile(wranglerConfigPath, 'utf8');
 const wranglerConfig = JSON.parse(parseJsonc(wranglerRaw));
 
+const previewConfig = wranglerConfig.env?.preview || {};
+const primaryD1Binding = wranglerConfig.d1_databases?.[0] || {};
+const previewD1Binding = previewConfig.d1_databases?.[0] || {};
+const primaryR2Bindings = wranglerConfig.r2_buckets || [];
+const previewR2Bindings = previewConfig.r2_buckets || [];
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
-const d1Database = process.env.CLOUDFLARE_D1_DATABASE || wranglerConfig.d1_databases?.[0]?.database_name || '';
+const d1Database = process.env.CLOUDFLARE_D1_DATABASE || primaryD1Binding.database_name || '';
 const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW || `${d1Database}-preview`;
-const previewD1DatabaseId = wranglerConfig.d1_databases?.[0]?.preview_database_id || '';
+const d1DatabaseId = primaryD1Binding.database_id || '';
+const previewD1DatabaseId = previewD1Binding.database_id || primaryD1Binding.preview_database_id || '';
 const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
-const r2Bindings = (wranglerConfig.r2_buckets || []).flatMap((bucket) => {
-  const pairs = [];
-  if (bucket.bucket_name) pairs.push({ env: 'production', name: bucket.bucket_name });
-  if (bucket.preview_bucket_name) pairs.push({ env: 'preview', name: bucket.preview_bucket_name });
-  return pairs;
-});
+const productionR2BucketName = primaryR2Bindings[0]?.bucket_name || '';
+const previewR2BucketName = previewR2Bindings[0]?.bucket_name || primaryR2Bindings[0]?.preview_bucket_name || '';
+const r2Bindings = [
+  ...primaryR2Bindings.flatMap((bucket) => (bucket.bucket_name ? [{ env: 'production', name: bucket.bucket_name }] : [])),
+  ...previewR2Bindings.flatMap((bucket) => (bucket.bucket_name ? [{ env: 'preview', name: bucket.bucket_name }] : [])),
+  ...primaryR2Bindings.flatMap((bucket) => (bucket.preview_bucket_name ? [{ env: 'preview', name: bucket.preview_bucket_name }] : [])),
+];
 const repoSlug = getRepoSlug();
 
 pushRecord('info', 'Workspace', cwd);
@@ -231,7 +242,7 @@ pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
 pushRecord('info', 'Pages project', pagesProject);
 pushRecord('info', 'D1 database', d1Database || '(missing in wrangler.jsonc)');
 pushRecord('info', 'Preview D1 database', previewD1Database || '(missing preview name)');
-pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing preview_database_id)');
+pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing env.preview.d1_databases[0].database_id)');
 pushRecord('info', 'Writing AI mode', writingAiMode);
 pushRecord('info', 'R2 buckets', r2Bindings.length > 0 ? r2Bindings.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 
@@ -365,20 +376,21 @@ if (githubReady && repoSlug) {
 if (cloudflareReady) {
   const pagesProjects = runWrangler(['pages', 'project', 'list']);
   if (recordCommand('Cloudflare Pages project inventory', pagesProjects, 'retrieved')) {
+    const projectExists = pagesProjects.stdout.includes(pagesProject);
     pushRecord(
-      pagesProjects.stdout.includes(pagesProject) ? 'ok' : 'error',
+      projectExists ? 'ok' : 'error',
       `Pages project ${pagesProject}`,
-      pagesProjects.stdout.includes(pagesProject) ? 'present' : 'missing',
+      projectExists ? 'present' : 'missing',
     );
     const gitProvider = readPagesProjectColumn(pagesProjects.stdout, pagesProject, 'Git Provider');
-    if (gitProvider?.toLowerCase() === 'yes') {
+    if (projectExists) {
       try {
-        const project = await fetchCloudflareApi(`/pages/projects/${pagesProject}`, {}, detectedAccountId);
+        let project = await fetchCloudflareApi(`/pages/projects/${pagesProject}`, {}, detectedAccountId);
         const sourceConfig = project?.source?.config || null;
 
-        if (isPagesGitAutoDeployDisabled(sourceConfig)) {
+        if (gitProvider?.toLowerCase() === 'yes' && isPagesGitAutoDeployDisabled(sourceConfig)) {
           pushRecord('ok', `Pages project ${pagesProject} Git auto-deploy`, 'already disabled');
-        } else if (project?.source?.type === 'github') {
+        } else if (gitProvider?.toLowerCase() === 'yes' && project?.source?.type === 'github') {
           const nextSource = {
             ...project.source,
             config: {
@@ -388,7 +400,7 @@ if (cloudflareReady) {
               preview_deployment_setting: 'none',
             },
           };
-          const updatedProject = await fetchCloudflareApi(
+          project = await fetchCloudflareApi(
             `/pages/projects/${pagesProject}`,
             {
               method: 'PATCH',
@@ -397,20 +409,64 @@ if (cloudflareReady) {
             detectedAccountId,
           );
           pushRecord(
-            isPagesGitAutoDeployDisabled(updatedProject?.source?.config || null) ? 'ok' : 'warn',
+            isPagesGitAutoDeployDisabled(project?.source?.config || null) ? 'ok' : 'warn',
             `Pages project ${pagesProject} Git auto-deploy`,
-            isPagesGitAutoDeployDisabled(updatedProject?.source?.config || null)
+            isPagesGitAutoDeployDisabled(project?.source?.config || null)
               ? 'disabled to keep GitHub Actions as the canonical deploy path'
               : 'Git integration remains active; verify Cloudflare Pages branch control settings',
           );
-        } else {
+        } else if (gitProvider?.toLowerCase() === 'yes') {
           pushRecord('warn', `Pages project ${pagesProject} Git auto-deploy`, 'Git provider is linked, but the source type is not github');
+        }
+
+        const deploymentConfigs = project?.deployment_configs || {};
+        const needsBindingSync = (
+          (d1DatabaseId && readPagesBindingValue(deploymentConfigs.production, 'd1_databases', 'DB', 'id') !== d1DatabaseId)
+          || (previewD1DatabaseId && readPagesBindingValue(deploymentConfigs.preview, 'd1_databases', 'DB', 'id') !== previewD1DatabaseId)
+          || (productionR2BucketName && readPagesBindingValue(deploymentConfigs.production, 'r2_buckets', 'WRITING_ASSETS', 'name') !== productionR2BucketName)
+          || (previewR2BucketName && readPagesBindingValue(deploymentConfigs.preview, 'r2_buckets', 'WRITING_ASSETS', 'name') !== previewR2BucketName)
+        );
+
+        if (!needsBindingSync) {
+          pushRecord('ok', `Pages project ${pagesProject} deployment bindings`, 'already aligned with wrangler.jsonc');
+        } else {
+          project = await fetchCloudflareApi(
+            `/pages/projects/${pagesProject}`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify({
+                deployment_configs: {
+                  production: {
+                    ...(d1DatabaseId ? { d1_databases: { DB: { id: d1DatabaseId } } } : {}),
+                    ...(productionR2BucketName ? { r2_buckets: { WRITING_ASSETS: { name: productionR2BucketName } } } : {}),
+                  },
+                  preview: {
+                    ...(previewD1DatabaseId ? { d1_databases: { DB: { id: previewD1DatabaseId } } } : {}),
+                    ...(previewR2BucketName ? { r2_buckets: { WRITING_ASSETS: { name: previewR2BucketName } } } : {}),
+                  },
+                },
+              }),
+            },
+            detectedAccountId,
+          );
+          const syncedDeploymentConfigs = project?.deployment_configs || {};
+          const bindingSyncOk = (
+            (!d1DatabaseId || readPagesBindingValue(syncedDeploymentConfigs.production, 'd1_databases', 'DB', 'id') === d1DatabaseId)
+            && (!previewD1DatabaseId || readPagesBindingValue(syncedDeploymentConfigs.preview, 'd1_databases', 'DB', 'id') === previewD1DatabaseId)
+            && (!productionR2BucketName || readPagesBindingValue(syncedDeploymentConfigs.production, 'r2_buckets', 'WRITING_ASSETS', 'name') === productionR2BucketName)
+            && (!previewR2BucketName || readPagesBindingValue(syncedDeploymentConfigs.preview, 'r2_buckets', 'WRITING_ASSETS', 'name') === previewR2BucketName)
+          );
+          pushRecord(
+            bindingSyncOk ? 'ok' : 'warn',
+            `Pages project ${pagesProject} deployment bindings`,
+            bindingSyncOk ? 'synced from wrangler.jsonc' : 'binding sync attempted, but Cloudflare returned unexpected values',
+          );
         }
       } catch (error) {
         pushRecord(
           'warn',
-          `Pages project ${pagesProject} Git auto-deploy`,
-          `unable to verify or disable via API: ${error instanceof Error ? error.message : String(error)}`,
+          `Pages project ${pagesProject} API sync`,
+          `unable to update project settings via API: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
