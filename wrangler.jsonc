@@ -23,5 +23,23 @@
       "bucket_name": "medace-writing-assets",
       "preview_bucket_name": "medace-writing-assets-preview"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "medace-db-preview",
+          "database_id": "d8e38fd6-775f-41be-8279-e3fed2b2d684",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "WRITING_ASSETS",
+          "bucket_name": "medace-writing-assets-preview"
+        }
+      ]
+    }
+  }
 }

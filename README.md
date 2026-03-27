@@ -167,7 +167,7 @@ echo 'your-internal-job-secret' | npx wrangler pages secret put INTERNAL_JOB_SEC
 - production: `medace-writing-assets`
 - preview: `medace-writing-assets-preview`
 
-D1 は production の `medace-db` に加えて preview 専用の `medace-db-preview` を使います。`wrangler.jsonc` の `preview_database_id` と GitHub `preview` environment の `CLOUDFLARE_D1_DATABASE` はこの preview DB を参照させてください。
+D1 は production の `medace-db` に加えて preview 専用の `medace-db-preview` を使います。Pages の preview deployment では `wrangler.jsonc` の `env.preview.d1_databases` と `env.preview.r2_buckets` を使うので、GitHub `preview` environment の `CLOUDFLARE_D1_DATABASE` も `medace-db-preview` に揃えてください。
 
 CLI で同期する場合は `npm run cf:sync` を使います。R2 がまだ未有効化のアカウントでは Cloudflare API が `code: 10042` を返すため、その場合は先に Dashboard で R2 を有効化してください。
 
