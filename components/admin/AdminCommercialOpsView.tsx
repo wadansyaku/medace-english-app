@@ -13,6 +13,7 @@ import {
   OrganizationRole,
   SUBSCRIPTION_PLAN_LABELS,
   SubscriptionPlan,
+  TEACHING_FORMAT_LABELS,
   type CommercialRequest,
   type ProductAnnouncement,
 } from '../../types';
@@ -136,6 +137,12 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
                   </div>
                   <div className="mt-2 text-sm text-slate-600">{request.contactName} / {request.contactEmail}</div>
                   <div className="mt-1 text-sm text-slate-500">{request.organizationName || '個人利用'} / {request.source}</div>
+                  {(request.teachingFormat || request.desiredStartTiming) && (
+                    <div className="mt-2 text-xs text-slate-500">
+                      {request.teachingFormat ? TEACHING_FORMAT_LABELS[request.teachingFormat] : '授業形態未設定'}
+                      {request.desiredStartTiming ? ` / ${request.desiredStartTiming}` : ''}
+                    </div>
+                  )}
                 </button>
               ))
             )}
@@ -145,6 +152,20 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
             <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
               <div className="text-lg font-black text-slate-950">{selectedRequest.contactName} さんの申請</div>
               <div className="mt-2 text-sm leading-relaxed text-slate-700">{selectedRequest.message}</div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">授業形態</div>
+                  <div className="mt-1 font-bold text-slate-900">
+                    {selectedRequest.teachingFormat ? TEACHING_FORMAT_LABELS[selectedRequest.teachingFormat] : '未設定'}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">開始希望時期</div>
+                  <div className="mt-1 font-bold text-slate-900">
+                    {selectedRequest.desiredStartTiming || '未設定'}
+                  </div>
+                </div>
+              </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
                   <label className="ui-form-label">反映プラン</label>

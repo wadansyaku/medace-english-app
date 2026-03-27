@@ -484,6 +484,8 @@ const main = async () => {
         contactName: 'Phase 4 Public Contact',
         contactEmail: publicCommercialEmail,
         organizationName: 'Phase 4 Academy',
+        teachingFormat: 'ONLINE',
+        desiredStartTiming: '来月からトライアル開始',
         requestedWorkspaceRole: 'GROUP_ADMIN',
         seatEstimate: '31-100名',
         message: '学校導入の初回相談をしたいです。',
@@ -491,6 +493,8 @@ const main = async () => {
       }),
     });
     assert(anonymousBusinessTrial.status === 200, 'anonymous commercial request should be accepted');
+    assert(anonymousBusinessTrial.data?.teachingFormat === 'ONLINE', 'public commercial request should persist teaching format');
+    assert(anonymousBusinessTrial.data?.desiredStartTiming === '来月からトライアル開始', 'public commercial request should persist desired start timing');
 
     const anonymousRoleConversion = await publicClient.request('/api/public/commercial-request', {
       method: 'POST',
@@ -499,6 +503,8 @@ const main = async () => {
         contactName: 'Phase 4 Public Contact',
         contactEmail: publicCommercialEmail,
         organizationName: 'Phase 4 Academy',
+        teachingFormat: 'HYBRID',
+        desiredStartTiming: '今学期中に講師導入',
         requestedWorkspaceRole: 'INSTRUCTOR',
         seatEstimate: '31-100名',
         message: '講師アカウントの切り替え相談です。',
@@ -522,6 +528,8 @@ const main = async () => {
         contactName: 'Phase 4 Public Contact',
         contactEmail: publicCommercialEmail,
         organizationName: 'Phase 4 Academy',
+        teachingFormat: 'ONLINE',
+        desiredStartTiming: '再来月に再相談',
         requestedWorkspaceRole: 'GROUP_ADMIN',
         seatEstimate: '31-100名',
         message: '導入相談を再送します。',

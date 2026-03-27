@@ -8,6 +8,7 @@ import {
   handleGetBooks,
   handleGetDailySessionWords,
   handleGetWordsByBook,
+  handlePrepareBookExamples,
   handleReportWord,
   handleUpdateWord,
   handleUpdateWordCache,
@@ -82,6 +83,13 @@ export const catalogStorageActionDefinitions = {
       return null;
     },
   }),
+  prepareBookExamples: defineStorageAction({
+    parse: (payload) => {
+      const record = expectObject(payload);
+      return { bookId: expectString(record, 'bookId') };
+    },
+    execute: ({ env, user }, payload) => handlePrepareBookExamples(env, user, payload.bookId),
+  }),
   getDailySessionWords: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
@@ -112,6 +120,7 @@ export const catalogStorageActionDefinitions = {
   | 'updateWord'
   | 'reportWord'
   | 'updateWordCache'
+  | 'prepareBookExamples'
   | 'getDailySessionWords'
   | 'getBookSession'
 >;

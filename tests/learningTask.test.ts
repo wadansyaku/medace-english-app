@@ -13,6 +13,7 @@ import {
 } from '../types';
 import {
   createCoachTaskIntent,
+  createFollowUpSpellingTaskIntent,
   createMissionTaskIntent,
   createTodayFocusTaskIntent,
   createWeaknessTaskIntent,
@@ -25,6 +26,19 @@ describe('learning tasks', () => {
       intentType: LearningTaskIntentType.TODAY_FOCUS,
       selectionPolicy: 'DUE_FIRST',
       limit: 20,
+    });
+  });
+
+  it('builds a short follow-up spelling check for finished study sessions', () => {
+    expect(createFollowUpSpellingTaskIntent('book-1')).toMatchObject({
+      mode: 'quiz',
+      intentType: LearningTaskIntentType.BOOK_QUIZ,
+      bookId: 'book-1',
+      label: '仕上げのスペルチェック',
+      selectionPolicy: 'BOOK_DEFAULT',
+      limit: 5,
+      targetQuestionModes: ['SPELLING_HINT'],
+      autoStart: true,
     });
   });
 

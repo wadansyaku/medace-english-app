@@ -70,6 +70,11 @@ const App: React.FC = () => {
     dispatchNavigation({ type: 'finish-book-view' });
   };
 
+  const handleFollowUpTask = (updatedUser: UserProfile, task: LearningTaskIntent) => {
+    setCurrentUser(updatedUser);
+    dispatchNavigation({ type: 'open-task', task });
+  };
+
   const handleSelectWorkspaceSection = (section: string) => {
     if (!user || currentView !== 'instructor') return;
     if (isGroupAdminUser) {
@@ -132,6 +137,7 @@ const App: React.FC = () => {
             taskIntent={selectedTask}
             onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
             onSessionComplete={handleSessionComplete}
+            onStartTask={handleFollowUpTask}
           />
         ) : null;
       case 'quiz':

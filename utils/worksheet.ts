@@ -30,8 +30,8 @@ export const WORKSHEET_MODE_COPY: Record<WorksheetQuestionMode, { label: string;
     description: '意味から英語を思い出し、逆向きの想起を鍛えます。',
   },
   SPELLING_HINT: {
-    label: '先頭2文字ヒント',
-    description: '最初の2文字をヒントに、残りの英語を思い出します。',
+    label: 'スペルチェック',
+    description: 'まずは全文入力し、必要なときだけ先頭2文字ヒントで確認します。',
   },
 };
 
@@ -301,6 +301,27 @@ export const isCorrectSpellingHintAnswer = (input: string, answer: string, hintP
   const normalizedAnswer = normalizeEnglish(answer);
   const normalizedSuffix = normalizeEnglish(answer.slice(hintPrefix.length));
   return normalizedInput === normalizedAnswer || normalizedInput === normalizedSuffix;
+};
+
+export const resolveSpellingAttempt = ({
+  input,
+  answer,
+  hintPrefix,
+  hintVisible,
+}: {
+  input: string;
+  answer: string;
+  hintPrefix: string;
+  hintVisible: boolean;
+}): 'correct' | 'retry-with-hint' | 'incorrect' => {
+  const isCorrect = isCorrectSpellingHintAnswer(
+    input,
+    answer,
+    hintVisible ? hintPrefix : '',
+  );
+  if (isCorrect) return 'correct';
+  if (!hintVisible) return 'retry-with-hint';
+  return 'incorrect';
 };
 
 export const generateWorksheetQuestions = (

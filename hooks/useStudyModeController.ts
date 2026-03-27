@@ -1,8 +1,8 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { EnglishLevel, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
+import { type LearningTaskIntent, type UserProfile, type WordData } from '../types';
 import { learningService } from '../services/learning';
-import { type GeneratedContext, generateGeminiSentence, generateWordImage } from '../services/gemini';
+import { type GeneratedContext } from '../services/gemini';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import useIsMobileViewport from './useIsMobileViewport';
@@ -37,14 +37,9 @@ export const useStudyModeController = ({
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isBookOwner, setIsBookOwner] = useState(false);
-  const [bookContext, setBookContext] = useState<string | undefined>(undefined);
   const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
-  const [aiContextLoading, setAiContextLoading] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
-  const [aiImage, setAiImage] = useState<string | null>(null);
-  const [aiImageLoading, setAiImageLoading] = useState(false);
   const [showHints, setShowHints] = useState(false);
-  const [imageHintUnavailable, setImageHintUnavailable] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editWord, setEditWord] = useState('');
   const [editDef, setEditDef] = useState('');
@@ -93,10 +88,8 @@ export const useStudyModeController = ({
   const resetCard = () => {
     setIsFlipped(false);
     setAiContext(null);
-    setAiImage(null);
     setShowTranslation(false);
     setShowHints(false);
-    setImageHintUnavailable(false);
     setIsEditing(false);
   };
 
@@ -165,7 +158,6 @@ export const useStudyModeController = ({
           const books = await learningService.getBooks();
           const currentBook = books.find((book) => book.id === bookId);
           if (currentBook) {
-            setBookContext(currentBook.sourceContext);
             try {
               const isMine = (currentBook.description?.includes(user.uid))
                 || (JSON.parse(currentBook.description || '{}').createdBy === user.uid);
@@ -189,67 +181,27 @@ export const useStudyModeController = ({
   useEffect(() => {
     if (queue.length === 0 || !showHints) return;
 
-    let cancelled = false;
-    const loadHints = async () => {
-      const current = queue[currentIndex];
-      if (!current) return;
+    const current = queue[currentIndex];
+    if (!current) return;
 
-      if (current.exampleSentence && current.exampleMeaning && !contextCache.current.has(current.id)) {
-        contextCache.current.set(current.id, {
-          english: current.exampleSentence,
-          japanese: current.exampleMeaning,
-        });
-      }
+    const cached = contextCache.current.get(current.id);
+    if (cached) {
+      setAiContext(cached);
+      return;
+    }
 
-      const userLevel = user.englishLevel || EnglishLevel.B1;
-      const cached = contextCache.current.get(current.id);
+    if (current.exampleSentence && current.exampleMeaning) {
+      const nextContext = {
+        english: current.exampleSentence,
+        japanese: current.exampleMeaning,
+      };
+      contextCache.current.set(current.id, nextContext);
+      setAiContext(nextContext);
+      return;
+    }
 
-      if (contextCache.current.has(current.id)) {
-        if (!cancelled) {
-          setAiContext(cached ?? null);
-          setAiContextLoading(false);
-        }
-      } else {
-        if (!cancelled) setAiContextLoading(true);
-        try {
-          const context = await generateGeminiSentence(current.word, current.definition, userLevel, bookContext);
-          contextCache.current.set(current.id, context);
-          if (!cancelled) setAiContext(context ?? null);
-          if (context) {
-            await learningService.updateWordCache(current.id, context.english, context.japanese);
-          }
-        } finally {
-          if (!cancelled) setAiContextLoading(false);
-        }
-      }
-
-      const nextWord = queue[currentIndex + 1];
-      if (!nextWord || contextCache.current.has(nextWord.id)) return;
-
-      if (nextWord.exampleSentence && nextWord.exampleMeaning) {
-        contextCache.current.set(nextWord.id, {
-          english: nextWord.exampleSentence,
-          japanese: nextWord.exampleMeaning,
-        });
-        return;
-      }
-
-      generateGeminiSentence(nextWord.word, nextWord.definition, userLevel, bookContext)
-        .then((context) => {
-          contextCache.current.set(nextWord.id, context);
-          if (context) {
-            return learningService.updateWordCache(nextWord.id, context.english, context.japanese);
-          }
-          return undefined;
-        })
-        .catch(() => {});
-    };
-
-    void loadHints();
-    return () => {
-      cancelled = true;
-    };
-  }, [bookContext, currentIndex, queue, showHints, user.englishLevel]);
+    setAiContext(null);
+  }, [currentIndex, queue, showHints]);
 
   useEffect(() => {
     if (!loading && currentWord && !isFinished) {
@@ -365,16 +317,6 @@ export const useStudyModeController = ({
     }
   };
 
-  const generateImage = async (event: MouseEvent) => {
-    event.stopPropagation();
-    if (!currentWord || aiImage || aiImageLoading) return;
-    setAiImageLoading(true);
-    const imageBase64 = await generateWordImage(currentWord.word, currentWord.definition);
-    setAiImage(imageBase64);
-    setImageHintUnavailable(!imageBase64);
-    setAiImageLoading(false);
-  };
-
   const speakText = (event: MouseEvent, text: string) => {
     event.stopPropagation();
     window.speechSynthesis.cancel();
@@ -394,21 +336,15 @@ export const useStudyModeController = ({
   return {
     actionBarRef,
     aiContext,
-    aiContextLoading,
-    aiImage,
-    aiImageLoading,
     backFaceScrollRef,
-    bookContext,
     closeBack,
     currentIndex,
     currentWord,
     editDef,
     editWord,
     earnedXP,
-    generateImage,
     handleExit,
     handleRating,
-    imageHintUnavailable,
     isAdvancingCard,
     isBookOwner,
     isEditing,
@@ -449,6 +385,7 @@ export const useStudyModeController = ({
     saveEditing,
     cancelEditing,
     taskIntent,
+    updatedUser,
   };
 };
 

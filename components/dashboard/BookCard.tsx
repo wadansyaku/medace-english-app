@@ -6,11 +6,21 @@ interface BookCardProps {
   book: BookMetadata;
   isMine?: boolean;
   progress: BookProgress;
+  preparingExamples?: boolean;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
+  onPrepareExamples?: (book: BookMetadata) => void;
   onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
-const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, onSelect }) => {
+const BookCard: React.FC<BookCardProps> = ({
+  book,
+  isMine,
+  progress,
+  preparingExamples = false,
+  onDelete,
+  onPrepareExamples,
+  onSelect,
+}) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
 
   return (
@@ -69,21 +79,33 @@ const BookCard: React.FC<BookCardProps> = ({ book, isMine, progress, onDelete, o
         </div>
       </div>
 
-      <div className="relative z-10 mt-auto flex flex-col gap-2 border-t border-slate-100 bg-slate-50 p-3 sm:flex-row sm:gap-3 sm:p-4">
-        <button
-          onClick={() => onSelect(book.id, 'study')}
-          data-testid={`book-study-${book.id}`}
-          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-600"
-        >
-          <BookOpen className="h-4 w-4" /> 学習
-        </button>
-        <button
-          onClick={() => onSelect(book.id, 'quiz')}
-          data-testid={`book-quiz-${book.id}`}
-          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
-        >
-          <Play className="h-4 w-4 fill-current" /> 条件を決めてテスト
-        </button>
+      <div className="relative z-10 mt-auto flex flex-col gap-2 border-t border-slate-100 bg-slate-50 p-3 sm:gap-3 sm:p-4">
+        {isMine && onPrepareExamples && (
+          <button
+            type="button"
+            onClick={() => onPrepareExamples(book)}
+            disabled={preparingExamples}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
+          >
+            {preparingExamples ? '例文を準備中...' : '例文を準備'}
+          </button>
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+          <button
+            onClick={() => onSelect(book.id, 'study')}
+            data-testid={`book-study-${book.id}`}
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-600"
+          >
+            <BookOpen className="h-4 w-4" /> 学習
+          </button>
+          <button
+            onClick={() => onSelect(book.id, 'quiz')}
+            data-testid={`book-quiz-${book.id}`}
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
+          >
+            <Play className="h-4 w-4 fill-current" /> 条件を決めてテスト
+          </button>
+        </div>
       </div>
     </div>
   );

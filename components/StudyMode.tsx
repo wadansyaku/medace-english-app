@@ -5,9 +5,7 @@ import {
   Clock,
   Edit2,
   Flag,
-  Image as ImageIcon,
   Languages,
-  Loader2,
   RotateCw,
   Save,
   Sparkles,
@@ -17,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import type { LearningTaskIntent, UserProfile } from '../types';
+import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { useStudyModeController } from '../hooks/useStudyModeController';
@@ -29,6 +28,7 @@ interface StudyModeProps {
   taskIntent?: LearningTaskIntent | null;
   onBack: () => void;
   onSessionComplete: (user: UserProfile) => void;
+  onStartTask: (user: UserProfile, task: LearningTaskIntent) => void;
 }
 
 function HelpCircleIcon() {
@@ -48,7 +48,7 @@ const RATING_OPTIONS = [
   { id: 3, label: '簡単', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
 ];
 
-const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete }) => {
+const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask }) => {
   const controller = useStudyModeController({
     user,
     bookId,
@@ -86,6 +86,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         nextReviewMessage={controller.nextReviewMessage}
         weaknessSummary={controller.weaknessSummary}
         reviewPreview={controller.reviewPreview}
+        onStartSpellingCheck={() => {
+          onStartTask(controller.updatedUser || user, createFollowUpSpellingTaskIntent(bookId));
+        }}
         onExit={controller.handleExit}
       />
     );
@@ -200,24 +203,19 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  {controller.aiContextLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-4 text-medace-200">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span className="text-xs">AI例文を生成中...</span>
-                    </div>
-                  ) : controller.aiContext ? (
+                  {controller.aiContext ? (
                     <div className="text-center">
                       <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
                         <span className="flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
-                          AI例文 {controller.bookContext && `(${controller.bookContext.slice(0, 15)}...)`}
+                          保存済みの例文
                         </span>
                         <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-white"><Volume2 className="h-4 w-4" /></button>
                       </div>
-                      <p className="mb-3 text-base font-medium leading-relaxed text-white/88 sm:text-lg">"{controller.aiContext.english}"</p>
+                      <p className="mb-3 text-lg font-semibold leading-relaxed text-white/92 sm:text-[1.45rem]">"{controller.aiContext.english}"</p>
 
                       {controller.showTranslation ? (
-                        <p className="animate-in fade-in border-t border-white/10 pt-2 text-xs text-white/70 sm:text-sm">{controller.aiContext.japanese}</p>
+                        <p className="animate-in fade-in border-t border-white/10 pt-3 text-sm leading-relaxed text-white/78 sm:text-base">{controller.aiContext.japanese}</p>
                       ) : (
                         <button
                           onClick={(event) => {
@@ -231,29 +229,15 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                       )}
                     </div>
                   ) : (
-                    <p className="text-center text-xs text-white/60">このカードは単語と意味に集中しましょう。</p>
-                  )}
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-                  {controller.aiImageLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-6 text-medace-200">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span className="text-xs text-center">AIイメージ生成中...</span>
+                    <div className="space-y-3 text-center">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">例文は準備中</div>
+                      <p className="text-base font-semibold leading-relaxed text-white/88 sm:text-lg">
+                        まずは意味と音声で定着させましょう。
+                      </p>
+                      <p className="text-sm leading-relaxed text-white/68">
+                        「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
+                      </p>
                     </div>
-                  ) : controller.aiImage ? (
-                    <div className="relative h-40 w-full overflow-hidden rounded-2xl bg-white/5">
-                      <img src={controller.aiImage} alt="視覚的記憶補助" className="h-full w-full object-contain opacity-90 transition-opacity hover:opacity-100" />
-                    </div>
-                  ) : controller.imageHintUnavailable ? (
-                    <p className="px-4 py-6 text-center text-xs text-white/60">画像ヒントは今は利用できません。</p>
-                  ) : (
-                    <button onClick={controller.generateImage} className="group flex h-full w-full flex-col items-center justify-center gap-2 py-6 text-white/65 transition-colors hover:text-white">
-                      <div className="rounded-full bg-white/10 p-2 transition-colors group-hover:bg-white/18">
-                        <ImageIcon className="h-4 w-4" />
-                      </div>
-                      <span className="text-xs font-bold text-center">画像ヒントを表示</span>
-                    </button>
                   )}
                 </div>
               </div>

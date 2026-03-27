@@ -13,6 +13,7 @@ interface StudyFinishedViewProps {
   nextReviewMessage: string;
   weaknessSummary: string;
   reviewPreview: WordData[];
+  onStartSpellingCheck: () => void;
   onExit: () => void;
 }
 
@@ -25,6 +26,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
   nextReviewMessage,
   weaknessSummary,
   reviewPreview,
+  onStartSpellingCheck,
   onExit,
 }) => {
   if (isMobileViewport) {
@@ -95,13 +97,22 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
         </div>
 
         <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
-          <button
-            data-testid="study-finish-exit"
-            onClick={onExit}
-            className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
-          >
-            ダッシュボードに戻る
-          </button>
+          <div className="grid gap-2">
+            <button
+              type="button"
+              onClick={onStartSpellingCheck}
+              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+            >
+              スペルチェックを5問
+            </button>
+            <button
+              data-testid="study-finish-exit"
+              onClick={onExit}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700 transition-all hover:border-medace-300 hover:text-medace-700"
+            >
+              ダッシュボードに戻る
+            </button>
+          </div>
         </MobileStickyActionBar>
       </div>
     );
@@ -164,9 +175,22 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
           </div>
         </div>
 
-        <button onClick={onExit} className="mt-8 w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700">
-          ダッシュボードに戻る
-        </button>
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onStartSpellingCheck}
+            className="rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+          >
+            スペルチェックを5問
+          </button>
+          <button
+            type="button"
+            onClick={onExit}
+            className="rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700 transition-all hover:border-medace-300 hover:text-medace-700"
+          >
+            ダッシュボードに戻る
+          </button>
+        </div>
       </div>
     </div>
   );

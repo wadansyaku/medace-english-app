@@ -1,7 +1,11 @@
 import React from 'react';
 import { AlertTriangle, BookOpen, FileText, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
 
-import { BookCatalogSource, BOOK_CATALOG_SOURCE_LABELS } from '../../types';
+import {
+  BookCatalogSource,
+  BOOK_CATALOG_SOURCE_LABELS,
+  type BookMetadata,
+} from '../../types';
 
 interface AdminContentImportViewProps {
   mode: 'csv' | 'ai';
@@ -19,6 +23,10 @@ interface AdminContentImportViewProps {
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onAiImport: () => void;
   onCsvUpload: () => void;
+  officialBooks: BookMetadata[];
+  loadingOfficialBooks: boolean;
+  preparingExamplesBookId: string | null;
+  onPrepareExamples: (book: BookMetadata) => void;
   onOpenResetModal: () => void;
   destructiveActionsEnabled: boolean;
   destructiveActionsMessage: string;
@@ -40,6 +48,10 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
   onFileChange,
   onAiImport,
   onCsvUpload,
+  officialBooks,
+  loadingOfficialBooks,
+  preparingExamplesBookId,
+  onPrepareExamples,
   onOpenResetModal,
   destructiveActionsEnabled,
   destructiveActionsMessage,
@@ -207,6 +219,62 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       {log.length > 0 && (
         <div className="mt-8 max-h-48 overflow-y-auto rounded-xl border border-medace-800 bg-medace-900 p-6 font-mono text-xs text-medace-100 shadow-inner">
           {log.map((line, index) => <div key={index} className="mb-1">&gt; {line}</div>)}
+        </div>
+      )}
+    </div>
+
+    <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Example Prep</div>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">公式教材の例文を先に保存する</h3>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+            生徒の学習中にAIを呼ばないため、公式教材はここで未生成の例文だけを先に準備します。
+          </p>
+        </div>
+        <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+          学習中のAI生成は停止済み
+        </div>
+      </div>
+
+      {loadingOfficialBooks ? (
+        <div className="mt-6 flex min-h-[120px] items-center justify-center text-sm font-medium text-slate-500">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin text-medace-500" />
+          公式教材を読み込み中...
+        </div>
+      ) : officialBooks.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+          例文準備の対象になる公式教材はまだありません。
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {officialBooks.map((book) => (
+            <article key={book.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-slate-950">{book.title}</div>
+                  <div className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+                    {BOOK_CATALOG_SOURCE_LABELS[book.catalogSource || BookCatalogSource.LICENSED_PARTNER]}
+                  </div>
+                </div>
+                <div className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                  {book.wordCount}語
+                </div>
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-500">
+                {book.description || '教材内で未生成の例文だけを保存し、生徒画面では再利用します。'}
+              </p>
+              <button
+                type="button"
+                onClick={() => onPrepareExamples(book)}
+                disabled={preparingExamplesBookId === book.id}
+                className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
+              >
+                {preparingExamplesBookId === book.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {preparingExamplesBookId === book.id ? '例文を準備中...' : '例文を準備'}
+              </button>
+            </article>
+          ))}
         </div>
       )}
     </div>

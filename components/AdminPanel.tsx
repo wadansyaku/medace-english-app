@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
 import getClientRuntimeFlags from '../config/runtime';
 import { dashboardService } from '../services/dashboard';
 import { extractVocabularyFromText, isAiUnavailableError } from '../services/gemini';
-import { BookAccessScope, BookCatalogSource } from '../types';
+import { BookAccessScope, BookCatalogSource, type BookMetadata } from '../types';
 import { BRAND } from '../config/brand';
 import { useAdminDashboardSnapshot } from '../hooks/useAdminDashboardSnapshot';
 import { useAdminCommercialOps } from '../hooks/useAdminCommercialOps';
@@ -57,11 +57,43 @@ const AdminPanel: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.LICENSED_PARTNER);
+  const [catalogBooks, setCatalogBooks] = useState<BookMetadata[]>([]);
+  const [loadingCatalogBooks, setLoadingCatalogBooks] = useState(true);
+  const [preparingExamplesBookId, setPreparingExamplesBookId] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
   const runtimeFlags = getClientRuntimeFlags();
   const destructiveActionsEnabled = runtimeFlags.enableDestructiveAdminActions;
   const destructiveActionsMessage = '本番/導入 pilot では教材更新と初期化を UI から実行できません。バックアップ付き CLI runbook で dry-run 確認後に反映してください。';
+
+  const loadCatalogBooks = async () => {
+    setLoadingCatalogBooks(true);
+    try {
+      const nextBooks = await dashboardService.getBooks();
+      setCatalogBooks(nextBooks);
+    } catch (error) {
+      console.error(error);
+      setLog((previous) => [...previous, `エラー: 公式教材一覧の取得に失敗しました。${(error as Error).message}`]);
+    } finally {
+      setLoadingCatalogBooks(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCatalogBooks();
+  }, []);
+
+  const officialBooks = useMemo(
+    () => catalogBooks
+      .filter((book) => book.catalogSource !== BookCatalogSource.USER_GENERATED)
+      .sort((left, right) => {
+        if ((left.isPriority ? 1 : 0) !== (right.isPriority ? 1 : 0)) {
+          return left.isPriority ? -1 : 1;
+        }
+        return left.title.localeCompare(right.title, 'ja');
+      }),
+    [catalogBooks],
+  );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -101,7 +133,7 @@ const AdminPanel: React.FC = () => {
         });
 
         appendImportSummary(setLog, result, 'インポート完了');
-        await fetchDashboard();
+        await Promise.all([fetchDashboard(), loadCatalogBooks()]);
       } catch (error) {
         console.error(error);
         setLog((previous) => [...previous, `エラー: ${(error as Error).message}`]);
@@ -147,7 +179,7 @@ const AdminPanel: React.FC = () => {
       appendImportSummary(setLog, result, '独自教材の追加が完了');
       setRawText('');
       setContentTitle('');
-      await fetchDashboard();
+      await Promise.all([fetchDashboard(), loadCatalogBooks()]);
     } catch (error) {
       console.error(error);
       const message = isAiUnavailableError(error)
@@ -168,6 +200,24 @@ const AdminPanel: React.FC = () => {
       window.location.reload();
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handlePrepareBookExamples = async (book: BookMetadata) => {
+    setPreparingExamplesBookId(book.id);
+    setLog((previous) => [...previous, `${book.title}: 未生成の例文を確認しています...`]);
+    try {
+      const result = await dashboardService.prepareBookExamples(book.id);
+      setLog((previous) => [
+        ...previous,
+        `${book.title}: ${result.preparedCount}語の例文を保存しました。残り未生成は ${result.remainingCount}語です。`,
+      ]);
+      await loadCatalogBooks();
+    } catch (error) {
+      console.error(error);
+      setLog((previous) => [...previous, `エラー: ${book.title} の例文準備に失敗しました。${(error as Error).message}`]);
+    } finally {
+      setPreparingExamplesBookId(null);
     }
   };
 
@@ -198,6 +248,10 @@ const AdminPanel: React.FC = () => {
       onFileChange={handleFileChange}
       onAiImport={handleAiImport}
       onCsvUpload={handleCsvUpload}
+      officialBooks={officialBooks}
+      loadingOfficialBooks={loadingCatalogBooks}
+      preparingExamplesBookId={preparingExamplesBookId}
+      onPrepareExamples={handlePrepareBookExamples}
       onOpenResetModal={() => {
         if (!destructiveActionsEnabled) return;
         setShowResetModal(true);
@@ -286,6 +340,10 @@ const AdminPanel: React.FC = () => {
             onClick={() => {
               if (panelView === 'commercial') {
                 void refreshCommercialOps();
+                return;
+              }
+              if (panelView === 'content') {
+                void Promise.all([fetchDashboard(), loadCatalogBooks()]);
                 return;
               }
               void fetchDashboard();

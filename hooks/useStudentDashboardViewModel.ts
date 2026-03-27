@@ -21,6 +21,13 @@ const getLeague = (level: number) => {
   return { name: 'ブロンズ', color: 'bg-orange-50 text-orange-800 border-orange-200' };
 };
 
+const orderBooksByIds = <T extends { id: string }>(books: T[], orderedIds: string[]): T[] => {
+  const bookMap = new Map(books.map((book) => [book.id, book]));
+  return orderedIds
+    .map((id) => bookMap.get(id))
+    .filter((book): book is T => Boolean(book));
+};
+
 export const useStudentDashboardViewModel = ({
   user,
   snapshot,
@@ -77,21 +84,23 @@ export const useStudentDashboardViewModel = ({
     : null;
 
   const plannedBooks = learningPlan && learningPlan.selectedBookIds.length > 0
-    ? planningBooks.filter((book) => learningPlan.selectedBookIds.includes(book.id))
+    ? orderBooksByIds(planningBooks, learningPlan.selectedBookIds)
     : (() => {
         const prioritized = planningBooks.filter((book) => book.isPriority);
         return (prioritized.length > 0 ? prioritized : planningBooks).slice(0, 3);
       })();
 
   const recommendedOfficialBooks = learningPlan && learningPlan.selectedBookIds.length > 0
-    ? books.filter((book) => learningPlan.selectedBookIds.includes(book.id))
+    ? orderBooksByIds(books, learningPlan.selectedBookIds)
     : (() => {
         const fallbackIds = fallbackPlanSuggestion?.selectedBookIds ?? [];
-        const suggested = books.filter((book) => fallbackIds.includes(book.id));
+        const suggested = orderBooksByIds(books, fallbackIds);
         if (suggested.length > 0) return suggested;
         const prioritized = books.filter((book) => book.isPriority);
         return (prioritized.length > 0 ? prioritized : books).slice(0, 3);
       })();
+  const primaryRecommendedBook = recommendedOfficialBooks[0] || null;
+  const secondaryRecommendedBooks = recommendedOfficialBooks.slice(1);
 
   const heroTitle = !hasStudyBooks
     ? '最初の教材を 1 冊つくる'
@@ -175,6 +184,8 @@ export const useStudentDashboardViewModel = ({
     canCreateFromFile,
     plannedBooks,
     recommendedOfficialBooks,
+    primaryRecommendedBook,
+    secondaryRecommendedBooks,
     heroTitle,
     heroCopy,
     questButtonLabel,

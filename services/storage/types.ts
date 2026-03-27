@@ -34,6 +34,7 @@ import type {
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
 } from '../../contracts/storage';
 
@@ -55,6 +56,7 @@ export interface CatalogStorageService {
   updateWord(word: WordData): Promise<void>;
   reportWord(wordId: string, reason: string): Promise<void>;
   updateWordCache(wordId: string, sentence: string, translation: string): Promise<void>;
+  prepareBookExamples(bookId: string): Promise<PrepareBookExamplesResult>;
 }
 
 export interface LearningStorageService {

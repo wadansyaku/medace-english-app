@@ -18,16 +18,20 @@ interface QuizRunningViewProps {
   questionsLength: number;
   score: number;
   isHintMode: boolean;
+  showSpellingHint: boolean;
   showOptions: boolean;
   selectedOption: string | null;
   answerInput: string;
   inputResult: 'correct' | 'incorrect' | null;
+  spellingFeedbackTone: 'info' | 'correct' | 'incorrect' | null;
+  spellingFeedbackMessage: string | null;
   persistingAttempt: boolean;
   saveError: string | null;
   hasPendingAttempt: boolean;
   onShowOptions: () => void;
   onChangeAnswerInput: (value: string) => void;
   onHintSubmit: (event: FormEvent) => void;
+  onRevealSpellingHint: () => void;
   onOptionClick: (option: string) => void;
   onRetrySave: () => void;
 }
@@ -40,16 +44,20 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   questionsLength,
   score,
   isHintMode,
+  showSpellingHint,
   showOptions,
   selectedOption,
   answerInput,
   inputResult,
+  spellingFeedbackTone,
+  spellingFeedbackMessage,
   persistingAttempt,
   saveError,
   hasPendingAttempt,
   onShowOptions,
   onChangeAnswerInput,
   onHintSubmit,
+  onRevealSpellingHint,
   onOptionClick,
   onRetrySave,
 }) => (
@@ -84,17 +92,25 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       </h2>
 
       {isHintMode ? (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-amber-800">
+        <div className={`mt-6 rounded-2xl px-4 py-4 ${showSpellingHint ? 'border border-amber-200 bg-amber-50' : 'border border-slate-200 bg-slate-50'}`}>
+          <div className={`flex items-center gap-2 text-sm font-bold ${showSpellingHint ? 'text-amber-800' : 'text-slate-700'}`}>
             <SpellCheck className="h-4 w-4" />
-            先頭2文字ヒント
+            スペルチェック
           </div>
-          <div className="mt-3 text-2xl font-black tracking-[0.12em] text-slate-900">
-            {currentQuestion.maskedAnswer}
-          </div>
-          <div className="mt-2 text-sm text-amber-800/80">
-            先頭2文字は見せています。全文でも、残りだけでも判定できます。
-          </div>
+          {showSpellingHint ? (
+            <>
+              <div className="mt-3 text-2xl font-black tracking-[0.12em] text-slate-900">
+                {currentQuestion.maskedAnswer}
+              </div>
+              <div className="mt-2 text-sm text-amber-800/80">
+                先頭2文字をヒントに、全文または残りを入力してください。
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 text-sm text-slate-600">
+              まずはヒントなしで全文を入力します。必要なときだけ先頭2文字ヒントを出せます。
+            </div>
+          )}
         </div>
       ) : (
         !showOptions && (
@@ -118,29 +134,40 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             disabled={!!inputResult || persistingAttempt}
             autoFocus
             className="ui-input text-lg"
-            placeholder={`${currentQuestion.hintPrefix || ''}...`}
+            placeholder={showSpellingHint ? `${currentQuestion.hintPrefix || ''}...` : '英語をそのまま入力'}
           />
-          {inputResult && (
+          {spellingFeedbackMessage && spellingFeedbackTone && (
             <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
-              inputResult === 'correct'
+              spellingFeedbackTone === 'correct'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : 'border-red-200 bg-red-50 text-red-700'
+                : spellingFeedbackTone === 'incorrect'
+                  ? 'border-red-200 bg-red-50 text-red-700'
+                  : 'border-amber-200 bg-amber-50 text-amber-800'
             }`}>
-              {inputResult === 'correct'
-                ? '正解です。この方向でも思い出せました。'
-                : `不正解です。正解は ${currentQuestion.answer} です。`}
+              {spellingFeedbackMessage}
             </div>
           )}
         </section>
 
         <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
-          <button
-            type="submit"
-            disabled={!answerInput.trim() || !!inputResult || persistingAttempt}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '入力して判定する'}
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="submit"
+              disabled={!answerInput.trim() || !!inputResult || persistingAttempt}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '入力して判定する'}
+            </button>
+            {!showSpellingHint && !inputResult && (
+              <button
+                type="button"
+                onClick={onRevealSpellingHint}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"
+              >
+                <SpellCheck className="h-5 w-5" /> ヒントを見る
+              </button>
+            )}
+          </div>
         </MobileStickyActionBar>
       </form>
     ) : !showOptions ? (

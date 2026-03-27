@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateWorksheetQuestions } from '../utils/worksheet';
+import { generateWorksheetQuestions, resolveSpellingAttempt } from '../utils/worksheet';
 
 const sourceWords = [
   {
@@ -36,5 +36,28 @@ describe('generateWorksheetQuestions', () => {
     expect(stabilizeQuestion?.options).toHaveLength(4);
     expect(stabilizeQuestion?.options?.some((option) => option.includes('その他'))).toBe(false);
     expect(stabilizeQuestion?.options?.some((option) => option !== '安定させる' && option.startsWith('安定'))).toBe(true);
+  });
+
+  it('requires a full spelling attempt before revealing the prefix hint', () => {
+    expect(resolveSpellingAttempt({
+      input: 'stabilise',
+      answer: 'stabilize',
+      hintPrefix: 'st',
+      hintVisible: false,
+    })).toBe('retry-with-hint');
+
+    expect(resolveSpellingAttempt({
+      input: 'abilize',
+      answer: 'stabilize',
+      hintPrefix: 'st',
+      hintVisible: true,
+    })).toBe('correct');
+
+    expect(resolveSpellingAttempt({
+      input: 'stable',
+      answer: 'stabilize',
+      hintPrefix: 'st',
+      hintVisible: true,
+    })).toBe('incorrect');
   });
 });

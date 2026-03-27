@@ -1,10 +1,15 @@
-import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
+import type {
+  CatalogImportRequest,
+  CatalogImportResult,
+  PrepareBookExamplesResult,
+} from '../../contracts/storage';
 import { BookAccessScope, BookCatalogSource, BookMetadata, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
+import { generateMeteredGeminiSentence } from './ai-actions';
 import { normalizeCatalogImport } from './catalog-import';
 import { HttpError } from './http';
 import { readWeaknessProfile } from './weakness-actions';
@@ -250,6 +255,82 @@ export const handleUpdateWordCache = async (
     SET example_sentence = ?, example_meaning = ?, updated_at = ?
     WHERE id = ?
   `).bind(sentence, translation, Date.now(), wordId).run();
+};
+
+export const handlePrepareBookExamples = async (
+  env: AppEnv,
+  user: DbUserRow,
+  bookId: string,
+): Promise<PrepareBookExamplesResult> => {
+  await assertBookWriteAccess(env, user, bookId);
+
+  const book = await readFirst<{ source_context: string | null }>(
+    env,
+    'SELECT source_context FROM books WHERE id = ?',
+    bookId,
+  );
+  if (!book) {
+    throw new HttpError(404, '対象の教材が見つかりません。');
+  }
+
+  const words = await readAll<DbWordRow>(
+    env,
+    `SELECT *
+       FROM words
+      WHERE book_id = ?
+        AND (
+          example_sentence IS NULL OR TRIM(example_sentence) = ''
+          OR example_meaning IS NULL OR TRIM(example_meaning) = ''
+        )
+      ORDER BY word_number ASC`,
+    bookId,
+  );
+
+  let preparedCount = 0;
+  for (const word of words) {
+    const context = await generateMeteredGeminiSentence(
+      env,
+      user,
+      {
+        word: word.word,
+        definition: word.definition,
+        userLevel: (user.english_level as EnglishLevel | null) || undefined,
+        sourceContext: book.source_context || undefined,
+      },
+    );
+
+    await env.DB.prepare(`
+      UPDATE words
+         SET example_sentence = ?,
+             example_meaning = ?,
+             updated_at = ?
+       WHERE id = ?
+    `).bind(
+      context.english,
+      context.japanese,
+      Date.now(),
+      word.id,
+    ).run();
+    preparedCount += 1;
+  }
+
+  const remainingRow = await readFirst<{ count: number }>(
+    env,
+    `SELECT COUNT(*) AS count
+       FROM words
+      WHERE book_id = ?
+        AND (
+          example_sentence IS NULL OR TRIM(example_sentence) = ''
+          OR example_meaning IS NULL OR TRIM(example_meaning) = ''
+        )`,
+    bookId,
+  );
+
+  return {
+    bookId,
+    preparedCount,
+    remainingCount: Number(remainingRow?.count || 0),
+  };
 };
 
 export const handleGetDailySessionWords = async (

@@ -3,6 +3,7 @@ import {
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
   StorageAction,
   StorageActionRequest,
@@ -152,6 +153,13 @@ export class CloudflareStorageService implements IStorageService {
     await this.callStorage({
       action: 'updateWordCache',
       payload: { wordId, sentence, translation },
+    });
+  }
+
+  async prepareBookExamples(bookId: string): Promise<PrepareBookExamplesResult> {
+    return this.callStorage({
+      action: 'prepareBookExamples',
+      payload: { bookId },
     });
   }
 

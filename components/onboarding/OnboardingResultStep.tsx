@@ -95,6 +95,14 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
             </p>
           </div>
 
+          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next Step</div>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">次の一手</h3>
+            <div className="mt-4 rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-slate-700">
+              {result.nextFocus[0] || 'まずはこのレベルで 1 日分の学習を始めましょう。'}
+            </div>
+          </div>
+
           {isRetake && historySummary && (
             <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">前回の学習サマリー</div>
@@ -104,7 +112,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
+          <div className="hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:block md:p-7">
             <div className="flex items-center gap-2">
               <Target className="h-5 w-5 text-medace-600" />
               <div>
@@ -121,92 +129,173 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-medace-600" />
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Breakdown</div>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">診断の内訳</h3>
+          <div className="space-y-4">
+            <details className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
+              <summary className="cursor-pointer list-none">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-medace-600" />
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Breakdown</div>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">診断の内訳を見る</h3>
+                  </div>
+                </div>
+              </summary>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {(Object.entries(result.phaseScores) as Array<[keyof typeof result.phaseScores, { correct: number; total: number }]>).map(([phase, score]) => (
+                  <div key={phase} className="rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{DIAGNOSTIC_PHASE_LABELS[phase]}</div>
+                    <div className="mt-2 text-3xl font-black text-slate-900">
+                      {score.correct}
+                      <span className="text-lg text-slate-400">/{score.total}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {phase === 'warmup' ? '基礎の安定度' : phase === 'core' ? '標準的な文脈力' : '上位帯の伸びしろ'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </details>
+
+            <div className="hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:block md:p-7">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-medace-600" />
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Breakdown</div>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">診断の内訳</h3>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {(Object.entries(result.phaseScores) as Array<[keyof typeof result.phaseScores, { correct: number; total: number }]>).map(([phase, score]) => (
+                  <div key={phase} className="rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{DIAGNOSTIC_PHASE_LABELS[phase]}</div>
+                    <div className="mt-2 text-3xl font-black text-slate-900">
+                      {score.correct}
+                      <span className="text-lg text-slate-400">/{score.total}</span>
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {phase === 'warmup' ? '基礎の安定度' : phase === 'core' ? '標準的な文脈力' : '上位帯の伸びしろ'}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {(Object.entries(result.phaseScores) as Array<[keyof typeof result.phaseScores, { correct: number; total: number }]>).map(([phase, score]) => (
-                <div key={phase} className="rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{DIAGNOSTIC_PHASE_LABELS[phase]}</div>
-                  <div className="mt-2 text-3xl font-black text-slate-900">
-                    {score.correct}
-                    <span className="text-lg text-slate-400">/{score.total}</span>
-                  </div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    {phase === 'warmup' ? '基礎の安定度' : phase === 'core' ? '標準的な文脈力' : '上位帯の伸びしろ'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Skill Review</div>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">スキル別コメント</h3>
-            <div className="mt-5 grid gap-3">
-              {result.skillSummaries.map((summary) => (
-                <div key={summary.skill} className="rounded-3xl border border-slate-200 px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-base font-bold text-slate-900">{summary.label}</div>
-                    <div className={`rounded-full border px-3 py-1 text-xs font-bold ${
-                      summary.status === 'strong'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : summary.status === 'steady'
-                          ? 'border-sky-200 bg-sky-50 text-sky-700'
-                          : 'border-amber-200 bg-amber-50 text-amber-700'
-                    }`}>
-                      {summary.status === 'strong' ? '安定' : summary.status === 'steady' ? '育成中' : '優先'}
-                    </div>
-                  </div>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{summary.message}</p>
-                  <div className="mt-3 flex justify-between text-[11px] font-bold text-slate-400">
-                    <span>{summary.correct} / {summary.total}</span>
-                    <span>{Math.round(summary.ratio * 100)}%</span>
-                  </div>
-                  <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className={`h-full rounded-full ${
+            <details className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
+              <summary className="cursor-pointer list-none">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Skill Review</div>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">スキル別コメントを見る</h3>
+              </summary>
+              <div className="mt-5 grid gap-3">
+                {result.skillSummaries.map((summary) => (
+                  <div key={summary.skill} className="rounded-3xl border border-slate-200 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-base font-bold text-slate-900">{summary.label}</div>
+                      <div className={`rounded-full border px-3 py-1 text-xs font-bold ${
                         summary.status === 'strong'
-                          ? 'bg-emerald-500'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                           : summary.status === 'steady'
-                            ? 'bg-sky-500'
-                            : 'bg-amber-500'
-                      }`}
-                      style={{ width: `${Math.max(8, Math.round(summary.ratio * 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review</div>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">見直すと効く問題</h3>
-            <div className="mt-5 space-y-3">
-              {reviewItems.map((item) => (
-                <div key={item.id} className="rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-bold text-slate-900">
-                      {item.skill === 'grammar' ? '文法' : item.skill === 'vocabulary' ? '語彙' : '読解'}
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700'
+                      }`}>
+                        {summary.status === 'strong' ? '安定' : summary.status === 'steady' ? '育成中' : '優先'}
+                      </div>
                     </div>
-                    <div className={`rounded-full border px-2.5 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[item.level]}`}>{item.level}</div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{summary.message}</p>
                   </div>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.question}</p>
-                  <div className="mt-3 text-xs text-slate-500">正解: {item.correctAnswer}</div>
-                  <div className="mt-2 text-sm text-slate-600">{item.explanation}</div>
-                </div>
-              ))}
-              {reviewItems.length === 0 && (
-                <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-                  取りこぼしはありませんでした。今の帯で十分にスタートできます。
-                </div>
-              )}
+                ))}
+              </div>
+            </details>
+
+            <div className="hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:block md:p-7">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Skill Review</div>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">スキル別コメント</h3>
+              <div className="mt-5 grid gap-3">
+                {result.skillSummaries.map((summary) => (
+                  <div key={summary.skill} className="rounded-3xl border border-slate-200 px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-base font-bold text-slate-900">{summary.label}</div>
+                      <div className={`rounded-full border px-3 py-1 text-xs font-bold ${
+                        summary.status === 'strong'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          : summary.status === 'steady'
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700'
+                      }`}>
+                        {summary.status === 'strong' ? '安定' : summary.status === 'steady' ? '育成中' : '優先'}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{summary.message}</p>
+                    <div className="mt-3 flex justify-between text-[11px] font-bold text-slate-400">
+                      <span>{summary.correct} / {summary.total}</span>
+                      <span>{Math.round(summary.ratio * 100)}%</span>
+                    </div>
+                    <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${
+                          summary.status === 'strong'
+                            ? 'bg-emerald-500'
+                            : summary.status === 'steady'
+                              ? 'bg-sky-500'
+                              : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${Math.max(8, Math.round(summary.ratio * 100))}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <details className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
+              <summary className="cursor-pointer list-none">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review</div>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">見直すと効く問題を見る</h3>
+              </summary>
+              <div className="mt-5 space-y-3">
+                {reviewItems.map((item) => (
+                  <div key={item.id} className="rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-bold text-slate-900">
+                        {item.skill === 'grammar' ? '文法' : item.skill === 'vocabulary' ? '語彙' : '読解'}
+                      </div>
+                      <div className={`rounded-full border px-2.5 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[item.level]}`}>{item.level}</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.question}</p>
+                    <div className="mt-3 text-xs text-slate-500">正解: {item.correctAnswer}</div>
+                    <div className="mt-2 text-sm text-slate-600">{item.explanation}</div>
+                  </div>
+                ))}
+                {reviewItems.length === 0 && (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                    取りこぼしはありませんでした。今の帯で十分にスタートできます。
+                  </div>
+                )}
+              </div>
+            </details>
+
+            <div className="hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:block md:p-7">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review</div>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">見直すと効く問題</h3>
+              <div className="mt-5 space-y-3">
+                {reviewItems.map((item) => (
+                  <div key={item.id} className="rounded-3xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-bold text-slate-900">
+                        {item.skill === 'grammar' ? '文法' : item.skill === 'vocabulary' ? '語彙' : '読解'}
+                      </div>
+                      <div className={`rounded-full border px-2.5 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[item.level]}`}>{item.level}</div>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.question}</p>
+                    <div className="mt-3 text-xs text-slate-500">正解: {item.correctAnswer}</div>
+                    <div className="mt-2 text-sm text-slate-600">{item.explanation}</div>
+                  </div>
+                ))}
+                {reviewItems.length === 0 && (
+                  <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                    取りこぼしはありませんでした。今の帯で十分にスタートできます。
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

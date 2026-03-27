@@ -552,6 +552,32 @@ class IndexedDBStorageService implements IStorageService {
     });
   }
 
+  async prepareBookExamples(bookId: string): Promise<import('../contracts/storage').PrepareBookExamplesResult> {
+    const store = await this.getStore(STORES.WORDS, 'readwrite');
+    const words = await this.getWordsByBook(bookId);
+    const targetWords = words.filter((word) => !word.exampleSentence?.trim() || !word.exampleMeaning?.trim());
+
+    await Promise.all(targetWords.map((word) => new Promise<void>((resolve) => {
+      const req = store.get(word.id);
+      req.onsuccess = () => {
+        const current = req.result as WordData | undefined;
+        if (current) {
+          current.exampleSentence = current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`;
+          current.exampleMeaning = current.exampleMeaning?.trim() || `今日の授業で「${current.word}」を学びます。`;
+          store.put(current);
+        }
+        resolve();
+      };
+      req.onerror = () => resolve();
+    })));
+
+    return {
+      bookId,
+      preparedCount: targetWords.length,
+      remainingCount: 0,
+    };
+  }
+
   async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
     return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit, taskIntent);
   }
@@ -827,6 +853,8 @@ class IndexedDBStorageService implements IStorageService {
       contactName: payload.contactName.trim(),
       contactEmail: payload.contactEmail.trim().toLowerCase(),
       organizationName: payload.organizationName?.trim() || undefined,
+      teachingFormat: payload.teachingFormat,
+      desiredStartTiming: payload.desiredStartTiming?.trim() || undefined,
       requestedWorkspaceRole: payload.requestedWorkspaceRole,
       seatEstimate: payload.seatEstimate?.trim() || undefined,
       message: payload.message.trim(),

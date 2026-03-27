@@ -77,6 +77,17 @@ export const createBookQuizTaskIntent = (bookId: string, label = '教材テス�
   limit: 10,
 });
 
+export const createFollowUpSpellingTaskIntent = (bookId: string): LearningTaskIntent => ({
+  mode: 'quiz',
+  intentType: LearningTaskIntentType.BOOK_QUIZ,
+  bookId,
+  label: '仕上げのスペルチェック',
+  selectionPolicy: 'BOOK_DEFAULT',
+  limit: 5,
+  targetQuestionModes: ['SPELLING_HINT'],
+  autoStart: true,
+});
+
 export const createTodayFocusTaskIntent = (): LearningTaskIntent => ({
   mode: 'study',
   intentType: LearningTaskIntentType.TODAY_FOCUS,

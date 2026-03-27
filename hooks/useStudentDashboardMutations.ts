@@ -38,6 +38,7 @@ interface UseStudentDashboardMutationsParams {
   removeMyBook: (bookId: string) => void;
   setPageNotice: Dispatch<SetStateAction<DashboardPageNotice | null>>;
   setGeneratingPlan: Dispatch<SetStateAction<boolean>>;
+  setPreparingExamplesBookId: Dispatch<SetStateAction<string | null>>;
   selectedPlanBooks: string[];
   editDailyGoal: number;
   setShowPlanEditModal: Dispatch<SetStateAction<boolean>>;
@@ -83,6 +84,7 @@ export const useStudentDashboardMutations = ({
   removeMyBook,
   setPageNotice,
   setGeneratingPlan,
+  setPreparingExamplesBookId,
   selectedPlanBooks,
   editDailyGoal,
   setShowPlanEditModal,
@@ -282,6 +284,28 @@ export const useStudentDashboardMutations = ({
     }
   }, [pendingDeleteBook, removeMyBook, refreshDashboard, setPageNotice, setPendingDeleteBook]);
 
+  const handlePrepareBookExamples = useCallback(async (book: BookMetadata) => {
+    setPreparingExamplesBookId(book.id);
+    try {
+      const result = await dashboardService.prepareBookExamples(book.id);
+      await refreshDashboard();
+      setPageNotice({
+        tone: 'success',
+        message: result.preparedCount > 0
+          ? `「${book.title}」の例文を ${result.preparedCount} 件準備しました。`
+          : `「${book.title}」はすでに例文準備済みです。`,
+      });
+    } catch (error) {
+      console.error(error);
+      setPageNotice({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '例文準備に失敗しました。',
+      });
+    } finally {
+      setPreparingExamplesBookId(null);
+    }
+  }, [refreshDashboard, setPageNotice, setPreparingExamplesBookId]);
+
   const handleSaveProfile = useCallback(async () => {
     setIsSavingProfile(true);
     try {
@@ -350,6 +374,7 @@ export const useStudentDashboardMutations = ({
     handleUpdatePlan,
     handleCreatePhrasebook,
     confirmDeleteBook,
+    handlePrepareBookExamples,
     handleSaveProfile,
   };
 };

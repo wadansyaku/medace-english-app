@@ -9,6 +9,8 @@ interface DashboardHeroSectionProps {
   englishLevel?: string;
   heroTitle: string;
   heroCopy: string;
+  primaryRecommendedBookTitle?: string | null;
+  primaryRecommendedBookWordCount?: number;
   preferenceSummary: string;
   hasStudyBooks: boolean;
   questButtonLabel: string;
@@ -23,6 +25,7 @@ interface DashboardHeroSectionProps {
   gameLeagueBadge?: { name: string; color: string };
   isMobileCompact?: boolean;
   onOpenSettings: () => void;
+  onOpenRecommendedCourse?: () => void;
   onStartQuest: () => void;
   onOpenPlan: () => void;
   onGeneratePlan: () => void;
@@ -33,6 +36,8 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   englishLevel,
   heroTitle,
   heroCopy,
+  primaryRecommendedBookTitle,
+  primaryRecommendedBookWordCount,
   preferenceSummary,
   hasStudyBooks,
   questButtonLabel,
@@ -47,6 +52,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   gameLeagueBadge,
   isMobileCompact = false,
   onOpenSettings,
+  onOpenRecommendedCourse,
   onStartQuest,
   onOpenPlan,
   onGeneratePlan,
@@ -135,12 +141,35 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             ) : null}
           </div>
 
-          <div className={`min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
-            <div className={`min-w-0 leading-relaxed text-white/80 ${isMobileCompact ? 'mt-1.5 text-[13px] line-clamp-2' : 'mt-2 text-sm line-clamp-2 md:line-clamp-none'}`}>
-              {preferenceSummary}
+          {isMobileCompact && primaryRecommendedBookTitle && onOpenRecommendedCourse ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">推奨コース 1つ</div>
+              <div className="mt-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="line-clamp-2 text-sm font-bold leading-snug text-white">
+                    {primaryRecommendedBookTitle}
+                  </div>
+                  <div className="mt-1 text-xs text-white/70">
+                    {primaryRecommendedBookWordCount ? `${primaryRecommendedBookWordCount}語` : '今日の学習に最適'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenRecommendedCourse}
+                  className="shrink-0 rounded-full bg-white px-3 py-2 text-xs font-bold text-medace-900"
+                >
+                  このコースで始める
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className={`min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
+              <div className={`min-w-0 leading-relaxed text-white/80 ${isMobileCompact ? 'mt-1.5 text-[13px] line-clamp-2' : 'mt-2 text-sm line-clamp-2 md:line-clamp-none'}`}>
+                {preferenceSummary}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className={`min-w-0 rounded-[28px] border border-white/10 bg-white/8 backdrop-blur-sm ${isMobileCompact ? 'p-3' : 'p-3.5 md:p-5'}`}>
