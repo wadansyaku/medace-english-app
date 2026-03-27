@@ -127,6 +127,41 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   const reactivatedStudentsDetail = isLocalMockData
     ? 'ローカル擬似データ上の参考値'
     : '72時間以内に学習再開';
+  const onboardingChecklist = [
+    {
+      label: '組織名を確認',
+      done: Boolean(settingsSnapshot?.displayName.trim()),
+      detail: settingsSnapshot?.displayName || '組織名を設定すると案内メールと管理画面表示が揃います。',
+    },
+    {
+      label: 'cohort を作成',
+      done: (settingsSnapshot?.cohorts.length || 0) > 0,
+      detail: (settingsSnapshot?.cohorts.length || 0) > 0
+        ? `${settingsSnapshot?.cohorts.length || 0}件の cohort を作成済み`
+        : '学年・クラス・講座単位で 1 つ以上作ると割当が整理しやすくなります。',
+    },
+    {
+      label: '講師を割り当て',
+      done: snapshot.assignmentCoverageRate > 0,
+      detail: snapshot.assignmentCoverageRate > 0
+        ? `担当割当率 ${snapshot.assignmentCoverageRate}%`
+        : '最初は at-risk 生徒からでもよいので担当を決めてください。',
+    },
+    {
+      label: '教材を配布',
+      done: books.length > 0,
+      detail: books.length > 0
+        ? `${books.length}冊の教材を利用可能`
+        : '公式教材または My単語帳を最低 1 冊用意してください。',
+    },
+    {
+      label: '初回ミッションを設定',
+      done: snapshot.learningPlanCount > 0 || snapshot.missionStartedRate > 0,
+      detail: snapshot.learningPlanCount > 0 || snapshot.missionStartedRate > 0
+        ? '学習計画またはミッション配布が始まっています。'
+        : '最初の1週間分だけでもよいので、開始ミッションを固定してください。',
+    },
+  ];
 
   return (
     <>
@@ -138,6 +173,27 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
             <WorkspaceMetricCard label="未処理 backlog" value={`${snapshot.interventionBacklogCount}名`} detail="いま介入順を決めるべき生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
             <WorkspaceMetricCard label="未割当 at-risk" value={`${snapshot.unassignedAtRiskCount}名`} detail="担当再設定が必要な生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
           </div>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-medace-600" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">導入スタートチェック</p>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最初に確認する 5 項目</h3>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {onboardingChecklist.map((item) => (
+                <div key={item.label} className={`rounded-3xl border px-4 py-4 ${item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                    <CheckCircle2 className={`h-4 w-4 ${item.done ? 'text-emerald-600' : 'text-slate-300'}`} />
+                    {item.label}
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <WorkspaceMetricCard label="期限超過ミッション" value={`${snapshot.overdueMissionCount}件`} detail="未介入で止まっている週次課題" tone={snapshot.overdueMissionCount > 0 ? 'danger' : 'success'} />

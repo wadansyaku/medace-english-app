@@ -2,6 +2,7 @@ import {
   CommercialRequest,
   CommercialRequestKind,
   CommercialRequestStatus,
+  type TeachingFormat,
   type CommercialWorkspaceRole,
   type OrganizationRole,
   type SubscriptionPlan,
@@ -14,6 +15,8 @@ export interface CommercialRequestInput {
   contactName: string;
   contactEmail: string;
   organizationName?: string;
+  teachingFormat?: TeachingFormat;
+  desiredStartTiming?: string;
   requestedWorkspaceRole?: CommercialWorkspaceRole;
   seatEstimate?: string;
   message: string;

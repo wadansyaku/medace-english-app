@@ -24,6 +24,13 @@ const ROLE_ICONS = {
   'service-admin': <Settings className="h-5 w-5" />,
 } as const;
 
+const ROLE_PAGE_STEPS = [
+  '対象塾か判断する',
+  '役割ごとの見え方を確認する',
+  '導入相談を送る',
+  '招待または手動発行で開始する',
+];
+
 const PublicRolePage: React.FC<PublicRolePageProps> = ({
   roleKey,
   onBack,
@@ -169,6 +176,19 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
             <p className="mt-3 text-base leading-relaxed text-slate-600">
               ページを開いた時点では自動ログインしません。案内を読んだうえで、必要なら体験開始、またはそのまま導入相談へ進めます。
             </p>
+          </section>
+
+          <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-5">
+            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">導入フロー</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">半セルフ導入の流れ</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {ROLE_PAGE_STEPS.map((step, index) => (
+                <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step {index + 1}</div>
+                  <div className="mt-1 text-sm font-bold text-slate-900">{step}</div>
+                </div>
+              ))}
+            </div>
           </section>
 
           <div ref={requestSectionRef}>

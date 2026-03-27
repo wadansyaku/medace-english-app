@@ -8,6 +8,7 @@ import {
   CommercialWorkspaceRole,
   OrganizationRole,
   SubscriptionPlan,
+  TeachingFormat,
   type CommercialRequest,
   UserRole,
 } from '../../types';
@@ -30,6 +31,8 @@ interface DbCommercialRequestRow {
   contact_name: string;
   contact_email: string;
   organization_name: string | null;
+  teaching_format: string | null;
+  desired_start_timing: string | null;
   requested_workspace_role: string | null;
   seat_estimate: string | null;
   message: string;
@@ -58,6 +61,8 @@ const createCommercialRequestFromRow = (row: DbCommercialRequestRow): Commercial
   contactName: row.contact_name,
   contactEmail: row.contact_email,
   organizationName: row.organization_name || undefined,
+  teachingFormat: row.teaching_format as TeachingFormat | undefined,
+  desiredStartTiming: row.desired_start_timing || undefined,
   requestedWorkspaceRole: row.requested_workspace_role as CommercialWorkspaceRole | undefined,
   seatEstimate: row.seat_estimate || undefined,
   message: row.message,
@@ -83,6 +88,7 @@ const assertCommercialRequestPayload = (payload: CommercialRequestPayload): Comm
   const message = String(payload.message || '').trim();
   const source = String(payload.source || '').trim();
   const organizationName = String(payload.organizationName || '').trim();
+  const desiredStartTiming = String(payload.desiredStartTiming || '').trim();
   const seatEstimate = String(payload.seatEstimate || '').trim();
 
   if (!contactName) throw new HttpError(400, '担当者名を入力してください。');
@@ -92,6 +98,13 @@ const assertCommercialRequestPayload = (payload: CommercialRequestPayload): Comm
 
   if (payload.kind !== CommercialRequestKind.PERSONAL_UPGRADE && !organizationName) {
     throw new HttpError(400, '学校名または教室名を入力してください。');
+  }
+
+  if (
+    payload.teachingFormat
+    && !Object.values(TeachingFormat).includes(payload.teachingFormat)
+  ) {
+    throw new HttpError(400, '授業形態が不正です。');
   }
 
   if (
@@ -108,6 +121,7 @@ const assertCommercialRequestPayload = (payload: CommercialRequestPayload): Comm
     message,
     source,
     organizationName: organizationName || undefined,
+    desiredStartTiming: desiredStartTiming || undefined,
     seatEstimate: seatEstimate || undefined,
   };
 };
@@ -238,11 +252,12 @@ export const handleCreateCommercialRequest = async (
   const insertResult = await env.DB.prepare(`
     INSERT INTO commercial_requests (
       kind, status, contact_name, contact_email, normalized_contact_email,
-      organization_name, requested_workspace_role, seat_estimate,
+      organization_name, teaching_format, desired_start_timing,
+      requested_workspace_role, seat_estimate,
       message, source, requested_by_user_id, linked_user_id,
       created_at, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     input.kind,
     CommercialRequestStatus.OPEN,
@@ -250,6 +265,8 @@ export const handleCreateCommercialRequest = async (
     input.contactEmail,
     input.contactEmail,
     input.organizationName || null,
+    input.teachingFormat || null,
+    input.desiredStartTiming || null,
     input.requestedWorkspaceRole || null,
     input.seatEstimate || null,
     input.message,

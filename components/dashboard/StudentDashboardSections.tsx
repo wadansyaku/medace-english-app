@@ -134,6 +134,8 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           englishLevel={user.englishLevel}
           heroTitle={viewModel.heroTitle}
           heroCopy={viewModel.heroCopy}
+          primaryRecommendedBookTitle={viewModel.primaryRecommendedBook?.title || null}
+          primaryRecommendedBookWordCount={viewModel.primaryRecommendedBook?.wordCount}
           preferenceSummary={viewModel.preferenceSummary}
           hasStudyBooks={viewModel.hasStudyBooks}
           questButtonLabel={viewModel.questButtonLabel}
@@ -148,6 +150,9 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           gameLeagueBadge={viewModel.isGameMode ? viewModel.userLeague : undefined}
           isMobileCompact={isStudentMobileShell}
           onOpenSettings={() => controller.setShowSettingsModal(true)}
+          onOpenRecommendedCourse={viewModel.primaryRecommendedBook
+            ? () => onSelectBook(viewModel.primaryRecommendedBook!.id, 'study')
+            : undefined}
           onStartQuest={() => {
             if (viewModel.hasStudyBooks) {
               onStartTask(todayTaskIntent);
@@ -283,13 +288,16 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         <DashboardLibrarySection
           books={viewModel.books}
           myBooks={viewModel.myBooks}
-          recommendedOfficialBooks={viewModel.recommendedOfficialBooks}
+          primaryRecommendedBook={viewModel.primaryRecommendedBook}
+          secondaryRecommendedBooks={viewModel.secondaryRecommendedBooks}
           progressMap={viewModel.progressMap}
           showLibrary={controller.showLibrary}
           isCompact={isStudentMobileShell}
+          preparingExamplesBookId={controller.preparingExamplesBookId}
           onToggleLibrary={() => controller.setShowLibrary((previous) => !previous)}
           onOpenCreateModal={() => controller.setShowCreateModal(true)}
           onDelete={controller.handleDeleteBook}
+          onPrepareExamples={controller.handlePrepareBookExamples}
           onSelect={onSelectBook}
         />
       </div>

@@ -11,6 +11,16 @@ export const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
   density: 'standard',
 };
 
+const getResponsiveDefaultDisplayPreferences = (): DisplayPreferences => {
+  if (typeof window === 'undefined') return DEFAULT_DISPLAY_PREFERENCES;
+  const isMobileViewport = window.matchMedia('(max-width: 768px)').matches;
+  if (!isMobileViewport) return DEFAULT_DISPLAY_PREFERENCES;
+  return {
+    fontSize: 'large',
+    density: 'comfortable',
+  };
+};
+
 const STORAGE_KEY = 'medace:display-preferences';
 
 const normalizeFontSize = (value: unknown): DisplayFontSize =>
@@ -44,7 +54,7 @@ export const getStoredDisplayPreferences = (uid?: string | null): DisplayPrefere
     }
   }
 
-  return DEFAULT_DISPLAY_PREFERENCES;
+  return getResponsiveDefaultDisplayPreferences();
 };
 
 export const applyDisplayPreferences = (preferences: DisplayPreferences): void => {

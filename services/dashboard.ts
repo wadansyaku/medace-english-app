@@ -19,6 +19,7 @@ type DashboardCatalogSurface = Pick<CatalogClient,
   | 'batchImportWords'
   | 'deleteBook'
   | 'getBooks'
+  | 'prepareBookExamples'
 >;
 
 type DashboardLearningSurface = Pick<LearningClient,
@@ -49,6 +50,7 @@ export const dashboardService: DashboardService = {
   deleteBook: (bookId) => catalogClient.deleteBook(bookId),
   getAdminDashboardSnapshot: () => dashboardClient.getAdminDashboardSnapshot(),
   getBooks: () => catalogClient.getBooks(),
+  prepareBookExamples: (bookId) => catalogClient.prepareBookExamples(bookId),
   getDashboardSnapshot: (uid) => dashboardClient.getDashboardSnapshot(uid),
   getLearningPlan: (uid) => learningClient.getLearningPlan(uid),
   getLearningPreference: (uid) => learningClient.getLearningPreference(uid),

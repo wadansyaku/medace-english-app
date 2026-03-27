@@ -114,16 +114,20 @@ const QuizMode: React.FC<QuizModeProps> = ({
           questionsLength={controller.questions.length}
           score={controller.score}
           isHintMode={controller.isHintMode}
+          showSpellingHint={controller.showSpellingHint}
           showOptions={controller.showOptions}
           selectedOption={controller.selectedOption}
           answerInput={controller.answerInput}
           inputResult={controller.inputResult}
+          spellingFeedbackTone={controller.spellingFeedbackTone}
+          spellingFeedbackMessage={controller.spellingFeedbackMessage}
           persistingAttempt={controller.persistingAttempt}
           saveError={controller.saveError}
           hasPendingAttempt={Boolean(controller.pendingAttempt)}
           onShowOptions={() => controller.setShowOptions(true)}
           onChangeAnswerInput={controller.setAnswerInput}
           onHintSubmit={controller.handleHintSubmit}
+          onRevealSpellingHint={controller.revealSpellingHint}
           onOptionClick={controller.handleOptionClick}
           onRetrySave={controller.handleRetrySave}
         />

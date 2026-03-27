@@ -41,6 +41,25 @@ const PLATFORM_HIGHLIGHTS = [
   },
 ];
 
+const CONSULTATION_STEPS = [
+  {
+    title: '1. 対象塾か判断',
+    detail: 'オンライン中心か、既存教材を配信したいか、講師フォローまで必要かを先に確認します。',
+  },
+  {
+    title: '2. 役割別の見え方を見る',
+    detail: '生徒・講師・管理者でどこまで使うかを公開プレビューで揃えます。',
+  },
+  {
+    title: '3. 導入相談を送る',
+    detail: '授業形態、開始時期、想定人数を送れば、必要な案内だけ個別に返します。',
+  },
+  {
+    title: '4. 開始までの流れを確認',
+    detail: '自動発行ではなく、招待または手動 provisioning を前提に導入を進めます。',
+  },
+];
+
 const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   onBack,
   motivationSnapshot,
@@ -137,6 +156,19 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
                   <div className="mt-2 text-lg font-black text-slate-950">{plan.label}</div>
                   <div className="mt-1 text-base font-black text-medace-700">{plan.priceLabel}</div>
                   <p className="mt-3 text-base leading-relaxed text-slate-600">{plan.pricingNote}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">導入の進め方</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">オンライン塾向けの4ステップ</h2>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {CONSULTATION_STEPS.map((step) => (
+                <div key={step.title} className="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
+                  <div className="text-base font-black text-slate-950">{step.title}</div>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.detail}</p>
                 </div>
               ))}
             </div>

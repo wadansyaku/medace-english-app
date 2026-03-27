@@ -251,12 +251,10 @@ export const getDashboardSnapshot = async (
       featureSummary: plan.featureSummary,
       aiUsage: {
         monthKey: formatMonthKey(new Date()),
-        estimatedCostMilliYen: 240,
+        estimatedCostMilliYen: 0,
         budgetMilliYen: plan.monthlyAiBudgetMilliYen,
-        remainingMilliYen: Math.max(0, plan.monthlyAiBudgetMilliYen - 240),
-        actionCounts: {
-          generateGeminiSentence: 2,
-        },
+        remainingMilliYen: plan.monthlyAiBudgetMilliYen,
+        actionCounts: {},
       },
     },
     commercialRequests: [],

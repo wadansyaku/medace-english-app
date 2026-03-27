@@ -27,7 +27,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
   onSelectBook,
   eyebrow = 'Catalog Access',
   title = '既存単語帳にそのままアクセスする',
-  description = 'ビジネス体験アカウントでは、既存の公式単語帳をそのまま開けます。テストでは英日・日英・先頭2文字ヒントを切り替えて確認できます。',
+  description = 'ビジネス体験アカウントでは、既存の公式単語帳をそのまま開けます。テストでは英日・日英・スペルチェックを切り替えて確認できます。',
 }) => {
   const [books, setBooks] = useState<BookMetadata[]>([]);
   const [loading, setLoading] = useState(true);

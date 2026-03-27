@@ -5,6 +5,8 @@ import {
   COMMERCIAL_WORKSPACE_ROLE_LABELS,
   CommercialRequestKind,
   CommercialWorkspaceRole,
+  TEACHING_FORMAT_LABELS,
+  TeachingFormat,
 } from '../../types';
 
 interface CommercialRequestFormProps {
@@ -26,6 +28,12 @@ const ROLE_OPTIONS = [
   CommercialWorkspaceRole.GROUP_ADMIN,
 ];
 
+const TEACHING_FORMAT_OPTIONS = [
+  TeachingFormat.ONLINE,
+  TeachingFormat.HYBRID,
+  TeachingFormat.IN_PERSON,
+];
+
 const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
   title,
   description,
@@ -42,6 +50,8 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
   const [contactName, setContactName] = useState(defaultContactName);
   const [contactEmail, setContactEmail] = useState(defaultContactEmail);
   const [organizationName, setOrganizationName] = useState(defaultOrganizationName);
+  const [teachingFormat, setTeachingFormat] = useState<TeachingFormat>(TeachingFormat.ONLINE);
+  const [desiredStartTiming, setDesiredStartTiming] = useState('');
   const [requestedWorkspaceRole, setRequestedWorkspaceRole] = useState<CommercialWorkspaceRole>(CommercialWorkspaceRole.GROUP_ADMIN);
   const [seatEstimate, setSeatEstimate] = useState('31-100名');
   const [message, setMessage] = useState('');
@@ -129,13 +139,39 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
           </div>
         )}
 
+        {requiresOrganization && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="ui-form-label">授業形態</label>
+              <select
+                value={teachingFormat}
+                onChange={(event) => setTeachingFormat(event.target.value as TeachingFormat)}
+                className="ui-input mt-2"
+              >
+                {TEACHING_FORMAT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{TEACHING_FORMAT_LABELS[option]}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="ui-form-label">想定人数</label>
+              <input
+                value={seatEstimate}
+                onChange={(event) => setSeatEstimate(event.target.value)}
+                className="ui-input mt-2"
+                placeholder={seatPlaceholder}
+              />
+            </div>
+          </div>
+        )}
+
         <div>
-          <label className="ui-form-label">想定人数</label>
+          <label className="ui-form-label">開始したい時期</label>
           <input
-            value={seatEstimate}
-            onChange={(event) => setSeatEstimate(event.target.value)}
+            value={desiredStartTiming}
+            onChange={(event) => setDesiredStartTiming(event.target.value)}
             className="ui-input mt-2"
-            placeholder={seatPlaceholder}
+            placeholder="例: 4月中にトライアル開始 / 来学期から本導入"
           />
         </div>
 
@@ -168,6 +204,8 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
                 contactName,
                 contactEmail,
                 organizationName: requiresOrganization ? organizationName : undefined,
+                teachingFormat: requiresOrganization ? teachingFormat : undefined,
+                desiredStartTiming: desiredStartTiming.trim() || undefined,
                 requestedWorkspaceRole: requiresOrganization ? requestedWorkspaceRole : undefined,
                 seatEstimate: requiresOrganization ? seatEstimate : undefined,
                 message,

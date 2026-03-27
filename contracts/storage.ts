@@ -7,6 +7,7 @@ import {
   CommercialRequestKind,
   CommercialRequestStatus,
   CommercialWorkspaceRole,
+  TeachingFormat,
   AssignmentEvent,
   BookAccessScope,
   BookCatalogSource,
@@ -98,10 +99,22 @@ export interface CommercialRequestPayload {
   contactName: string;
   contactEmail: string;
   organizationName?: string;
+  teachingFormat?: TeachingFormat;
+  desiredStartTiming?: string;
   requestedWorkspaceRole?: CommercialWorkspaceRole;
   seatEstimate?: string;
   message: string;
   source: string;
+}
+
+export interface PrepareBookExamplesPayload {
+  bookId: string;
+}
+
+export interface PrepareBookExamplesResult {
+  bookId: string;
+  preparedCount: number;
+  remainingCount: number;
 }
 
 export interface CommercialRequestUpdatePayload {
@@ -158,6 +171,10 @@ export interface StorageActionMap {
   updateWordCache: {
     payload: { wordId: string; sentence: string; translation: string };
     response: null;
+  };
+  prepareBookExamples: {
+    payload: PrepareBookExamplesPayload;
+    response: PrepareBookExamplesResult;
   };
   getDailySessionWords: {
     payload: { limit: number; taskIntent?: LearningTaskIntent };
@@ -367,6 +384,7 @@ export const STORAGE_ACTIONS = [
   'updateWord',
   'reportWord',
   'updateWordCache',
+  'prepareBookExamples',
   'getDailySessionWords',
   'getBookSession',
   'getDashboardSnapshot',

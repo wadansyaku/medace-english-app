@@ -29,6 +29,18 @@ export const COMMERCIAL_WORKSPACE_ROLE_LABELS: Record<CommercialWorkspaceRole, s
   [CommercialWorkspaceRole.GROUP_ADMIN]: '学校管理者',
 };
 
+export enum TeachingFormat {
+  ONLINE = 'ONLINE',
+  HYBRID = 'HYBRID',
+  IN_PERSON = 'IN_PERSON',
+}
+
+export const TEACHING_FORMAT_LABELS: Record<TeachingFormat, string> = {
+  [TeachingFormat.ONLINE]: 'オンライン中心',
+  [TeachingFormat.HYBRID]: 'オンライン+対面',
+  [TeachingFormat.IN_PERSON]: '対面中心',
+};
+
 export enum CommercialRequestKind {
   PERSONAL_UPGRADE = 'PERSONAL_UPGRADE',
   BUSINESS_TRIAL = 'BUSINESS_TRIAL',
@@ -701,6 +713,8 @@ export interface CommercialRequest {
   contactName: string;
   contactEmail: string;
   organizationName?: string;
+  teachingFormat?: TeachingFormat;
+  desiredStartTiming?: string;
   requestedWorkspaceRole?: CommercialWorkspaceRole;
   seatEstimate?: string;
   message: string;

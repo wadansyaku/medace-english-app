@@ -11,7 +11,7 @@ import {
   type GeneratedWorksheetQuestion,
   WORKSHEET_MODE_COPY,
   generateWorksheetQuestions,
-  isCorrectSpellingHintAnswer,
+  resolveSpellingAttempt,
   toWorksheetSourceWords,
 } from '../utils/worksheet';
 import {
@@ -56,6 +56,9 @@ export const useQuizModeController = ({
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [answerInput, setAnswerInput] = useState('');
   const [inputResult, setInputResult] = useState<'correct' | 'incorrect' | null>(null);
+  const [showSpellingHint, setShowSpellingHint] = useState(false);
+  const [spellingFeedbackTone, setSpellingFeedbackTone] = useState<'info' | 'correct' | 'incorrect' | null>(null);
+  const [spellingFeedbackMessage, setSpellingFeedbackMessage] = useState<string | null>(null);
   const [score, setScore] = useState(0);
   const [missedQuestions, setMissedQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +129,9 @@ export const useQuizModeController = ({
     setSelectedOption(null);
     setAnswerInput('');
     setInputResult(null);
+    setShowSpellingHint(false);
+    setSpellingFeedbackTone(null);
+    setSpellingFeedbackMessage(null);
     setScore(0);
     setMissedQuestions([]);
     setSaveError(null);
@@ -339,6 +345,9 @@ export const useQuizModeController = ({
         setShowOptions(false);
         setAnswerInput('');
         setInputResult(null);
+        setShowSpellingHint(false);
+        setSpellingFeedbackTone(null);
+        setSpellingFeedbackMessage(null);
         setSaveError(null);
         return;
       }
@@ -360,13 +369,46 @@ export const useQuizModeController = ({
     event.preventDefault();
     if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt) return;
 
-    const correct = isCorrectSpellingHintAnswer(
-      answerInput,
-      currentQuestion.answer,
-      currentQuestion.hintPrefix || '',
+    const spellingAttempt = resolveSpellingAttempt({
+      input: answerInput,
+      answer: currentQuestion.answer,
+      hintPrefix: currentQuestion.hintPrefix || '',
+      hintVisible: showSpellingHint,
+    });
+    if (spellingAttempt === 'correct') {
+      setInputResult('correct');
+      setSpellingFeedbackTone('correct');
+      setSpellingFeedbackMessage(
+        showSpellingHint
+          ? '正解です。ヒントありでもスペルを思い出せました。'
+          : '正解です。ヒントなしでスペルを確認できました。'
+      );
+      await persistAttempt(true, Math.max(0, Date.now() - questionStartedAtRef.current));
+      return;
+    }
+
+    if (spellingAttempt === 'retry-with-hint') {
+      setShowSpellingHint(true);
+      setSpellingFeedbackTone('info');
+      setSpellingFeedbackMessage(
+        `先頭2文字「${currentQuestion.hintPrefix || ''}」をヒントに、もう一度入力してください。`,
+      );
+      return;
+    }
+
+    setInputResult('incorrect');
+    setSpellingFeedbackTone('incorrect');
+    setSpellingFeedbackMessage(`不正解です。正解は ${currentQuestion.answer} です。`);
+    await persistAttempt(false, Math.max(0, Date.now() - questionStartedAtRef.current));
+  };
+
+  const revealSpellingHint = () => {
+    if (!isHintMode || showSpellingHint || inputResult || !currentQuestion) return;
+    setShowSpellingHint(true);
+    setSpellingFeedbackTone('info');
+    setSpellingFeedbackMessage(
+      `先頭2文字「${currentQuestion.hintPrefix || ''}」を表示しました。スペルをもう一度入力してください。`,
     );
-    setInputResult(correct ? 'correct' : 'incorrect');
-    await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
 
   const handleRetrySave = async () => {
@@ -407,6 +449,9 @@ export const useQuizModeController = ({
     currentQuestion,
     currentModeLabel: currentModeCopy.label,
     isHintMode,
+    showSpellingHint,
+    spellingFeedbackTone,
+    spellingFeedbackMessage,
     reviewTargets,
     activeSummary,
     percentage,
@@ -417,6 +462,7 @@ export const useQuizModeController = ({
     startQuiz,
     handleOptionClick,
     handleHintSubmit,
+    revealSpellingHint,
     handleRetrySave,
     setShowOptions,
     setAnswerInput,

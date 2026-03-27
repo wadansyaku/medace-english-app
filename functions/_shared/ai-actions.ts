@@ -129,6 +129,26 @@ const generateGeminiSentence = async (env: AppEnv, payload: any): Promise<Genera
   }
 };
 
+export const generateMeteredGeminiSentence = async (
+  env: AppEnv,
+  user: DbUserRow,
+  payload: {
+    word: string;
+    definition: string;
+    userLevel?: EnglishLevel;
+    sourceContext?: string;
+  },
+  logContext?: AiUsageLogContext,
+): Promise<GeneratedContext> => {
+  return runMeteredAiAction(
+    env,
+    user,
+    'generateGeminiSentence',
+    () => generateGeminiSentence(env, payload),
+    logContext,
+  );
+};
+
 const generateWordImage = async (env: AppEnv, payload: any): Promise<string | null> => {
   const ai = getAiClient(env);
 

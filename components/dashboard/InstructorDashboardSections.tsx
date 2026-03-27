@@ -673,7 +673,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 onSelectBook={onSelectBook}
                 eyebrow="Business Demo Catalog"
                 title="ビジネス版の既存単語帳をそのまま確認する"
-                description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・先頭2文字ヒントを切り替えることもできます。"
+                description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・スペルチェックを切り替えることもできます。"
               />
             </Suspense>
           </div>

@@ -6,13 +6,16 @@ import BookCard from './BookCard';
 interface DashboardLibrarySectionProps {
   books: BookMetadata[];
   myBooks: BookMetadata[];
-  recommendedOfficialBooks: BookMetadata[];
+  primaryRecommendedBook: BookMetadata | null;
+  secondaryRecommendedBooks: BookMetadata[];
   progressMap: Record<string, BookProgress>;
   showLibrary: boolean;
   isCompact?: boolean;
+  preparingExamplesBookId?: string | null;
   onToggleLibrary: () => void;
   onOpenCreateModal: () => void;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
+  onPrepareExamples: (book: BookMetadata) => void;
   onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
@@ -26,13 +29,16 @@ const emptyProgress = (book: BookMetadata): BookProgress => ({
 const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   books,
   myBooks,
-  recommendedOfficialBooks,
+  primaryRecommendedBook,
+  secondaryRecommendedBooks,
   progressMap,
   showLibrary,
   isCompact = false,
+  preparingExamplesBookId,
   onToggleLibrary,
   onOpenCreateModal,
   onDelete,
+  onPrepareExamples,
   onSelect,
 }) => (
   <div className={isCompact ? 'space-y-5' : 'space-y-7 md:space-y-10'}>
@@ -54,7 +60,9 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
               book={book}
               isMine
               progress={progressMap[book.id] || emptyProgress(book)}
+              preparingExamples={preparingExamplesBookId === book.id}
               onDelete={onDelete}
+              onPrepareExamples={onPrepareExamples}
               onSelect={onSelect}
             />
           ))}
@@ -79,25 +87,44 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
       <div className="mb-4 flex items-center justify-between md:mb-6">
         <h3 className="border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">推奨コース</h3>
       </div>
-      <div className="mb-6 grid grid-cols-1 gap-4 md:mb-8 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
-        {recommendedOfficialBooks.map((book) => (
+      <div className="mb-4 grid grid-cols-1 gap-4 md:mb-6">
+        {primaryRecommendedBook ? (
           <BookCard
-            key={book.id}
-            book={book}
-            progress={progressMap[book.id] || emptyProgress(book)}
+            key={primaryRecommendedBook.id}
+            book={primaryRecommendedBook}
+            progress={progressMap[primaryRecommendedBook.id] || emptyProgress(primaryRecommendedBook)}
             onDelete={onDelete}
             onSelect={onSelect}
           />
-        ))}
+        ) : null}
         {books.length === 0 && (
-          <div className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm leading-relaxed text-slate-600 md:col-span-2 lg:col-span-3 ${isCompact ? 'p-4' : 'p-6'}`}>
+          <div className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm leading-relaxed text-slate-600 ${isCompact ? 'p-4' : 'p-6'}`}>
             現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
           </div>
         )}
-        {books.length > 0 && recommendedOfficialBooks.length === 0 && (
+        {books.length > 0 && !primaryRecommendedBook && (
           <p className="text-sm text-slate-400">推奨コースはありません</p>
         )}
       </div>
+
+      {secondaryRecommendedBooks.length > 0 && (
+        <details className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 md:mb-8">
+          <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">
+            他の候補をみる ({secondaryRecommendedBooks.length}冊)
+          </summary>
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            {secondaryRecommendedBooks.map((book) => (
+              <BookCard
+                key={book.id}
+                book={book}
+                progress={progressMap[book.id] || emptyProgress(book)}
+                onDelete={onDelete}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </details>
+      )}
 
       <div className="border-t border-slate-200 pt-5 md:pt-6">
         <button
