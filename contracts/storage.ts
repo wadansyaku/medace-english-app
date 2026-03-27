@@ -38,6 +38,7 @@ import {
   UserRole,
   WeeklyMission,
   WeeklyMissionBoard,
+  WordHintAssetType,
   WordData,
 } from '../types';
 
@@ -117,6 +118,12 @@ export interface PrepareBookExamplesResult {
   remainingCount: number;
 }
 
+export interface GenerateWordHintAssetPayload {
+  wordId: string;
+  assetType: WordHintAssetType;
+  forceRefresh?: boolean;
+}
+
 export interface CommercialRequestUpdatePayload {
   id: number;
   status: CommercialRequestStatus;
@@ -171,6 +178,10 @@ export interface StorageActionMap {
   updateWordCache: {
     payload: { wordId: string; sentence: string; translation: string };
     response: null;
+  };
+  generateWordHintAsset: {
+    payload: GenerateWordHintAssetPayload;
+    response: WordData;
   };
   prepareBookExamples: {
     payload: PrepareBookExamplesPayload;
@@ -384,6 +395,7 @@ export const STORAGE_ACTIONS = [
   'updateWord',
   'reportWord',
   'updateWordCache',
+  'generateWordHintAsset',
   'prepareBookExamples',
   'getDailySessionWords',
   'getBookSession',

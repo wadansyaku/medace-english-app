@@ -3,7 +3,7 @@ import type {
   CatalogImportResult,
   PrepareBookExamplesResult,
 } from '../../contracts/storage';
-import { BookAccessScope, BookCatalogSource, BookMetadata, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
+import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
@@ -252,9 +252,22 @@ export const handleUpdateWordCache = async (
 
   await env.DB.prepare(`
     UPDATE words
-    SET example_sentence = ?, example_meaning = ?, updated_at = ?
+    SET example_sentence = ?,
+        example_meaning = ?,
+        example_generated_at = ?,
+        example_audit_status = ?,
+        example_audit_note = NULL,
+        example_audited_at = NULL,
+        updated_at = ?
     WHERE id = ?
-  `).bind(sentence, translation, Date.now(), wordId).run();
+  `).bind(
+    sentence,
+    translation,
+    Date.now(),
+    GeneratedAssetAuditStatus.PENDING,
+    Date.now(),
+    wordId,
+  ).run();
 };
 
 export const handlePrepareBookExamples = async (
@@ -303,11 +316,17 @@ export const handlePrepareBookExamples = async (
       UPDATE words
          SET example_sentence = ?,
              example_meaning = ?,
+             example_generated_at = ?,
+             example_audit_status = ?,
+             example_audit_note = NULL,
+             example_audited_at = NULL,
              updated_at = ?
        WHERE id = ?
     `).bind(
       context.english,
       context.japanese,
+      Date.now(),
+      GeneratedAssetAuditStatus.PENDING,
       Date.now(),
       word.id,
     ).run();

@@ -3,6 +3,7 @@ import {
   BookCatalogSource,
   BookMetadata,
   BookProgress,
+  GeneratedAssetAuditStatus,
   LearningHistory,
   LearningPreference,
   LearningPreferenceIntensity,
@@ -47,6 +48,16 @@ export interface DbWordRow {
   search_key: string | null;
   example_sentence: string | null;
   example_meaning: string | null;
+  example_generated_at: number | null;
+  example_audit_status: string | null;
+  example_audit_note: string | null;
+  example_audited_at: number | null;
+  example_image_key: string | null;
+  example_image_content_type: string | null;
+  example_image_generated_at: number | null;
+  example_image_audit_status: string | null;
+  example_image_audit_note: string | null;
+  example_image_audited_at: number | null;
   is_reported: number;
 }
 
@@ -145,6 +156,11 @@ export const createBookId = (bookName: string, ownerId?: string, uniqueSalt?: st
   return `${ownerSegment}${slug}-${suffix}`;
 };
 
+export const buildWordHintImageUrl = (wordId: string, generatedAt?: number | null): string => {
+  const version = generatedAt ? `?v=${generatedAt}` : '';
+  return `/api/word-hints/${encodeURIComponent(wordId)}/image${version}`;
+};
+
 export const toBookMetadata = (row: DbBookRow): BookMetadata => ({
   id: row.id,
   title: row.title,
@@ -165,6 +181,11 @@ export const toWordData = (row: DbWordRow): WordData => ({
   searchKey: row.search_key || undefined,
   exampleSentence: row.example_sentence,
   exampleMeaning: row.example_meaning,
+  exampleGeneratedAt: row.example_generated_at,
+  exampleImageUrl: row.example_image_key ? buildWordHintImageUrl(row.id, row.example_image_generated_at) : null,
+  exampleImageGeneratedAt: row.example_image_generated_at,
+  exampleAuditStatus: (row.example_audit_status as GeneratedAssetAuditStatus | null) || null,
+  exampleImageAuditStatus: (row.example_image_audit_status as GeneratedAssetAuditStatus | null) || null,
   isReported: Boolean(row.is_reported),
 });
 

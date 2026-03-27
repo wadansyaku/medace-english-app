@@ -1,8 +1,10 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { type LearningTaskIntent, type UserProfile, type WordData } from '../types';
+import { getSubscriptionPolicy } from '../config/subscription';
+import { WordHintAssetType, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
 import { learningService } from '../services/learning';
 import { type GeneratedContext } from '../services/gemini';
+import { ApiError } from '../services/apiClient';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import useIsMobileViewport from './useIsMobileViewport';
@@ -31,13 +33,19 @@ export const useStudyModeController = ({
   onSessionComplete,
 }: UseStudyModeControllerParams) => {
   const isMobileViewport = useIsMobileViewport();
+  const subscriptionPolicy = getSubscriptionPolicy(user.subscriptionPlan);
   const [queue, setQueue] = useState<WordData[]>([]);
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isBookOwner, setIsBookOwner] = useState(false);
+  const [aiContextLoading, setAiContextLoading] = useState(false);
   const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiImageLoading, setAiImageLoading] = useState(false);
+  const [exampleError, setExampleError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [showHints, setShowHints] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -57,6 +65,8 @@ export const useStudyModeController = ({
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
   const [isAdvancingCard, setIsAdvancingCard] = useState(false);
+  const canGenerateExampleHint = subscriptionPolicy.allowedAiActions.includes('generateGeminiSentence');
+  const canGenerateImageHint = subscriptionPolicy.allowedAiActions.includes('generateWordImage');
 
   const contextCache = useRef<Map<string, GeneratedContext | null>>(new Map());
   const cardStartedAtRef = useRef(Date.now());
@@ -88,6 +98,11 @@ export const useStudyModeController = ({
   const resetCard = () => {
     setIsFlipped(false);
     setAiContext(null);
+    setAiImage(null);
+    setAiContextLoading(false);
+    setAiImageLoading(false);
+    setExampleError(null);
+    setImageError(null);
     setShowTranslation(false);
     setShowHints(false);
     setIsEditing(false);
@@ -184,12 +199,6 @@ export const useStudyModeController = ({
     const current = queue[currentIndex];
     if (!current) return;
 
-    const cached = contextCache.current.get(current.id);
-    if (cached) {
-      setAiContext(cached);
-      return;
-    }
-
     if (current.exampleSentence && current.exampleMeaning) {
       const nextContext = {
         english: current.exampleSentence,
@@ -197,10 +206,17 @@ export const useStudyModeController = ({
       };
       contextCache.current.set(current.id, nextContext);
       setAiContext(nextContext);
-      return;
+    } else if (contextCache.current.has(current.id)) {
+      setAiContext(contextCache.current.get(current.id) ?? null);
+    } else {
+      setAiContext(null);
     }
 
-    setAiContext(null);
+    setAiImage(current.exampleImageUrl || null);
+    setAiContextLoading(false);
+    setAiImageLoading(false);
+    setExampleError(null);
+    setImageError(null);
   }, [currentIndex, queue, showHints]);
 
   useEffect(() => {
@@ -227,6 +243,72 @@ export const useStudyModeController = ({
 
   const handleExit = () => {
     onSessionComplete(updatedUser || user);
+  };
+
+  const resolveHintError = (error: unknown, fallback: string): string => {
+    if (error instanceof ApiError || error instanceof Error) {
+      return error.message || fallback;
+    }
+    return fallback;
+  };
+
+  const replaceCurrentWord = (nextWord: WordData) => {
+    setQueue((previous) => previous.map((word, index) => (index === currentIndex ? nextWord : word)));
+  };
+
+  const generateExampleHint = async (forceRefresh = false) => {
+    if (!currentWord || aiContextLoading) return;
+    setAiContextLoading(true);
+    setExampleError(null);
+
+    try {
+      const updated = await learningService.generateWordHintAsset({
+        wordId: currentWord.id,
+        assetType: WordHintAssetType.EXAMPLE,
+        forceRefresh,
+      });
+      replaceCurrentWord(updated);
+
+      if (updated.exampleSentence && updated.exampleMeaning) {
+        const nextContext = {
+          english: updated.exampleSentence,
+          japanese: updated.exampleMeaning,
+        };
+        contextCache.current.set(updated.id, nextContext);
+        setAiContext(nextContext);
+        setShowTranslation(false);
+      } else {
+        setAiContext(null);
+        setExampleError('例文は作成できませんでした。');
+      }
+    } catch (error) {
+      setExampleError(resolveHintError(error, '例文は作成できませんでした。'));
+    } finally {
+      setAiContextLoading(false);
+    }
+  };
+
+  const generateImageHint = async (forceRefresh = false) => {
+    if (!currentWord || aiImageLoading) return;
+    setAiImageLoading(true);
+    setImageError(null);
+
+    try {
+      const updated = await learningService.generateWordHintAsset({
+        wordId: currentWord.id,
+        assetType: WordHintAssetType.IMAGE,
+        forceRefresh,
+      });
+      replaceCurrentWord(updated);
+      setAiImage(updated.exampleImageUrl || null);
+      if (!updated.exampleImageUrl) {
+        setImageError('画像は作成できませんでした。');
+      }
+    } catch (error) {
+      setImageError(resolveHintError(error, '画像は作成できませんでした。'));
+    } finally {
+      setAiImageLoading(false);
+    }
   };
 
   const startEditing = (event: MouseEvent) => {
@@ -336,6 +418,9 @@ export const useStudyModeController = ({
   return {
     actionBarRef,
     aiContext,
+    aiContextLoading,
+    aiImage,
+    aiImageLoading,
     backFaceScrollRef,
     closeBack,
     currentIndex,
@@ -343,8 +428,14 @@ export const useStudyModeController = ({
     editDef,
     editWord,
     earnedXP,
+    exampleError,
+    canGenerateExampleHint,
+    canGenerateImageHint,
+    generateExampleHint,
+    generateImageHint,
     handleExit,
     handleRating,
+    imageError,
     isAdvancingCard,
     isBookOwner,
     isEditing,

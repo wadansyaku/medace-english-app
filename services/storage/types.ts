@@ -36,6 +36,7 @@ import type {
   CommercialRequestUpdatePayload,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
+  GenerateWordHintAssetPayload,
 } from '../../contracts/storage';
 
 export interface SessionStorageService {
@@ -56,6 +57,7 @@ export interface CatalogStorageService {
   updateWord(word: WordData): Promise<void>;
   reportWord(wordId: string, reason: string): Promise<void>;
   updateWordCache(wordId: string, sentence: string, translation: string): Promise<void>;
+  generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData>;
   prepareBookExamples(bookId: string): Promise<PrepareBookExamplesResult>;
 }
 

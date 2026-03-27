@@ -173,6 +173,18 @@ export enum UserStudyMode {
   GAME = 'GAME',
 }
 
+export enum WordHintAssetType {
+  EXAMPLE = 'EXAMPLE',
+  IMAGE = 'IMAGE',
+}
+
+export enum GeneratedAssetAuditStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REVIEW_REQUIRED = 'REVIEW_REQUIRED',
+  FAILED = 'FAILED',
+}
+
 export const USER_STUDY_MODE_LABELS: Record<UserStudyMode, string> = {
   [UserStudyMode.FOCUS]: '集中モード',
   [UserStudyMode.GAME]: 'ゲームモード',
@@ -229,6 +241,11 @@ export interface WordData {
   searchKey?: string;
   exampleSentence?: string | null;
   exampleMeaning?: string | null;
+  exampleGeneratedAt?: number | null;
+  exampleImageUrl?: string | null;
+  exampleImageGeneratedAt?: number | null;
+  exampleAuditStatus?: GeneratedAssetAuditStatus | null;
+  exampleImageAuditStatus?: GeneratedAssetAuditStatus | null;
   isReported?: boolean;
 }
 

@@ -1,0 +1,50 @@
+name: Word Hint Audit Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 1回で監査する最大件数
+        required: false
+        default: '12'
+      stale_after_hours:
+        description: 再監査までの経過時間
+        required: false
+        default: '168'
+  schedule:
+    - cron: '30 18 * * *'
+
+jobs:
+  audit:
+    if: github.repository == 'wadansyaku/medace-english-app'
+    runs-on: ubuntu-latest
+    env:
+      APP_BASE_URL: https://medace-english-app.pages.dev
+      LIMIT: ${{ inputs.limit || '12' }}
+      STALE_AFTER_HOURS: ${{ inputs.stale_after_hours || '168' }}
+      INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+    steps:
+      - name: Call internal word hint audit agent
+        run: |
+          if [ -z "$INTERNAL_JOB_SECRET" ]; then
+            echo "INTERNAL_JOB_SECRET is not configured." >&2
+            exit 1
+          fi
+
+          payload=$(printf '{"limit":%s,"staleAfterHours":%s}' "$LIMIT" "$STALE_AFTER_HOURS")
+          response="$(curl -fsS -X POST "$APP_BASE_URL/api/internal/word-hint-audits/run" \
+            -H "Content-Type: application/json" \
+            -H "X-Internal-Job-Secret: $INTERNAL_JOB_SECRET" \
+            --data "$payload")"
+
+          echo "$response"
+          {
+            echo "## Word Hint Audit Agent"
+            echo
+            echo "- Base URL: \`$APP_BASE_URL\`"
+            echo "- Payload: \`$payload\`"
+            echo "- Response:"
+            echo '```json'
+            echo "$response"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

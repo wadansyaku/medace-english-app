@@ -34,6 +34,8 @@ import {
   WeeklyMission,
   WeeklyMissionBoard,
   WordData,
+  WordHintAssetType,
+  GeneratedAssetAuditStatus,
 } from '../types';
 import {
   CatalogImportIssue,
@@ -42,9 +44,15 @@ import {
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  GenerateWordHintAssetPayload,
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
+import { generateGeminiSentence, generateWordImage } from './gemini';
+import {
+  createLocalExampleHint,
+  createWordImagePlaceholderDataUrl,
+} from '../shared/wordHintAssets';
 import type {
   AdminStorageService,
   AnnouncementStorageService,
@@ -92,6 +100,7 @@ import {
   readStoreRecord,
   requestToPromise,
   STORES,
+  type GetStore,
   type StoredAnnouncementReceiptRecord,
   type StoredCommercialRequestRecord,
   type StoredProductAnnouncementRecord,
@@ -254,11 +263,19 @@ const mergeRecordsById = <T extends { id: string | number }>(seed: T[], stored: 
 
 const buildAnnouncementReceiptId = (announcementId: string, userUid: string): string => `${announcementId}:${userUid}`;
 
-class IndexedDBStorageService implements IStorageService {
-  private dbPromise: Promise<IDBDatabase>;
+interface IndexedDBStorageServiceOptions {
+  getStore?: GetStore;
+}
 
-  constructor() {
-    this.dbPromise = this.initDB();
+export class IndexedDBStorageService implements IStorageService {
+  private dbPromise: Promise<IDBDatabase>;
+  private readonly getStoreOverride?: GetStore;
+
+  constructor(options: IndexedDBStorageServiceOptions = {}) {
+    this.getStoreOverride = options.getStore;
+    this.dbPromise = this.getStoreOverride
+      ? Promise.resolve(null as IDBDatabase)
+      : this.initDB();
   }
 
   private initDB(): Promise<IDBDatabase> {
@@ -266,6 +283,9 @@ class IndexedDBStorageService implements IStorageService {
   }
 
   private async getStore(storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
+    if (this.getStoreOverride) {
+      return this.getStoreOverride(storeName, mode);
+    }
     return getObjectStore(this.dbPromise, storeName, mode);
   }
 
@@ -544,12 +564,72 @@ class IndexedDBStorageService implements IStorageService {
         if (word) {
           word.exampleSentence = sentence;
           word.exampleMeaning = translation;
+          word.exampleGeneratedAt = Date.now();
+          word.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
           store.put(word);
         }
         resolve();
       };
       req.onerror = () => resolve();
     });
+  }
+
+  private async readWordRecord(wordId: string): Promise<WordData | undefined> {
+    const store = await this.getStore(STORES.WORDS, 'readonly');
+    return new Promise((resolve, reject) => {
+      const req = store.get(wordId);
+      req.onsuccess = () => resolve(req.result as WordData | undefined);
+      req.onerror = () => reject(req.error || new Error('単語キャッシュの読み込みに失敗しました。'));
+    });
+  }
+
+  private async writeWordRecord(word: WordData): Promise<void> {
+    const store = await this.getStore(STORES.WORDS, 'readwrite');
+    return new Promise((resolve, reject) => {
+      const req = store.put(word);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error || new Error('単語キャッシュの保存に失敗しました。'));
+    });
+  }
+
+  async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
+    const word = await this.readWordRecord(payload.wordId);
+    if (!word) {
+      throw new Error('対象の単語が見つかりません。');
+    }
+
+    const nextWord: WordData = { ...word };
+    if (payload.assetType === WordHintAssetType.EXAMPLE) {
+      if (!payload.forceRefresh && nextWord.exampleSentence?.trim() && nextWord.exampleMeaning?.trim()) {
+        return nextWord;
+      }
+
+      const generatedAt = Date.now();
+      const context = await generateGeminiSentence(nextWord.word, nextWord.definition)
+        || createLocalExampleHint(nextWord.word, nextWord.definition, generatedAt);
+      const nextSentence = 'english' in context ? context.english : context.sentence;
+      const nextTranslation = 'japanese' in context ? context.japanese : context.translation;
+
+      nextWord.exampleSentence = nextSentence;
+      nextWord.exampleMeaning = nextTranslation;
+      nextWord.exampleGeneratedAt = generatedAt;
+      nextWord.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
+    } else {
+      if (!payload.forceRefresh && nextWord.exampleImageUrl?.trim()) {
+        return nextWord;
+      }
+
+      const generatedAt = Date.now();
+      const imageUrl = await generateWordImage(nextWord.word, nextWord.definition)
+        || createWordImagePlaceholderDataUrl(nextWord.word, nextWord.definition);
+
+      nextWord.exampleImageUrl = imageUrl;
+      nextWord.exampleImageGeneratedAt = generatedAt;
+      nextWord.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
+    }
+
+    await this.writeWordRecord(nextWord);
+    return nextWord;
   }
 
   async prepareBookExamples(bookId: string): Promise<import('../contracts/storage').PrepareBookExamplesResult> {
@@ -564,6 +644,8 @@ class IndexedDBStorageService implements IStorageService {
         if (current) {
           current.exampleSentence = current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`;
           current.exampleMeaning = current.exampleMeaning?.trim() || `今日の授業で「${current.word}」を学びます。`;
+          current.exampleGeneratedAt = Date.now();
+          current.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
           store.put(current);
         }
         resolve();
