@@ -32,6 +32,14 @@ export const formatMonthKey = (value: Date | number): string => {
   return formatDateKey(value).slice(0, 7);
 };
 
+export const getTokyoMonthRange = (monthKey: string): { start: number; end: number } => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return {
+    start: Date.UTC(year, month - 1, 1, -9, 0, 0, 0),
+    end: Date.UTC(year, month, 1, -9, 0, 0, 0),
+  };
+};
+
 export const getTodayDateKey = (): string => formatDateKey(new Date());
 
 export const parseDateKey = (dateKey: string): Date => {

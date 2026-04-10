@@ -32,6 +32,8 @@ export interface AiActionEstimate {
   model: string;
 }
 
+export const AI_PRICING_VERSION = '2026-03-28';
+
 export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy> = {
   [SubscriptionPlan.TOC_FREE]: {
     plan: SubscriptionPlan.TOC_FREE,
@@ -192,6 +194,8 @@ export const AI_ACTION_ESTIMATES: Record<MeteredAiAction, AiActionEstimate> = {
     model: 'writing-provider-router',
   },
 };
+
+export const getAiActionEstimate = (action: MeteredAiAction): AiActionEstimate => AI_ACTION_ESTIMATES[action];
 
 export const getSubscriptionPolicy = (plan: SubscriptionPlan | null | undefined): SubscriptionPolicy => {
   return SUBSCRIPTION_POLICIES[plan || SubscriptionPlan.TOC_FREE];

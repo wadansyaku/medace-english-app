@@ -52,6 +52,22 @@ const planTone = (plan: SubscriptionPlan): string => {
   return 'border-slate-200 bg-white text-slate-600';
 };
 
+const getAnalyticsStatus = (updatedAt: number) => {
+  if (updatedAt > 0) {
+    return {
+      label: '集計済み',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      detail: `最終更新 ${formatDateTime(updatedAt)}。0件は未計測ではなく、現時点の集計結果です。`,
+    };
+  }
+
+  return {
+    label: '未計測',
+    tone: 'border-amber-200 bg-amber-50 text-amber-800',
+    detail: 'analytics snapshot がまだ実行されていません。表示中の 0 件は未計測の可能性があります。',
+  };
+};
+
 const MetricCard: React.FC<{
   label: string;
   value: string;
@@ -84,6 +100,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   subcopy,
 }) => {
   const overview = snapshot?.overview;
+  const analyticsStatus = snapshot ? getAnalyticsStatus(snapshot.productKpis.updatedAt) : null;
   const maxTrendValue = snapshot
     ? Math.max(
         ...snapshot.trend.map((point) => Math.max(point.activeStudents, point.studiedWords, point.notifications, point.newStudents)),
@@ -171,6 +188,111 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               detail={`${overview?.aiRequestsThisMonth || 0} リクエスト / 通知 ${overview?.notifications7d || 0} 件`}
               icon={<Bot className="h-5 w-5" />}
             />
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-3">
+            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Activity className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Product KPI</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">日次ベースライン</h3>
+                </div>
+              </div>
+              {analyticsStatus && (
+                <div className={`mt-5 rounded-2xl border px-4 py-4 text-sm ${analyticsStatus.tone}`}>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em]">Analytics Status</div>
+                  <div className="mt-1 text-base font-black">{analyticsStatus.label}</div>
+                  <div className="mt-2 text-xs leading-relaxed opacity-90">{analyticsStatus.detail}</div>
+                </div>
+              )}
+              <div className="mt-5 grid gap-3 text-sm">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">対象日</div>
+                  <div className="mt-1 font-black text-slate-950">{snapshot.productKpis.dateKey}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">30日学習アクティブ</div>
+                  <div className="mt-1 text-2xl font-black text-slate-950">{snapshot.productKpis.activeStudents30d}</div>
+                  <div className="mt-1 text-xs text-slate-500">1日 {snapshot.productKpis.activeStudents1d} / 7日 {snapshot.productKpis.activeStudents7d}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">30日セッション</div>
+                  <div className="mt-1 text-2xl font-black text-slate-950">{snapshot.productKpis.studySessionsStarted30d}</div>
+                  <div className="mt-1 text-xs text-slate-500">完了 {snapshot.productKpis.studySessionsFinished30d} / テスト {snapshot.productKpis.quizSessionsStarted30d}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">30日英作文</div>
+                  <div className="mt-1 text-2xl font-black text-slate-950">{snapshot.productKpis.writingAssignmentsCreated30d}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    提出 {snapshot.productKpis.writingSubmissionsReceived30d} / 返却 {snapshot.productKpis.writingReviewsCompleted30d}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Users className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">B2B Activation</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">導入ファネル</h3>
+                </div>
+              </div>
+              {analyticsStatus && (
+                <div className={`mt-5 rounded-2xl border px-4 py-4 text-sm ${analyticsStatus.tone}`}>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em]">Count Interpretation</div>
+                  <div className="mt-2 text-xs leading-relaxed opacity-90">{analyticsStatus.detail}</div>
+                </div>
+              )}
+              <div className="mt-5 space-y-3">
+                {[
+                  ['組織数', snapshot.activationFunnel.totalOrganizations],
+                  ['cohort 作成', snapshot.activationFunnel.organizationsWithCohortCount],
+                  ['担当割当', snapshot.activationFunnel.organizationsWithAssignmentCount],
+                  ['初回ミッション', snapshot.activationFunnel.organizationsWithMissionCount],
+                  ['初回通知', snapshot.activationFunnel.organizationsWithNotificationCount],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <span className="text-sm font-bold text-slate-700">{label}</span>
+                    <span className="text-lg font-black text-slate-950">{value}</span>
+                  </div>
+                ))}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  フォーム open {snapshot.activationFunnel.commercialFormOpenCount30d} 件 / 相談送信 {snapshot.activationFunnel.commercialRequestCount30d} 件
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  作成 {snapshot.activationFunnel.writingAssignmentsCreated30d} 件 / 提出 {snapshot.activationFunnel.writingSubmissionsReceived30d} 件 / 返却 {snapshot.activationFunnel.writingReviewsCompleted30d} 件
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Bot className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">AI Economics</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">生成と再利用</h3>
+                </div>
+              </div>
+              <div className="mt-5 grid gap-3 text-sm">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今月の生成</div>
+                  <div className="mt-1 text-2xl font-black text-slate-950">{snapshot.aiEconomics.generationCount}</div>
+                  <div className="mt-1 text-xs text-slate-500">cache hit {snapshot.aiEconomics.cacheHitCount} / 比率 {snapshot.aiEconomics.cacheHitRatio}%</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">推定コスト</div>
+                  <div className="mt-1 text-2xl font-black text-slate-950">{formatCost(snapshot.aiEconomics.estimatedCostMilliYen)}</div>
+                  <div className="mt-1 text-xs text-slate-500">provider {formatCost(snapshot.aiEconomics.estimatedProviderCostMilliYen)}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">回避できた推定費用</div>
+                  <div className="mt-1 text-2xl font-black text-emerald-900">{formatCost(snapshot.aiEconomics.avoidedCostMilliYen)}</div>
+                  <div className="mt-1 text-xs text-emerald-700/80">例文 hit {snapshot.aiEconomics.exampleCacheHitRatio}% / 画像 hit {snapshot.aiEconomics.imageCacheHitRatio}%</div>
+                </div>
+              </div>
+            </section>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

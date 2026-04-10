@@ -65,6 +65,7 @@ import {
   runSideEffectJobById,
   type SideEffectJobRunResult,
 } from '../side-effect-jobs';
+import { recordProductEventForUser } from '../product-events';
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PDF_MIME_TYPE = 'application/pdf';
@@ -251,6 +252,17 @@ export const handleGenerateWritingAssignment = async (
     now,
     now,
   ).run();
+  await recordProductEventForUser(env, user, {
+    eventName: 'writing_assignment_created',
+    subjectType: 'writing_assignment',
+    subjectId: assignmentId,
+    status: AssignmentStatus.DRAFT,
+    metadata: {
+      organizationId: organization.organizationId,
+      studentUid: student.id,
+      templateId: template.id,
+    },
+  });
 
   return readAssignmentResponse(env, assignmentId);
 };
@@ -487,6 +499,19 @@ export const handleFinalizeWritingSubmission = async (
     promptSnapshot: assignmentRow.prompt_snapshot,
     now,
   });
+  await recordProductEventForUser(env, user, {
+    eventName: 'writing_submission_received',
+    subjectType: 'writing_submission',
+    subjectId: submissionId,
+    status: 'SUBMITTED',
+    usedAi: true,
+    metadata: {
+      assignmentId: request.assignmentId,
+      organizationId: assignmentRow.organization_id,
+      attemptNo,
+      source: request.source,
+    },
+  });
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
@@ -532,6 +557,17 @@ const applyTeacherReview = async (
     assignmentId: detail.assignment.id,
     assignmentStatus: nextStatus,
     now,
+  });
+  await recordProductEventForUser(env, user, {
+    eventName: 'writing_review_completed',
+    subjectType: 'writing_submission',
+    subjectId: submissionId,
+    status: decision,
+    metadata: {
+      assignmentId: detail.assignment.id,
+      organizationId: detail.assignment.organizationId,
+      selectedEvaluationId: payload.selectedEvaluationId,
+    },
   });
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: detail.assignment.studentUid,

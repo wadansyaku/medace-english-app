@@ -191,7 +191,11 @@ describe('buildOrganizationDashboardSnapshot', () => {
       totalMembers: 5,
       totalInstructors: 1,
       learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
       notifications7d: 4,
+      totalNotificationCount: 2,
       instructors,
       students,
       missionAssignments,
@@ -219,6 +223,8 @@ describe('buildOrganizationDashboardSnapshot', () => {
     expect(snapshot.trackCompletion.find((track) => track.track === LearningTrack.EIKEN_2)?.overdueCount).toBe(1);
     expect(snapshot.studentAssignments.map((student) => student.name)).toEqual(['Beta', 'Alpha', 'Delta', 'Gamma']);
     expect(snapshot.atRiskStudentList.map((student) => student.name)).toEqual(['Alpha', 'Beta', 'Delta']);
+    expect(snapshot.activationState).toBe('ACTIVE');
+    expect(snapshot.nextRequiredAction).toBe('ACTIVE');
     expect(snapshot.instructorBacklog[0]).toMatchObject({
       immediateCount: 1,
       waitingCount: 1,
@@ -226,5 +232,33 @@ describe('buildOrganizationDashboardSnapshot', () => {
       backlogCount: 2,
     });
     expect(snapshot.assignmentEvents).toHaveLength(1);
+  });
+
+  it('selects exactly one next required activation action in priority order', () => {
+    const snapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 2,
+      totalInstructors: 1,
+      learningPlanCount: 0,
+      cohortCount: 0,
+      studentAssignmentCount: 0,
+      missionAssignmentCount: 0,
+      notifications7d: 0,
+      totalNotificationCount: 0,
+      instructors,
+      students: students.slice(0, 1).map((student) => ({ ...student, assignedInstructorUid: undefined, assignedInstructorName: undefined })),
+      missionAssignments: [],
+      assignmentEvents: [],
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(snapshot.activationState).toBe('CREATE_COHORT');
+    expect(snapshot.nextRequiredAction).toBe('CREATE_COHORT');
+    expect(snapshot.nextRequiredActionLabel).toContain('cohort');
   });
 });

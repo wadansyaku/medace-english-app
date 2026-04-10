@@ -24,6 +24,7 @@ import {
 } from '../../shared/missions';
 import { requireActiveOrganizationContext, appendOrganizationAuditLog } from './organization-memberships';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
+import { recordProductEventForUser } from './product-events';
 import { buildVisibleStudentFilter, readVisibleStudentIds } from './student-visibility';
 import type { AppEnv, DbUserRow } from './types';
 import { HttpError } from './http';
@@ -651,6 +652,12 @@ export const handleCreateWeeklyMission = async (
   if (!isLearningTrack(payload.learningTrack)) {
     throw new HttpError(400, '学習トラックが不正です。');
   }
+  const existingMissionCountRow = await readFirst<{ count: number }>(
+    env,
+    'SELECT COUNT(*) AS count FROM weekly_missions WHERE organization_id = ?',
+    organization.organizationId,
+  );
+  const isFirstMission = Number(existingMissionCountRow?.count || 0) === 0;
 
   const missionId = crypto.randomUUID();
   const createdAt = Date.now();
@@ -720,6 +727,19 @@ export const handleCreateWeeklyMission = async (
       writingAssignmentId: payload.writingAssignmentId || null,
     },
   });
+  if (isFirstMission) {
+    await recordProductEventForUser(env, currentUser, {
+      eventName: 'group_admin_created_first_mission',
+      subjectType: 'mission',
+      subjectId: missionId,
+      status: 'CREATED',
+      metadata: {
+        organizationId: organization.organizationId,
+        learningTrack: payload.learningTrack,
+        bookId: payload.bookId || null,
+      },
+    });
+  }
 
   return {
     id: missionId,

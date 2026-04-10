@@ -1,4 +1,5 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
+import { getTokyoMonthRange } from '../../utils/date';
 import { buildMasteryDistribution } from '../../shared/learningHistory';
 import { toPrimaryMissionSnapshot } from '../../shared/missions';
 import {
@@ -29,6 +30,7 @@ import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
 import { handleGetCoachNotifications } from './organization-notification-actions';
+import { buildActivationFunnel, readCurrentMonthAiEconomics, readLatestProductKpiSnapshot } from './product-kpi';
 import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { buildSuggestedPrimaryMission, readMissionAssignmentsByStudent } from './storage-mission-actions';
@@ -153,6 +155,8 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     historyTrendRows,
     notificationTrendRows,
     signupTrendRows,
+    productKpis,
+    aiEconomics,
   ] = await Promise.all([
     readFirst<{ count: number }>(
       env,
@@ -292,6 +296,8 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
       UserRole.STUDENT,
       trendStart,
     ),
+    readLatestProductKpiSnapshot(env),
+    readCurrentMonthAiEconomics(env),
   ]);
 
   const aiActions: AdminAiActionSummary[] = aiUsageRows.map((row) => ({
@@ -458,12 +464,16 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     recentReports,
     organizations,
     atRiskStudents,
+    productKpis,
+    activationFunnel: buildActivationFunnel(productKpis),
+    aiEconomics,
   };
 };
 
 export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Promise<AccountOverview['aiUsage']> => {
   const plan = getSubscriptionPolicy(getUserSubscriptionPlan(user));
   const monthKey = currentMonthKey();
+  const { start: monthStart, end: monthEnd } = getTokyoMonthRange(monthKey);
   const rows = await readAll<{
     action: string;
     estimated_cost_milli_yen: number;
@@ -480,18 +490,48 @@ export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Pro
     user.id,
     monthKey,
   );
+  const hintRow = await readFirst<{
+    cache_hit_count: number;
+    example_cache_hit_count: number;
+    image_cache_hit_count: number;
+  }>(
+    env,
+    `SELECT
+       SUM(CASE WHEN event_name IN ('word_hint_example_cache_hit', 'word_hint_image_cache_hit') THEN 1 ELSE 0 END) AS cache_hit_count,
+       SUM(CASE WHEN event_name = 'word_hint_example_cache_hit' THEN 1 ELSE 0 END) AS example_cache_hit_count,
+       SUM(CASE WHEN event_name = 'word_hint_image_cache_hit' THEN 1 ELSE 0 END) AS image_cache_hit_count
+     FROM product_events
+     WHERE user_id = ?
+       AND created_at >= ?
+       AND created_at < ?`,
+    user.id,
+    monthStart,
+    monthEnd,
+  );
 
   const actionCounts: Record<string, number> = {};
   const estimatedCostMilliYen = rows.reduce((total, row) => {
     actionCounts[row.action] = Number(row.request_count || 0);
     return total + Number(row.estimated_cost_milli_yen || 0);
   }, 0);
+  const generationCount = rows.reduce((total, row) => total + Number(row.request_count || 0), 0);
+  const cacheHitCount = Number(hintRow?.cache_hit_count || 0);
+  const avoidedCostMilliYen = (
+    Number(hintRow?.example_cache_hit_count || 0) * AI_ACTION_ESTIMATES.generateGeminiSentence.estimatedCostMilliYen
+    + Number(hintRow?.image_cache_hit_count || 0) * AI_ACTION_ESTIMATES.generateWordImage.estimatedCostMilliYen
+  );
 
   return {
     monthKey,
     estimatedCostMilliYen,
     budgetMilliYen: plan.monthlyAiBudgetMilliYen,
     remainingMilliYen: Math.max(0, plan.monthlyAiBudgetMilliYen - estimatedCostMilliYen),
+    generationCount,
+    cacheHitCount,
+    cacheHitRatio: generationCount + cacheHitCount > 0
+      ? Math.round((cacheHitCount / (generationCount + cacheHitCount)) * 100)
+      : 0,
+    avoidedCostMilliYen,
     actionCounts,
   };
 };

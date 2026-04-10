@@ -22,7 +22,7 @@ export const handleGetOrganizationDashboardSnapshot = async (
 ): Promise<OrganizationDashboardSnapshot> => {
   const organization = await requireActiveOrganizationContext(env, user);
 
-  const [students, missionBoard, kpiSeries, memberCountRow, instructorCountRow, instructorRows, assignmentEvents] = await Promise.all([
+  const [students, missionBoard, kpiSeries, memberCountRow, instructorCountRow, cohortCountRow, assignmentCountRow, notificationCountRow, instructorRows, assignmentEvents] = await Promise.all([
     handleGetAllStudentsProgress(env, user),
     handleGetWeeklyMissionBoard(env, user),
     readOrganizationKpiSeriesFromSnapshots(env, organization.organizationId),
@@ -47,6 +47,33 @@ export const handleGetOrganizationDashboardSnapshot = async (
          AND email NOT GLOB 'demo_*@medace.app'`,
       organization.organizationId,
       UserRole.INSTRUCTOR,
+    ),
+    readFirst<{ count: number }>(
+      env,
+      `SELECT COUNT(*) AS count
+       FROM organization_cohorts
+       WHERE organization_id = ?`,
+      organization.organizationId,
+    ),
+    readFirst<{ count: number }>(
+      env,
+      `SELECT COUNT(*) AS count
+       FROM student_instructor_assignments a
+       JOIN organization_memberships m
+         ON m.user_id = a.student_user_id
+        AND m.status = 'ACTIVE'
+       WHERE m.organization_id = ?`,
+      organization.organizationId,
+    ),
+    readFirst<{ count: number }>(
+      env,
+      `SELECT COUNT(*) AS count
+       FROM instructor_notifications n
+       JOIN organization_memberships m
+         ON m.user_id = n.student_user_id
+        AND m.status = 'ACTIVE'
+       WHERE m.organization_id = ?`,
+      organization.organizationId,
     ),
     readAll<{
       uid: string;
@@ -167,7 +194,11 @@ export const handleGetOrganizationDashboardSnapshot = async (
     totalMembers: Number(memberCountRow?.count || 0),
     totalInstructors: Number(instructorCountRow?.count || 0),
     learningPlanCount: students.filter((student) => student.hasLearningPlan).length,
+    cohortCount: Number(cohortCountRow?.count || 0),
+    studentAssignmentCount: Number(assignmentCountRow?.count || 0),
+    missionAssignmentCount: missionBoard.assignments.length,
     notifications7d: kpiSeries.summary7d.notifications7d,
+    totalNotificationCount: Number(notificationCountRow?.count || 0),
     instructors,
     students,
     missionAssignments: missionBoard.assignments,

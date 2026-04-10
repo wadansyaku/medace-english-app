@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -22,6 +22,7 @@ import { getHintAuditTone } from '../shared/wordHintAssets';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { useStudyModeController } from '../hooks/useStudyModeController';
+import { recordClientProductEvent } from '../services/productEvents';
 import StudyFinishedView from './study/StudyFinishedView';
 import StudyReportDialogs from './study/StudyReportDialogs';
 
@@ -58,6 +59,48 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     taskIntent,
     onSessionComplete,
   });
+  const startedRef = useRef(false);
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    if (controller.loading || controller.queue.length === 0 || startedRef.current) return;
+    startedRef.current = true;
+    void recordClientProductEvent({
+      eventName: 'study_session_started',
+      subjectType: 'book',
+      subjectId: bookId,
+      status: 'STARTED',
+      metadata: {
+        intentType: taskIntent?.intentType || null,
+        limit: taskIntent?.limit || null,
+        missionAssignmentId: taskIntent?.missionAssignmentId || null,
+      },
+    }).catch(() => undefined);
+  }, [bookId, controller.loading, controller.queue.length, taskIntent]);
+
+  useEffect(() => {
+    if (!controller.isFinished || finishedRef.current) return;
+    finishedRef.current = true;
+    void recordClientProductEvent({
+      eventName: 'study_session_finished',
+      subjectType: 'book',
+      subjectId: bookId,
+      status: 'FINISHED',
+      metadata: {
+        intentType: taskIntent?.intentType || null,
+        sessionWordCount: controller.sessionWordCount,
+        earnedXP: controller.earnedXP,
+        streakBonusXP: controller.streakBonusXP,
+      },
+    }).catch(() => undefined);
+  }, [
+    bookId,
+    controller.earnedXP,
+    controller.isFinished,
+    controller.sessionWordCount,
+    controller.streakBonusXP,
+    taskIntent,
+  ]);
 
   if (controller.loading) {
     return (

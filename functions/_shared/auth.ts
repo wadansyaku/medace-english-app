@@ -9,6 +9,7 @@ import {
   resolveOrCreateOrganization,
   upsertActiveOrganizationMembership,
 } from './organization-memberships';
+import { syncLearningPlanBooks } from './learning-plan-books';
 import { AppEnv, DbUserRow } from './types';
 
 const SESSION_COOKIE_NAME = 'medace_session';
@@ -448,7 +449,9 @@ const ensureDemoOrganizationSeed = async (env: AppEnv, organizationName?: string
         'ACTIVE',
         now
       ).run();
+      await syncLearningPlanBooks(env, student.id, planBookIds, now, now - DAY_MS);
     } else {
+      await env.DB.prepare('DELETE FROM learning_plan_books WHERE user_id = ?').bind(student.id).run();
       await env.DB.prepare('DELETE FROM learning_plans WHERE user_id = ?').bind(student.id).run();
     }
   }

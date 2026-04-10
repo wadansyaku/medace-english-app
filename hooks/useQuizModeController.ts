@@ -24,6 +24,7 @@ import {
   buildQuizLoadingMessage,
   createDefaultQuizConfig,
 } from '../config/quizFlow';
+import { recordClientProductEvent } from '../services/productEvents';
 import { isSmartSessionBookId } from '../shared/studySession';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
@@ -68,6 +69,8 @@ export const useQuizModeController = ({
   const [pendingAttempt, setPendingAttempt] = useState<{ correct: boolean; responseTimeMs: number } | null>(null);
   const [persistingAttempt, setPersistingAttempt] = useState(false);
   const questionStartedAtRef = useRef(Date.now());
+  const quizStartedEventRef = useRef(false);
+  const spellingStartedEventRef = useRef(false);
 
   const minWordNumber = useMemo(() => {
     if (allWords.length === 0) return 1;
@@ -159,6 +162,8 @@ export const useQuizModeController = ({
       config.questionMode,
       actualQuestionCount,
     );
+    quizStartedEventRef.current = false;
+    spellingStartedEventRef.current = false;
 
     setActiveConfig(config);
     setShowExitConfirm(false);
@@ -243,6 +248,38 @@ export const useQuizModeController = ({
       questionStartedAtRef.current = Date.now();
     }
   }, [currentQuestion, screen]);
+
+  useEffect(() => {
+    if (screen !== 'RUNNING' || !activeConfig || questions.length === 0 || quizStartedEventRef.current) {
+      return;
+    }
+    quizStartedEventRef.current = true;
+    void recordClientProductEvent({
+      eventName: 'quiz_session_started',
+      subjectType: 'book',
+      subjectId: bookId,
+      status: 'STARTED',
+      metadata: {
+        questionMode: activeConfig.questionMode,
+        questionCount: questions.length,
+        intentType: taskIntent?.intentType || null,
+      },
+    }).catch(() => undefined);
+
+    if (activeConfig.questionMode === 'SPELLING_HINT' && !spellingStartedEventRef.current) {
+      spellingStartedEventRef.current = true;
+      void recordClientProductEvent({
+        eventName: 'spelling_check_started',
+        subjectType: 'book',
+        subjectId: bookId,
+        status: 'STARTED',
+        metadata: {
+          questionCount: questions.length,
+          intentType: taskIntent?.intentType || null,
+        },
+      }).catch(() => undefined);
+    }
+  }, [activeConfig, bookId, questions.length, screen, taskIntent]);
 
   const updateSetupConfig = (nextPartial: Partial<QuizSessionConfig>) => {
     setSetupConfig((previous) => ({ ...previous, ...nextPartial }));

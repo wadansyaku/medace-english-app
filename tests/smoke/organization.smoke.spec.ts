@@ -10,6 +10,7 @@ import {
   loginInstructorDemo,
   maybeCompleteOnboarding,
   seedPhrasebook,
+  runtimeAdminPost,
   storageAction,
   completeCoachCtaStudySession,
   completeMissionCtaStudySession,
@@ -19,13 +20,84 @@ test('group admin can open the organization dashboard and update an assignment',
   await loginGroupAdminDemo(page);
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await runtimeAdminPost(page, 'runtime-admin/bootstrap-demo-organization');
+  await page.reload();
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
   await expect(page.getByTestId('organization-kpi-trend-section')).toBeVisible();
   await page.getByTestId('workspace-tab-assignments').click();
+  const assignmentRows = page.locator('[data-testid^="assignment-row-"]');
+  await expect(assignmentRows.first()).toBeVisible();
+  await assignmentRows.first().click();
   const assignmentSelect = page.locator('[data-testid^="assignment-select-"]').first();
-  await assignmentSelect.selectOption({ index: 1 });
+  await expect(assignmentSelect).toBeVisible();
+  const nextInstructorUid = await assignmentSelect.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    return Array.from(select.options)
+      .map((option) => option.value)
+      .find((value) => value && value !== select.value) || '';
+  });
+  expect(nextInstructorUid).toBeTruthy();
+  await assignmentSelect.selectOption(nextInstructorUid);
 
   await expect(page.getByText(/担当講師を .* に更新しました。/)).toBeVisible();
   await expect(page.getByTestId('assignment-history-section')).toContainText('変更者');
+});
+
+test('group admin bootstrap seeds the demo activation loop and leaves guided next steps', async ({ page }) => {
+  await loginGroupAdminDemo(page);
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('organization-kpi-trend-section')).toBeVisible();
+
+  const bootstrap = await runtimeAdminPost<{
+    cohortId: string;
+    missionId: string;
+    studentUid: string;
+    instructorUid: string;
+  }>(page, 'runtime-admin/bootstrap-demo-organization');
+  expect(bootstrap.cohortId).toBeTruthy();
+  expect(bootstrap.missionId).toBeTruthy();
+  expect(bootstrap.studentUid).toBeTruthy();
+  expect(bootstrap.instructorUid).toBeTruthy();
+  await page.reload();
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+
+  const snapshot = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
+  expect(['SEND_FIRST_NOTIFICATION', 'ACTIVE']).toContain(snapshot.activationState);
+  expect(snapshot.assignmentCoverageRate).toBeGreaterThan(0);
+  expect(
+    snapshot.studentAssignments.some((student: {
+      uid: string;
+      primaryMissionStatus?: string;
+      primaryMissionTitle?: string;
+    }) => (
+      student.uid === bootstrap.studentUid
+      && (student.primaryMissionStatus === 'ASSIGNED' || Boolean(student.primaryMissionTitle))
+    )),
+  ).toBeTruthy();
+
+  const settings = await storageAction<any>(page, 'getOrganizationSettingsSnapshot');
+  expect(settings.cohorts.length).toBeGreaterThan(0);
+
+  if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
+    await expect(page.getByText(/最初のフォロー通知/)).toBeVisible();
+  } else {
+    await expect(page.getByText('導入完了')).toBeVisible();
+  }
+
+  await page.getByTestId('workspace-tab-assignments').click();
+  const assignmentRows = page.locator('[data-testid^="assignment-row-"]');
+  await expect(assignmentRows.first()).toBeVisible();
+  await assignmentRows.first().click();
+  await expect(page.getByTestId('weekly-mission-form')).toBeVisible();
+  await expect(page.getByTestId('assignment-history-section')).not.toContainText('まだ担当変更の履歴はありません。');
+
+  await page.getByTestId('workspace-tab-writing').click();
+  if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
+    await expect(page.getByTestId('business-admin-activation-gate')).toBeVisible();
+    await expect(page.getByText(/最初のフォロー通知/)).toBeVisible();
+  } else {
+    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+  }
 });
 
 test('group admin can open settings and organization rename survives reload across business roles', async ({ browser }) => {

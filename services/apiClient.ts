@@ -41,8 +41,10 @@ const parseError = async (response: Response): Promise<never> => {
 };
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const normalizedMethod = (init?.method || 'GET').toUpperCase();
   const response = await fetch(path, {
     credentials: 'include',
+    cache: init?.cache ?? (normalizedMethod === 'GET' ? 'no-store' : undefined),
     ...init,
     headers: {
       ...DEFAULT_HEADERS,

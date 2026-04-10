@@ -21,6 +21,7 @@ import {
   resolveOrCreateOrganization,
   upsertActiveOrganizationMembership,
 } from './organization-memberships';
+import { recordProductEvent, recordProductEventForUser } from './product-events';
 import { readAll, readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
 
@@ -285,6 +286,34 @@ export const handleCreateCommercialRequest = async (
   );
   if (!row) {
     throw new HttpError(500, '申請の保存に失敗しました。');
+  }
+  if (requestedByUser) {
+    await recordProductEventForUser(env, requestedByUser, {
+      eventName: 'commercial_request_submitted',
+      subjectType: 'commercial_request',
+      subjectId: String(insertedId),
+      status: CommercialRequestStatus.OPEN,
+      metadata: {
+        kind: input.kind,
+        source: input.source,
+        teachingFormat: input.teachingFormat || null,
+        requestedWorkspaceRole: input.requestedWorkspaceRole || null,
+      },
+    });
+  } else {
+    await recordProductEvent(env, {
+      eventName: 'commercial_request_submitted',
+      subjectType: 'commercial_request',
+      subjectId: String(insertedId),
+      status: CommercialRequestStatus.OPEN,
+      metadata: {
+        kind: input.kind,
+        source: input.source,
+        organizationName: input.organizationName || null,
+        teachingFormat: input.teachingFormat || null,
+        requestedWorkspaceRole: input.requestedWorkspaceRole || null,
+      },
+    });
   }
   return createCommercialRequestFromRow(row);
 };

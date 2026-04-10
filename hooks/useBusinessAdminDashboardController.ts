@@ -8,6 +8,7 @@ import type {
   WritingAssignment,
 } from '../types';
 import { useAssignmentManagement } from './businessAdmin/useAssignmentManagement';
+import { useActivationBootstrap } from './businessAdmin/useActivationBootstrap';
 import { useOrganizationSettingsForm } from './businessAdmin/useOrganizationSettingsForm';
 import { useWeeklyMissionComposer } from './businessAdmin/useWeeklyMissionComposer';
 
@@ -34,6 +35,10 @@ export const useBusinessAdminDashboardController = ({
   refresh,
 }: UseBusinessAdminDashboardControllerParams) => {
   const [notice, setNotice] = useState<NoticeState | null>(null);
+  const activationBootstrap = useActivationBootstrap({
+    refresh,
+    setNotice,
+  });
 
   const assignment = useAssignmentManagement({
     snapshot,
@@ -56,6 +61,7 @@ export const useBusinessAdminDashboardController = ({
 
   return {
     notice,
+    ...activationBootstrap,
     ...assignment,
     ...organizationSettings,
     ...missionComposer,
