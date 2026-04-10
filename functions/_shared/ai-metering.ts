@@ -1,5 +1,7 @@
 import {
+  AI_PRICING_VERSION,
   AI_ACTION_ESTIMATES,
+  getAiActionEstimate,
   getSubscriptionPolicy,
   type MeteredAiAction,
 } from '../../config/subscription';
@@ -53,7 +55,12 @@ export interface AiUsageEventInput {
   model?: string;
   usedAi: boolean;
   estimatedCostMilliYen?: number;
+  estimatedProviderCostMilliYen?: number;
   requestUnits?: number;
+  pricingVersion?: string;
+  providerInputUnits?: number;
+  providerOutputUnits?: number;
+  providerAssetCount?: number;
   logContext?: AiUsageLogContext;
 }
 
@@ -66,23 +73,47 @@ export const recordAiUsageEvent = async (
   user: DbUserRow,
   input: AiUsageEventInput,
 ): Promise<void> => {
-  const estimate = AI_ACTION_ESTIMATES[input.action];
+  const estimate = getAiActionEstimate(input.action);
   const estimatedCostMilliYen = input.estimatedCostMilliYen
     ?? (input.usedAi ? estimate.estimatedCostMilliYen : 0);
+  const estimatedProviderCostMilliYen = input.estimatedProviderCostMilliYen
+    ?? estimatedCostMilliYen;
+  const requestUnits = Math.max(0, Math.trunc(input.requestUnits ?? 1));
+  const providerInputUnits = Math.max(0, Math.trunc(input.providerInputUnits ?? requestUnits));
+  const providerOutputUnits = Math.max(0, Math.trunc(input.providerOutputUnits ?? (input.usedAi ? 1 : 0)));
+  const providerAssetCount = Math.max(0, Math.trunc(input.providerAssetCount ?? (input.action === 'generateWordImage' && input.usedAi ? 1 : 0)));
 
   await env.DB.prepare(`
     INSERT INTO ai_usage_events (
-      user_id, action, model, provider, estimated_cost_milli_yen, request_units, used_ai, month_key, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      user_id,
+      action,
+      model,
+      provider,
+      estimated_cost_milli_yen,
+      request_units,
+      used_ai,
+      month_key,
+      pricing_version,
+      provider_input_units,
+      provider_output_units,
+      provider_asset_count,
+      estimated_provider_cost_milli_yen,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     input.action,
     input.model || estimate.model,
     input.provider || 'GEMINI',
     estimatedCostMilliYen,
-    input.requestUnits || 1,
+    requestUnits,
     input.usedAi ? 1 : 0,
     currentMonthKey(),
+    input.pricingVersion || AI_PRICING_VERSION,
+    providerInputUnits,
+    providerOutputUnits,
+    providerAssetCount,
+    estimatedProviderCostMilliYen,
     Date.now(),
   ).run();
 
@@ -101,6 +132,11 @@ export const recordAiUsageEvent = async (
     model: input.model || estimate.model,
     usedAi: input.usedAi,
     estimatedCostMilliYen,
-    requestUnits: input.requestUnits || 1,
+    estimatedProviderCostMilliYen,
+    requestUnits,
+    pricingVersion: input.pricingVersion || AI_PRICING_VERSION,
+    providerInputUnits,
+    providerOutputUnits,
+    providerAssetCount,
   }));
 };

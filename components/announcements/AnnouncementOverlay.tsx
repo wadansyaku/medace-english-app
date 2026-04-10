@@ -6,12 +6,14 @@ interface AnnouncementOverlayProps {
   feed: ProductAnnouncementFeed;
   onAcknowledge: (announcementId: string) => void;
   onDismissMajor: (announcementId: string) => void;
+  suppressModal?: boolean;
 }
 
 const AnnouncementOverlay: React.FC<AnnouncementOverlayProps> = ({
   feed,
   onAcknowledge,
   onDismissMajor,
+  suppressModal = false,
 }) => {
   return (
     <>
@@ -37,7 +39,7 @@ const AnnouncementOverlay: React.FC<AnnouncementOverlayProps> = ({
         </div>
       )}
 
-      {feed.highestPriorityModal && (
+      {!suppressModal && feed.highestPriorityModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4" data-testid="announcement-modal">
           <div className="max-w-xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center gap-2 text-medace-700">

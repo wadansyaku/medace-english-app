@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CommercialRequestPayload } from '../../contracts/storage';
 import {
   COMMERCIAL_REQUEST_KIND_LABELS,
@@ -8,6 +8,7 @@ import {
   TEACHING_FORMAT_LABELS,
   TeachingFormat,
 } from '../../types';
+import { recordClientProductEvent } from '../../services/productEvents';
 
 interface CommercialRequestFormProps {
   title: string;
@@ -62,6 +63,19 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
   const seatPlaceholder = useMemo(() => (
     kind === CommercialRequestKind.PERSONAL_UPGRADE ? '個人利用' : seatEstimate
   ), [kind, seatEstimate]);
+
+  useEffect(() => {
+    void recordClientProductEvent({
+      eventName: 'commercial_form_opened',
+      subjectType: 'commercial_source',
+      subjectId: source,
+      status: 'OPENED',
+      metadata: {
+        defaultKind,
+        source,
+      },
+    }).catch(() => undefined);
+  }, [defaultKind, source]);
 
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">

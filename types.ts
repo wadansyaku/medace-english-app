@@ -633,6 +633,14 @@ export interface LearningPlan {
   status: 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
 }
 
+export interface LearningPlanBook {
+  userId: string;
+  bookId: string;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface LeaderboardEntry {
   uid: string;
   displayName: string;
@@ -704,11 +712,88 @@ export interface InstructorNotification {
   createdAt: number;
 }
 
+export type ProductEventName =
+  | 'student_dashboard_start_task'
+  | 'study_session_started'
+  | 'study_session_finished'
+  | 'quiz_session_started'
+  | 'spelling_check_started'
+  | 'word_hint_example_cache_hit'
+  | 'word_hint_example_generated'
+  | 'word_hint_example_failed'
+  | 'word_hint_image_cache_hit'
+  | 'word_hint_image_generated'
+  | 'word_hint_image_failed'
+  | 'commercial_form_opened'
+  | 'commercial_request_submitted'
+  | 'group_admin_created_cohort'
+  | 'group_admin_assigned_student'
+  | 'group_admin_created_first_mission'
+  | 'instructor_notification_sent'
+  | 'writing_assignment_created'
+  | 'writing_submission_received'
+  | 'writing_review_completed';
+
+export interface ProductEvent {
+  id: number;
+  eventName: ProductEventName;
+  featureArea: string;
+  userId?: string;
+  organizationId?: string;
+  subscriptionPlan?: SubscriptionPlan;
+  userRole?: UserRole;
+  subjectType?: string;
+  subjectId?: string;
+  status?: string;
+  usedAi: boolean;
+  estimatedCostMilliYen: number;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface ProductKpiDailySnapshot {
+  dateKey: string;
+  totalUsers: number;
+  activeStudents1d: number;
+  activeStudents7d: number;
+  activeStudents30d: number;
+  totalOrganizations: number;
+  activeOrganizations30d: number;
+  studySessionsStarted30d: number;
+  studySessionsFinished30d: number;
+  quizSessionsStarted30d: number;
+  spellingChecksStarted30d: number;
+  commercialFormOpenCount30d: number;
+  commercialRequestCount30d: number;
+  organizationsWithCohortCount: number;
+  organizationsWithAssignmentCount: number;
+  organizationsWithMissionCount: number;
+  organizationsWithNotificationCount: number;
+  writingAssignmentsCreated30d: number;
+  writingSubmissionsReceived30d: number;
+  writingReviewsCompleted30d: number;
+  generationCount30d: number;
+  cacheHitCount30d: number;
+  exampleGenerationCount30d: number;
+  exampleCacheHitCount30d: number;
+  imageGenerationCount30d: number;
+  imageCacheHitCount30d: number;
+  estimatedAiCostMilliYen30d: number;
+  estimatedProviderAiCostMilliYen30d: number;
+  estimatedAvoidedCostMilliYen30d: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AiUsageSummary {
   monthKey: string;
   estimatedCostMilliYen: number;
   budgetMilliYen: number;
   remainingMilliYen: number;
+  generationCount: number;
+  cacheHitCount: number;
+  cacheHitRatio: number;
+  avoidedCostMilliYen: number;
   actionCounts: Record<string, number>;
 }
 
@@ -958,6 +1043,13 @@ export interface OrganizationSettingsSnapshot {
   updatedAt: number;
 }
 
+export type OrganizationActivationState =
+  | 'CREATE_COHORT'
+  | 'ASSIGN_STUDENTS'
+  | 'CREATE_FIRST_MISSION'
+  | 'SEND_FIRST_NOTIFICATION'
+  | 'ACTIVE';
+
 export interface OrganizationDashboardSnapshot {
   organizationId: string;
   organizationName: string;
@@ -989,6 +1081,10 @@ export interface OrganizationDashboardSnapshot {
   studentAssignments: StudentSummary[];
   assignmentEvents: AssignmentEvent[];
   trend: OrganizationKpiTrendPoint[];
+  activationState: OrganizationActivationState;
+  nextRequiredAction: OrganizationActivationState;
+  nextRequiredActionLabel: string;
+  nextRequiredActionDescription: string;
 }
 
 export enum InstructorWorkspaceView {
@@ -1051,6 +1147,31 @@ export interface StudentWorksheetSnapshot {
 
 export * from './domains/writing/types';
 
+export interface AdminActivationFunnel {
+  totalOrganizations: number;
+  organizationsWithCohortCount: number;
+  organizationsWithAssignmentCount: number;
+  organizationsWithMissionCount: number;
+  organizationsWithNotificationCount: number;
+  writingAssignmentsCreated30d: number;
+  writingSubmissionsReceived30d: number;
+  writingReviewsCompleted30d: number;
+  commercialFormOpenCount30d: number;
+  commercialRequestCount30d: number;
+}
+
+export interface AdminAiEconomicsSummary {
+  monthKey: string;
+  generationCount: number;
+  cacheHitCount: number;
+  cacheHitRatio: number;
+  exampleCacheHitRatio: number;
+  imageCacheHitRatio: number;
+  estimatedCostMilliYen: number;
+  estimatedProviderCostMilliYen: number;
+  avoidedCostMilliYen: number;
+}
+
 export interface AdminDashboardSnapshot {
   overview: AdminOverviewStats;
   planBreakdown: AdminPlanBreakdownItem[];
@@ -1062,4 +1183,7 @@ export interface AdminDashboardSnapshot {
   recentReports: AdminWordReportSummary[];
   organizations: AdminOrganizationInsight[];
   atRiskStudents: StudentSummary[];
+  productKpis: ProductKpiDailySnapshot;
+  activationFunnel: AdminActivationFunnel;
+  aiEconomics: AdminAiEconomicsSummary;
 }

@@ -66,13 +66,9 @@ import type {
   SessionStorageService,
   StorageClientMap,
 } from './storage/types';
-import { buildAnnouncementFeed, getEffectiveAudienceRole, isAnnouncementVisibleToUser } from '../shared/announcements';
-import { hasDuplicateOpenRequest } from '../shared/commercial';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
 import {
   defaultLearningPreference,
-  IDB_MOCK_COMMERCIAL_REQUESTS,
-  IDB_MOCK_PRODUCT_ANNOUNCEMENTS,
   isBookOwnedByUser,
 } from './storage/mockData';
 import {
@@ -96,16 +92,24 @@ import {
 import {
   getObjectStore,
   initStorageDb,
-  readAllStoreRecords,
-  readStoreRecord,
   requestToPromise,
   STORES,
   type GetStore,
-  type StoredAnnouncementReceiptRecord,
-  type StoredCommercialRequestRecord,
-  type StoredProductAnnouncementRecord,
   waitForTransaction,
 } from './storage/idb-support';
+import {
+  getCommercialRequestStatus as getCommercialRequestStatusIdb,
+  listCommercialRequests as listCommercialRequestsIdb,
+  submitCommercialRequest as submitCommercialRequestIdb,
+  updateCommercialRequest as updateCommercialRequestIdb,
+} from './storage/idb-commercial';
+import {
+  acknowledgeAnnouncement as acknowledgeAnnouncementIdb,
+  listProductAnnouncements as listProductAnnouncementsIdb,
+  listProductAnnouncementsAdmin as listProductAnnouncementsAdminIdb,
+  markAnnouncementSeen as markAnnouncementSeenIdb,
+  upsertProductAnnouncement as upsertProductAnnouncementIdb,
+} from './storage/idb-announcements';
 import {
   getBookProgress as getBookProgressFromHistory,
   getBookSession as getBookSessionFromHistory,
@@ -155,11 +159,6 @@ const hashString = (value: string): string => {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(36);
-};
-
-const createLocalOrganizationId = (displayName: string): string => {
-  const slug = slugifySegment(displayName) || 'organization';
-  return `org_local_${slug}_${hashString(displayName)}`;
 };
 
 const createBookId = (bookName: string, createdByUid?: string, uniqueSalt?: string): string => {
@@ -254,15 +253,6 @@ const normalizeCatalogImportRows = (
   };
 };
 
-const mergeRecordsById = <T extends { id: string | number }>(seed: T[], stored: T[]): T[] => {
-  const merged = new Map<string, T>();
-  seed.forEach((record) => merged.set(String(record.id), record));
-  stored.forEach((record) => merged.set(String(record.id), record));
-  return [...merged.values()];
-};
-
-const buildAnnouncementReceiptId = (announcementId: string, userUid: string): string => `${announcementId}:${userUid}`;
-
 interface IndexedDBStorageServiceOptions {
   getStore?: GetStore;
 }
@@ -327,29 +317,19 @@ export class IndexedDBStorageService implements IStorageService {
     };
   }
 
-  private async getStoredCommercialRequests(): Promise<CommercialRequest[]> {
-    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS);
-    const stored = await readAllStoreRecords<StoredCommercialRequestRecord>(store);
-    return mergeRecordsById(IDB_MOCK_COMMERCIAL_REQUESTS, stored)
-      .sort((left, right) => right.updatedAt - left.updatedAt);
+  private getCommercialStorageContext() {
+    return {
+      getStore: this.getStore.bind(this),
+      getSession: this.getSession.bind(this),
+      updateSessionUser: this.updateSessionUser.bind(this),
+    };
   }
 
-  private async getStoredAnnouncements(): Promise<ProductAnnouncement[]> {
-    const store = await this.getStore(STORES.PRODUCT_ANNOUNCEMENTS);
-    const stored = await readAllStoreRecords<StoredProductAnnouncementRecord>(store);
-    return mergeRecordsById(IDB_MOCK_PRODUCT_ANNOUNCEMENTS, stored)
-      .sort((left, right) => right.updatedAt - left.updatedAt);
-  }
-
-  private async getStoredAnnouncementReceipts(userUid: string): Promise<StoredAnnouncementReceiptRecord[]> {
-    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS);
-    const receipts = await readAllStoreRecords<StoredAnnouncementReceiptRecord>(store);
-    return receipts.filter((receipt) => receipt.userUid === userUid);
-  }
-
-  private async getNextCommercialRequestId(): Promise<number> {
-    const requests = await this.getStoredCommercialRequests();
-    return requests.reduce((maxId, request) => Math.max(maxId, Number(request.id || 0)), 100) + 1;
+  private getAnnouncementStorageContext() {
+    return {
+      getStore: this.getStore.bind(this),
+      getSession: this.getSession.bind(this),
+    };
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
@@ -905,49 +885,11 @@ export class IndexedDBStorageService implements IStorageService {
   }
 
   async getCommercialRequestStatus(): Promise<CommercialRequest[]> {
-    const sessionUser = await this.getSession();
-    if (!sessionUser) return [];
-    const normalizedEmail = sessionUser.email.trim().toLowerCase();
-    const requests = await this.getStoredCommercialRequests();
-    return requests.filter((request) => (
-      request.requestedByUid === sessionUser.uid
-      || request.contactEmail.trim().toLowerCase() === normalizedEmail
-    ));
+    return getCommercialRequestStatusIdb(this.getCommercialStorageContext());
   }
 
   async submitCommercialRequest(payload: CommercialRequestPayload): Promise<CommercialRequest> {
-    const sessionUser = await this.getSession();
-    if (!sessionUser) {
-      throw new Error('ログイン後に申請してください。');
-    }
-
-    const existing = await this.getStoredCommercialRequests();
-    if (hasDuplicateOpenRequest(existing, payload.contactEmail, payload.kind, sessionUser.uid)) {
-      throw new Error('進行中の申請があるため、新しい申請は作成できません。');
-    }
-
-    const nextRequestId = await this.getNextCommercialRequestId();
-    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS, 'readwrite');
-    const nextRequest: CommercialRequest = {
-      id: nextRequestId,
-      kind: payload.kind,
-      status: CommercialRequestStatus.OPEN,
-      contactName: payload.contactName.trim(),
-      contactEmail: payload.contactEmail.trim().toLowerCase(),
-      organizationName: payload.organizationName?.trim() || undefined,
-      teachingFormat: payload.teachingFormat,
-      desiredStartTiming: payload.desiredStartTiming?.trim() || undefined,
-      requestedWorkspaceRole: payload.requestedWorkspaceRole,
-      seatEstimate: payload.seatEstimate?.trim() || undefined,
-      message: payload.message.trim(),
-      source: payload.source,
-      requestedByUid: sessionUser.uid,
-      linkedUserUid: sessionUser.uid,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    await requestToPromise(store.put(nextRequest));
-    return nextRequest;
+    return submitCommercialRequestIdb(this.getCommercialStorageContext(), payload);
   }
 
   async updateOrganizationProfile(displayName: string): Promise<OrganizationSettingsSnapshot> {
@@ -977,135 +919,31 @@ export class IndexedDBStorageService implements IStorageService {
   }
 
   async listProductAnnouncements(): Promise<ProductAnnouncementFeed> {
-    const sessionUser = await this.getSession();
-    if (!sessionUser) {
-      return buildAnnouncementFeed([]);
-    }
-    const announcements = await this.getStoredAnnouncements();
-    const receipts = await this.getStoredAnnouncementReceipts(sessionUser.uid);
-    const receiptMap = new Map(receipts.map((receipt) => [receipt.announcementId, receipt]));
-    const effectiveRole = getEffectiveAudienceRole(sessionUser);
-    const visible = announcements
-      .map((announcement) => ({
-        ...announcement,
-        receipt: receiptMap.get(announcement.id),
-      }))
-      .filter((announcement) => isAnnouncementVisibleToUser(announcement, sessionUser.subscriptionPlan, effectiveRole));
-    return buildAnnouncementFeed(visible);
+    return listProductAnnouncementsIdb(this.getAnnouncementStorageContext());
   }
 
   async markAnnouncementSeen(announcementId: string): Promise<void> {
-    const sessionUser = await this.getSession();
-    if (!sessionUser) return;
-    const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
-    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(
-      await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS),
-      receiptId,
-    );
-    const nextSeenAt = current?.seenAt || Date.now();
-    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
-    await requestToPromise(store.put({
-      id: receiptId,
-      announcementId,
-      userUid: sessionUser.uid,
-      seenAt: nextSeenAt,
-      acknowledgedAt: current?.acknowledgedAt,
-      updatedAt: Date.now(),
-    }));
+    return markAnnouncementSeenIdb(this.getAnnouncementStorageContext(), announcementId);
   }
 
   async acknowledgeAnnouncement(announcementId: string): Promise<void> {
-    const sessionUser = await this.getSession();
-    if (!sessionUser) return;
-    const receiptId = buildAnnouncementReceiptId(announcementId, sessionUser.uid);
-    const current = await readStoreRecord<StoredAnnouncementReceiptRecord>(
-      await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS),
-      receiptId,
-    );
-    const now = Date.now();
-    const store = await this.getStore(STORES.ANNOUNCEMENT_RECEIPTS, 'readwrite');
-    await requestToPromise(store.put({
-      id: receiptId,
-      announcementId,
-      userUid: sessionUser.uid,
-      seenAt: current?.seenAt || now,
-      acknowledgedAt: now,
-      updatedAt: now,
-    }));
+    return acknowledgeAnnouncementIdb(this.getAnnouncementStorageContext(), announcementId);
   }
 
   async listCommercialRequests(): Promise<CommercialRequest[]> {
-    return this.getStoredCommercialRequests();
+    return listCommercialRequestsIdb(this.getCommercialStorageContext());
   }
 
   async updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest> {
-    const requests = await this.getStoredCommercialRequests();
-    const current = requests.find((request) => request.id === payload.id);
-    if (!current) {
-      throw new Error('申請が見つかりません。');
-    }
-
-    const nextRequest: CommercialRequest = {
-      ...current,
-      status: payload.status,
-      resolutionNote: payload.resolutionNote || current.resolutionNote,
-      linkedUserUid: payload.linkedUserUid || current.linkedUserUid,
-      targetSubscriptionPlan: payload.targetSubscriptionPlan || current.targetSubscriptionPlan,
-      targetOrganizationId: payload.targetOrganizationId
-        || current.targetOrganizationId
-        || (payload.targetOrganizationName ? createLocalOrganizationId(payload.targetOrganizationName) : undefined),
-      targetOrganizationName: payload.targetOrganizationName || current.targetOrganizationName,
-      targetOrganizationRole: payload.targetOrganizationRole || current.targetOrganizationRole,
-      updatedAt: Date.now(),
-    };
-
-    const store = await this.getStore(STORES.COMMERCIAL_REQUESTS, 'readwrite');
-    await requestToPromise(store.put(nextRequest));
-
-    const sessionUser = await this.getSession();
-    if (
-      payload.status === CommercialRequestStatus.PROVISIONED
-      && sessionUser
-      && nextRequest.linkedUserUid === sessionUser.uid
-    ) {
-      const nextUserRole = nextRequest.targetOrganizationRole === OrganizationRole.GROUP_ADMIN
-        || nextRequest.targetOrganizationRole === OrganizationRole.INSTRUCTOR
-        ? UserRole.INSTRUCTOR
-        : UserRole.STUDENT;
-      await this.updateSessionUser({
-        ...sessionUser,
-        role: nextUserRole,
-        subscriptionPlan: nextRequest.targetSubscriptionPlan || sessionUser.subscriptionPlan || SubscriptionPlan.TOC_FREE,
-        organizationId: nextRequest.targetOrganizationId,
-        organizationName: nextRequest.targetOrganizationName,
-        organizationRole: nextRequest.targetOrganizationRole,
-      });
-    }
-
-    return nextRequest;
+    return updateCommercialRequestIdb(this.getCommercialStorageContext(), payload);
   }
 
   async listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]> {
-    return this.getStoredAnnouncements();
+    return listProductAnnouncementsAdminIdb(this.getAnnouncementStorageContext());
   }
 
   async upsertProductAnnouncement(payload: ProductAnnouncementUpsertPayload): Promise<ProductAnnouncement> {
-    const store = await this.getStore(STORES.PRODUCT_ANNOUNCEMENTS, 'readwrite');
-    const nextAnnouncement: ProductAnnouncement = {
-      id: payload.id || `local-announcement-${Date.now().toString(36)}`,
-      title: payload.title.trim(),
-      body: payload.body.trim(),
-      severity: payload.severity,
-      subscriptionPlans: payload.subscriptionPlans,
-      audienceRoles: payload.audienceRoles,
-      startsAt: payload.startsAt,
-      endsAt: payload.endsAt,
-      publishedAt: Date.now(),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    await requestToPromise(store.put(nextAnnouncement));
-    return nextAnnouncement;
+    return upsertProductAnnouncementIdb(this.getAnnouncementStorageContext(), payload);
   }
 }
 

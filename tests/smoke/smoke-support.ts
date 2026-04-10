@@ -249,7 +249,7 @@ export const getLatestWritingAssignmentForStudentUid = async (
   studentUid: string,
   status: string,
 ) => page.evaluate(async ({ nextScope, nextStudentUid, nextStatus }) => {
-  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`);
+  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`writing assignments fetch failed with status ${response.status}`);
   }
@@ -273,7 +273,7 @@ export const getWritingAssignmentById = async (
   scope: 'all' | 'mine',
   assignmentId: string,
 ) => page.evaluate(async ({ nextScope, nextAssignmentId }) => {
-  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`);
+  const response = await fetch(`/api/writing/assignments?scope=${nextScope}`, { cache: 'no-store' });
   if (!response.ok) {
     throw new Error(`writing assignments fetch failed with status ${response.status}`);
   }
@@ -314,7 +314,7 @@ export const getCurrentSessionUser = async (page: Page, timeoutMs = 10_000) => {
 
   while (Date.now() - startedAt < timeoutMs) {
     const result = await page.evaluate(async () => {
-      const response = await fetch('/api/session');
+      const response = await fetch('/api/session', { cache: 'no-store' });
       if (response.status === 204) {
         return { ok: true, session: null, empty: true } as const;
       }
@@ -331,6 +331,7 @@ export const getCurrentSessionUser = async (page: Page, timeoutMs = 10_000) => {
         ok: true,
         session: JSON.parse(text) as {
           uid: string;
+          email: string;
           displayName: string;
           role: string;
           organizationId?: string;
@@ -431,7 +432,30 @@ const waitForAuthenticatedSession = async (
   fallbackDashboardTestId?: string,
 ) => {
   if (expectIdbStorageMode && fallbackDashboardTestId) {
-    await expect(page.getByTestId(fallbackDashboardTestId)).toBeVisible({ timeout: timeoutMs });
+    const fallbackDashboard = page.getByTestId(fallbackDashboardTestId);
+    const onboardingProfile = fallbackDashboardTestId === MOBILE_FLOW_TEST_IDS.studentDashboard
+      ? page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingProfile)
+      : null;
+    const readinessChecks = [
+      fallbackDashboard.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => null),
+    ];
+
+    if (onboardingProfile) {
+      readinessChecks.push(
+        onboardingProfile.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => null),
+      );
+    }
+
+    await Promise.race(readinessChecks);
+
+    if (await fallbackDashboard.isVisible().catch(() => false)) {
+      return null;
+    }
+    if (onboardingProfile && await onboardingProfile.isVisible().catch(() => false)) {
+      return null;
+    }
+
+    await expect(fallbackDashboard).toBeVisible({ timeout: 1 });
     return null;
   }
 
@@ -466,6 +490,72 @@ export const loginAdminDemo = async (page: Page) => {
   await expect(page.getByTestId('admin-demo-password')).toBeVisible();
   await page.getByTestId('admin-demo-password').fill('admin');
   await page.getByTestId('admin-demo-submit').click();
+};
+
+export const resolveWritingStudentSelectValue = async (
+  page: Page,
+  target: {
+    uid?: string | null;
+    email?: string | null;
+    displayName?: string | null;
+  },
+  options?: {
+    timeoutMs?: number;
+    onRetry?: () => Promise<void>;
+  },
+): Promise<string> => {
+  const timeoutMs = options?.timeoutMs ?? 10_000;
+  const select = page.getByTestId('writing-student-select');
+  const startedAt = Date.now();
+  let lastOptions: Array<{ value: string; text: string }> = [];
+  let lastRetryAt = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const resolved = await select.evaluate((element, nextTarget) => {
+      const options = Array.from((element as HTMLSelectElement).options).map((option) => ({
+        value: option.value,
+        text: option.text,
+      }));
+
+      const byValue = nextTarget.uid
+        ? options.find((option) => option.value === nextTarget.uid)
+        : null;
+      if (byValue) {
+        return { value: byValue.value, options };
+      }
+
+      const byEmail = nextTarget.email
+        ? options.find((option) => option.text.includes(nextTarget.email || ''))
+        : null;
+      if (byEmail) {
+        return { value: byEmail.value, options };
+      }
+
+      const byNameMatches = nextTarget.displayName
+        ? options.filter((option) => option.text.includes(nextTarget.displayName || ''))
+        : [];
+      if (byNameMatches.length === 1) {
+        return { value: byNameMatches[0].value, options };
+      }
+
+      return { value: '', options };
+    }, target);
+
+    lastOptions = resolved.options;
+    if (resolved.value) {
+      return resolved.value;
+    }
+
+    if (options?.onRetry && Date.now() - lastRetryAt >= 1_000) {
+      lastRetryAt = Date.now();
+      await options.onRetry();
+      continue;
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(`Could not resolve writing student option for ${JSON.stringify(target)} from ${JSON.stringify(lastOptions)}`);
 };
 
 export const getInstructorSegmentLabel = (student: {
@@ -573,6 +663,45 @@ export const storageAction = async <T,>(
   }
 
   throw new Error(`${action} failed with status 401 after ${timeoutMs}ms`);
+};
+
+export const runtimeAdminPost = async <T,>(
+  page: Page,
+  pathname: string,
+  payload?: Record<string, unknown>,
+  timeoutMs = 10_000,
+) => {
+  const startedAt = Date.now();
+  const resolvedPathname = pathname.startsWith('/api/') ? pathname : `/api/${pathname.replace(/^\/+/, '')}`;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const result = await page.evaluate(async ({ nextPathname, nextPayload }) => {
+      const response = await fetch(nextPathname, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(nextPayload || {}),
+      });
+
+      const text = await response.text();
+      return { ok: response.ok, status: response.status, text };
+    }, { nextPathname: resolvedPathname, nextPayload: payload });
+
+    if (result.ok) {
+      if (!result.text.trim()) {
+        return null as T;
+      }
+      return JSON.parse(result.text) as T;
+    }
+    if (result.status !== 401) {
+      throw new Error(`${resolvedPathname} failed with status ${result.status}`);
+    }
+
+    await page.waitForTimeout(250);
+  }
+
+  throw new Error(`${resolvedPathname} failed with status 401 after ${timeoutMs}ms`);
 };
 
 export const completeSeededStudySession = async (page: Page, bookId: string) => {

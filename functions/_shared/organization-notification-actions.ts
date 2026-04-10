@@ -18,6 +18,7 @@ import {
   isRecommendedActionType,
   readActiveOrganizationMember,
 } from './organization-support';
+import { recordProductEventForUser } from './product-events';
 
 export const handleSendInstructorNotification = async (
   env: AppEnv,
@@ -119,6 +120,17 @@ export const handleSendInstructorNotification = async (
       dateKeys: [toTokyoDateKey(Date.now())],
     });
   }
+  await recordProductEventForUser(env, instructor, {
+    eventName: 'instructor_notification_sent',
+    subjectType: 'student',
+    subjectId: studentUid,
+    status: 'SENT',
+    usedAi,
+    metadata: {
+      interventionKind,
+      recommendedActionType: resolvedRecommendedActionType,
+    },
+  });
 };
 
 export const handleGetCoachNotifications = async (env: AppEnv, userId: string): Promise<InstructorNotification[]> => {

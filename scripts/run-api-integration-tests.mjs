@@ -191,6 +191,17 @@ class SessionClient {
   }
 }
 
+const runAnalyticsSnapshot = async (client, internalJobSecret) => {
+  const result = await client.request('/api/internal/analytics-snapshots/run', {
+    method: 'POST',
+    headers: {
+      'X-Internal-Job-Secret': internalJobSecret,
+    },
+  });
+  assert(result.status === 200, `[${client.name}] analytics snapshot failed: ${JSON.stringify(result.data)}`);
+  return result.data;
+};
+
 const waitForServer = async (baseUrl, serverLogs) => {
   const deadline = Date.now() + 60_000;
 
@@ -230,7 +241,7 @@ const getAvailablePort = () => new Promise((resolve, reject) => {
   });
 });
 
-const startServer = (persistDir, port) => {
+const startServer = (persistDir, port, bindings = {}) => {
   const logs = [];
   const wranglerPagesDev = createNodeToolCommand('wrangler', [
     'pages',
@@ -242,6 +253,7 @@ const startServer = (persistDir, port) => {
     String(port),
     '--persist-to',
     persistDir,
+    ...Object.entries(bindings).flatMap(([key, value]) => ['--binding', `${key}=${value}`]),
   ]);
   const child = spawn(wranglerPagesDev.command, wranglerPagesDev.args, {
     cwd,
@@ -361,6 +373,7 @@ const main = async () => {
   const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-api-tests-'));
   const port = await getAvailablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
+  const internalJobSecret = 'integration-internal-job-secret';
   let server;
 
   try {
@@ -377,7 +390,9 @@ const main = async () => {
     await runCommand(wranglerMigrate.command, wranglerMigrate.args);
 
     console.log('Starting local Pages Functions server...');
-    server = startServer(persistDir, port);
+    server = startServer(persistDir, port, {
+      INTERNAL_JOB_SECRET: internalJobSecret,
+    });
     await waitForServer(baseUrl, server.logs);
 
     const publicMotivationResponse = await fetch(`${baseUrl}/api/public/motivation`);
@@ -475,6 +490,10 @@ const main = async () => {
     const instructorUser = await instructor.get('/api/session');
     assert(instructorUser.organizationRole === 'INSTRUCTOR', 'provisioned instructor should receive instructor organization role');
     assert(instructorUser.organizationId === groupAdminUser.organizationId, 'provisioned instructor should join the group admin organization');
+
+    await runAnalyticsSnapshot(admin, internalJobSecret);
+    const analyticsBefore = await admin.storage('getAdminDashboardSnapshot');
+    assert(analyticsBefore.productKpis.updatedAt > 0, 'analytics snapshot should set updatedAt on admin KPI snapshot');
 
     const publicCommercialEmail = 'phase4-public@example.jp';
     const anonymousBusinessTrial = await publicClient.request('/api/public/commercial-request', {
@@ -1198,6 +1217,65 @@ const main = async () => {
 
     const printableFeedback = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}/printable-feedback`);
     assert(printableFeedback.html.includes('自由英作文返却'), 'printable feedback should contain the feedback HTML');
+
+    const analyticsAfterRun = await runAnalyticsSnapshot(admin, internalJobSecret);
+    const analyticsAfter = await admin.storage('getAdminDashboardSnapshot');
+    assert(
+      analyticsAfter.productKpis.updatedAt >= analyticsBefore.productKpis.updatedAt,
+      'analytics snapshot should refresh product KPI timestamps',
+    );
+    assert(
+      analyticsAfter.productKpis.writingAssignmentsCreated30d > analyticsBefore.productKpis.writingAssignmentsCreated30d,
+      'analytics snapshot should increase writing assignment counts after the writing flow',
+    );
+    assert(
+      analyticsAfter.productKpis.writingSubmissionsReceived30d > analyticsBefore.productKpis.writingSubmissionsReceived30d,
+      'analytics snapshot should increase writing submission counts after the writing flow',
+    );
+    assert(
+      analyticsAfter.productKpis.writingReviewsCompleted30d > analyticsBefore.productKpis.writingReviewsCompleted30d,
+      'analytics snapshot should increase writing review counts after the writing flow',
+    );
+    assert(
+      analyticsAfter.activationFunnel.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
+      'activation funnel writing assignment counts should mirror product KPI writing counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.writingSubmissionsReceived30d === analyticsAfter.productKpis.writingSubmissionsReceived30d,
+      'activation funnel writing submission counts should mirror product KPI writing counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.writingReviewsCompleted30d === analyticsAfter.productKpis.writingReviewsCompleted30d,
+      'activation funnel writing review counts should mirror product KPI writing counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithMissionCount >= analyticsBefore.activationFunnel.organizationsWithMissionCount,
+      'activation funnel mission counts should not regress after analytics refresh',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithMissionCount >= 1,
+      'activation funnel should count at least one organization with a mission after the integration flow',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithNotificationCount >= analyticsBefore.activationFunnel.organizationsWithNotificationCount,
+      'activation funnel notification counts should not regress after analytics refresh',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithNotificationCount >= 1,
+      'activation funnel should count at least one organization with a notification after the integration flow',
+    );
+    assert(
+      analyticsAfterRun.snapshot.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
+      'snapshot API response should match admin KPI writing assignment counts',
+    );
+    assert(
+      analyticsAfterRun.snapshot.writingSubmissionsReceived30d === analyticsAfter.productKpis.writingSubmissionsReceived30d,
+      'snapshot API response should match admin KPI writing submission counts',
+    );
+    assert(
+      analyticsAfterRun.snapshot.writingReviewsCompleted30d === analyticsAfter.productKpis.writingReviewsCompleted30d,
+      'snapshot API response should match admin KPI writing review counts',
+    );
 
     const futureAnnouncement = await admin.storage('upsertProductAnnouncement', {
       title: '翌週公開の案内',

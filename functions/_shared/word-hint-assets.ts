@@ -1,9 +1,11 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 import { GeneratedAssetAuditStatus, WordHintAssetType, type WordData } from '../../types';
+import { AI_ACTION_ESTIMATES } from '../../config/subscription';
 import { shouldAuditGeneratedAsset } from '../../shared/wordHintAssets';
 import { generateMeteredGeminiSentence, generateMeteredWordImage } from './ai-actions';
 import { HttpError } from './http';
+import { recordProductEventForUser } from './product-events';
 import {
   assertBookReadAccess,
   buildWordHintImageUrl,
@@ -364,33 +366,111 @@ export const handleGenerateWordHintAsset = async (
 
   if (input.assetType === WordHintAssetType.EXAMPLE) {
     if (!input.forceRefresh && row.example_sentence?.trim() && row.example_meaning?.trim()) {
+      await recordProductEventForUser(env, user, {
+        eventName: 'word_hint_example_cache_hit',
+        subjectType: 'word',
+        subjectId: row.id,
+        status: 'CACHE_HIT',
+        metadata: {
+          bookId: row.book_id,
+          forceRefresh: Boolean(input.forceRefresh),
+        },
+      });
       return toWordData(row);
     }
 
-    const context = await generateMeteredGeminiSentence(env, user, {
-      word: row.word,
-      definition: row.definition,
-      userLevel: user.english_level as any || undefined,
-      sourceContext: row.source_context || undefined,
-    });
-    await persistWordExample(env, row.id, context.english, context.japanese);
-    return rereadWordData(env, row.id);
+    try {
+      const context = await generateMeteredGeminiSentence(env, user, {
+        word: row.word,
+        definition: row.definition,
+        userLevel: user.english_level as any || undefined,
+        sourceContext: row.source_context || undefined,
+      });
+      await persistWordExample(env, row.id, context.english, context.japanese);
+      await recordProductEventForUser(env, user, {
+        eventName: 'word_hint_example_generated',
+        subjectType: 'word',
+        subjectId: row.id,
+        status: 'GENERATED',
+        usedAi: true,
+        estimatedCostMilliYen: AI_ACTION_ESTIMATES.generateGeminiSentence.estimatedCostMilliYen,
+        metadata: {
+          bookId: row.book_id,
+          forceRefresh: Boolean(input.forceRefresh),
+        },
+      });
+      return rereadWordData(env, row.id);
+    } catch (error) {
+      await recordProductEventForUser(env, user, {
+        eventName: 'word_hint_example_failed',
+        subjectType: 'word',
+        subjectId: row.id,
+        status: 'FAILED',
+        usedAi: true,
+        estimatedCostMilliYen: AI_ACTION_ESTIMATES.generateGeminiSentence.estimatedCostMilliYen,
+        metadata: {
+          bookId: row.book_id,
+          forceRefresh: Boolean(input.forceRefresh),
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
+    }
   }
 
   if (!input.forceRefresh && row.example_image_key?.trim() && row.example_image_generated_at) {
+    await recordProductEventForUser(env, user, {
+      eventName: 'word_hint_image_cache_hit',
+      subjectType: 'word',
+      subjectId: row.id,
+      status: 'CACHE_HIT',
+      metadata: {
+        bookId: row.book_id,
+        forceRefresh: Boolean(input.forceRefresh),
+      },
+    });
     return toWordData(row);
   }
 
-  const dataUrl = await generateMeteredWordImage(env, user, {
-    word: row.word,
-    definition: row.definition,
-  });
-  if (!dataUrl) {
-    throw new HttpError(502, '画像生成に失敗しました。');
-  }
+  try {
+    const dataUrl = await generateMeteredWordImage(env, user, {
+      word: row.word,
+      definition: row.definition,
+    });
+    if (!dataUrl) {
+      throw new HttpError(502, '画像生成に失敗しました。');
+    }
 
-  await persistWordImage(env, row.id, dataUrl);
-  return rereadWordData(env, row.id);
+    await persistWordImage(env, row.id, dataUrl);
+    await recordProductEventForUser(env, user, {
+      eventName: 'word_hint_image_generated',
+      subjectType: 'word',
+      subjectId: row.id,
+      status: 'GENERATED',
+      usedAi: true,
+      estimatedCostMilliYen: AI_ACTION_ESTIMATES.generateWordImage.estimatedCostMilliYen,
+      metadata: {
+        bookId: row.book_id,
+        forceRefresh: Boolean(input.forceRefresh),
+      },
+    });
+    return rereadWordData(env, row.id);
+  } catch (error) {
+    await recordProductEventForUser(env, user, {
+      eventName: 'word_hint_image_failed',
+      subjectType: 'word',
+      subjectId: row.id,
+      status: 'FAILED',
+      usedAi: true,
+      estimatedCostMilliYen: AI_ACTION_ESTIMATES.generateWordImage.estimatedCostMilliYen,
+      metadata: {
+        bookId: row.book_id,
+        forceRefresh: Boolean(input.forceRefresh),
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    throw error;
+  }
 };
 
 export const handleGetWordHintImageResponse = async (

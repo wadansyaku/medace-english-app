@@ -12,6 +12,7 @@ import {
   readOrganizationCohorts,
   readStudentCohort,
 } from './student-visibility';
+import { recordProductEventForUser } from './product-events';
 import type { AppEnv, DbUserRow } from './types';
 import { readFirst, toTokyoDateKey } from './storage-support';
 import { readActiveOrganizationMember } from './organization-support';
@@ -101,6 +102,18 @@ export const handleAssignStudentInstructor = async (
       dateKeys: [toTokyoDateKey(Date.now())],
     });
   }
+  if (instructorUid) {
+    await recordProductEventForUser(env, currentUser, {
+      eventName: 'group_admin_assigned_student',
+      subjectType: 'student',
+      subjectId: studentUid,
+      status: 'ASSIGNED',
+      metadata: {
+        previousInstructorUid,
+        nextInstructorUid: instructorUid,
+      },
+    });
+  }
 };
 
 export const handleUpsertOrganizationCohort = async (
@@ -173,6 +186,15 @@ export const handleUpsertOrganizationCohort = async (
       now,
       now,
     ).run();
+    await recordProductEventForUser(env, user, {
+      eventName: 'group_admin_created_cohort',
+      subjectType: 'cohort',
+      subjectId: nextCohortId,
+      status: 'CREATED',
+      metadata: {
+        cohortName: trimmedName,
+      },
+    });
   }
 
   await appendOrganizationAuditLog(env, {

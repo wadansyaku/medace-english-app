@@ -8,6 +8,9 @@ import {
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
   maybeCompleteOnboarding,
+  resolveWritingStudentSelectValue,
+  runtimeAdminPost,
+  storageAction,
   toUploadBuffer,
   waitForWritingAssignment,
 } from './smoke-support';
@@ -19,6 +22,16 @@ test('group admin and business student can complete the writing workflow with on
   const studentPage = await studentContext.newPage();
 
   await loginGroupAdminDemo(adminPage);
+  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(adminPage, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(adminPage, 'sendInstructorNotification', {
+    studentUid: bootstrap.studentUid,
+    message: '導入確認のため、最初のフォロー通知を送ります。',
+    triggerReason: 'smoke-writing-bootstrap',
+    usedAi: false,
+    interventionKind: 'REVIEW_RESTART',
+  });
+  await adminPage.reload();
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
   await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
@@ -34,21 +47,28 @@ test('group admin and business student can complete the writing workflow with on
   await adminPage.getByTestId('workspace-tab-writing').click();
   await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
 
-  await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
+  const selectedStudentUid = await resolveWritingStudentSelectValue(adminPage, businessStudent, {
+    timeoutMs: 10_000,
+    onRetry: async () => {
+      await adminPage.reload();
+      await adminPage.getByTestId('workspace-tab-writing').click();
+      await expect(adminPage.getByTestId('writing-ops-panel')).toBeVisible();
+    },
+  });
+  await adminPage.getByTestId('writing-student-select').selectOption(selectedStudentUid);
   await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
   await adminPage.getByTestId('writing-generate-submit').click();
   await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
-  const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+  const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', selectedStudentUid, 'DRAFT');
   expect(generatedAssignment?.id).toBeTruthy();
   await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
   await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
   await adminPage.getByTestId('writing-issue-assignment').click();
   await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
   await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['ISSUED']);
-  await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
-
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
   await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-1.png',

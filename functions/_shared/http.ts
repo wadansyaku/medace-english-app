@@ -11,10 +11,19 @@ export class HttpError extends Error {
 export const json = (data: unknown, init: ResponseInit = {}): Response => {
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json; charset=utf-8');
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'no-store');
+  }
   return new Response(JSON.stringify(data), { ...init, headers });
 };
 
-export const noContent = (init: ResponseInit = {}): Response => new Response(null, { ...init, status: init.status || 204 });
+export const noContent = (init: ResponseInit = {}): Response => {
+  const headers = new Headers(init.headers);
+  if (!headers.has('Cache-Control')) {
+    headers.set('Cache-Control', 'no-store');
+  }
+  return new Response(null, { ...init, status: init.status || 204, headers });
+};
 
 export const readJson = async <T>(request: Request): Promise<T> => {
   try {

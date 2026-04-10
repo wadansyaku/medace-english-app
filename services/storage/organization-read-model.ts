@@ -732,6 +732,36 @@ export const getOrganizationDashboardSnapshot = async (
   });
   const trackCompletion = buildMissionTrackCompletion(missionAssignments);
   const writingReturnRateByTrack = buildMissionWritingReturnRateByTrack(missionAssignments);
+  const cohortCount = getLocalOrganizationCohorts(sessionOrganization.organizationId).length;
+  const studentAssignmentCount = students.filter((student) => student.assignedInstructorUid).length;
+  const totalNotificationCount = instructors.reduce((sum, instructor) => sum + instructor.notifications7d, 0);
+  const activationState = cohortCount === 0
+    ? 'CREATE_COHORT'
+    : studentAssignmentCount === 0
+      ? 'ASSIGN_STUDENTS'
+      : missionAssignments.length === 0
+        ? 'CREATE_FIRST_MISSION'
+        : totalNotificationCount === 0
+          ? 'SEND_FIRST_NOTIFICATION'
+          : 'ACTIVE';
+  const nextRequiredActionLabel = activationState === 'CREATE_COHORT'
+    ? 'cohort を1つ作成する'
+    : activationState === 'ASSIGN_STUDENTS'
+      ? '最初の生徒担当を決める'
+      : activationState === 'CREATE_FIRST_MISSION'
+        ? '初回ミッションを配布する'
+        : activationState === 'SEND_FIRST_NOTIFICATION'
+          ? '最初のフォロー通知を送る'
+          : '導入完了';
+  const nextRequiredActionDescription = activationState === 'CREATE_COHORT'
+    ? 'まずは学年・クラス・講座のどれかで cohort を1つ作ると導線が揃います。'
+    : activationState === 'ASSIGN_STUDENTS'
+      ? '最初は1人だけでも担当講師を決めると運用の起点になります。'
+      : activationState === 'CREATE_FIRST_MISSION'
+        ? '最初の1週間分だけ固定して配布してください。'
+        : activationState === 'SEND_FIRST_NOTIFICATION'
+          ? '最初の一言を送ると通知導線が実データで回り始めます。'
+          : '基本の導入導線は完了しています。';
 
   return {
     organizationId: sessionOrganization.organizationId,
@@ -777,6 +807,10 @@ export const getOrganizationDashboardSnapshot = async (
       },
     ],
     trend: [],
+    activationState,
+    nextRequiredAction: activationState,
+    nextRequiredActionLabel,
+    nextRequiredActionDescription,
   };
 };
 

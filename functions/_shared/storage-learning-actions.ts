@@ -4,6 +4,7 @@ import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeak
 import { formatDateKey } from '../../utils/date';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
+import { readLearningPlanBookIds, syncLearningPlanBooks } from './learning-plan-books';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
 import {
   readMissionAssignmentsByStudent,
@@ -319,6 +320,8 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM writing_submissions'),
     env.DB.prepare('DELETE FROM writing_assignments'),
     env.DB.prepare('DELETE FROM ai_usage_events'),
+    env.DB.prepare('DELETE FROM product_events'),
+    env.DB.prepare('DELETE FROM product_kpi_daily_snapshots'),
     env.DB.prepare('DELETE FROM instructor_notifications'),
     env.DB.prepare('DELETE FROM product_announcement_receipts'),
     env.DB.prepare('DELETE FROM product_announcements'),
@@ -335,6 +338,7 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM learning_histories'),
     env.DB.prepare('DELETE FROM student_instructor_assignments'),
     env.DB.prepare('DELETE FROM learning_preferences'),
+    env.DB.prepare('DELETE FROM learning_plan_books'),
     env.DB.prepare('DELETE FROM learning_plans'),
     env.DB.prepare('DELETE FROM words'),
     env.DB.prepare('DELETE FROM books'),
@@ -354,6 +358,8 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
 };
 
 export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan: LearningPlan): Promise<void> => {
+  const createdAt = plan.createdAt || Date.now();
+  const updatedAt = Date.now();
   await env.DB.prepare(`
     INSERT INTO learning_plans (
       user_id, created_at, target_date, goal_description, daily_word_goal, selected_book_ids, status, updated_at
@@ -367,14 +373,15 @@ export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan:
       updated_at = excluded.updated_at
   `).bind(
     user.id,
-    plan.createdAt || Date.now(),
+    createdAt,
     plan.targetDate,
     plan.goalDescription,
     plan.dailyWordGoal,
     JSON.stringify(plan.selectedBookIds || []),
     plan.status,
-    Date.now(),
+    updatedAt,
   ).run();
+  await syncLearningPlanBooks(env, user.id, plan.selectedBookIds || [], updatedAt, createdAt);
 
   await rebuildOrganizationKpiForUser(env, user.id, getLastTokyoDateKeys(1));
 };
@@ -391,13 +398,16 @@ export const handleGetLearningPlan = async (env: AppEnv, user: DbUserRow): Promi
   }>(env, 'SELECT * FROM learning_plans WHERE user_id = ?', user.id);
 
   if (!row) return null;
+  const selectedBookIds = await readLearningPlanBookIds(env, user.id);
   return {
     uid: row.user_id,
     createdAt: row.created_at,
     targetDate: row.target_date,
     goalDescription: row.goal_description,
     dailyWordGoal: row.daily_word_goal,
-    selectedBookIds: JSON.parse(row.selected_book_ids || '[]'),
+    selectedBookIds: selectedBookIds.length > 0
+      ? selectedBookIds
+      : JSON.parse(row.selected_book_ids || '[]'),
     status: row.status,
   };
 };

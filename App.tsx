@@ -1,7 +1,7 @@
 
 import React, { Suspense, lazy, useState } from 'react';
 import Layout from './components/Layout';
-import { type LearningTaskIntent, type UserProfile } from './types';
+import { UserRole, type LearningTaskIntent, type UserProfile } from './types';
 import { BusinessAdminWorkspaceView, InstructorWorkspaceView } from './types';
 import { isGroupAdmin } from './config/access';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from './config/workspace';
@@ -12,6 +12,7 @@ import AnnouncementOverlay from './components/announcements/AnnouncementOverlay'
 import { canAccessAppView, isHomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
+import { recordClientProductEvent } from './services/productEvents';
 import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -45,6 +46,7 @@ const App: React.FC = () => {
     },
   });
   const announcementFeed = useAnnouncementFeed(Boolean(user));
+  const suppressAnnouncementModal = Boolean(user && user.role === UserRole.STUDENT && user.needsOnboarding);
   const isGroupAdminUser = isGroupAdmin(user);
   const isInstructorWorkspace = Boolean(user && currentView === 'instructor');
   const workspaceSections = isInstructorWorkspace
@@ -62,6 +64,18 @@ const App: React.FC = () => {
   };
 
   const handleTaskSelect = (task: LearningTaskIntent) => {
+    void recordClientProductEvent({
+      eventName: 'student_dashboard_start_task',
+      subjectType: 'learning_task',
+      subjectId: task.intentType,
+      status: 'STARTED',
+      metadata: {
+        mode: task.mode,
+        bookId: getTaskRouteBookId(task),
+        intentType: task.intentType,
+        targetQuestionModes: task.targetQuestionModes || [],
+      },
+    }).catch(() => undefined);
     dispatchNavigation({ type: 'open-task', task });
   };
 
@@ -234,6 +248,7 @@ const App: React.FC = () => {
       {user && (
         <AnnouncementOverlay
           feed={announcementFeed.feed}
+          suppressModal={suppressAnnouncementModal}
           onAcknowledge={(announcementId) => {
             void announcementFeed.acknowledge(announcementId);
           }}

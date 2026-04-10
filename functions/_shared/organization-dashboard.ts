@@ -1,5 +1,6 @@
 import {
   type MissionAssignment,
+  type OrganizationActivationState,
   StudentRiskLevel,
   SubscriptionPlan,
   WeeklyMissionStatus,
@@ -29,7 +30,11 @@ interface BuildOrganizationDashboardSnapshotInput {
   totalMembers: number;
   totalInstructors: number;
   learningPlanCount: number;
+  cohortCount: number;
+  studentAssignmentCount: number;
+  missionAssignmentCount: number;
   notifications7d: number;
+  totalNotificationCount: number;
   instructors: OrganizationInstructorSummary[];
   students: StudentSummary[];
   missionAssignments: MissionAssignment[];
@@ -47,7 +52,11 @@ export const buildOrganizationDashboardSnapshot = ({
   totalMembers,
   totalInstructors,
   learningPlanCount,
+  cohortCount,
+  studentAssignmentCount,
+  missionAssignmentCount,
   notifications7d,
+  totalNotificationCount,
   instructors,
   students,
   missionAssignments,
@@ -116,6 +125,27 @@ export const buildOrganizationDashboardSnapshot = ({
     || Number(Boolean(!right.assignedInstructorUid)) - Number(Boolean(!left.assignedInstructorUid))
     || left.name.localeCompare(right.name)
   ));
+  let activationState: OrganizationActivationState = 'ACTIVE';
+  let nextRequiredActionLabel = '導入完了';
+  let nextRequiredActionDescription = '基本の導入導線は完了しています。次は継続率と再開率を見ながら運用を整えます。';
+
+  if (cohortCount === 0) {
+    activationState = 'CREATE_COHORT';
+    nextRequiredActionLabel = 'cohort を1つ作成する';
+    nextRequiredActionDescription = 'まずは学年・クラス・講座のどれかで1つだけ cohort を作ると、その後の割当と配布が迷いません。';
+  } else if (studentAssignmentCount === 0 || assignedStudents === 0) {
+    activationState = 'ASSIGN_STUDENTS';
+    nextRequiredActionLabel = '最初の生徒担当を決める';
+    nextRequiredActionDescription = '最初は at-risk 生徒か直近で止まっている生徒を1人だけ担当講師に割り当ててください。';
+  } else if (missionAssignmentCount === 0) {
+    activationState = 'CREATE_FIRST_MISSION';
+    nextRequiredActionLabel = '初回ミッションを配布する';
+    nextRequiredActionDescription = '最初の1週間分だけで十分です。新出語と復習語を少なく固定して配布してください。';
+  } else if (totalNotificationCount === 0) {
+    activationState = 'SEND_FIRST_NOTIFICATION';
+    nextRequiredActionLabel = '最初のフォロー通知を送る';
+    nextRequiredActionDescription = '担当講師から最初の一言を送ると、運用導線が実データで回り始めます。';
+  }
 
   return {
     organizationId,
@@ -150,5 +180,9 @@ export const buildOrganizationDashboardSnapshot = ({
     studentAssignments,
     assignmentEvents,
     trend,
+    activationState,
+    nextRequiredAction: activationState,
+    nextRequiredActionLabel,
+    nextRequiredActionDescription,
   };
 };

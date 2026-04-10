@@ -7,6 +7,7 @@ import {
   assertAiActionAllowed,
   assertBudgetAvailable,
   recordAiUsageEvent,
+  type AiUsageEventInput,
   type AiUsageLogContext,
 } from './ai-metering';
 import { HttpError } from './http';
@@ -68,12 +69,14 @@ const runMeteredAiAction = async <T>(
   action: MeteredAiAction,
   runner: () => Promise<T>,
   logContext?: AiUsageLogContext,
+  metering?: Partial<AiUsageEventInput>,
 ): Promise<T> => {
   await assertBudgetAvailable(env, user, action);
   const result = await runner();
   await recordAiUsageEvent(env, user, {
     action,
     usedAi: true,
+    ...(metering || {}),
     ...(logContext ? { logContext } : {}),
   });
   return result;
@@ -146,6 +149,10 @@ export const generateMeteredGeminiSentence = async (
     'generateGeminiSentence',
     () => generateGeminiSentence(env, payload),
     logContext,
+    {
+      providerInputUnits: 1,
+      providerOutputUnits: 1,
+    },
   );
 };
 
@@ -185,6 +192,10 @@ export const generateMeteredWordImage = async (
     'generateWordImage',
     () => generateWordImage(env, payload),
     logContext,
+    {
+      providerAssetCount: 1,
+      providerOutputUnits: 1,
+    },
   );
 };
 
