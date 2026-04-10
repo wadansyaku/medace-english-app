@@ -6,7 +6,7 @@ import type {
   AdminAiEconomicsSummary,
   ProductKpiDailySnapshot,
 } from '../../types';
-import { formatDateKey, formatMonthKey } from '../../utils/date';
+import { formatDateKey, formatMonthKey, getTokyoMonthRange } from '../../utils/date';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
 import { readAll, readFirst, DAY_MS } from './storage-support';
 import type { AppEnv } from './types';
@@ -151,11 +151,7 @@ export const readCurrentMonthAiEconomics = async (
   env: AppEnv,
   monthKey = formatMonthKey(Date.now()),
 ): Promise<AdminAiEconomicsSummary> => {
-  const monthStart = new Date(`${monthKey}-01T00:00:00+09:00`).getTime();
-  const nextMonthStart = new Date(`${monthKey}-01T00:00:00+09:00`).getTime();
-  const nextMonth = new Date(nextMonthStart);
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const monthEnd = nextMonth.getTime();
+  const { start: monthStart, end: monthEnd } = getTokyoMonthRange(monthKey);
 
   const aiUsageRow = await readFirst<{
     generation_count: number;

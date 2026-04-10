@@ -1,4 +1,5 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
+import { getTokyoMonthRange } from '../../utils/date';
 import { buildMasteryDistribution } from '../../shared/learningHistory';
 import { toPrimaryMissionSnapshot } from '../../shared/missions';
 import {
@@ -472,10 +473,7 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
 export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Promise<AccountOverview['aiUsage']> => {
   const plan = getSubscriptionPolicy(getUserSubscriptionPlan(user));
   const monthKey = currentMonthKey();
-  const monthStart = new Date(`${monthKey}-01T00:00:00+09:00`).getTime();
-  const nextMonth = new Date(monthStart);
-  nextMonth.setMonth(nextMonth.getMonth() + 1);
-  const monthEnd = nextMonth.getTime();
+  const { start: monthStart, end: monthEnd } = getTokyoMonthRange(monthKey);
   const rows = await readAll<{
     action: string;
     estimated_cost_milli_yen: number;
