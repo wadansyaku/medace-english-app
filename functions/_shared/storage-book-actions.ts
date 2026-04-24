@@ -10,7 +10,7 @@ import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
 import { generateMeteredGeminiSentence } from './ai-actions';
-import { normalizeCatalogImport } from './catalog-import';
+import { normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
 import { HttpError } from './http';
 import { readWeaknessProfile } from './weakness-actions';
 import {
@@ -34,14 +34,16 @@ import {
 
 const validateNounWorkbookImportProfile = (
   payload: CatalogImportRequest,
-  normalizedRowCount: number,
+  normalizedRows: NormalizedCatalogImportRow[],
 ): void => {
   const profile = payload.importProfile;
   const contextSummary = typeof payload.contextSummary === 'string' ? payload.contextSummary : '';
   const bookDescription = typeof payload.bookDescription === 'string' ? payload.bookDescription : '';
+  const hasNounWorkbookBookRows = normalizedRows.some((row) => row.bookName.trim() === 'ナルシスト');
   const looksLikeNounWorkbook = payload.defaultBookName === 'ナルシスト'
     || contextSummary.includes('中学生用名詞教材')
-    || bookDescription.includes('名詞単語帳');
+    || bookDescription.includes('名詞単語帳')
+    || hasNounWorkbookBookRows;
 
   if (!looksLikeNounWorkbook && profile?.kind !== 'NOUN_WORKBOOK') return;
 
@@ -93,8 +95,8 @@ const validateNounWorkbookImportProfile = (
   if (summary?.hasIndexSheet !== true) {
     blockingReasons.push('必須シート `名詞一覧` が確認できません。');
   }
-  if (summary?.importWordCount !== normalizedRowCount) {
-    blockingReasons.push(`解析語数 ${summary?.importWordCount ?? 'unknown'} と正規化後語数 ${normalizedRowCount} が一致しません。`);
+  if (summary?.importWordCount !== normalizedRows.length) {
+    blockingReasons.push(`解析語数 ${summary?.importWordCount ?? 'unknown'} と正規化後語数 ${normalizedRows.length} が一致しません。`);
   }
   if ((summary?.warningIssueCount || 0) > 0) {
     blockingReasons.push(`要確認 issue が ${summary.warningIssueCount} 件残っています。`);
@@ -137,7 +139,7 @@ export const handleBatchImportWords = async (
     const firstWarning = normalized.warnings[0];
     throw new HttpError(400, firstWarning?.message || 'インポート対象のデータが空です。');
   }
-  validateNounWorkbookImportProfile(payload, normalized.rows.length);
+  validateNounWorkbookImportProfile(payload, normalized.rows);
 
   const isOfficialImport = user.role === UserRole.ADMIN && !createdByUid;
   if (isOfficialImport && runtimeFlags && !runtimeFlags.enableDestructiveAdminActions) {

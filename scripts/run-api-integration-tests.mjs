@@ -624,6 +624,26 @@ const main = async () => {
     assert(orgBookTitles.includes('Business 500'), 'business student should see BUSINESS_ONLY official books');
     assert(orgBookTitles.includes('Legacy CSV 4-col'), 'business student should see official books imported from positional CSV');
 
+    const missingProfileNounWorkbookImport = await admin.storageRaw('batchImportWords', {
+      defaultBookName: 'noun_workbook_reviewed.csv',
+      source: {
+        kind: 'rows',
+        rows: nounWorkbookFixtureImportRows,
+      },
+      options: {
+        accessScope: 'ALL_PLANS',
+        catalogSource: 'LICENSED_PARTNER',
+      },
+    });
+    assert(
+      missingProfileNounWorkbookImport.status === 400,
+      'noun workbook row book names should require an import profile even when the uploaded filename is generic',
+    );
+    assert(
+      String(missingProfileNounWorkbookImport.data?.error || '').includes('解析 profile'),
+      'noun workbook import without a profile should explain the missing profile requirement',
+    );
+
     const nounWorkbookImport = await admin.storage('batchImportWords', {
       defaultBookName: nounWorkbookFixtureBookTitle,
       source: {

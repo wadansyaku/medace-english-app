@@ -53,12 +53,12 @@ export const getBookProgressionIndex = (
   const normalized = haystack.replace(/\s+/g, '');
   const levelMatch = normalized.match(/レベル([1-6])/);
   if (levelMatch) return Number.parseInt(levelMatch[1], 10);
-  if (normalized.includes('中学生')) return 2;
   if (normalized.includes('中1')) return 1;
   if (normalized.includes('中2')) return 2;
   if (normalized.includes('中3')) return 3;
   if (normalized.includes('高1')) return 4;
   if (normalized.includes('高2')) return 5;
   if (normalized.includes('高3')) return 6;
+  if (normalized.includes('中学生')) return 2;
   return null;
 };
