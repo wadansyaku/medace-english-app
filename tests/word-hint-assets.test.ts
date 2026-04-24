@@ -47,7 +47,7 @@ vi.mock('../functions/_shared/storage-support', async () => {
 
 import { handleGenerateWordHintAsset, runWordHintAuditSweep } from '../functions/_shared/word-hint-assets';
 
-const createWordRow = () => ({
+const createWordRow = (overrides: Record<string, unknown> = {}) => ({
   id: 'word-1',
   book_id: 'book-1',
   word_number: 1,
@@ -68,6 +68,7 @@ const createWordRow = () => ({
   example_image_audited_at: null,
   is_reported: 0,
   source_context: 'Medical English',
+  ...overrides,
 });
 
 const createEnv = () => {
@@ -120,8 +121,10 @@ describe('word hint assets', () => {
     readFirstMock.mockReset();
   });
 
-  it('returns the cached example without calling AI again', async () => {
-    readFirstMock.mockResolvedValueOnce(createWordRow());
+  it('returns the cached example without calling AI again when only the sentence is cached', async () => {
+    readFirstMock.mockResolvedValueOnce(createWordRow({
+      example_meaning: null,
+    }));
 
     const result = await handleGenerateWordHintAsset(createEnv(), createUser() as any, {
       wordId: 'word-1',
@@ -131,10 +134,13 @@ describe('word hint assets', () => {
     expect(generateMeteredGeminiSentenceMock).not.toHaveBeenCalled();
     expect(assertBookReadAccessMock).toHaveBeenCalled();
     expect(result.exampleSentence).toBe('The patient felt acute pain in her leg.');
+    expect(result.exampleMeaning).toBeNull();
   });
 
-  it('audits due example and image hints in a single sweep', async () => {
-    readAllMock.mockResolvedValueOnce([createWordRow()]);
+  it('audits due example and image hints in a single sweep even when exampleMeaning is missing', async () => {
+    readAllMock.mockResolvedValueOnce([createWordRow({
+      example_meaning: null,
+    })]);
     generateContentMock
       .mockResolvedValueOnce({ text: JSON.stringify({ status: GeneratedAssetAuditStatus.APPROVED, reason: '問題ありません。' }) })
       .mockResolvedValueOnce({ text: JSON.stringify({ status: GeneratedAssetAuditStatus.REVIEW_REQUIRED, reason: '画像が意味を十分に示していません。' }) });
@@ -151,9 +157,10 @@ describe('word hint assets', () => {
     expect(result.reviewRequiredCount).toBe(1);
     expect(result.failedCount).toBe(0);
     expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(String(generateContentMock.mock.calls[0]?.[0]?.contents || '')).toContain('Japanese translation: "語義: 鋭い"');
   });
 
-  it('orders audit candidates by the stalest available asset timestamp', async () => {
+  it('orders audit candidates by the stalest available asset timestamp without requiring exampleMeaning', async () => {
     readAllMock.mockResolvedValueOnce([]);
 
     await runWordHintAuditSweep(createEnv(), {
@@ -164,5 +171,6 @@ describe('word hint assets', () => {
     expect(readAllMock).toHaveBeenCalledTimes(1);
     expect(String(readAllMock.mock.calls[0]?.[1] || '')).toContain('ORDER BY MIN(');
     expect(String(readAllMock.mock.calls[0]?.[1] || '')).toContain('COALESCE(w.example_image_audited_at, w.example_image_generated_at)');
+    expect(String(readAllMock.mock.calls[0]?.[1] || '')).not.toContain('example_meaning IS NOT NULL');
   });
 });

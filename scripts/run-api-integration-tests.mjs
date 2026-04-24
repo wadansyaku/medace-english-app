@@ -6,6 +6,13 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
+import {
+  nounWorkbookFixtureBookDescription,
+  nounWorkbookFixtureBookTitle,
+  nounWorkbookFixtureImportProfile,
+  nounWorkbookFixtureImportRows,
+  nounWorkbookFixtureSourceContext,
+} from '../tests/fixtures/nounWorkbookFixture.js';
 
 const cwd = process.cwd();
 
@@ -341,6 +348,28 @@ const importOfficialCatalog = async (admin, title, accessScope, catalogSource, w
   assert(result.importedBookCount === 1, `[admin] expected one imported book for ${title}`);
 };
 
+const importOfficialCatalogFromLegacyCsv = async (admin, title, accessScope, catalogSource) => {
+  const result = await admin.storage('batchImportWords', {
+    defaultBookName: title,
+    source: {
+      kind: 'csv',
+      fileName: `${title}.csv`,
+      csvText: [
+        `${title},1,legacy care,注意`,
+        `${title},2,legacy heal,治す`,
+      ].join('\n'),
+    },
+    options: {
+      accessScope,
+      catalogSource,
+    },
+  });
+
+  assert(result.importedBookCount === 1, '[admin] expected positional CSV import to create one official book');
+  assert(result.importedWordCount === 2, '[admin] expected positional CSV import to keep both rows');
+  assert(result.warnings.length === 0, '[admin] positional CSV import should not emit warnings');
+};
+
 const executeLocalSql = async (persistDir, sql) => {
   const wranglerExecute = createNodeToolCommand('wrangler', [
     'd1',
@@ -415,6 +444,7 @@ const main = async () => {
 
     await importOfficialCatalog(admin, 'Starter 120', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL');
     await importOfficialCatalog(admin, 'Business 500', 'BUSINESS_ONLY', 'LICENSED_PARTNER');
+    await importOfficialCatalogFromLegacyCsv(admin, 'Legacy CSV 4-col', 'BUSINESS_ONLY', 'LICENSED_PARTNER');
     await importOfficialCatalog(admin, 'レベル1', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
     await importOfficialCatalog(admin, 'レベル2', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
     await importOfficialCatalog(admin, 'レベル3', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
@@ -592,6 +622,102 @@ const main = async () => {
     const orgBookTitles = orgBooks.map((book) => book.title);
     assert(orgBookTitles.includes('Starter 120'), 'business student should see ALL_PLANS official books');
     assert(orgBookTitles.includes('Business 500'), 'business student should see BUSINESS_ONLY official books');
+    assert(orgBookTitles.includes('Legacy CSV 4-col'), 'business student should see official books imported from positional CSV');
+
+    const missingProfileNounWorkbookImport = await admin.storageRaw('batchImportWords', {
+      defaultBookName: 'noun_workbook_reviewed.csv',
+      source: {
+        kind: 'rows',
+        rows: nounWorkbookFixtureImportRows,
+      },
+      options: {
+        accessScope: 'ALL_PLANS',
+        catalogSource: 'LICENSED_PARTNER',
+      },
+    });
+    assert(
+      missingProfileNounWorkbookImport.status === 400,
+      'noun workbook row book names should require an import profile even when the uploaded filename is generic',
+    );
+    assert(
+      String(missingProfileNounWorkbookImport.data?.error || '').includes('解析 profile'),
+      'noun workbook import without a profile should explain the missing profile requirement',
+    );
+
+    const nounWorkbookImport = await admin.storage('batchImportWords', {
+      defaultBookName: nounWorkbookFixtureBookTitle,
+      source: {
+        kind: 'rows',
+        rows: nounWorkbookFixtureImportRows,
+      },
+      contextSummary: nounWorkbookFixtureSourceContext,
+      bookDescription: nounWorkbookFixtureBookDescription,
+      importProfile: nounWorkbookFixtureImportProfile,
+      options: {
+        accessScope: 'ALL_PLANS',
+        catalogSource: 'LICENSED_PARTNER',
+      },
+    });
+    assert(nounWorkbookImport.importedBookCount === 1, 'noun workbook import should create one official book');
+    assert(
+      nounWorkbookImport.importedWordCount === nounWorkbookFixtureImportRows.length,
+      'noun workbook import should persist every fixture row',
+    );
+
+    const orgBooksAfterWorkbookImport = await orgStudent.storage('getBooks');
+    const nounWorkbookBook = orgBooksAfterWorkbookImport.find((book) => book.title === nounWorkbookFixtureBookTitle);
+    assert(nounWorkbookBook, 'business student should see the imported noun workbook');
+    assert(
+      nounWorkbookBook.sourceContext === nounWorkbookFixtureSourceContext,
+      'imported noun workbook should preserve source context',
+    );
+
+    const nounWorkbookWords = await orgStudent.storage('getWordsByBook', { bookId: nounWorkbookBook.id });
+    assert(
+      nounWorkbookWords.length === nounWorkbookFixtureImportRows.length,
+      'noun workbook words should round-trip through D1 and storage actions',
+    );
+    const goalWord = nounWorkbookWords.find((word) => word.word === 'goal');
+    assert(goalWord?.section === '到達', 'noun workbook section metadata should survive round-trip');
+    assert(goalWord?.category === '国際 移動', 'noun workbook category metadata should survive round-trip');
+    assert(goalWord?.subcategory === '国際', 'noun workbook subcategory metadata should survive round-trip');
+    assert(goalWord?.sourceSheet === '国際 移動', 'noun workbook source sheet should survive round-trip');
+    assert(goalWord?.sourceEntryId === 3, 'noun workbook source entry id should survive round-trip');
+    assert(goalWord?.exampleSentence === 'Set a goal for the year.', 'noun workbook example sentence should survive round-trip');
+    assert(goalWord?.exampleMeaning === null, 'noun workbook example meaning should stay nullable');
+    const accessWord = nounWorkbookWords.find((word) => word.word === 'access');
+    assert(accessWord?.sourceSheet === '生活', 'noun workbook sheet-level provenance should survive round-trip');
+    assert(accessWord?.sourceEntryId === 4, 'noun workbook source ids should survive round-trip');
+
+    const blockedNounWorkbookImport = await admin.storageRaw('batchImportWords', {
+      defaultBookName: nounWorkbookFixtureBookTitle,
+      source: {
+        kind: 'rows',
+        rows: nounWorkbookFixtureImportRows,
+      },
+      contextSummary: nounWorkbookFixtureSourceContext,
+      bookDescription: nounWorkbookFixtureBookDescription,
+      importProfile: {
+        kind: 'NOUN_WORKBOOK',
+        summary: {
+          ...nounWorkbookFixtureImportProfile.summary,
+          unmatchedIndexWordCount: 1,
+        },
+        guardrail: {
+          shouldBlockImport: true,
+          blockingReasons: ['索引だけに存在する単語が 1 件あります。'],
+        },
+      },
+      options: {
+        accessScope: 'ALL_PLANS',
+        catalogSource: 'LICENSED_PARTNER',
+      },
+    });
+    assert(blockedNounWorkbookImport.status === 400, 'noun workbook import should be rejected when server-side guardrail fails');
+    assert(
+      String(blockedNounWorkbookImport.data?.error || '').includes('名詞 workbook の解析結果が安全条件を満たしていません'),
+      'noun workbook import rejection should explain the server-side guardrail failure',
+    );
 
     const phrasebookImport = await orgStudent.storage('batchImportWords', {
       defaultBookName: 'Follow-up Drill',

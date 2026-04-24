@@ -10,7 +10,13 @@ export const hasExampleHint = (input: {
   exampleMeaning?: string | null;
 }): boolean => (
   Boolean(input.exampleSentence?.trim())
-  && Boolean(input.exampleMeaning?.trim())
+);
+
+export const resolveExampleTranslation = (input: {
+  definition: string;
+  exampleMeaning?: string | null;
+}): string => (
+  input.exampleMeaning?.trim() || `語義: ${input.definition}`
 );
 
 export const hasImageHint = (input: {

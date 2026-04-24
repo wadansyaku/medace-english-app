@@ -24,6 +24,13 @@ vi.mock('../services/storage/idb-support', async () => {
 });
 
 import { IndexedDBStorageService } from '../services/storage';
+import {
+  nounWorkbookFixtureBookDescription,
+  nounWorkbookFixtureBookTitle,
+  nounWorkbookFixtureImportProfile,
+  nounWorkbookFixtureImportRows,
+  nounWorkbookFixtureSourceContext,
+} from './fixtures/nounWorkbookFixture.js';
 
 const createRequest = <T>(result?: T, error?: Error) => {
   const request: any = {};
@@ -87,5 +94,71 @@ describe('IndexedDBStorageService word hints', () => {
       exampleMeaning: '患者は鋭い痛みを訴えた。',
     });
     expect(result.exampleSentence).toBe('The patient reported acute pain.');
+  });
+
+  it('round-trips noun workbook import metadata through the IndexedDB fallback', async () => {
+    const books = new Map<string, unknown>();
+    const words = new Map<string, WordData>();
+    const booksStore = {
+      put: vi.fn((value: { id: string }) => {
+        books.set(value.id, value);
+        return createRequest(value);
+      }),
+    };
+    const wordsStore = {
+      put: vi.fn((value: WordData) => {
+        words.set(value.id, value);
+        return createRequest(value);
+      }),
+      index: vi.fn(() => ({
+        getAll: vi.fn((bookId: string) => createRequest(
+          [...words.values()].filter((word) => word.bookId === bookId),
+        )),
+      })),
+    };
+    const createTransaction = () => {
+      let oncomplete: ((event: Event) => void) | null = null;
+      return {
+        get oncomplete() {
+          return oncomplete;
+        },
+        set oncomplete(handler) {
+          oncomplete = handler;
+          queueMicrotask(() => handler?.(new Event('complete')));
+        },
+        objectStore: vi.fn((storeName: string) => {
+          if (storeName === 'books') return booksStore;
+          if (storeName === 'words') return wordsStore;
+          throw new Error(`Unexpected store: ${storeName}`);
+        }),
+      } as unknown as IDBTransaction;
+    };
+    const db = {
+      transaction: vi.fn(() => createTransaction()),
+    } as unknown as IDBDatabase;
+
+    const service = new IndexedDBStorageService({ db });
+    const result = await service.batchImportWords({
+      defaultBookName: nounWorkbookFixtureBookTitle,
+      source: {
+        kind: 'rows',
+        rows: [...nounWorkbookFixtureImportRows],
+      },
+      contextSummary: nounWorkbookFixtureSourceContext,
+      bookDescription: nounWorkbookFixtureBookDescription,
+      importProfile: nounWorkbookFixtureImportProfile,
+    });
+    const importedWords = await service.getWordsByBook(result.importedBookIds[0]);
+    const goalWord = importedWords.find((word) => word.word === 'goal');
+
+    expect(result.importedWordCount).toBe(nounWorkbookFixtureImportRows.length);
+    expect(goalWord).toMatchObject({
+      category: '国際 移動',
+      subcategory: '国際',
+      section: '到達',
+      sourceSheet: '国際 移動',
+      sourceEntryId: 3,
+      exampleSentence: 'Set a goal for the year.',
+    });
   });
 });

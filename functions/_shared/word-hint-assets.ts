@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 import { GeneratedAssetAuditStatus, WordHintAssetType, type WordData } from '../../types';
 import { AI_ACTION_ESTIMATES } from '../../config/subscription';
-import { shouldAuditGeneratedAsset } from '../../shared/wordHintAssets';
+import { resolveExampleTranslation, shouldAuditGeneratedAsset } from '../../shared/wordHintAssets';
 import { generateMeteredGeminiSentence, generateMeteredWordImage } from './ai-actions';
 import { HttpError } from './http';
 import { recordProductEventForUser } from './product-events';
@@ -209,6 +209,10 @@ const auditExampleSentence = async (
   row: DbWordHintAssetRow,
 ): Promise<AuditDecision> => {
   const ai = getAiClient(env);
+  const translation = resolveExampleTranslation({
+    definition: row.definition,
+    exampleMeaning: row.example_meaning,
+  });
   const response = await ai.models.generateContent({
     model: WORD_HINT_AUDIT_MODEL,
     contents: `
@@ -218,7 +222,7 @@ const auditExampleSentence = async (
       Target word: "${row.word}"
       Intended meaning: "${row.definition}"
       Example sentence: "${row.example_sentence || ''}"
-      Japanese translation: "${row.example_meaning || ''}"
+      Japanese translation: "${translation}"
       Source context: "${row.source_context || ''}"
 
       Return JSON:
@@ -334,7 +338,7 @@ const auditExampleImage = async (
 };
 
 const isExampleAuditDue = (row: DbWordHintAssetRow, cutoffMs: number): boolean => {
-  if (!row.example_sentence?.trim() || !row.example_meaning?.trim()) return false;
+  if (!row.example_sentence?.trim()) return false;
   return shouldAuditGeneratedAsset(
     row.example_generated_at,
     row.example_audited_at,
@@ -365,7 +369,7 @@ export const handleGenerateWordHintAsset = async (
   await assertBookReadAccess(env, user, row.book_id);
 
   if (input.assetType === WordHintAssetType.EXAMPLE) {
-    if (!input.forceRefresh && row.example_sentence?.trim() && row.example_meaning?.trim()) {
+    if (!input.forceRefresh && row.example_sentence?.trim()) {
       await recordProductEventForUser(env, user, {
         eventName: 'word_hint_example_cache_hit',
         subjectType: 'word',
@@ -529,8 +533,6 @@ export const runWordHintAuditSweep = async (
        w.example_generated_at IS NOT NULL
        AND w.example_sentence IS NOT NULL
        AND TRIM(w.example_sentence) != ''
-       AND w.example_meaning IS NOT NULL
-       AND TRIM(w.example_meaning) != ''
      ) OR (
        w.example_image_generated_at IS NOT NULL
        AND w.example_image_key IS NOT NULL
@@ -543,8 +545,6 @@ export const runWordHintAuditSweep = async (
          WHEN w.example_generated_at IS NOT NULL
            AND w.example_sentence IS NOT NULL
            AND TRIM(w.example_sentence) != ''
-           AND w.example_meaning IS NOT NULL
-           AND TRIM(w.example_meaning) != ''
          THEN COALESCE(w.example_audited_at, w.example_generated_at)
          ELSE 9223372036854775807
        END,

@@ -6,6 +6,7 @@ import { learningService } from '../services/learning';
 import { type GeneratedContext } from '../services/gemini';
 import { ApiError } from '../services/apiClient';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
+import { resolveExampleTranslation } from '../shared/wordHintAssets';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import useIsMobileViewport from './useIsMobileViewport';
 
@@ -199,10 +200,10 @@ export const useStudyModeController = ({
     const current = queue[currentIndex];
     if (!current) return;
 
-    if (current.exampleSentence && current.exampleMeaning) {
+    if (current.exampleSentence?.trim()) {
       const nextContext = {
         english: current.exampleSentence,
-        japanese: current.exampleMeaning,
+        japanese: resolveExampleTranslation(current),
       };
       contextCache.current.set(current.id, nextContext);
       setAiContext(nextContext);
@@ -269,10 +270,10 @@ export const useStudyModeController = ({
       });
       replaceCurrentWord(updated);
 
-      if (updated.exampleSentence && updated.exampleMeaning) {
+      if (updated.exampleSentence?.trim()) {
         const nextContext = {
           english: updated.exampleSentence,
-          japanese: updated.exampleMeaning,
+          japanese: resolveExampleTranslation(updated),
         };
         contextCache.current.set(updated.id, nextContext);
         setAiContext(nextContext);

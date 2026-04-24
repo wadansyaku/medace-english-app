@@ -73,7 +73,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
           onClick={() => onModeChange('csv')}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${mode === 'csv' ? 'bg-white text-medace-700 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
         >
-          <FileText className="w-4 h-4" /> CSV一括
+          <FileText className="w-4 h-4" /> CSV / 名詞workbook
         </button>
       </div>
     </div>
@@ -168,16 +168,16 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
               <Upload className="w-6 h-6 text-medace-600" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-800">CSVインポート</h3>
-              <p className="text-sm text-slate-500">既存の単語リストを一括で取り込みたい場合はこちらを利用します。</p>
-              <p className="mt-1 text-xs text-slate-400">推奨フォーマット: 1列目=単語帳名, 2列目=番号, 3列目=単語, 4列目=日本語訳</p>
+              <h3 className="text-lg font-bold text-slate-800">CSV / 名詞 workbook CSV インポート</h3>
+              <p className="text-sm text-slate-500">既存の単語リスト CSV、または監査済みの名詞 workbook CSV を取り込みます。</p>
+              <p className="mt-1 text-xs text-slate-400">CSV は 1列目=単語帳名, 2列目=番号, 3列目=単語, 4列目=日本語訳。名詞 workbook は npm run noun:analyze で未確認差分を 0 にしたうえで、CSV化済みデータを取り込みます。</p>
             </div>
           </div>
 
           <div className="rounded-xl border-2 border-dashed border-medace-200 bg-[#fff8ef] p-10 text-center transition-colors hover:border-medace-400">
             <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
             <p className="mb-4 text-slate-600">
-              {file ? `選択中: ${file.name}` : 'ここにCSVをドラッグ＆ドロップ、またはクリックして選択'}
+              {file ? `選択中: ${file.name}` : 'ここに CSV をドラッグ＆ドロップ、またはクリックして選択'}
             </p>
             <input type="file" accept=".csv" onChange={onFileChange} className="hidden" id="csv-upload" disabled={!destructiveActionsEnabled} />
             <label

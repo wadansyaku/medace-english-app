@@ -59,5 +59,6 @@ export const getBookProgressionIndex = (
   if (normalized.includes('高1')) return 4;
   if (normalized.includes('高2')) return 5;
   if (normalized.includes('高3')) return 6;
+  if (normalized.includes('中学生')) return 2;
   return null;
 };

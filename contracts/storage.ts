@@ -47,6 +47,13 @@ export interface CatalogImportRow {
   number?: number | string;
   word: string;
   definition: string;
+  exampleSentence?: string;
+  exampleMeaning?: string;
+  category?: string;
+  subcategory?: string;
+  section?: string;
+  sourceSheet?: string;
+  sourceEntryId?: number | string;
 }
 
 export interface CatalogImportOptions {
@@ -72,6 +79,8 @@ export interface CatalogImportRequest {
   defaultBookName: string;
   createdByUid?: string;
   contextSummary?: string;
+  bookDescription?: string;
+  importProfile?: CatalogImportProfile;
   options?: CatalogImportOptions;
 }
 
@@ -94,6 +103,34 @@ export interface CatalogImportResult {
   skippedRowCount: number;
   warnings: CatalogImportIssue[];
 }
+
+export interface NounWorkbookImportSummary {
+  hasIndexSheet?: boolean;
+  importWordCount: number;
+  warningIssueCount: number;
+  unmatchedIndexWordCount: number;
+  unmatchedImportedWordCount: number;
+  duplicateHeadwordCount: number;
+  reviewedIndexOnlyWordCount?: number;
+  reviewedImportedOnlyWordCount?: number;
+  unreviewedIndexOnlyWordCount?: number;
+  unreviewedImportedOnlyWordCount?: number;
+  reviewedDuplicateHeadwordCount?: number;
+  unreviewedDuplicateHeadwordCount?: number;
+}
+
+export interface NounWorkbookImportGuardrailResult {
+  shouldBlockImport: boolean;
+  blockingReasons: string[];
+}
+
+export interface NounWorkbookImportProfile {
+  kind: 'NOUN_WORKBOOK';
+  summary: NounWorkbookImportSummary;
+  guardrail: NounWorkbookImportGuardrailResult;
+}
+
+export type CatalogImportProfile = NounWorkbookImportProfile;
 
 export interface CommercialRequestPayload {
   kind: CommercialRequestKind;

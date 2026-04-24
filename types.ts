@@ -239,6 +239,11 @@ export interface WordData {
   word: string;
   definition: string;
   searchKey?: string;
+  category?: string;
+  subcategory?: string;
+  section?: string;
+  sourceSheet?: string;
+  sourceEntryId?: number;
   exampleSentence?: string | null;
   exampleMeaning?: string | null;
   exampleGeneratedAt?: number | null;

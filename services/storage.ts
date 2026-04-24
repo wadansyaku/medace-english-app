@@ -38,9 +38,7 @@ import {
   GeneratedAssetAuditStatus,
 } from '../types';
 import {
-  CatalogImportIssue,
   CatalogImportRequest,
-  CatalogImportRow,
   CatalogImportResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
@@ -143,117 +141,10 @@ import {
 } from './storage/missions';
 import { getCoachNotifications } from './storage/writing-read-model';
 import { resolveStorageMode } from '../shared/storageMode';
-
-const slugifySegment = (value: string): string => value
-  .normalize('NFKC')
-  .toLowerCase()
-  .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-  .replace(/^-+|-+$/g, '')
-  .replace(/-{2,}/g, '-')
-  .slice(0, 48);
-
-const hashString = (value: string): string => {
-  let hash = 2166136261;
-  for (const char of value) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-};
-
-const createBookId = (bookName: string, createdByUid?: string, uniqueSalt?: string): string => {
-  const slug = slugifySegment(bookName) || 'book';
-  const ownerSegment = createdByUid ? `${createdByUid.slice(0, 8)}-` : '';
-  const suffixBase = `${createdByUid || 'official'}:${bookName}:${uniqueSalt || ''}`;
-  const suffix = hashString(suffixBase);
-  return `${ownerSegment}${slug}-${suffix}`;
-};
-
-const parseCsvLine = (line: string): string[] => {
-  const cells: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const nextChar = line[index + 1];
-
-    if (char === '"' && inQuotes && nextChar === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
-    if (char === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (char === ',' && !inQuotes) {
-      cells.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-
-  cells.push(current);
-  return cells;
-};
-
-const normalizeCatalogImportRows = (
-  request: CatalogImportRequest,
-): { rows: CatalogImportRow[]; warnings: CatalogImportIssue[] } => {
-  if (request.source.kind === 'rows') {
-    return {
-      rows: request.source.rows,
-      warnings: [],
-    };
-  }
-
-  const csvText = request.source.csvText.replace(/^\uFEFF/, '');
-  const lines = csvText
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0);
-
-  if (lines.length === 0) {
-    return {
-      rows: [],
-      warnings: [{ code: 'EMPTY_PAYLOAD', message: 'CSV に有効な行がありません。' }],
-    };
-  }
-
-  const headers = parseCsvLine(lines[0]).map((cell) => cell.trim());
-  const headerLookup = new Map(headers.map((header, index) => [header.toLowerCase(), index]));
-  const bookIndex = headerLookup.get('bookname') ?? headerLookup.get('book_name') ?? 0;
-  const numberIndex = headerLookup.get('number') ?? 1;
-  const wordIndex = headerLookup.get('word') ?? 2;
-  const definitionIndex = headerLookup.get('meaning') ?? headerLookup.get('definition') ?? 3;
-
-  if (wordIndex === undefined || definitionIndex === undefined) {
-    return {
-      rows: [],
-      warnings: [{
-        code: 'MISSING_REQUIRED_COLUMNS',
-        message: 'CSV は Word / Meaning 列を含む必要があります。',
-      }],
-    };
-  }
-
-  return {
-    rows: lines.slice(1).map((line) => {
-      const cells = parseCsvLine(line);
-      return {
-        bookName: cells[bookIndex] || request.defaultBookName,
-        number: cells[numberIndex] || '',
-        word: cells[wordIndex] || '',
-        definition: cells[definitionIndex] || '',
-      };
-    }),
-    warnings: [],
-  };
-};
+import { createImportedBookId, normalizeCatalogImportRows } from './storage/catalog-import';
 
 interface IndexedDBStorageServiceOptions {
+  db?: IDBDatabase;
   getStore?: GetStore;
 }
 
@@ -263,7 +154,9 @@ export class IndexedDBStorageService implements IStorageService {
 
   constructor(options: IndexedDBStorageServiceOptions = {}) {
     this.getStoreOverride = options.getStore;
-    this.dbPromise = this.getStoreOverride
+    this.dbPromise = options.db
+      ? Promise.resolve(options.db)
+      : this.getStoreOverride
       ? Promise.resolve(null as IDBDatabase)
       : this.initDB();
   }
@@ -394,10 +287,14 @@ export class IndexedDBStorageService implements IStorageService {
       }
 
       if (!bookGroups.has(groupKey)) {
-        const bookId = createBookId(bookName, request.createdByUid, request.createdByUid ? String(Date.now()) : undefined);
+        const bookId = createImportedBookId(
+          bookName,
+          request.createdByUid,
+          request.createdByUid ? String(Date.now()) : undefined,
+        );
         const description = request.createdByUid
           ? JSON.stringify({ createdBy: request.createdByUid, type: 'USER_GENERATED' })
-          : 'Imported';
+          : (request.bookDescription || 'Imported');
 
         bookGroups.set(groupKey, {
           meta: {
@@ -435,6 +332,15 @@ export class IndexedDBStorageService implements IStorageService {
         word,
         definition,
         searchKey: word.toLowerCase(),
+        ...(row.category?.trim() ? { category: row.category.trim() } : {}),
+        ...(row.subcategory?.trim() ? { subcategory: row.subcategory.trim() } : {}),
+        ...(row.section?.trim() ? { section: row.section.trim() } : {}),
+        ...(row.sourceSheet?.trim() ? { sourceSheet: row.sourceSheet.trim() } : {}),
+        ...(Number.isFinite(Number.parseInt(String(row.sourceEntryId || '').trim(), 10))
+          ? { sourceEntryId: Number.parseInt(String(row.sourceEntryId).trim(), 10) }
+          : {}),
+        ...(row.exampleSentence?.trim() ? { exampleSentence: row.exampleSentence.trim() } : {}),
+        ...(row.exampleMeaning?.trim() ? { exampleMeaning: row.exampleMeaning.trim() } : {}),
       });
 
       if (i % 250 === 0) {
@@ -580,7 +486,7 @@ export class IndexedDBStorageService implements IStorageService {
 
     const nextWord: WordData = { ...word };
     if (payload.assetType === WordHintAssetType.EXAMPLE) {
-      if (!payload.forceRefresh && nextWord.exampleSentence?.trim() && nextWord.exampleMeaning?.trim()) {
+      if (!payload.forceRefresh && nextWord.exampleSentence?.trim()) {
         return nextWord;
       }
 
@@ -615,7 +521,7 @@ export class IndexedDBStorageService implements IStorageService {
   async prepareBookExamples(bookId: string): Promise<import('../contracts/storage').PrepareBookExamplesResult> {
     const store = await this.getStore(STORES.WORDS, 'readwrite');
     const words = await this.getWordsByBook(bookId);
-    const targetWords = words.filter((word) => !word.exampleSentence?.trim() || !word.exampleMeaning?.trim());
+    const targetWords = words.filter((word) => !word.exampleSentence?.trim());
 
     await Promise.all(targetWords.map((word) => new Promise<void>((resolve) => {
       const req = store.get(word.id);
@@ -623,7 +529,7 @@ export class IndexedDBStorageService implements IStorageService {
         const current = req.result as WordData | undefined;
         if (current) {
           current.exampleSentence = current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`;
-          current.exampleMeaning = current.exampleMeaning?.trim() || `今日の授業で「${current.word}」を学びます。`;
+          current.exampleMeaning = current.exampleMeaning?.trim() || `語義: ${current.definition}`;
           current.exampleGeneratedAt = Date.now();
           current.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
           store.put(current);

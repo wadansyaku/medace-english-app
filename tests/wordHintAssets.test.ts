@@ -5,6 +5,7 @@ import {
   createLocalExampleHint,
   createWordImagePlaceholderDataUrl,
   getHintAuditTone,
+  resolveExampleTranslation,
   shouldAuditGeneratedAsset,
 } from '../shared/wordHintAssets';
 
@@ -27,6 +28,17 @@ describe('word hint asset helpers', () => {
       translation: '「apple」は a fruit の話をするときに使います。',
     });
     expect(createLocalExampleHint('apple', 'a fruit', 1).sentence).toContain('teacher');
+  });
+
+  it('falls back to the definition when the example translation is missing', () => {
+    expect(resolveExampleTranslation({
+      definition: '鋭い',
+      exampleMeaning: '',
+    })).toBe('語義: 鋭い');
+    expect(resolveExampleTranslation({
+      definition: '鋭い',
+      exampleMeaning: '鋭い痛み',
+    })).toBe('鋭い痛み');
   });
 
   it('creates svg placeholder images', () => {
