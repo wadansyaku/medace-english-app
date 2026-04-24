@@ -46,6 +46,11 @@ export interface DbWordRow {
   word: string;
   definition: string;
   search_key: string | null;
+  category: string | null;
+  subcategory: string | null;
+  section: string | null;
+  source_sheet: string | null;
+  source_entry_id: number | null;
   example_sentence: string | null;
   example_meaning: string | null;
   example_generated_at: number | null;
@@ -179,6 +184,11 @@ export const toWordData = (row: DbWordRow): WordData => ({
   word: row.word,
   definition: row.definition,
   searchKey: row.search_key || undefined,
+  ...(row.category ? { category: row.category } : {}),
+  ...(row.subcategory ? { subcategory: row.subcategory } : {}),
+  ...(row.section ? { section: row.section } : {}),
+  ...(row.source_sheet ? { sourceSheet: row.source_sheet } : {}),
+  ...(typeof row.source_entry_id === 'number' ? { sourceEntryId: row.source_entry_id } : {}),
   exampleSentence: row.example_sentence,
   exampleMeaning: row.example_meaning,
   exampleGeneratedAt: row.example_generated_at,

@@ -6,7 +6,8 @@
 - [ ] **Assignment Ops**: 担当講師割当の履歴化を UI / 運用フローまで仕上げ、cohort 単位権限へ拡張する。
 - [ ] **BtoB KPI**: 通知後再開率、割当率、学習プラン浸透率を継続計測できるようにし、監査性も強化する。
 - [ ] **Cloudflare Data Sync**: Cloudflare を正史として session / storage の整合性確認を継続し、IndexedDB は demo / offline fallback に限定する。
-- [ ] **Facade Split**: `components/dashboard/BusinessAdminDashboardSections.tsx` と `services/storage.ts` の分割を進める。
+- [ ] **Storage Hotspot Split**: `services/storage.ts` と `services/storage/organization-read-model.ts` を優先して薄くし、`types.ts` / `contracts/storage.ts` の shared contract 変更は最小に保つ。
+- [x] **Workbook Import Guardrails**: 名詞 workbook import は generic XLSX import として広げず、mismatch 可視化・停止条件・fixture 回帰・server-side reject を固めた。
 
 ## 2. Next Up: Mobile App Experience
 - [ ] **Touch Gestures**: Study Modeでのスワイプ操作（Tinder風UI）の導入検討。
@@ -24,6 +25,7 @@
 - [x] **Streak Visuals**: ダッシュボードでのストリーク演出強化。
 
 ### Core Stability & Logic
+- [x] **Noun Workbook Import Safety**: 4列シート/ヘッダーなし索引/監査シート除外/実 workbook の reviewed exception 台帳を追加し、未確認 mismatch だけを停止条件にした。
 - [x] **Progress Logic Fix**: 学習開始直後から1%の進捗を表示するよう修正。
 - [x] **Fix Learning Algorithm**: 学習コース進捗ロジック修正。
 - [x] **AI Content Persistence**: 例文・訳のDB保存とキャッシュ。

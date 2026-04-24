@@ -1,119 +1,137 @@
 # Parallel Workstreams Phase 2
 
 ## Goal
-- Run three large implementation threads in parallel without repeatedly colliding on the same files.
+- Keep the main product track centered on `B2B activation + Cloudflare-first stability`.
+- Separate the current `workbook import` risk from the larger `storage / B2B refactor` track.
 - Keep shared contracts stable while each thread moves a different layer of the app forward.
-- Merge each thread into a single integration branch with predictable validation gates.
+
+## Current Hotspots
+- The files that currently dominate change risk are:
+  - `types.ts`
+  - `contracts/storage.ts`
+  - `services/storage.ts`
+  - `services/storage/organization-read-model.ts`
+  - `functions/_shared/storage-mission-actions.ts`
+  - `functions/_shared/storage-dashboard-actions.ts`
+  - `functions/_shared/writing-actions/*`
+- `components/dashboard/BusinessAdminDashboardSections.tsx` is no longer the main hotspot. It should not be treated as the default split target ahead of the storage and read-model layers.
 
 ## Branch Model
 - Create an integration base branch from the current working state:
   - `codex/phase2-integration`
-- Create three topic branches from that exact commit:
-  - `codex/mobile-ui-thread-a`
+- Create topic branches from that exact commit:
+  - `codex/workbook-import-guardrails`
   - `codex/storage-read-model-thread-b`
-  - `codex/writing-backend-thread-c`
-- Do not branch one thread from another thread.
-- Rebase each topic branch only onto `codex/phase2-integration`, never directly onto a partially merged topic branch.
+  - `codex/b2b-activation-thread-c`
+- Do not branch one topic branch from another topic branch.
+- Rebase topic branches only onto `codex/phase2-integration`, never directly onto a partially merged topic branch.
 
 ## Shared Contracts
-- These files are effectively locked. Change them only with explicit coordination because every thread depends on them:
+- These files are effectively locked because multiple threads depend on them:
   - `types.ts`
-  - `contracts/`
+  - `contracts/storage.ts`
   - `shared/learningHistory.ts`
-  - `config/mobileFlow.js`
   - `functions/_shared/writing-ai-adapter.ts`
 - If one thread must touch a locked file:
   - keep the diff minimal
   - merge that change first into `codex/phase2-integration`
-  - rebase the other two threads immediately afterward
+  - rebase the other threads immediately afterward
 
 ## Thread A
-- Branch: `codex/mobile-ui-thread-a`
-- Purpose: finish controller-driven decomposition of student mobile screens.
+- Branch: `codex/workbook-import-guardrails`
+- Purpose: close the current noun workbook import track safely before deeper refactors continue.
+- Current status: release-ready after final verification; server-side guardrails now fail only on unreviewed workbook mismatches.
 - Primary files:
-  - `components/Onboarding.tsx`
-  - `components/onboarding/*`
-  - `hooks/useOnboardingController.ts`
-  - `components/Dashboard.tsx`
-  - `components/dashboard/*`
-  - `hooks/useStudentDashboardController.ts`
+  - `components/AdminPanel.tsx`
+  - `components/admin/AdminContentImportView.tsx`
+  - `utils/nounWorkbookImport.js`
+  - `tests/nounWorkbookImport.test.ts`
+  - `functions/_shared/catalog-import.ts`
+  - `functions/_shared/storage-book-actions.ts`
+  - `functions/_shared/word-hint-assets.ts`
+  - `shared/wordHintAssets.ts`
+  - `hooks/useStudyModeController.ts`
+  - `migrations/0028_word_catalog_metadata.sql`
 - Allowed secondary files:
-  - `App.tsx`
-  - `components/auth/*`
-  - `components/mobile/*`
-- Explicitly avoid:
+  - `contracts/storage.ts`
+  - `types.ts`
   - `services/storage.ts`
-  - `functions/_shared/writing-actions.ts`
-  - Cloudflare workflows or scripts
+  - `scripts/analyze-noun-workbook.mjs`
+- Explicitly avoid:
+  - B2B dashboard copy changes
+  - writing workflow refactors unrelated to example hints
+  - deploy workflow edits
 - Exit criteria:
-  - `Onboarding` split into profile/test/result sections
-  - dashboard orchestration reduced, with sections receiving props instead of running side effects
-  - all existing mobile smoke selectors preserved
+  - workbook import is explicitly presented as a noun workbook path, not a generic XLSX promise
+  - import stops or warns hard on significant `index/import` mismatches
+  - known source-workbook alias / duplicate exceptions are tracked in code as reviewed exceptions, not silently ignored
+  - parser and D1 round-trip coverage exist for workbook-derived rows
+  - example hint contract is consistent across cache hit, study UI, and audit logic
 - Required checks before merge:
-  - `npm run typecheck`
+  - `npm run verify:fast`
+  - `npm run test:api`
+  - `npm run build`
   - `npm run test:smoke`
-  - `npm run test:ios-simulator`
 
 ## Thread B
 - Branch: `codex/storage-read-model-thread-b`
-- Purpose: split `services/storage.ts` internals while preserving public method names.
+- Purpose: split `services/storage.ts` and `organization-read-model` internals while preserving public method names.
 - Primary files:
   - `services/storage.ts`
   - `services/storage/*`
-  - `shared/learningHistory.ts`
-  - `tests/quiz-utils.test.ts`
-  - any new storage-focused unit tests
-- Allowed secondary files:
-  - `utils/quiz.ts`
   - `functions/_shared/storage-support.ts`
+  - storage-focused unit tests
+- Allowed secondary files:
+  - `contracts/storage.ts`
+  - `types.ts`
+  - `utils/quiz.ts`
 - Explicitly avoid:
-  - `components/`
+  - `components/AdminPanel.tsx`
   - `functions/_shared/writing-actions.ts`
   - deploy workflows
 - Exit criteria:
-  - `auth-session`, `learning-history`, `dashboard-read-model`, `organization-read-model`, `writing-read-model` extracted
-  - `STUDY` semantics enforced through shared helper usage only
+  - `services/storage.ts` becomes thinner and delegates to read-model or domain modules
+  - `organization-read-model` and related helpers stop accumulating unrelated responsibilities
   - no public storage API rename
 - Required checks before merge:
-  - `npm run typecheck`
-  - `npm run test:unit`
+  - `npm run verify:fast`
   - `npm run test:api`
+  - focused storage unit coverage
 
 ## Thread C
-- Branch: `codex/writing-backend-thread-c`
-- Purpose: split `writing-actions` and batch student-first read paths.
+- Branch: `codex/b2b-activation-thread-c`
+- Purpose: continue the main business loop after storage boundaries are safer.
 - Primary files:
-  - `functions/_shared/writing-actions.ts`
-  - `functions/_shared/writing-actions/*`
-  - `functions/api/writing/*`
-  - writing-related API tests
+  - `components/dashboard/businessAdmin/*`
+  - `functions/_shared/storage-dashboard-actions.ts`
+  - `functions/_shared/product-kpi.ts`
+  - activation-related smoke and API tests
 - Allowed secondary files:
-  - `contracts/writing.ts`
-  - `functions/_shared/types.ts`
-  - D1 migrations only if strictly necessary
+  - `components/dashboard/InstructorDashboardSections.tsx`
+  - `hooks/useBusinessAdminDashboardController.ts`
+  - `services/workspace.ts`
 - Explicitly avoid:
-  - `components/QuizMode.tsx`
-  - `components/Onboarding.tsx`
-  - `services/storage.ts`
+  - workbook parser work
+  - broad storage facade rewrites
+  - deploy workflows unless release-ready
 - Exit criteria:
-  - `readSubmissionDetail` helper family separated from HTTP orchestration
-  - assignment list/detail paths use batch or join reads for latest submissions
-  - no external API break
+  - cohort -> assignment -> mission -> notification -> writing loop has tighter empty states, CTA surfaces, and analytics coverage
+  - smoke paths for business workflows stay green
 - Required checks before merge:
-  - `npm run typecheck`
-  - `npm run test:unit`
+  - `npm run verify:fast`
   - `npm run test:api`
+  - `npm run test:smoke`
 
 ## Merge Order
 - Default order:
-  1. `codex/mobile-ui-thread-a`
+  1. `codex/workbook-import-guardrails`
   2. `codex/storage-read-model-thread-b`
-  3. `codex/writing-backend-thread-c`
+  3. `codex/b2b-activation-thread-c`
 - Reasoning:
-  - Thread A is user-visible and now has strong smoke coverage.
-  - Thread B is mostly internal and should preserve public APIs, so it can follow once the mobile surface is stable.
-  - Thread C carries the highest backend regression risk and may require the most re-test time, so merge it last.
-- Override this order only if one thread changes a locked shared contract first.
+  - Thread A closes the highest immediate correctness risk in the dirty worktree.
+  - Thread B reduces the main structural drag without changing public APIs.
+  - Thread C should build on safer contracts and thinner storage boundaries.
+- Override this order only if a locked shared contract changes first.
 
 ## Daily Operating Rule
 - At the start of each thread session:
@@ -127,10 +145,7 @@
 
 ## Final Integration Gate
 - Before merging `codex/phase2-integration` back to the main delivery branch, run:
-  - `npm run typecheck`
-  - `npm run test:unit`
-  - `npm run build`
+  - `npm run verify:fast`
   - `npm run test:api`
+  - `npm run build`
   - `npm run test:smoke`
-  - `npm run test:ios-simulator:doctor`
-  - `npm run test:ios-simulator`

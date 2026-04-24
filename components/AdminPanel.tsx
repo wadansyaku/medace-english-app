@@ -109,39 +109,35 @@ const AdminPanel: React.FC = () => {
     setUploading(true);
     setLog((previous) => [...previous, 'ファイル読み込み中...']);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      try {
-        if (!text.trim()) throw new Error('有効なデータが見つかりませんでした。');
-        setLog((previous) => [...previous, 'サーバーで CSV を検証しています...']);
-        const defaultBookName = file.name.replace('.csv', '');
+    try {
+      const text = await file.text();
+      if (!text.trim()) throw new Error('有効なデータが見つかりませんでした。');
+      setLog((previous) => [...previous, 'サーバーで CSV を検証しています...']);
+      const defaultBookName = file.name.replace(/\.csv$/i, '');
 
-        const result = await dashboardService.batchImportWords({
-          defaultBookName,
-          source: {
-            kind: 'csv',
-            csvText: text,
-            fileName: file.name,
-          },
-          options: {
-            catalogSource,
-            accessScope: BookAccessScope.BUSINESS_ONLY,
-          },
-        }, (nextProgress) => {
-          setProgress(nextProgress);
-        });
+      const result = await dashboardService.batchImportWords({
+        defaultBookName,
+        source: {
+          kind: 'csv',
+          csvText: text,
+          fileName: file.name,
+        },
+        options: {
+          catalogSource,
+          accessScope: BookAccessScope.BUSINESS_ONLY,
+        },
+      }, (nextProgress) => {
+        setProgress(nextProgress);
+      });
 
-        appendImportSummary(setLog, result, 'インポート完了');
-        await Promise.all([fetchDashboard(), loadCatalogBooks()]);
-      } catch (error) {
-        console.error(error);
-        setLog((previous) => [...previous, `エラー: ${(error as Error).message}`]);
-      } finally {
-        setUploading(false);
-      }
-    };
-    reader.readAsText(file);
+      appendImportSummary(setLog, result, 'インポート完了');
+      await Promise.all([fetchDashboard(), loadCatalogBooks()]);
+    } catch (error) {
+      console.error(error);
+      setLog((previous) => [...previous, `エラー: ${(error as Error).message}`]);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleAiImport = async () => {

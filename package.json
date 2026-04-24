@@ -22,6 +22,7 @@
     "cf:doctor": "node scripts/cf-doctor.mjs",
     "cf:doctor:strict": "node scripts/cf-doctor.mjs --include-deferred",
     "cf:sync": "node scripts/cf-sync.mjs",
+    "noun:analyze": "node scripts/analyze-noun-workbook.mjs",
     "db:migrations:check-names": "node scripts/check-migration-filenames.mjs",
     "db:migrate:local": "node node_modules/wrangler/bin/wrangler.js d1 migrations apply medace-db --local",
     "db:migrate:verify": "bash -lc 'tmpdir=$(mktemp -d); cleanup() { rm -rf \"$tmpdir\"; }; trap cleanup EXIT; node node_modules/wrangler/bin/wrangler.js d1 migrations apply medace-db --local --persist-to \"$tmpdir\"'",
@@ -44,6 +45,11 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vitest": "^3.2.4",
-    "wrangler": "^4.72.0"
+    "wrangler": "^4.72.0",
+    "xlsx": "^0.18.5"
+  },
+  "overrides": {
+    "brace-expansion": "^2.0.3",
+    "protobufjs": "^7.5.5"
   }
 }

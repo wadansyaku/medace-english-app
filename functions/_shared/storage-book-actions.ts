@@ -32,6 +32,88 @@ import {
   type DbWordRow,
 } from './storage-support';
 
+const validateNounWorkbookImportProfile = (
+  payload: CatalogImportRequest,
+  normalizedRowCount: number,
+): void => {
+  const profile = payload.importProfile;
+  const contextSummary = typeof payload.contextSummary === 'string' ? payload.contextSummary : '';
+  const bookDescription = typeof payload.bookDescription === 'string' ? payload.bookDescription : '';
+  const looksLikeNounWorkbook = payload.defaultBookName === 'ナルシスト'
+    || contextSummary.includes('中学生用名詞教材')
+    || bookDescription.includes('名詞単語帳');
+
+  if (!looksLikeNounWorkbook && profile?.kind !== 'NOUN_WORKBOOK') return;
+
+  if (profile?.kind !== 'NOUN_WORKBOOK') {
+    throw new HttpError(400, '名詞 workbook 由来の取り込みには解析 profile が必要です。');
+  }
+
+  const summary = profile.summary;
+  const guardrail = profile.guardrail;
+  const blockingReasons = [
+    ...(guardrail?.shouldBlockImport ? guardrail.blockingReasons || ['guardrail が import 停止を要求しています。'] : []),
+  ];
+  const resolveUnreviewedCount = (
+    rawValue: unknown,
+    reviewedValue: unknown,
+    unreviewedValue: unknown,
+    label: string,
+  ): number => {
+    const raw = typeof rawValue === 'number' && Number.isFinite(rawValue) ? Math.trunc(rawValue) : 0;
+    const reviewed = typeof reviewedValue === 'number' && Number.isFinite(reviewedValue) ? Math.trunc(reviewedValue) : undefined;
+    const unreviewed = typeof unreviewedValue === 'number' && Number.isFinite(unreviewedValue) ? Math.trunc(unreviewedValue) : undefined;
+
+    if (reviewed !== undefined && unreviewed !== undefined && reviewed + unreviewed !== raw) {
+      blockingReasons.push(`${label} の reviewed/unreviewed 件数が raw 件数と一致しません。`);
+      return raw;
+    }
+
+    return unreviewed ?? raw;
+  };
+  const unreviewedIndexOnlyWordCount = resolveUnreviewedCount(
+    summary?.unmatchedIndexWordCount,
+    summary?.reviewedIndexOnlyWordCount,
+    summary?.unreviewedIndexOnlyWordCount,
+    '索引 mismatch',
+  );
+  const unreviewedImportedOnlyWordCount = resolveUnreviewedCount(
+    summary?.unmatchedImportedWordCount,
+    summary?.reviewedImportedOnlyWordCount,
+    summary?.unreviewedImportedOnlyWordCount,
+    '取り込み mismatch',
+  );
+  const unreviewedDuplicateHeadwordCount = resolveUnreviewedCount(
+    summary?.duplicateHeadwordCount,
+    summary?.reviewedDuplicateHeadwordCount,
+    summary?.unreviewedDuplicateHeadwordCount,
+    '重複 headword',
+  );
+
+  if (summary?.hasIndexSheet !== true) {
+    blockingReasons.push('必須シート `名詞一覧` が確認できません。');
+  }
+  if (summary?.importWordCount !== normalizedRowCount) {
+    blockingReasons.push(`解析語数 ${summary?.importWordCount ?? 'unknown'} と正規化後語数 ${normalizedRowCount} が一致しません。`);
+  }
+  if ((summary?.warningIssueCount || 0) > 0) {
+    blockingReasons.push(`要確認 issue が ${summary.warningIssueCount} 件残っています。`);
+  }
+  if (unreviewedIndexOnlyWordCount > 0) {
+    blockingReasons.push(`未確認の索引だけに存在する単語が ${unreviewedIndexOnlyWordCount} 件残っています。`);
+  }
+  if (unreviewedImportedOnlyWordCount > 0) {
+    blockingReasons.push(`未確認の取り込み結果だけに存在する単語が ${unreviewedImportedOnlyWordCount} 件残っています。`);
+  }
+  if (unreviewedDuplicateHeadwordCount > 0) {
+    blockingReasons.push(`未確認の重複 headword が ${unreviewedDuplicateHeadwordCount} 件残っています。`);
+  }
+
+  if (blockingReasons.length > 0) {
+    throw new HttpError(400, `名詞 workbook の解析結果が安全条件を満たしていません: ${blockingReasons.join(' / ')}`);
+  }
+};
+
 export const handleGetBooks = async (env: AppEnv, user: DbUserRow): Promise<BookMetadata[]> => {
   const rows = await readVisibleBookRows(env, user);
   return rows.map(toBookMetadata);
@@ -45,6 +127,7 @@ export const handleBatchImportWords = async (
 ): Promise<CatalogImportResult> => {
   const defaultBookName = String(payload?.defaultBookName || '').trim();
   const contextSummary = typeof payload?.contextSummary === 'string' ? payload.contextSummary : undefined;
+  const bookDescription = typeof payload?.bookDescription === 'string' ? payload.bookDescription.trim() : undefined;
   const createdByUid = typeof payload?.createdByUid === 'string' ? payload.createdByUid : undefined;
   const optionCatalogSource = payload?.options?.catalogSource as BookCatalogSource | undefined;
   const optionAccessScope = payload?.options?.accessScope as BookAccessScope | undefined;
@@ -54,6 +137,7 @@ export const handleBatchImportWords = async (
     const firstWarning = normalized.warnings[0];
     throw new HttpError(400, firstWarning?.message || 'インポート対象のデータが空です。');
   }
+  validateNounWorkbookImportProfile(payload, normalized.rows.length);
 
   const isOfficialImport = user.role === UserRole.ADMIN && !createdByUid;
   if (isOfficialImport && runtimeFlags && !runtimeFlags.enableDestructiveAdminActions) {
@@ -73,7 +157,7 @@ export const handleBatchImportWords = async (
       const bookId = createBookId(bookName, ownerId || undefined, ownerId ? Date.now().toString(36) : undefined);
       const description = ownerId
         ? JSON.stringify({ createdBy: ownerId, type: 'USER_GENERATED' })
-        : 'Imported';
+        : (bookDescription || 'Imported');
 
       grouped.set(key, {
         meta: {
@@ -117,6 +201,13 @@ export const handleBatchImportWords = async (
       word,
       definition,
       searchKey: word.toLowerCase(),
+      ...(row.category?.trim() ? { category: row.category.trim() } : {}),
+      ...(row.subcategory?.trim() ? { subcategory: row.subcategory.trim() } : {}),
+      ...(row.section?.trim() ? { section: row.section.trim() } : {}),
+      ...(row.sourceSheet?.trim() ? { sourceSheet: row.sourceSheet.trim() } : {}),
+      ...(typeof row.sourceEntryId === 'number' && Number.isFinite(row.sourceEntryId) ? { sourceEntryId: row.sourceEntryId } : {}),
+      ...(row.exampleSentence?.trim() ? { exampleSentence: row.exampleSentence.trim() } : {}),
+      ...(row.exampleMeaning?.trim() ? { exampleMeaning: row.exampleMeaning.trim() } : {}),
     });
   });
 
@@ -156,12 +247,19 @@ export const handleBatchImportWords = async (
 
     const statements = words.map((word) => env.DB.prepare(`
       INSERT INTO words (
-        id, book_id, word_number, word, definition, search_key, example_sentence, example_meaning, is_reported, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        id, book_id, word_number, word, definition, search_key, category, subcategory, section, source_sheet, source_entry_id, example_sentence, example_meaning, is_reported, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         word = excluded.word,
         definition = excluded.definition,
         search_key = excluded.search_key,
+        category = excluded.category,
+        subcategory = excluded.subcategory,
+        section = excluded.section,
+        source_sheet = excluded.source_sheet,
+        source_entry_id = excluded.source_entry_id,
+        example_sentence = COALESCE(excluded.example_sentence, example_sentence),
+        example_meaning = COALESCE(excluded.example_meaning, example_meaning),
         updated_at = excluded.updated_at
     `).bind(
       word.id,
@@ -170,6 +268,11 @@ export const handleBatchImportWords = async (
       word.word,
       word.definition,
       word.searchKey || word.word.toLowerCase(),
+      word.category || null,
+      word.subcategory || null,
+      word.section || null,
+      word.sourceSheet || null,
+      word.sourceEntryId || null,
       word.exampleSentence || null,
       word.exampleMeaning || null,
       Date.now(),
@@ -293,7 +396,6 @@ export const handlePrepareBookExamples = async (
       WHERE book_id = ?
         AND (
           example_sentence IS NULL OR TRIM(example_sentence) = ''
-          OR example_meaning IS NULL OR TRIM(example_meaning) = ''
         )
       ORDER BY word_number ASC`,
     bookId,
@@ -340,7 +442,6 @@ export const handlePrepareBookExamples = async (
       WHERE book_id = ?
         AND (
           example_sentence IS NULL OR TRIM(example_sentence) = ''
-          OR example_meaning IS NULL OR TRIM(example_meaning) = ''
         )`,
     bookId,
   );
