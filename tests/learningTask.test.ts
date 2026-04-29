@@ -49,7 +49,7 @@ describe('learning tasks', () => {
       score: 71,
       sampleSize: 8,
       reason: 'recall',
-      nextActionLabel: '意味から英語クイズを始める',
+      nextActionLabel: '意味から英語を10語確認する',
       recommendedActionType: RecommendedActionType.START_REVIEW,
       targetQuestionModes: ['JA_TO_EN'],
       updatedAt: 1_000,

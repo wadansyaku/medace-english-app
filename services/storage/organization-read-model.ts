@@ -19,18 +19,12 @@ import {
   WordData,
 } from '../../types';
 import {
-  FOLLOW_UP_WINDOW_MS,
   getContinuityBand,
   resolveInterventionOutcome,
   resolveNeedsFollowUpNow,
   resolveRecommendedActionType,
 } from '../../shared/retention';
-import {
-  buildMissionTrackCompletion,
-  buildMissionWritingReturnRateByTrack,
-  calculateMissionOverdueRecoveryRate,
-  calculateMissionStartedRate,
-} from '../../shared/missions';
+import { buildOrganizationDashboardSnapshot } from '../../functions/_shared/organization-dashboard';
 import { isDemoEmail } from '../../utils/demo';
 import {
   FALLBACK_WORKSHEET_WORD_LIMIT,
@@ -705,93 +699,28 @@ export const getOrganizationDashboardSnapshot = async (
       assignedStudentCount: students.filter((student) => student.assignedInstructorUid === user.uid).length,
     }));
 
-  const assignedStudents = students.filter((student) => student.assignedInstructorUid).length;
-  const atRiskStudents = students.filter((student) => student.riskLevel !== StudentRiskLevel.SAFE);
-  const weeklyContinuityStudents = students.filter((student) => (student.activeStudyDays7d || 0) >= 4).length;
-  const followedUpAtRiskStudents = atRiskStudents.filter((student) => (
-    Boolean(student.latestInterventionAt) && now - Number(student.latestInterventionAt || 0) <= FOLLOW_UP_WINDOW_MS
-  )).length;
-  const instructorBacklog = instructors.map((instructor) => {
-    const assigned = students.filter((student) => student.assignedInstructorUid === instructor.uid);
-    const immediateCount = assigned.filter((student) => student.needsFollowUpNow).length;
-    const waitingCount = assigned.filter((student) => (
-      !student.needsFollowUpNow && student.latestInterventionOutcome === 'PENDING'
-    )).length;
-    const reactivatedCount = assigned.filter((student) => student.latestInterventionOutcome === 'REACTIVATED').length;
-    return {
-      uid: instructor.uid,
-      displayName: instructor.displayName,
-      email: instructor.email,
-      organizationRole: instructor.organizationRole,
-      assignedStudentCount: instructor.assignedStudentCount,
-      immediateCount,
-      waitingCount,
-      reactivatedCount,
-      backlogCount: immediateCount + waitingCount,
-    };
-  });
-  const trackCompletion = buildMissionTrackCompletion(missionAssignments);
-  const writingReturnRateByTrack = buildMissionWritingReturnRateByTrack(missionAssignments);
   const cohortCount = getLocalOrganizationCohorts(sessionOrganization.organizationId).length;
   const studentAssignmentCount = students.filter((student) => student.assignedInstructorUid).length;
   const totalNotificationCount = instructors.reduce((sum, instructor) => sum + instructor.notifications7d, 0);
-  const activationState = cohortCount === 0
-    ? 'CREATE_COHORT'
-    : studentAssignmentCount === 0
-      ? 'ASSIGN_STUDENTS'
-      : missionAssignments.length === 0
-        ? 'CREATE_FIRST_MISSION'
-        : totalNotificationCount === 0
-          ? 'SEND_FIRST_NOTIFICATION'
-          : 'ACTIVE';
-  const nextRequiredActionLabel = activationState === 'CREATE_COHORT'
-    ? 'cohort を1つ作成する'
-    : activationState === 'ASSIGN_STUDENTS'
-      ? '最初の生徒担当を決める'
-      : activationState === 'CREATE_FIRST_MISSION'
-        ? '初回ミッションを配布する'
-        : activationState === 'SEND_FIRST_NOTIFICATION'
-          ? '最初のフォロー通知を送る'
-          : '導入完了';
-  const nextRequiredActionDescription = activationState === 'CREATE_COHORT'
-    ? 'まずは学年・クラス・講座のどれかで cohort を1つ作ると導線が揃います。'
-    : activationState === 'ASSIGN_STUDENTS'
-      ? '最初は1人だけでも担当講師を決めると運用の起点になります。'
-      : activationState === 'CREATE_FIRST_MISSION'
-        ? '最初の1週間分だけ固定して配布してください。'
-        : activationState === 'SEND_FIRST_NOTIFICATION'
-          ? '最初の一言を送ると通知導線が実データで回り始めます。'
-          : '基本の導入導線は完了しています。';
+  const writingAssignmentCount = missionAssignments.filter((assignment) => assignment.mission.writingAssignmentId).length;
 
-  return {
+  return buildOrganizationDashboardSnapshot({
     organizationId: sessionOrganization.organizationId,
     organizationName: sessionOrganization.displayName,
     subscriptionPlan: sessionOrganization.subscriptionPlan,
     totalMembers: instructors.length + students.length,
-    totalStudents: students.length,
     totalInstructors: instructors.length,
-    activeStudents7d: students.filter((student) => Date.now() - student.lastActive < 7 * 86400000).length,
-    atRiskStudents: atRiskStudents.length,
     learningPlanCount: Math.max(1, students.length - 1),
+    cohortCount,
+    studentAssignmentCount,
+    missionAssignmentCount: missionAssignments.length,
     notifications7d: 8,
-    reactivatedStudents7d: Math.max(0, students.length - 2),
-    reactivationRate7d: students.length > 0 ? Math.round((Math.max(0, students.length - 2) / students.length) * 100) : 0,
-    weeklyContinuityRate: students.length > 0 ? Math.round((weeklyContinuityStudents / students.length) * 100) : 0,
-    followUpCoverageRate48h: atRiskStudents.length > 0 ? Math.round((followedUpAtRiskStudents / atRiskStudents.length) * 100) : 0,
-    interventionBacklogCount: students.filter((student) => student.needsFollowUpNow).length,
-    overdueMissionCount: missionAssignments.filter((assignment) => assignment.progress.status === WeeklyMissionStatus.OVERDUE).length,
-    missionStartedRate: calculateMissionStartedRate(missionAssignments),
-    overdueMissionRecoveryRate: calculateMissionOverdueRecoveryRate(missionAssignments, now),
-    assignmentCoverageRate: students.length > 0 ? Math.round((assignedStudents / students.length) * 100) : 0,
-    planCoverageRate: students.length > 0 ? Math.round((Math.max(1, students.length - 1) / students.length) * 100) : 0,
-    unassignedStudents: students.filter((student) => !student.assignedInstructorUid).length,
-    unassignedAtRiskCount: students.filter((student) => !student.assignedInstructorUid && student.riskLevel !== StudentRiskLevel.SAFE).length,
-    trackCompletion,
-    writingReturnRateByTrack,
+    totalNotificationCount,
+    writingAssignmentCount,
+    issuedWritingAssignmentCount: writingAssignmentCount,
     instructors,
-    instructorBacklog,
-    atRiskStudentList: atRiskStudents,
-    studentAssignments: students,
+    students,
+    missionAssignments,
     assignmentEvents: [
       {
         id: 1,
@@ -806,12 +735,11 @@ export const getOrganizationDashboardSnapshot = async (
         createdAt: Date.now() - 2 * 3600_000,
       },
     ],
+    reactivatedStudents7d: Math.max(0, students.length - 2),
+    notifiedStudents7d: students.length,
     trend: [],
-    activationState,
-    nextRequiredAction: activationState,
-    nextRequiredActionLabel,
-    nextRequiredActionDescription,
-  };
+    now,
+  });
 };
 
 export const getOrganizationSettingsSnapshot = async (

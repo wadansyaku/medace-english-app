@@ -14,7 +14,7 @@
 
 ## Release Flow
 
-1. PR で `CI` と preview deployment を通す。
+1. PR で `CI` と preview deployment を通す。`CI` と deploy workflow は `verify:fast` を先に走らせ、migration filename check / local D1 migration replay / typecheck / unit tests を同じ gate で確認します。
 2. `Deploy Pages Preview` が preview DB migration と deployed smoke まで通ったことを確認する。
 3. `main` へ merge すると `Deploy Pages` が production bookmark を採取し、remote migration と Pages deploy を実行する。
 4. job summary に記録された production bookmark を DB rollback の起点として保存する。
@@ -40,5 +40,7 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 ## Secrets and Drift
 
 - `npm run cf:doctor` は repo-level fallback に加えて GitHub environment secrets / variables と preview DB binding を検査します。
+- `INTERNAL_JOB_SECRET` は GitHub scheduled workflow の repository secret と、Pages production / preview の runtime secret の両方に必要です。前者が無いと `analytics-snapshots.yml` / `word-hint-audit.yml` が落ち、後者が無いと内部 endpoint が 503 を返します。
+- Pages の required secrets は `ADMIN_DEMO_PASSWORD`, `WRITING_AI_MODE`, `INTERNAL_JOB_SECRET` です。`GEMINI_API_KEY` と `OPENAI_API_KEY` は外部 AI を有効化するまで deferred warning として扱います。
 - `npm run cf:sync` は GitHub environment vars/secrets と preview DB の存在を揃えます。
 - preview 用 `ADMIN_DEMO_PASSWORD` を本番と分ける場合は、local で `ADMIN_DEMO_PASSWORD_PREVIEW` をセットしてから `npm run cf:sync` を実行します。

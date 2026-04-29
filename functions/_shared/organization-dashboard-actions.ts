@@ -22,7 +22,19 @@ export const handleGetOrganizationDashboardSnapshot = async (
 ): Promise<OrganizationDashboardSnapshot> => {
   const organization = await requireActiveOrganizationContext(env, user);
 
-  const [students, missionBoard, kpiSeries, memberCountRow, instructorCountRow, cohortCountRow, assignmentCountRow, notificationCountRow, instructorRows, assignmentEvents] = await Promise.all([
+  const [
+    students,
+    missionBoard,
+    kpiSeries,
+    memberCountRow,
+    instructorCountRow,
+    cohortCountRow,
+    assignmentCountRow,
+    notificationCountRow,
+    writingAssignmentCountRow,
+    instructorRows,
+    assignmentEvents,
+  ] = await Promise.all([
     handleGetAllStudentsProgress(env, user),
     handleGetWeeklyMissionBoard(env, user),
     readOrganizationKpiSeriesFromSnapshots(env, organization.organizationId),
@@ -74,6 +86,17 @@ export const handleGetOrganizationDashboardSnapshot = async (
         AND m.status = 'ACTIVE'
        WHERE m.organization_id = ?`,
       organization.organizationId,
+    ),
+    readFirst<{ total_count: number; issued_count: number }>(
+      env,
+      `SELECT
+         COUNT(*) AS total_count,
+         COALESCE(SUM(CASE WHEN status != 'DRAFT' THEN 1 ELSE 0 END), 0) AS issued_count
+       FROM writing_assignments
+       WHERE organization_id = ?
+          OR (organization_id IS NULL AND organization_name = ?)`,
+      organization.organizationId,
+      organization.organizationName,
     ),
     readAll<{
       uid: string;
@@ -199,6 +222,8 @@ export const handleGetOrganizationDashboardSnapshot = async (
     missionAssignmentCount: missionBoard.assignments.length,
     notifications7d: kpiSeries.summary7d.notifications7d,
     totalNotificationCount: Number(notificationCountRow?.count || 0),
+    writingAssignmentCount: Number(writingAssignmentCountRow?.total_count || 0),
+    issuedWritingAssignmentCount: Number(writingAssignmentCountRow?.issued_count || 0),
     instructors,
     students,
     missionAssignments: missionBoard.assignments,

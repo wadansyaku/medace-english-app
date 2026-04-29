@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-import { GRADE_LABELS, UserGrade, type LearningTaskIntent, type UserProfile } from '../types';
+import { GRADE_LABELS, MissionNextActionType, UserGrade, type LearningTaskIntent, type UserProfile } from '../types';
 import Onboarding from './Onboarding';
 import { useDashboardData } from '../hooks/useDashboardData';
 import type { AnnouncementFeedController } from '../hooks/useAnnouncementFeed';
@@ -57,6 +57,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   const navigation = useDashboardSectionNavigation({
     isStudentMobileShell,
     hasPrimaryMission: Boolean(viewModel.primaryMission),
+    hasActionableWriting: Boolean(
+      viewModel.canShowWritingSection
+        && viewModel.primaryMission
+        && (
+          viewModel.primaryMission.nextActionType === MissionNextActionType.OPEN_WRITING
+          || (viewModel.primaryMission.writingRequired && !viewModel.primaryMission.writingCompleted)
+        ),
+    ),
     canShowWritingSection: viewModel.canShowWritingSection,
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });

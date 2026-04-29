@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest';
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import {
   InterventionOutcome,
+  LearningTrack,
+  SubscriptionPlan,
   StudentRiskLevel,
+  BusinessAdminWorkspaceView,
   type StudentSummary,
   type WritingAssignment,
   type WritingQueueItem,
 } from '../types';
+import { buildBusinessActivationProgress } from '../utils/businessActivation';
 import {
   filterAssignmentStudents,
   resolveSelectedAssignmentStudentUid,
@@ -123,5 +127,124 @@ describe('b2b workspace helpers', () => {
 
     expect(resolveSelectedEvaluationId(detail, 'missing')).toBe('eval-a');
     expect(resolveSelectedEvaluationId(detail, 'eval-b')).toBe('eval-b');
+  });
+
+  it('builds a direct activation checklist from organization state', () => {
+    const progress = buildBusinessActivationProgress({
+      snapshot: {
+        organizationId: 'org-1',
+        organizationName: 'Demo School',
+        subscriptionPlan: SubscriptionPlan.TOB_PAID,
+        totalMembers: 3,
+        totalStudents: 2,
+        totalInstructors: 1,
+        activeStudents7d: 0,
+        atRiskStudents: 1,
+        learningPlanCount: 0,
+        notifications7d: 0,
+        reactivatedStudents7d: 0,
+        reactivationRate7d: 0,
+        weeklyContinuityRate: 0,
+        followUpCoverageRate48h: 0,
+        interventionBacklogCount: 1,
+        overdueMissionCount: 0,
+        missionStartedRate: 0,
+        overdueMissionRecoveryRate: 0,
+        assignmentCoverageRate: 50,
+        planCoverageRate: 0,
+        unassignedStudents: 1,
+        unassignedAtRiskCount: 1,
+        trackCompletion: [
+          {
+            track: LearningTrack.SCHOOL_TERM,
+            assignedCount: 1,
+            completedCount: 0,
+            overdueCount: 0,
+            completionRate: 0,
+          },
+        ],
+        writingReturnRateByTrack: [],
+        instructors: [],
+        instructorBacklog: [],
+        atRiskStudentList: [],
+        studentAssignments: [],
+        assignmentEvents: [],
+        trend: [],
+        activationState: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+        nextRequiredAction: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+        nextRequiredActionLabel: '初回作文を配布する',
+        nextRequiredActionDescription: 'sample',
+        activationSteps: [
+          {
+            id: 'CREATE_COHORT',
+            label: 'cohort を1つ作成する',
+            description: 'sample',
+            done: true,
+            target: {
+              kind: 'ORGANIZATION_SETTINGS',
+              targetView: BusinessAdminWorkspaceView.SETTINGS,
+              organizationId: 'org-1',
+            },
+          },
+          {
+            id: 'ASSIGN_STUDENTS',
+            label: '最初の生徒担当を決める',
+            description: 'sample',
+            done: true,
+            target: {
+              kind: 'STUDENT_ASSIGNMENT',
+              targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+              organizationId: 'org-1',
+            },
+          },
+          {
+            id: 'CREATE_FIRST_MISSION',
+            label: '初回ミッションを配布する',
+            description: 'sample',
+            done: true,
+            target: {
+              kind: 'MISSION_ASSIGNMENT',
+              targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+              organizationId: 'org-1',
+            },
+          },
+          {
+            id: 'SEND_FIRST_NOTIFICATION',
+            label: '最初のフォロー通知を送る',
+            description: 'sample',
+            done: true,
+            target: {
+              kind: 'INSTRUCTOR_NOTIFICATION',
+              targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+              organizationId: 'org-1',
+            },
+          },
+          {
+            id: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+            label: '初回作文を配布する',
+            description: 'sample',
+            done: false,
+            target: {
+              kind: 'WRITING_ASSIGNMENT',
+              targetView: BusinessAdminWorkspaceView.WRITING,
+              organizationId: 'org-1',
+            },
+          },
+        ],
+        nextRequiredActionTarget: {
+          kind: 'WRITING_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.WRITING,
+          organizationId: 'org-1',
+        },
+      },
+    });
+
+    expect(progress.completedCount).toBe(4);
+    expect(progress.totalCount).toBe(5);
+    expect(progress.currentItem).toMatchObject({
+      id: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+      targetView: BusinessAdminWorkspaceView.WRITING,
+    });
+    expect(progress.progressPercent).toBe(80);
   });
 });

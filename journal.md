@@ -9,6 +9,7 @@
 - browser smoke は core / writing / idb mode まで green に戻し、直近の writing 導線 blocker は解消しました。
 - `名詞 workbook import` は B2B/storage refactor と混ぜず、server-side guardrail と reviewed exception 台帳で閉じる段階です。
 - 実際の hotspot は `services/storage.ts`、`services/storage/organization-read-model.ts`、`types.ts`、storage/writing actions 群で、`BusinessAdminDashboardSections` は最優先の分割対象ではなくなっています。
+- 2026-04-26 時点の次 batch は、schema-heavy な商用CRM化や import atomic 化ではなく、既存の B2B activation loop を実操作としてつなげる UI/read-model 改善を優先します。
 
 ## Implemented
 - `student_instructor_assignment_events` migration を追加。
@@ -32,6 +33,7 @@
 - Cloudflare / GitHub 運用手順の継続整理。
 - `services/storage.ts` と `services/storage/organization-read-model.ts` の分割計画。
 - Thread A の PR / preview deployment / main 統合。
+- Business Admin の導入進捗モデル化と、生徒 Writing の reload 不要な再取得・提出バリデーション。
 
 ## Next Focus
 - `todo.md` の High priority に合わせ、割当運用の履歴化、cohort 単位運用、B2B KPI の継続検証を先に固める。

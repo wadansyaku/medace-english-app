@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 import {
   expectPreviewDeployment,
+  loginBusinessStudentDemo,
+  maybeCompleteOnboarding,
   PUBLIC_BUSINESS_ROLE_KEYS,
 } from './smoke-support';
 import {
@@ -15,6 +17,16 @@ test('public home shows the live motivation board before login', async ({ page }
   await expect(page.getByText('みんなの学習ライブ')).toBeVisible();
   await expect(page.getByText('直近15分', { exact: true })).toBeVisible();
   await expect(page.getByText(/いまの積み上がり/)).toBeVisible();
+});
+
+test('public readonly session endpoint is reachable before login', async ({ page }) => {
+  const response = await page.request.get('/api/session');
+  expect([200, 204]).toContain(response.status());
+  if (response.status() === 200) {
+    await expect(response.json()).resolves.toBeNull();
+  } else {
+    await expect(response.text()).resolves.toBe('');
+  }
 });
 
 test('public guide updates the URL and browser back returns to login', async ({ page }) => {
@@ -72,4 +84,13 @@ test('preview deployment surfaces a visible preview banner and noindex marker', 
 
   await expect(page.getByTestId('preview-deployment-banner')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/i);
+});
+
+test('preview deployment supports demo login, D1 read, and Writing visibility', async ({ page }) => {
+  test.skip(!expectPreviewDeployment, 'preview-only deployment validation');
+
+  await loginBusinessStudentDemo(page);
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  await expect(page.getByTestId('writing-student-section')).toBeVisible();
 });

@@ -12,9 +12,10 @@ const cwd = process.cwd();
 const includeDeferred = process.argv.includes('--include-deferred');
 
 const REQUIRED_GITHUB_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
+const REQUIRED_GITHUB_SCHEDULED_SECRETS = ['INTERNAL_JOB_SECRET'];
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
 const GITHUB_DEPLOYMENT_ENVIRONMENTS = ['production', 'preview'];
-const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
+const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE', 'INTERNAL_JOB_SECRET'];
 const DEFERRED_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY'];
 
 const run = (command, args, options = {}) => {
@@ -308,10 +309,25 @@ if (githubReady && repoSlug) {
         present ? 'available to current workflow' : 'missing from current workflow environment'
       );
     });
+    REQUIRED_GITHUB_SCHEDULED_SECRETS.forEach((name) => {
+      const present = Boolean(process.env[name]);
+      pushRecord(
+        present ? 'ok' : 'warn',
+        `Scheduled workflow secret ${name}`,
+        present ? 'available to current workflow' : 'secret inventory unavailable; scheduled workflows must define this repo secret',
+      );
+    });
   } else if (recordCommand('GitHub secret inventory', ghSecrets, 'retrieved')) {
     const names = new Set(parseGhListNames(ghSecrets.stdout));
     REQUIRED_GITHUB_SECRETS.forEach((name) => {
       pushRecord(names.has(name) ? 'ok' : 'error', `GitHub secret ${name}`, names.has(name) ? 'present' : 'missing');
+    });
+    REQUIRED_GITHUB_SCHEDULED_SECRETS.forEach((name) => {
+      pushRecord(
+        names.has(name) ? 'ok' : 'error',
+        `GitHub scheduled workflow secret ${name}`,
+        names.has(name) ? 'present' : 'missing',
+      );
     });
   }
 

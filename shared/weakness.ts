@@ -100,11 +100,11 @@ export const getWeaknessRecommendedActionType = (dimension: WeaknessDimension): 
 
 export const getWeaknessNextActionLabel = (dimension: WeaknessDimension): string => (
   dimension === WeaknessDimensionEnum.MEANING_RECALL
-    ? '意味から英語クイズを始める'
+    ? '意味から英語を10語確認する'
     : dimension === WeaknessDimensionEnum.MEANING_RECOGNITION
-      ? '英語から意味クイズを始める'
+      ? '英語から意味を10語確認する'
       : dimension === WeaknessDimensionEnum.SPELLING_RECALL
-        ? 'スペリングクイズを始める'
+        ? 'スペリングを10語確認する'
         : getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
           ? '今日のプランに戻る'
           : '復習を10語始める'

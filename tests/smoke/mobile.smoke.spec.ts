@@ -132,6 +132,8 @@ test.describe('student mobile ux', () => {
 
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'My単語帳 作成' })).toBeVisible();
+    await expect(page.getByTestId('phrasebook-create-submit')).toBeDisabled();
+    await expect(page.getByTestId('phrasebook-create-plan-warning')).toContainText('AI教材化は使えません');
   });
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {
@@ -540,6 +542,20 @@ test.describe('student mobile ux', () => {
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await expect(studentPage.getByText('ファイル選択へ進む')).toBeVisible();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
+    await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles([
+      {
+        name: 'mobile-attempt.pdf',
+        mimeType: 'application/pdf',
+        buffer: toUploadBuffer('mobile-writing-attempt-pdf'),
+      },
+      {
+        name: 'mobile-attempt.png',
+        mimeType: 'image/png',
+        buffer: toUploadBuffer('mobile-writing-attempt-image'),
+      },
+    ]);
+    await expect(studentPage.getByTestId('writing-file-validation-message')).toContainText('PDF と画像は混在できません');
+    await expect(studentPage.getByRole('button', { name: '最終送信へ進む' })).toBeDisabled();
     await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
       name: 'mobile-attempt.png',
       mimeType: 'image/png',

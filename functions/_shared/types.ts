@@ -49,6 +49,7 @@ export interface R2Bucket {
     value: ArrayBuffer | ArrayBufferView | Blob | ReadableStream | string,
     options?: R2PutOptions,
   ): Promise<R2ObjectBody | null>;
+  delete(key: string): Promise<void>;
 }
 
 export interface AppEnv {

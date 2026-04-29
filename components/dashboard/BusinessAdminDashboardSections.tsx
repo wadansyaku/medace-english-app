@@ -6,6 +6,7 @@ import { getSubscriptionPolicy } from '../../config/subscription';
 import {
   BusinessAdminWorkspaceView,
   type BookMetadata,
+  type OrganizationActivationActionTarget,
   type OrganizationActivationState,
   type OrganizationDashboardSnapshot,
   type OrganizationSettingsSnapshot,
@@ -46,10 +47,13 @@ interface ActivationGateDefinition {
 }
 
 const resolveNextActionView = (
-  activationState: OrganizationActivationState,
+  snapshot: OrganizationDashboardSnapshot,
 ): BusinessAdminWorkspaceView => {
+  if (snapshot.nextRequiredActionTarget?.targetView) return snapshot.nextRequiredActionTarget.targetView;
+  const activationState = snapshot.nextRequiredAction;
   if (activationState === 'CREATE_COHORT') return BusinessAdminWorkspaceView.SETTINGS;
-  if (activationState === 'SEND_FIRST_NOTIFICATION') return BusinessAdminWorkspaceView.INSTRUCTORS;
+  if (activationState === 'SEND_FIRST_NOTIFICATION') return BusinessAdminWorkspaceView.ASSIGNMENTS;
+  if (activationState === 'ISSUE_FIRST_WRITING_ASSIGNMENT') return BusinessAdminWorkspaceView.WRITING;
   return BusinessAdminWorkspaceView.ASSIGNMENTS;
 };
 
@@ -152,6 +156,7 @@ interface ActivationGateCardProps {
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
   canBootstrap: boolean;
   controller: BusinessAdminDashboardController;
+  nextRequiredActionTarget: OrganizationActivationActionTarget | null;
 }
 
 const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
@@ -159,19 +164,33 @@ const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
   onChangeView,
   canBootstrap,
   controller,
+  nextRequiredActionTarget,
 }) => (
   <section data-testid="business-admin-activation-gate" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
     <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">{gate.eyebrow}</p>
     <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{gate.title}</h3>
     <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">{gate.body}</p>
     <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-      <button
-        type="button"
-        onClick={() => onChangeView(gate.targetView)}
-        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800"
-      >
-        {gate.ctaLabel} <ArrowRight className="h-4 w-4" />
-      </button>
+      {nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION' && nextRequiredActionTarget.studentUid ? (
+        <button
+          type="button"
+          data-testid="business-admin-gate-send-first-notification"
+          onClick={() => void controller.handleSendActivationNotification(nextRequiredActionTarget)}
+          disabled={controller.activationNotificationPending}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-60"
+        >
+          {controller.activationNotificationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          最初の通知を送る
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onChangeView(gate.targetView)}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800"
+        >
+          {gate.ctaLabel} <ArrowRight className="h-4 w-4" />
+        </button>
+      )}
       {gate.allowBootstrap && canBootstrap && (
         <button
           type="button"
@@ -203,9 +222,11 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
 }) => {
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
   const runtimeFlags = getClientRuntimeFlags();
-  const nextActionView = resolveNextActionView(snapshot.nextRequiredAction);
+  const nextActionView = resolveNextActionView(snapshot);
   const gate = resolveViewGate(activeView, snapshot.activationState);
-  const canBootstrap = !runtimeFlags.deployment.isProductionLike && snapshot.activationState !== 'ACTIVE';
+  const canBootstrap = !runtimeFlags.deployment.isProductionLike
+    && snapshot.activationState !== 'ACTIVE'
+    && snapshot.activationState !== 'ISSUE_FIRST_WRITING_ASSIGNMENT';
 
   if (gate) {
     return (
@@ -214,6 +235,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         onChangeView={onChangeView}
         canBootstrap={canBootstrap}
         controller={controller}
+        nextRequiredActionTarget={snapshot.nextRequiredActionTarget}
       />
     );
   }
@@ -222,13 +244,13 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
     return (
       <BusinessAdminOverviewSection
         snapshot={snapshot}
-        settingsSnapshot={settingsSnapshot}
-        books={books}
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
         isLocalMockData={isLocalMockData}
         nextActionView={nextActionView}
         onChangeView={onChangeView}
+        activationNotificationPending={controller.activationNotificationPending}
+        onSendActivationNotification={(target) => void controller.handleSendActivationNotification(target)}
         policyFeatureSummary={policy.featureSummary}
         canBootstrap={canBootstrap}
         bootstrapPending={controller.bootstrapPending}
@@ -254,6 +276,10 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
       <BusinessAdminInstructorsSection
         snapshot={snapshot}
         isLocalMockData={isLocalMockData}
+        activationNotificationPending={controller.activationNotificationPending}
+        firstNotificationNotice={controller.firstNotificationNotice}
+        firstNotificationTarget={controller.firstNotificationTarget}
+        onSendFirstNotification={() => void controller.handleSendActivationNotification()}
       />
     );
   }

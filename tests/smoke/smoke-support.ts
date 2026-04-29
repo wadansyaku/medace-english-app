@@ -433,11 +433,13 @@ const waitForAuthenticatedSession = async (
 ) => {
   if (expectIdbStorageMode && fallbackDashboardTestId) {
     const fallbackDashboard = page.getByTestId(fallbackDashboardTestId);
+    const cloudflareRequiredMessage = page.getByText('Cloudflare storage mode でのみ利用できます。');
     const onboardingProfile = fallbackDashboardTestId === MOBILE_FLOW_TEST_IDS.studentDashboard
       ? page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingProfile)
       : null;
     const readinessChecks = [
       fallbackDashboard.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => null),
+      cloudflareRequiredMessage.waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => null),
     ];
 
     if (onboardingProfile) {
@@ -449,6 +451,9 @@ const waitForAuthenticatedSession = async (
     await Promise.race(readinessChecks);
 
     if (await fallbackDashboard.isVisible().catch(() => false)) {
+      return null;
+    }
+    if (await cloudflareRequiredMessage.isVisible().catch(() => false)) {
       return null;
     }
     if (onboardingProfile && await onboardingProfile.isVisible().catch(() => false)) {

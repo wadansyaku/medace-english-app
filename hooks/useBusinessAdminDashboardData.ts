@@ -16,8 +16,6 @@ const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const canUseWritingApi = storageMode.capabilities.writing.available;
 const canUseBusinessWorkspaceApi = storageMode.capabilities.organization.available
   && storageMode.capabilities.missions.available;
-const canUseBusinessWorkspacePreview = storageMode.capabilities.organization.usesMockData
-  && storageMode.capabilities.missions.usesMockData;
 
 export const useBusinessAdminDashboardData = () => {
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
@@ -33,7 +31,7 @@ export const useBusinessAdminDashboardData = () => {
     setLoading(true);
     setError(null);
 
-    if (!canUseBusinessWorkspaceApi && !canUseBusinessWorkspacePreview) {
+    if (!canUseBusinessWorkspaceApi) {
       setSnapshot(null);
       setSettingsSnapshot(null);
       setMissionBoard(null);

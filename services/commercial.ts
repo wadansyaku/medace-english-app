@@ -14,13 +14,12 @@ export const submitPublicCommercialRequest = async (
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const commercialApiAvailable = storageMode.capabilities.commercial.available;
-const commercialMockAvailable = storageMode.capabilities.commercial.usesMockData;
 const unavailableCommercialMessage = '導入申請機能はこの storage mode では利用できません。';
 const cloudflareStorage = new CloudflareStorageService();
 const commercialService = commercialApiAvailable ? cloudflareStorage : storage;
 
 const assertCommercialAvailable = (): void => {
-  if (!commercialApiAvailable && !commercialMockAvailable) {
+  if (!commercialApiAvailable) {
     throw new Error(unavailableCommercialMessage);
   }
 };

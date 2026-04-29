@@ -196,6 +196,8 @@ describe('buildOrganizationDashboardSnapshot', () => {
       missionAssignmentCount: 2,
       notifications7d: 4,
       totalNotificationCount: 2,
+      writingAssignmentCount: 1,
+      issuedWritingAssignmentCount: 1,
       instructors,
       students,
       missionAssignments,
@@ -225,6 +227,14 @@ describe('buildOrganizationDashboardSnapshot', () => {
     expect(snapshot.atRiskStudentList.map((student) => student.name)).toEqual(['Alpha', 'Beta', 'Delta']);
     expect(snapshot.activationState).toBe('ACTIVE');
     expect(snapshot.nextRequiredAction).toBe('ACTIVE');
+    expect(snapshot.nextRequiredActionTarget).toBeNull();
+    expect(snapshot.activationSteps.map((step) => [step.id, step.done])).toEqual([
+      ['CREATE_COHORT', true],
+      ['ASSIGN_STUDENTS', true],
+      ['CREATE_FIRST_MISSION', true],
+      ['SEND_FIRST_NOTIFICATION', true],
+      ['ISSUE_FIRST_WRITING_ASSIGNMENT', true],
+    ]);
     expect(snapshot.instructorBacklog[0]).toMatchObject({
       immediateCount: 1,
       waitingCount: 1,
@@ -260,5 +270,137 @@ describe('buildOrganizationDashboardSnapshot', () => {
     expect(snapshot.activationState).toBe('CREATE_COHORT');
     expect(snapshot.nextRequiredAction).toBe('CREATE_COHORT');
     expect(snapshot.nextRequiredActionLabel).toContain('cohort');
+    expect(snapshot.activationSteps.find((step) => step.id === 'CREATE_COHORT')).toMatchObject({
+      done: false,
+      target: {
+        kind: 'ORGANIZATION_SETTINGS',
+      },
+    });
+  });
+
+  it('keeps notification and Writing targets in the server activation contract', () => {
+    const notificationSnapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
+      notifications7d: 0,
+      totalNotificationCount: 0,
+      writingAssignmentCount: 0,
+      issuedWritingAssignmentCount: 0,
+      instructors,
+      students,
+      missionAssignments,
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(notificationSnapshot.activationState).toBe('SEND_FIRST_NOTIFICATION');
+    expect(notificationSnapshot.nextRequiredActionTarget).toMatchObject({
+      kind: 'INSTRUCTOR_NOTIFICATION',
+      targetView: 'ASSIGNMENTS',
+      organizationId: 'org_demo_academy',
+      studentUid: 'student-a',
+      instructorUid: 'inst-1',
+      missionId: 'mission-a',
+      missionTitle: 'Alpha Mission',
+    });
+
+    const writingSnapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
+      notifications7d: 1,
+      totalNotificationCount: 1,
+      writingAssignmentCount: 0,
+      issuedWritingAssignmentCount: 0,
+      instructors,
+      students,
+      missionAssignments,
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(writingSnapshot.activationState).toBe('ISSUE_FIRST_WRITING_ASSIGNMENT');
+    expect(writingSnapshot.nextRequiredActionTarget).toMatchObject({
+      kind: 'WRITING_ASSIGNMENT',
+      targetView: 'WRITING',
+      studentUid: 'student-a',
+      missionId: 'mission-a',
+    });
+    expect(writingSnapshot.activationSteps.find((step) => step.id === 'ISSUE_FIRST_WRITING_ASSIGNMENT')).toMatchObject({
+      done: false,
+      label: '初回作文を配布する',
+    });
+  });
+
+  it('does not advance to notification when missions are not assigned to instructor-owned students', () => {
+    const unownedMission: MissionAssignment = {
+      ...missionAssignments[0],
+      id: 'mission-unowned',
+      missionId: 'mission-unowned',
+      studentUid: 'student-b',
+      studentName: 'Beta',
+      mission: {
+        ...missionAssignments[0].mission,
+        id: 'mission-unowned',
+        title: 'Unowned Mission',
+      },
+    };
+
+    const snapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 1,
+      notifications7d: 0,
+      totalNotificationCount: 0,
+      writingAssignmentCount: 0,
+      issuedWritingAssignmentCount: 0,
+      instructors,
+      students,
+      missionAssignments: [unownedMission],
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(snapshot.activationState).toBe('CREATE_FIRST_MISSION');
+    expect(snapshot.nextRequiredActionTarget).toMatchObject({
+      kind: 'MISSION_ASSIGNMENT',
+      targetView: 'ASSIGNMENTS',
+      studentUid: 'student-a',
+      instructorUid: 'inst-1',
+    });
+    expect(snapshot.activationSteps.find((step) => step.id === 'CREATE_FIRST_MISSION')).toMatchObject({
+      done: false,
+    });
+    expect(snapshot.activationSteps.find((step) => step.id === 'SEND_FIRST_NOTIFICATION')).toMatchObject({
+      done: false,
+    });
   });
 });

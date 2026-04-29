@@ -28,8 +28,6 @@ export type WorkspaceService =
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const workspaceAvailable = storageMode.capabilities.organization.available
   && storageMode.capabilities.missions.available;
-const workspacePreviewAvailable = storageMode.capabilities.organization.usesMockData
-  && storageMode.capabilities.missions.usesMockData;
 
 const unavailableMessage = '組織・ミッション機能は Cloudflare storage mode でのみ利用できます。';
 const unavailable = async (): Promise<never> => {
@@ -54,28 +52,8 @@ const unavailableWorkspaceService: WorkspaceService = {
   upsertOrganizationCohort: unavailable,
 };
 
-const previewWorkspaceService: WorkspaceService = {
-  assignStudentInstructor: (...args) => storage.assignStudentInstructor(...args),
-  assignWeeklyMission: (...args) => storage.assignWeeklyMission(...args),
-  createWeeklyMission: (...args) => storage.createWeeklyMission(...args),
-  getAllStudentsProgress: (...args) => storage.getAllStudentsProgress(...args),
-  getBooks: (...args) => storage.getBooks(...args),
-  getOrganizationDashboardSnapshot: (...args) => storage.getOrganizationDashboardSnapshot(...args),
-  getOrganizationSettingsSnapshot: (...args) => storage.getOrganizationSettingsSnapshot(...args),
-  getStudentWorksheetSnapshot: (...args) => storage.getStudentWorksheetSnapshot(...args),
-  getWeeklyMissionBoard: (...args) => storage.getWeeklyMissionBoard(...args),
-  sendInstructorNotification: (...args) => storage.sendInstructorNotification(...args),
-  setInstructorCohorts: (...args) => storage.setInstructorCohorts(...args),
-  setStudentCohort: (...args) => storage.setStudentCohort(...args),
-  updateMissionProgress: (assignmentId: string, eventType: MissionProgressEventType) => (
-    storage.updateMissionProgress(assignmentId, eventType)
-  ),
-  updateOrganizationProfile: (...args) => storage.updateOrganizationProfile(...args),
-  upsertOrganizationCohort: (...args) => storage.upsertOrganizationCohort(...args),
-};
-
 export const workspaceService: WorkspaceService = workspaceAvailable
   ? (new CloudflareStorageService() as WorkspaceService)
-  : (workspacePreviewAvailable ? previewWorkspaceService : unavailableWorkspaceService);
+  : unavailableWorkspaceService;
 
 export default workspaceService;

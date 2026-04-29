@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { useAssignmentManagement } from './businessAdmin/useAssignmentManagement';
 import { useActivationBootstrap } from './businessAdmin/useActivationBootstrap';
+import { useFirstNotificationAction } from './businessAdmin/useFirstNotificationAction';
 import { useOrganizationSettingsForm } from './businessAdmin/useOrganizationSettingsForm';
 import { useWeeklyMissionComposer } from './businessAdmin/useWeeklyMissionComposer';
 
@@ -39,6 +40,12 @@ export const useBusinessAdminDashboardController = ({
     refresh,
     setNotice,
   });
+  const firstNotificationAction = useFirstNotificationAction({
+    snapshot,
+    onSent: async () => {
+      await refresh();
+    },
+  });
 
   const assignment = useAssignmentManagement({
     snapshot,
@@ -60,7 +67,11 @@ export const useBusinessAdminDashboardController = ({
   });
 
   return {
-    notice,
+    notice: firstNotificationAction.firstNotificationNotice || notice,
+    activationNotificationPending: firstNotificationAction.firstNotificationSending,
+    firstNotificationNotice: firstNotificationAction.firstNotificationNotice,
+    firstNotificationTarget: firstNotificationAction.firstNotificationTarget,
+    handleSendActivationNotification: firstNotificationAction.sendFirstNotification,
     ...activationBootstrap,
     ...assignment,
     ...organizationSettings,
