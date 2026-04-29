@@ -13,12 +13,15 @@ import {
   BusinessAdminWorkspaceView,
   LEARNING_TRACK_LABELS,
   OrganizationRole,
-  type BookMetadata,
+  type OrganizationActivationActionTarget,
   type OrganizationDashboardSnapshot,
-  type OrganizationSettingsSnapshot,
   type WritingAssignment,
   type WritingQueueItem,
 } from '../../../types';
+import {
+  buildBusinessActivationProgress,
+  type BusinessActivationChecklistItem,
+} from '../../../utils/businessActivation';
 import {
   getBusinessAdminWritingCounts,
   sortInstructorBacklogByLoad,
@@ -34,13 +37,13 @@ import {
 
 interface BusinessAdminOverviewSectionProps {
   snapshot: OrganizationDashboardSnapshot;
-  settingsSnapshot: OrganizationSettingsSnapshot | null;
-  books: BookMetadata[];
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
   isLocalMockData: boolean;
   nextActionView: BusinessAdminWorkspaceView;
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
+  activationNotificationPending: boolean;
+  onSendActivationNotification: (target: OrganizationActivationActionTarget) => void;
   policyFeatureSummary: string[];
   canBootstrap: boolean;
   bootstrapPending: boolean;
@@ -49,13 +52,13 @@ interface BusinessAdminOverviewSectionProps {
 
 const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> = ({
   snapshot,
-  settingsSnapshot,
-  books,
   writingAssignments,
   writingQueue,
   isLocalMockData,
   nextActionView,
   onChangeView,
+  activationNotificationPending,
+  onSendActivationNotification,
   policyFeatureSummary,
   canBootstrap,
   bootstrapPending,
@@ -63,42 +66,34 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
 }) => {
   const instructorLoad = sortInstructorBacklogByLoad(snapshot.instructorBacklog);
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
+  const activationProgress = buildBusinessActivationProgress({
+    snapshot,
+  });
   const latestTrendPoint = snapshot.trend[snapshot.trend.length - 1];
-  const onboardingChecklist = [
-    {
-      label: '組織名を確認',
-      done: Boolean(settingsSnapshot?.displayName.trim()),
-      detail: settingsSnapshot?.displayName || '組織名を設定すると案内メールと管理画面表示が揃います。',
-    },
-    {
-      label: 'cohort を作成',
-      done: (settingsSnapshot?.cohorts.length || 0) > 0,
-      detail: (settingsSnapshot?.cohorts.length || 0) > 0
-        ? `${settingsSnapshot?.cohorts.length || 0}件の cohort を作成済み`
-        : '学年・クラス・講座単位で 1 つ以上作ると割当が整理しやすくなります。',
-    },
-    {
-      label: '講師を割り当て',
-      done: snapshot.assignmentCoverageRate > 0,
-      detail: snapshot.assignmentCoverageRate > 0
-        ? `担当割当率 ${snapshot.assignmentCoverageRate}%`
-        : '最初は at-risk 生徒からでもよいので担当を決めてください。',
-    },
-    {
-      label: '教材を配布',
-      done: books.length > 0,
-      detail: books.length > 0
-        ? `${books.length}冊の教材を利用可能`
-        : '公式教材または My単語帳を最低 1 冊用意してください。',
-    },
-    {
-      label: '初回ミッションを設定',
-      done: snapshot.learningPlanCount > 0 || snapshot.missionStartedRate > 0,
-      detail: snapshot.learningPlanCount > 0 || snapshot.missionStartedRate > 0
-        ? '学習計画またはミッション配布が始まっています。'
-        : '最初の1週間分だけでもよいので、開始ミッションを固定してください。',
-    },
-  ];
+  const canSendActivationNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
+    && Boolean(snapshot.nextRequiredActionTarget.studentUid);
+  const renderChecklistItem = (item: BusinessActivationChecklistItem) => (
+    <div key={item.id} className={`flex h-full flex-col justify-between rounded-3xl border px-4 py-4 ${item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+      <div>
+        <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+          <CheckCircle2 className={`h-4 w-4 ${item.done ? 'text-emerald-600' : 'text-slate-300'}`} />
+          {item.label}
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.detail}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChangeView(item.targetView)}
+        className={`mt-4 inline-flex min-h-9 items-center justify-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold transition-colors ${
+          item.done
+            ? 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-100'
+            : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200 hover:text-medace-700'
+        }`}
+      >
+        開く <ArrowRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -115,13 +110,26 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             )}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => onChangeView(nextActionView)}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800"
-            >
-              次の一手へ進む <ArrowRight className="h-4 w-4" />
-            </button>
+            {canSendActivationNotification && snapshot.nextRequiredActionTarget ? (
+              <button
+                type="button"
+                data-testid="business-admin-send-first-notification"
+                onClick={() => onSendActivationNotification(snapshot.nextRequiredActionTarget!)}
+                disabled={activationNotificationPending}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-60"
+              >
+                {activationNotificationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                最初の通知を送る
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onChangeView(nextActionView)}
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800"
+              >
+                次の一手へ進む <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
             {canBootstrap && (
               <button
                 type="button"
@@ -146,23 +154,34 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
       </div>
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-medace-600" />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">導入スタートチェック</p>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最初に確認する 5 項目</h3>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-medace-600" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">導入スタートチェック</p>
+              <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最初の運用ループ {activationProgress.completedCount}/{activationProgress.totalCount}</h3>
+              {activationProgress.currentItem && (
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  次は「{activationProgress.currentItem.label}」を進めると、導入ループが次の段階に移ります。
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="min-w-48 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+              <span>Progress</span>
+              <span>{activationProgress.progressPercent}%</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+              <div
+                className="h-full rounded-full bg-medace-600 transition-all"
+                style={{ width: `${activationProgress.progressPercent}%` }}
+              />
+            </div>
           </div>
         </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {onboardingChecklist.map((item) => (
-            <div key={item.label} className={`rounded-3xl border px-4 py-4 ${item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
-              <div className="flex items-center gap-2 text-sm font-black text-slate-900">
-                <CheckCircle2 className={`h-4 w-4 ${item.done ? 'text-emerald-600' : 'text-slate-300'}`} />
-                {item.label}
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.detail}</p>
-            </div>
-          ))}
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          {activationProgress.items.map(renderChecklistItem)}
         </div>
       </section>
 

@@ -2,6 +2,11 @@ import React, { useMemo } from 'react';
 import { Loader2, ScanSearch, X } from 'lucide-react';
 
 import type { WritingAssignment } from '../../types';
+import {
+  formatWritingUploadBytes,
+  resolveWritingUploadMimeType,
+  validateWritingSubmissionFiles,
+} from '../../utils/writingSubmissionValidation';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStepPager from '../mobile/MobileStepPager';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
@@ -34,6 +39,8 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
   onChangeStep,
   onSubmit,
 }) => {
+  const fileValidation = useMemo(() => validateWritingSubmissionFiles(files), [files]);
+
   const mobileSubmitActions = useMemo(() => {
     if (!isMobileViewport) return null;
     if (mobileSubmitStep === 0) {
@@ -62,7 +69,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           <button
             type="button"
             onClick={() => onChangeStep(2)}
-            disabled={files.length === 0}
+            disabled={!fileValidation.valid}
             className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
           >
             最終送信へ進む
@@ -83,7 +90,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           type="button"
           data-testid="writing-submit-upload"
           onClick={onSubmit}
-          disabled={submitting || files.length === 0}
+          disabled={submitting || !fileValidation.valid}
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
@@ -91,7 +98,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
         </button>
       </div>
     );
-  }, [files.length, isMobileViewport, mobileSubmitStep, onChangeStep, onSubmit, submitting]);
+  }, [fileValidation.valid, isMobileViewport, mobileSubmitStep, onChangeStep, onSubmit, submitting]);
 
   return (
     <MobileSheetDialog
@@ -179,7 +186,8 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                 <div className="mt-4 grid gap-2">
                   {files.map((file) => (
                     <div key={`${file.name}-${file.size}`} className="rounded-2xl border border-white bg-white px-4 py-3 text-sm text-slate-700">
-                      {file.name}
+                      <div className="font-bold text-slate-900">{file.name}</div>
+                      <div className="mt-1 text-xs text-slate-400">{resolveWritingUploadMimeType(file) || '形式未判定'} / {formatWritingUploadBytes(file.size)}</div>
                     </div>
                   ))}
                 </div>
@@ -188,6 +196,13 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                   まだファイルは選択されていません。
                 </div>
               )}
+              <div data-testid="writing-file-validation-message" className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+                fileValidation.valid
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}>
+                {fileValidation.message}
+              </div>
             </section>
           )}
 
@@ -227,7 +242,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
               type="button"
               data-testid="writing-submit-upload"
               onClick={onSubmit}
-              disabled={submitting || files.length === 0}
+              disabled={submitting || !fileValidation.valid}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}

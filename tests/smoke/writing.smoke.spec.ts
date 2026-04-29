@@ -66,10 +66,25 @@ test('group admin and business student can complete the writing workflow with on
   await adminPage.getByTestId('writing-issue-assignment').click();
   await expect(adminPage.getByText(/配布状態にしました/)).toBeVisible();
   await waitForWritingAssignment(adminPage, 'all', generatedAssignment.id, ['ISSUED']);
-  await studentPage.reload();
-  await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  await expect(studentPage.getByTestId('writing-refresh-button')).toBeEnabled();
+  await studentPage.getByTestId('writing-refresh-button').click();
   await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
+  await expect(studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`)).toBeVisible();
   await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
+  await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles([
+    {
+      name: 'attempt-1.pdf',
+      mimeType: 'application/pdf',
+      buffer: toUploadBuffer('student-attempt-one-pdf'),
+    },
+    {
+      name: 'attempt-1.png',
+      mimeType: 'image/png',
+      buffer: toUploadBuffer('student-attempt-one-image'),
+    },
+  ]);
+  await expect(studentPage.getByTestId('writing-file-validation-message')).toContainText('PDF と画像は混在できません');
+  await expect(studentPage.getByTestId('writing-submit-upload')).toBeDisabled();
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-1.png',
     mimeType: 'image/png',

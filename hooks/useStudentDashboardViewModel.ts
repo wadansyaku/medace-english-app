@@ -58,7 +58,10 @@ export const useStudentDashboardViewModel = ({
   const weekTotal = activityLogs.reduce((sum, log) => sum + log.count, 0);
   const stabilizedWords = (masteryDist?.graduated ?? 0) + (masteryDist?.review ?? 0);
   const userLeague = getLeague(user.stats?.level || 1);
-  const todayWordGoal = learningPlan?.dailyWordGoal ?? Math.min(Math.max(dueCount, 10), 20);
+  const preferenceDailyWordGoal = learningPreference?.dailyStudyMinutes
+    ? Math.min(40, Math.max(10, learningPreference.dailyStudyMinutes * 4))
+    : null;
+  const todayWordGoal = learningPlan?.dailyWordGoal ?? preferenceDailyWordGoal ?? Math.min(Math.max(dueCount, 10), 20);
   const weeklyGoal = todayWordGoal * 7;
   const weeklyRemaining = Math.max(weeklyGoal - weekTotal, 0);
   const remainingWords = Math.max(todayWordGoal - todayCount, 0);

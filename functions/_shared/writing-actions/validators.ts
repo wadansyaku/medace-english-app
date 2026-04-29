@@ -6,6 +6,10 @@ import type {
   RequestWritingRevisionRequest,
 } from '../../../contracts/writing';
 import {
+  WRITING_UPLOAD_MAX_BYTES,
+  resolveWritingUploadMimeType,
+} from '../../../shared/writingUploadPolicy';
+import {
   expectIntegerInRange,
   expectObject,
   expectOptionalSha256Base64,
@@ -34,11 +38,18 @@ export const parseAssignmentMutationRequest = (value: unknown): { assignmentId: 
 
 export const parseCreateWritingUploadUrlRequest = (value: unknown): CreateWritingUploadUrlRequest => {
   const record = expectObject(value);
+  const fileName = expectTrimmedString(record, 'fileName');
+  const rawMimeType = expectTrimmedString(record, 'mimeType');
+  const byteSize = expectIntegerInRange(record, 'byteSize', { min: 1, max: WRITING_UPLOAD_MAX_BYTES }) as number;
+  const mimeType = resolveWritingUploadMimeType({
+    name: fileName,
+    type: rawMimeType,
+  });
   return {
     assignmentId: expectString(record, 'assignmentId'),
-    fileName: expectTrimmedString(record, 'fileName'),
-    mimeType: expectTrimmedString(record, 'mimeType'),
-    byteSize: expectIntegerInRange(record, 'byteSize', { min: 1, max: 20 * 1024 * 1024 }) as number,
+    fileName,
+    mimeType,
+    byteSize,
     sha256Base64: expectOptionalSha256Base64(record, 'sha256Base64'),
     assetOrder: expectIntegerInRange(record, 'assetOrder', { min: 1, max: 4 }) as number,
     attemptNo: expectIntegerInRange(record, 'attemptNo', { min: 1, max: 2, optional: true }),

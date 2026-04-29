@@ -3,6 +3,8 @@
 
 ## 1. Current Focus: B2B Ops & Stability
 **Priority: High** (B2B運用基盤の安定化を優先)
+- [ ] **Activation Loop UX**: Business Admin の導入チェックを進捗モデル化し、cohort→担当→ミッション→通知→writing の次アクションを overview から直接実行できるようにする。
+- [ ] **Student Writing Awareness**: 生徒側 Writing 課題を focus / visibility / polling で再取得し、提出ファイルの事前バリデーションを UI に出す。
 - [ ] **Assignment Ops**: 担当講師割当の履歴化を UI / 運用フローまで仕上げ、cohort 単位権限へ拡張する。
 - [ ] **BtoB KPI**: 通知後再開率、割当率、学習プラン浸透率を継続計測できるようにし、監査性も強化する。
 - [ ] **Cloudflare Data Sync**: Cloudflare を正史として session / storage の整合性確認を継続し、IndexedDB は demo / offline fallback に限定する。

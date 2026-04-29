@@ -25,14 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify D1 migrations
-        run: npm run db:migrate:verify
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Fast verification gate
+        run: npm run verify:fast
 
       - name: Build
         run: npm run build

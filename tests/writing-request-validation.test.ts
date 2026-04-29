@@ -26,6 +26,30 @@ describe('writing request validation', () => {
     });
   });
 
+  it('normalizes generic browser mime types from the requested file name', () => {
+    expect(parseCreateWritingUploadUrlRequest({
+      assignmentId: 'assignment-1',
+      fileName: 'draft-1.pdf',
+      mimeType: 'application/octet-stream',
+      byteSize: 1024,
+      assetOrder: 1,
+    })).toMatchObject({
+      fileName: 'draft-1.pdf',
+      mimeType: 'application/pdf',
+    });
+
+    expect(parseCreateWritingUploadUrlRequest({
+      assignmentId: 'assignment-1',
+      fileName: 'draft-1.webp',
+      mimeType: 'binary/octet-stream',
+      byteSize: 1024,
+      assetOrder: 1,
+    })).toMatchObject({
+      fileName: 'draft-1.webp',
+      mimeType: 'image/webp',
+    });
+  });
+
   it('rejects zero-byte upload reservations', () => {
     expect(() => parseCreateWritingUploadUrlRequest({
       assignmentId: 'assignment-1',

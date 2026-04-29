@@ -11,7 +11,6 @@ import type {
 
 const storageMode = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE);
 const canUseInstructorWorkspaceApi = storageMode.capabilities.organization.available;
-const canUseInstructorWorkspacePreview = storageMode.capabilities.organization.usesMockData;
 
 export const useInstructorDashboardData = () => {
   const [students, setStudents] = useState<StudentSummary[]>([]);
@@ -24,7 +23,7 @@ export const useInstructorDashboardData = () => {
     setLoading(true);
     setError(null);
 
-    if (!canUseInstructorWorkspaceApi && !canUseInstructorWorkspacePreview) {
+    if (!canUseInstructorWorkspaceApi) {
       setStudents([]);
       setWritingAssignments([]);
       setWritingQueue([]);

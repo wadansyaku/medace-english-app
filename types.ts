@@ -1053,7 +1053,39 @@ export type OrganizationActivationState =
   | 'ASSIGN_STUDENTS'
   | 'CREATE_FIRST_MISSION'
   | 'SEND_FIRST_NOTIFICATION'
+  | 'ISSUE_FIRST_WRITING_ASSIGNMENT'
   | 'ACTIVE';
+
+export type OrganizationActivationStepId = Exclude<OrganizationActivationState, 'ACTIVE'>;
+
+export type OrganizationActivationActionTargetKind =
+  | 'ORGANIZATION_SETTINGS'
+  | 'STUDENT_ASSIGNMENT'
+  | 'MISSION_ASSIGNMENT'
+  | 'INSTRUCTOR_NOTIFICATION'
+  | 'WRITING_ASSIGNMENT';
+
+export interface OrganizationActivationActionTarget {
+  kind: OrganizationActivationActionTargetKind;
+  targetView: BusinessAdminWorkspaceView;
+  organizationId: string;
+  studentUid?: string;
+  studentName?: string;
+  instructorUid?: string;
+  instructorName?: string;
+  missionAssignmentId?: string;
+  missionId?: string;
+  missionTitle?: string;
+  writingAssignmentId?: string;
+}
+
+export interface OrganizationActivationStep {
+  id: OrganizationActivationStepId;
+  label: string;
+  description: string;
+  done: boolean;
+  target: OrganizationActivationActionTarget | null;
+}
 
 export interface OrganizationDashboardSnapshot {
   organizationId: string;
@@ -1090,6 +1122,8 @@ export interface OrganizationDashboardSnapshot {
   nextRequiredAction: OrganizationActivationState;
   nextRequiredActionLabel: string;
   nextRequiredActionDescription: string;
+  activationSteps: OrganizationActivationStep[];
+  nextRequiredActionTarget: OrganizationActivationActionTarget | null;
 }
 
 export enum InstructorWorkspaceView {

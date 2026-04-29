@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import {
@@ -20,6 +20,10 @@ import {
   canSubmitWritingAssignment,
 } from '../components/writing/studentSectionUtils';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
+import {
+  resolveWritingUploadMimeType,
+  validateWritingSubmissionFiles,
+} from '../utils/writingSubmissionValidation';
 
 interface NoticeState {
   tone: 'success' | 'error';
@@ -29,6 +33,8 @@ interface NoticeState {
 export const useWritingStudentController = (user: UserProfile) => {
   const [assignments, setAssignments] = useState<WritingAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [submitTarget, setSubmitTarget] = useState<WritingAssignment | null>(null);
   const [feedbackDetail, setFeedbackDetail] = useState<WritingSubmissionDetailResponse | null>(null);
@@ -39,6 +45,7 @@ export const useWritingStudentController = (user: UserProfile) => {
   const [selectedEvaluationId, setSelectedEvaluationId] = useState('');
   const [feedbackCommentExpanded, setFeedbackCommentExpanded] = useState(false);
   const [mobileSubmitStep, setMobileSubmitStep] = useState(0);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const actionableAssignmentCount = useMemo(
     () => assignments.filter((assignment) => (
@@ -53,14 +60,32 @@ export const useWritingStudentController = (user: UserProfile) => {
       || feedbackDetail?.submission.evaluations[0]
   ), [feedbackDetail, selectedEvaluationId]);
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+    const inFlightRefresh = refreshInFlightRef.current;
+    if (inFlightRefresh) {
+      await inFlightRefresh.catch(() => undefined);
+      return;
+    }
+
+    if (options?.silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    const refreshPromise = (async () => {
       const response = await listWritingAssignments('mine');
       const sortedAssignments = [...response.assignments].sort(
         (left, right) => (right.updatedAt || 0) - (left.updatedAt || 0),
       );
       setAssignments(sortedAssignments);
+      setLastRefreshedAt(Date.now());
+    })();
+
+    refreshInFlightRef.current = refreshPromise;
+
+    try {
+      await refreshPromise;
     } catch (error) {
       console.error(error);
       setNotice({
@@ -68,13 +93,43 @@ export const useWritingStudentController = (user: UserProfile) => {
         message: (error as Error).message || '自由英作文課題の取得に失敗しました。',
       });
     } finally {
-      setLoading(false);
+      refreshInFlightRef.current = null;
+      if (options?.silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refresh();
-  }, [user.uid]);
+  }, [refresh, user.uid]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return undefined;
+
+    const revalidateVisibleAssignments = () => {
+      if (document.visibilityState !== 'visible' || submitting) return;
+      void refresh({ silent: true });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        revalidateVisibleAssignments();
+      }
+    };
+
+    window.addEventListener('focus', revalidateVisibleAssignments);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const intervalId = window.setInterval(revalidateVisibleAssignments, 60_000);
+
+    return () => {
+      window.removeEventListener('focus', revalidateVisibleAssignments);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  }, [refresh, submitting]);
 
   const resetSubmitDialog = () => {
     setSubmitTarget(null);
@@ -91,23 +146,24 @@ export const useWritingStudentController = (user: UserProfile) => {
   };
 
   const handleSubmit = async () => {
-    if (!submitTarget || files.length === 0) return;
+    if (!submitTarget) return;
+    const validation = validateWritingSubmissionFiles(files);
+    if (!validation.valid) {
+      setNotice({
+        tone: 'error',
+        message: validation.message,
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const isPdf = files[0].type === 'application/pdf';
-      if (isPdf && files.length > 1) {
-        throw new Error('PDF は1ファイルのみ提出できます。');
-      }
-      if (!isPdf && files.length > 4) {
-        throw new Error('画像は最大4枚まで提出できます。');
-      }
-
       const uploadResults: string[] = [];
       for (const [index, file] of files.entries()) {
         const upload = await createWritingUploadUrl({
           assignmentId: submitTarget.id,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType: resolveWritingUploadMimeType(file),
           byteSize: file.size,
           sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,
@@ -184,6 +240,8 @@ export const useWritingStudentController = (user: UserProfile) => {
   return {
     assignments,
     loading,
+    refreshing,
+    lastRefreshedAt,
     notice,
     submitTarget,
     feedbackDetail,

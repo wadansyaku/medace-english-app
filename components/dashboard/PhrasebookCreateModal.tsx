@@ -41,6 +41,19 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
 }) => {
   if (!open) return null;
 
+  const trimmedTitle = newBookTitle.trim();
+  const hasSource = createMode === 'TEXT' ? rawText.trim().length > 0 : Boolean(uploadFile);
+  const createDisabledReason = !trimmedTitle
+    ? 'タイトルを入力してください。'
+    : !hasSource
+      ? createMode === 'TEXT'
+        ? '教材にしたい英文を入力してください。'
+        : '教材にしたい PDF または画像を選択してください。'
+      : !canUseSelectedCreateMode
+        ? `${currentPlanLabel} ではこの作成方法を使えません。`
+        : null;
+  const createDisabled = creating || Boolean(createDisabledReason);
+
   return (
     <MobileSheetDialog
       onClose={onClose}
@@ -127,10 +140,15 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
         )}
 
         {!canUseSelectedCreateMode && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+          <div data-testid="phrasebook-create-plan-warning" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
             {createMode === 'TEXT'
               ? `${currentPlanLabel} ではテキストからのAI教材化は使えません。`
               : `${currentPlanLabel} では画像/PDFからのAI教材化は使えません。`}
+          </div>
+        )}
+        {createDisabledReason && canUseSelectedCreateMode && !creating && (
+          <div data-testid="phrasebook-create-validation-message" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-bold text-amber-800">
+            {createDisabledReason}
           </div>
         )}
       </div>
@@ -147,8 +165,9 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
           </button>
           <button
             type="button"
+            data-testid="phrasebook-create-submit"
             onClick={onCreate}
-            disabled={creating || !newBookTitle || !canUseSelectedCreateMode}
+            disabled={createDisabled}
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {creating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}

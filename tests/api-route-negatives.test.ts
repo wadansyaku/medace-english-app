@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { UserRole } from '../types';
 import { authProfileRoutes } from '../functions/_shared/api-routes/auth-profile';
+import { publicCommercialRoutes } from '../functions/_shared/api-routes/public-commercial';
 import { handleAiAction } from '../functions/_shared/ai-actions';
 import { HttpError } from '../functions/_shared/http';
 import { handleStorageAction } from '../functions/_shared/storage-actions';
@@ -91,6 +92,38 @@ describe('negative route guards', () => {
       ),
       404,
       '未対応のストレージ操作です: unknown-storage-action',
+    );
+  });
+
+  it('rejects cross-site public commercial requests before writing to storage', async () => {
+    const request = new Request('https://medace-english-app.pages.dev/api/public/commercial-request', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Cross Site',
+        email: 'cross@example.com',
+        organizationName: 'Cross Academy',
+        message: 'hello',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://attacker.example',
+      },
+    });
+    const route = publicCommercialRoutes.find((candidate) => candidate.matches({
+      env: {} as never,
+      request,
+      pathname: 'public/commercial-request',
+    }));
+
+    expect(route).toBeDefined();
+    await expectHttpError(
+      route!.handle({
+        env: {} as never,
+        request,
+        pathname: 'public/commercial-request',
+      }),
+      403,
+      'Cross-origin な mutation は許可されていません。',
     );
   });
 

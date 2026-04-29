@@ -21,17 +21,17 @@ describe('resolveStorageMode', () => {
         organization: {
           available: false,
           provider: 'unavailable',
-          usesMockData: true,
+          usesMockData: false,
         },
         missions: {
           available: false,
           provider: 'unavailable',
-          usesMockData: true,
+          usesMockData: false,
         },
         commercial: {
           available: false,
           provider: 'unavailable',
-          usesMockData: true,
+          usesMockData: false,
         },
         announcements: {
           available: false,

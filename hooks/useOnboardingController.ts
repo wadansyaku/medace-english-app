@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { DIAGNOSTIC_QUESTIONS, evaluateDiagnostic, type SelfAssessmentKey } from '../data/diagnostic';
+import { dashboardService } from '../services/dashboard';
 import { sessionService } from '../services/session';
-import { type EnglishLevel, type UserProfile, UserGrade } from '../types';
+import {
+  LearningPreferenceIntensity,
+  type EnglishLevel,
+  type LearningPreference,
+  type UserProfile,
+  UserGrade,
+} from '../types';
 
 export type OnboardingStep = 'PROFILE' | 'TEST' | 'RESULT';
 
@@ -79,6 +86,21 @@ export const useOnboardingController = ({
       };
 
       await sessionService.updateSessionUser(updatedUser);
+      if (result) {
+        const nextPreference: LearningPreference = {
+          userUid: user.uid,
+          targetExam: '',
+          targetScore: '',
+          examDate: '',
+          weeklyStudyDays: selectedGrade === UserGrade.JHS1 ? 4 : 5,
+          dailyStudyMinutes: Math.max(5, Math.ceil(result.recommendedDailyGoal / 4)),
+          weakSkillFocus: result.nextFocus[0] || '診断結果に合わせて復習から始める',
+          motivationNote: result.nextFocus.join('\n'),
+          intensity: LearningPreferenceIntensity.BALANCED,
+          updatedAt: Date.now(),
+        };
+        await dashboardService.saveLearningPreference(nextPreference);
+      }
       onComplete(updatedUser);
     } finally {
       setIsSaving(false);

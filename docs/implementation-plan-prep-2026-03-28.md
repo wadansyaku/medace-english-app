@@ -171,6 +171,30 @@ Use these gates before committing to large implementation tracks:
 3. Add AI cost telemetry fields and dashboard summaries.
 4. Re-run the baseline after one week of instrumented traffic.
 
+## 2026-04-26 Implementation Batch
+
+### Critical Re-read
+
+The product has enough B2B surface area to operate a demo organization, but the weak point is still activation, not feature count.
+
+- Business admin already has cohort, assignment, mission, notification, writing, and KPI surfaces.
+- Student writing already supports assignment, upload, feedback, and print flows.
+- The remaining operational gap is that these surfaces do not yet behave like one continuous loop: admins need a clearer "next operational action", and students should notice newly issued or returned writing work without a manual reload.
+
+### Chosen Scope
+
+This batch should improve the existing loop instead of starting a new CRM/schema-heavy track:
+
+1. Add a derived activation checklist/progress model for Business Admin so the overview can show the current setup step, progress percentage, and direct action targets.
+2. Make student writing assignments revalidate on focus / visibility / short polling, with a manual refresh affordance.
+3. Add client-side writing submission validation before upload so PDF/image mix, count, type, size, and empty selection failures are visible before the server request.
+
+### Explicitly Deferred
+
+- Commercial lead CRM fields, lead owner/SLA, and anonymous provisioning flow are valid next work, but they require migrations and admin workflow decisions.
+- Atomic official catalog import and product event retention are correctness/ops tracks. They should not be mixed into this activation UX batch.
+- Organization read-model projection remains important for scale, but current production usage does not justify changing mutation paths in this batch.
+
 ## Supporting Assets Added
 
 - Baseline analysis memo: [`./analysis/production-baseline-2026-03-28.md`](./analysis/production-baseline-2026-03-28.md)

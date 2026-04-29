@@ -161,6 +161,14 @@ export const useStudentDashboardMutations = ({
 
   const handleUpdatePlan = useCallback(async () => {
     if (!learningPlan) return;
+    if (selectedPlanBooks.length === 0) {
+      setPageNotice({ tone: 'error', message: '学習プランには少なくとも1冊の教材が必要です。' });
+      return;
+    }
+    if (selectedPlanBooks.length > 5) {
+      setPageNotice({ tone: 'error', message: '学習プランの教材は5冊以内に絞ってください。' });
+      return;
+    }
     try {
       const updated = { ...learningPlan, dailyWordGoal: editDailyGoal, selectedBookIds: selectedPlanBooks };
       await dashboardService.saveLearningPlan(updated);
@@ -181,9 +189,21 @@ export const useStudentDashboardMutations = ({
   ]);
 
   const handleCreatePhrasebook = useCallback(async () => {
-    if (!newBookTitle) return;
-    if (createMode === 'TEXT' && !rawText) return;
-    if (createMode === 'FILE' && !uploadFile) return;
+    const normalizedTitle = newBookTitle.trim();
+    const normalizedRawText = rawText.trim();
+
+    if (!normalizedTitle) {
+      setErrorMsg('タイトルを入力してください。');
+      return;
+    }
+    if (createMode === 'TEXT' && !normalizedRawText) {
+      setErrorMsg('教材にしたい英文を入力してください。');
+      return;
+    }
+    if (createMode === 'FILE' && !uploadFile) {
+      setErrorMsg('教材にしたい PDF または画像を選択してください。');
+      return;
+    }
 
     setCreating(true);
     setErrorMsg(null);
@@ -194,7 +214,7 @@ export const useStudentDashboardMutations = ({
         | Awaited<ReturnType<typeof extractVocabularyFromMedia>>;
 
       if (createMode === 'TEXT') {
-        result = await extractVocabularyFromText(rawText);
+        result = await extractVocabularyFromText(normalizedRawText);
       } else if (createMode === 'FILE' && uploadFile) {
         const mimeType = uploadFile.type;
         if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
@@ -219,11 +239,11 @@ export const useStudentDashboardMutations = ({
       }
 
       const importResult = await dashboardService.batchImportWords({
-        defaultBookName: newBookTitle,
+        defaultBookName: normalizedTitle,
         source: {
           kind: 'rows',
           rows: result.words.map((item, index) => ({
-            bookName: newBookTitle,
+            bookName: normalizedTitle,
             number: index + 1,
             word: item.word,
             definition: item.definition,

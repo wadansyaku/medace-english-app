@@ -312,6 +312,30 @@ export const handleGetBookProgress = async (env: AppEnv, user: DbUserRow, bookId
 );
 
 export const handleResetAllData = async (env: AppEnv): Promise<void> => {
+  const [writingAssetRows, wordHintRows] = await Promise.all([
+    readAll<{ r2_key: string | null }>(
+      env,
+      `SELECT r2_key
+       FROM writing_submission_assets
+       WHERE r2_key IS NOT NULL
+         AND TRIM(r2_key) != ''`,
+    ),
+    readAll<{ example_image_key: string | null }>(
+      env,
+      `SELECT example_image_key
+       FROM words
+       WHERE example_image_key IS NOT NULL
+         AND TRIM(example_image_key) != ''`,
+    ),
+  ]);
+  const r2Keys = Array.from(new Set([
+    ...writingAssetRows.map((row) => row.r2_key).filter((key): key is string => Boolean(key)),
+    ...wordHintRows.map((row) => row.example_image_key).filter((key): key is string => Boolean(key)),
+  ]));
+  if (env.WRITING_ASSETS && r2Keys.length > 0) {
+    await Promise.all(r2Keys.map((key) => env.WRITING_ASSETS!.delete(key)));
+  }
+
   const statements = [
     env.DB.prepare('DELETE FROM sessions'),
     env.DB.prepare('DELETE FROM writing_teacher_reviews'),

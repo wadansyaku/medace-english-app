@@ -17,6 +17,8 @@ interface PlanEditorModalProps {
   onSave: () => void;
 }
 
+const MAX_SELECTED_PLAN_BOOKS = 5;
+
 const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
   open,
   planningBooks,
@@ -30,6 +32,13 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
   const isMobileViewport = useIsMobileViewport();
   const selectedBooks = planningBooks.filter((book) => selectedBookIds.includes(book.id));
   const dailyGoalPresets = [10, 15, 20, 30, 40];
+  const validationMessage = planningBooks.length === 0
+    ? '先に学習対象の教材を作成してください。'
+    : selectedBooks.length === 0
+      ? '少なくとも1冊を選んでください。'
+      : selectedBooks.length > MAX_SELECTED_PLAN_BOOKS
+        ? `学習対象は${MAX_SELECTED_PLAN_BOOKS}冊以内に絞ってください。`
+        : '';
   if (!open) return null;
 
   return (
@@ -126,6 +135,11 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
             ))}
           </div>
           <p className="mt-1 text-xs text-slate-400">選択したコースから日々の問題が出題されます。</p>
+          {validationMessage && (
+            <p data-testid="plan-editor-validation-message" className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+              {validationMessage}
+            </p>
+          )}
         </div>
       </div>
       </div>
@@ -143,7 +157,8 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
             type="button"
             onClick={onSave}
             data-testid="plan-editor-save-button"
-            className="min-h-11 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+            disabled={Boolean(validationMessage)}
+            className="min-h-11 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             設定を更新する
           </button>

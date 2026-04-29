@@ -5,7 +5,7 @@ import {
   WEAKNESS_SIGNAL_LEVEL_LABELS,
   type StudentWeaknessProfile,
 } from '../../types';
-import { buildWeaknessEmptyStateLabel } from '../../shared/weakness';
+import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../../shared/weakness';
 
 interface DashboardWeaknessSectionProps {
   weaknessProfile: StudentWeaknessProfile | null;
@@ -29,7 +29,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Weakness Focus</div>
             <h3 className="mt-3 text-xl font-black tracking-tight text-slate-950">まだ苦手分析は育成中です</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              最初の10語を進めると、どこで詰まりやすいかを次回から明示します。今日は短い1セットだけで十分です。
+              まずは{WEAKNESS_MIN_SAMPLE}問以上の学習ログを作ると、次に10語だけ確認する場所を絞れます。
             </p>
           </div>
           <button
@@ -79,8 +79,8 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
               </div>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{signal.reason}</p>
               <div className="mt-3 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
-                <span>score {signal.score}</span>
-                <span>sample {signal.sampleSize}</span>
+                <span>{signal.nextActionLabel}</span>
+                <span>{signal.sampleSize}問から判定</span>
               </div>
             </article>
           ))}

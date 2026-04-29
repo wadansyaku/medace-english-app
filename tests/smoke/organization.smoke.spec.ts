@@ -79,7 +79,44 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   expect(settings.cohorts.length).toBeGreaterThan(0);
 
   if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
-    await expect(page.getByText(/最初のフォロー通知/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: '最初のフォロー通知を送る' })).toBeVisible();
+    const notificationTarget = snapshot.studentAssignments.find((student: {
+      assignedInstructorUid?: string;
+      assignedInstructorName?: string;
+      lastNotificationAt?: number;
+      name: string;
+      primaryMissionTitle?: string;
+      uid: string;
+    }) => (
+      student.assignedInstructorUid
+      && student.primaryMissionTitle
+      && !student.lastNotificationAt
+    ));
+    if (!notificationTarget) {
+      throw new Error('Business Admin first notification target was not found after bootstrap.');
+    }
+    const targetInstructorName = notificationTarget.assignedInstructorName
+      || snapshot.instructors.find((instructor: { uid: string; displayName: string }) => (
+        instructor.uid === notificationTarget.assignedInstructorUid
+      ))?.displayName;
+    expect(targetInstructorName).toBeTruthy();
+
+    await page.getByTestId('workspace-tab-instructors').click();
+    await expect(page.getByTestId('business-admin-first-notification-card')).toBeVisible();
+    await expect(page.getByTestId('first-notification-target-student')).toContainText(notificationTarget.name);
+    await expect(page.getByTestId('first-notification-target-instructor')).toContainText(targetInstructorName || '');
+    await expect(page.getByTestId('first-notification-target-mission')).toContainText(notificationTarget.primaryMissionTitle);
+    await page.getByTestId('business-admin-first-notification-send').click();
+    await expect(page.getByTestId('first-notification-status')).toContainText('初回フォロー通知を保存しました');
+
+    const notifiedSnapshot = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
+    expect(notifiedSnapshot.activationState).not.toBe('SEND_FIRST_NOTIFICATION');
+    expect(notifiedSnapshot.notifications7d).toBeGreaterThanOrEqual(snapshot.notifications7d + 1);
+    expect(notifiedSnapshot.nextRequiredActionTarget?.kind || 'DONE').toMatch(/WRITING_ASSIGNMENT|DONE/);
+
+    await page.getByTestId('workspace-tab-writing').click();
+    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+    await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
   } else {
     await expect(page.getByText('導入完了')).toBeVisible();
   }
@@ -93,8 +130,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
 
   await page.getByTestId('workspace-tab-writing').click();
   if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
-    await expect(page.getByTestId('business-admin-activation-gate')).toBeVisible();
-    await expect(page.getByText(/最初のフォロー通知/)).toBeVisible();
+    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
   } else {
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
   }

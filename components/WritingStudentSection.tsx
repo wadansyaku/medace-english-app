@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RefreshCcw } from 'lucide-react';
 
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import { type UserProfile } from '../types';
@@ -15,6 +15,9 @@ interface WritingStudentSectionProps {
 const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) => {
   const isMobileViewport = useIsMobileViewport();
   const controller = useWritingStudentController(user);
+  const refreshedAtLabel = controller.lastRefreshedAt
+    ? new Date(controller.lastRefreshedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+    : '未取得';
 
   return (
     <section data-testid="writing-student-section" className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
@@ -26,10 +29,29 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
             紙で書いた答案をスマホで提出し、講師確認後の添削結果をアプリ内で確認できます。
           </p>
         </div>
-        <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
-          {user.organizationName || 'Business Workspace'}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-testid="writing-refresh-button"
+            onClick={() => void controller.refresh({ silent: true })}
+            disabled={controller.loading || controller.refreshing}
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 transition-colors hover:border-medace-200 hover:text-medace-700 disabled:opacity-60"
+          >
+            {controller.refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+            更新
+          </button>
+          <div data-testid="writing-last-refreshed" className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
+            {user.organizationName || 'Business Workspace'} / {refreshedAtLabel}
+          </div>
         </div>
       </div>
+
+      {controller.refreshing && !controller.loading && (
+        <div data-testid="writing-refresh-status" className="mt-4 inline-flex items-center gap-2 rounded-full border border-medace-100 bg-medace-50 px-4 py-2 text-xs font-bold text-medace-700">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          最新の課題と返却状況を確認中
+        </div>
+      )}
 
       {isMobileViewport && (
         <div className="mt-4 grid grid-cols-2 gap-3">

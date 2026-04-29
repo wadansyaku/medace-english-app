@@ -144,7 +144,7 @@ describe('weakness intelligence', () => {
       score: 61,
       sampleSize: 9,
       reason: 'spelling',
-      nextActionLabel: '復習を10語始める',
+      nextActionLabel: 'スペリングを10語確認する',
       recommendedActionType: RecommendedActionType.START_REVIEW,
       targetQuestionModes: ['SPELLING_HINT'],
       updatedAt: now,

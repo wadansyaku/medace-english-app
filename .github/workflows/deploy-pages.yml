@@ -43,14 +43,8 @@ jobs:
       - name: Install Playwright browser
         run: node node_modules/playwright/cli.js install --with-deps chromium
 
-      - name: Verify D1 migrations locally
-        run: npm run db:migrate:verify
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Fast verification gate
+        run: npm run verify:fast
 
       - name: API integration tests
         run: npm run test:api
@@ -121,7 +115,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep "public home shows the live motivation board before login"
+        run: node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login"
 
       - name: Inspect production Pages secrets
         id: production-secrets
@@ -136,7 +130,7 @@ jobs:
             names="(none)"
           fi
           missing_required=""
-          for required in ADMIN_DEMO_PASSWORD WRITING_AI_MODE; do
+          for required in ADMIN_DEMO_PASSWORD WRITING_AI_MODE INTERNAL_JOB_SECRET; do
             if ! printf '%s\n' "$names" | tr ',' '\n' | grep -qx "$required"; then
               missing_required="${missing_required}${missing_required:+,}$required"
             fi
@@ -169,7 +163,7 @@ jobs:
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Recovery Bookmark: \`${{ steps.d1-bookmark.outputs.bookmark }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: typecheck + unit tests + API integration tests + full smoke suite + cf:doctor"
+            echo "- Verification: verify:fast + API integration tests + full smoke suite + cf:doctor"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Production Secrets: \`${{ steps.production-secrets.outputs.names }}\`"
             echo "- Missing Required Production Secrets: \`${{ steps.production-secrets.outputs['missing-required'] }}\`"

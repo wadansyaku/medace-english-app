@@ -12,6 +12,7 @@ interface DashboardQuickNavItem {
 interface UseDashboardSectionNavigationParams {
   isStudentMobileShell: boolean;
   hasPrimaryMission: boolean;
+  hasActionableWriting: boolean;
   canShowWritingSection: boolean;
   hasCoachNotification: boolean;
 }
@@ -19,6 +20,7 @@ interface UseDashboardSectionNavigationParams {
 export const useDashboardSectionNavigation = ({
   isStudentMobileShell,
   hasPrimaryMission,
+  hasActionableWriting,
   canShowWritingSection,
   hasCoachNotification,
 }: UseDashboardSectionNavigationParams) => {
@@ -32,14 +34,16 @@ export const useDashboardSectionNavigation = ({
   const [activeQuickNavId, setActiveQuickNavId] = React.useState('today');
 
   const taskQuickNavTarget = React.useMemo<DashboardQuickNavItem>(() => (
-    hasPrimaryMission
+    hasActionableWriting
+      ? { id: 'task', label: '作文', kind: 'writing', ref: writingSectionRef }
+      : hasPrimaryMission
       ? { id: 'task', label: '課題', kind: 'mission', ref: missionSectionRef }
       : canShowWritingSection
         ? { id: 'task', label: '作文', kind: 'writing', ref: writingSectionRef }
         : hasCoachNotification
           ? { id: 'task', label: '講師', kind: 'coach', ref: coachSectionRef }
           : { id: 'task', label: 'プラン', kind: 'plan', ref: planSectionRef }
-  ), [canShowWritingSection, hasCoachNotification, hasPrimaryMission]);
+  ), [canShowWritingSection, hasActionableWriting, hasCoachNotification, hasPrimaryMission]);
 
   const mobileQuickNavItems = React.useMemo<DashboardQuickNavItem[]>(() => ([
     { id: 'today', label: '今日', kind: 'today', ref: heroSectionRef },

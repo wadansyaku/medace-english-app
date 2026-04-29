@@ -19,6 +19,10 @@ import {
   createSubmissionCode,
   encodeSubmissionMarker,
 } from '../../../utils/writing';
+import {
+  resolveWritingUploadMimeType,
+  validateWritingUploadPolicy,
+} from '../../../shared/writingUploadPolicy';
 import type { AiUsageLogContext } from '../ai-metering';
 import { HttpError, noContent } from '../http';
 import { readFirst } from '../storage-support';
@@ -67,8 +71,6 @@ import {
 } from '../side-effect-jobs';
 import { recordProductEventForUser } from '../product-events';
 
-const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const PDF_MIME_TYPE = 'application/pdf';
 const WRITING_UPLOAD_URL_TTL_MS = 15 * 60 * 1000;
 
 const encodeBase64 = (buffer: ArrayBuffer): string => {
@@ -167,6 +169,26 @@ const isUploadReservationActive = (row: DbWritingAssetRow, now: number): boolean
   if (row.uploaded_at) return true;
   if (row.upload_consumed_at) return false;
   return Number(row.upload_expires_at || 0) > now;
+};
+
+const toWritingUploadPolicyFile = (
+  row: DbWritingAssetRow,
+  options: { requireUploadedSize?: boolean } = {},
+) => ({
+  name: row.file_name,
+  type: row.mime_type,
+  size: options.requireUploadedSize
+    ? Number(row.byte_size || 0)
+    : Math.max(1, Number(row.expected_byte_size || row.byte_size || 1)),
+});
+
+const assertWritingUploadPolicy = (
+  files: Array<{ name: string; type: string; size: number }>,
+): void => {
+  const validation = validateWritingUploadPolicy(files);
+  if (!validation.valid) {
+    throw new HttpError(400, validation.message);
+  }
 };
 
 export const handleGenerateWritingAssignment = async (
@@ -308,27 +330,26 @@ export const handleCreateWritingUploadUrl = async (
     throw new HttpError(400, '現在の状態では提出できません。');
   }
 
-  const mimeType = String(request.mimeType || '');
-  const isPdf = mimeType === PDF_MIME_TYPE;
-  const isImage = IMAGE_MIME_TYPES.has(mimeType);
-  if (!isPdf && !isImage) {
-    throw new HttpError(400, 'PDF または画像のみ提出できます。');
-  }
-
   const now = Date.now();
   const existingAssets = await readSubmissionAssetRowsForAttempt(env, request.assignmentId, attemptNo);
   const activeAssets = existingAssets.filter((row) => isUploadReservationActive(row, now));
-  if (isPdf && activeAssets.length > 0) {
-    throw new HttpError(400, 'PDF 提出は1ファイルのみです。');
-  }
-  if (!isPdf && activeAssets.length >= 4) {
-    throw new HttpError(400, '画像提出は最大4枚までです。');
-  }
+  const mimeType = resolveWritingUploadMimeType({
+    name: request.fileName,
+    type: String(request.mimeType || ''),
+  });
+  assertWritingUploadPolicy([
+    ...activeAssets.map((row) => toWritingUploadPolicyFile(row)),
+    {
+      name: request.fileName,
+      type: mimeType,
+      size: request.byteSize,
+    },
+  ]);
 
   const assetId = crypto.randomUUID();
   const uploadToken = crypto.randomUUID();
   const safeName = request.fileName.replace(/[^\w.\-]+/g, '_');
-  const r2Key = `${assignmentRow.organization_id || 'org-unknown'}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
+  const r2Key = `writing-submissions/${assignmentRow.organization_id || 'org-unknown'}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
   const expiresAt = now + WRITING_UPLOAD_URL_TTL_MS;
 
   await env.DB.prepare(`
@@ -460,6 +481,7 @@ export const handleFinalizeWritingSubmission = async (
   if (assetRows.some((row) => !row.uploaded_at)) {
     throw new HttpError(400, 'アップロードが完了していないファイルがあります。');
   }
+  assertWritingUploadPolicy(assetRows.map((row) => toWritingUploadPolicyFile(row, { requireUploadedSize: true })));
 
   const assignment = toAssignment(assignmentRow);
   const aiMode = resolveWritingAiMode(env);
