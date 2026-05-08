@@ -18,6 +18,7 @@ import {
 import {
   canOpenWritingFeedback,
   canSubmitWritingAssignment,
+  getWritingStudentAssignmentPriority,
 } from '../components/writing/studentSectionUtils';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
 import {
@@ -53,6 +54,22 @@ export const useWritingStudentController = (user: UserProfile) => {
     )).length,
     [assignments],
   );
+  const submitReadyCount = useMemo(
+    () => assignments.filter(canSubmitWritingAssignment).length,
+    [assignments],
+  );
+  const feedbackReadyCount = useMemo(
+    () => assignments.filter(canOpenWritingFeedback).length,
+    [assignments],
+  );
+  const waitingAssignmentCount = useMemo(
+    () => assignments.filter((assignment) => (
+      !canSubmitWritingAssignment(assignment)
+      && !canOpenWritingFeedback(assignment)
+      && assignment.status !== 'COMPLETED'
+    )).length,
+    [assignments],
+  );
 
   const selectedEvaluation = useMemo(() => (
     feedbackDetail?.submission.evaluations.find((evaluation) => evaluation.id === selectedEvaluationId)
@@ -76,7 +93,11 @@ export const useWritingStudentController = (user: UserProfile) => {
     const refreshPromise = (async () => {
       const response = await listWritingAssignments('mine');
       const sortedAssignments = [...response.assignments].sort(
-        (left, right) => (right.updatedAt || 0) - (left.updatedAt || 0),
+        (left, right) => {
+          const priorityDiff = getWritingStudentAssignmentPriority(left) - getWritingStudentAssignmentPriority(right);
+          if (priorityDiff !== 0) return priorityDiff;
+          return (right.updatedAt || 0) - (left.updatedAt || 0);
+        },
       );
       setAssignments(sortedAssignments);
       setLastRefreshedAt(Date.now());
@@ -254,6 +275,9 @@ export const useWritingStudentController = (user: UserProfile) => {
     feedbackCommentExpanded,
     mobileSubmitStep,
     actionableAssignmentCount,
+    submitReadyCount,
+    feedbackReadyCount,
+    waitingAssignmentCount,
     refresh,
     openSubmitDialog,
     resetSubmitDialog,

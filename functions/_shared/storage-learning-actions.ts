@@ -1,4 +1,4 @@
-import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, type LearningTaskIntentType, UserProfile } from '../../types';
+import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, type LearningTaskIntentType, UserProfile, type WorksheetQuestionMode } from '../../types';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
@@ -188,7 +188,7 @@ export const handleRecordQuizAttempt = async (
   wordId: string,
   bookId: string,
   correct: boolean,
-  questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+  questionMode: WorksheetQuestionMode,
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,

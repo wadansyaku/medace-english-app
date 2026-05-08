@@ -38,6 +38,7 @@ import {
   UserRole,
   WeeklyMission,
   WeeklyMissionBoard,
+  WorksheetQuestionMode,
   WordHintAssetType,
   WordData,
 } from '../types';
@@ -267,7 +268,7 @@ export interface StorageActionMap {
       wordId: string;
       bookId: string;
       correct: boolean;
-      questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
+      questionMode: WorksheetQuestionMode;
       responseTimeMs: number;
       missionAssignmentId?: string;
       taskIntentType?: LearningTaskIntentType;

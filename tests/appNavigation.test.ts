@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildNavigationPath, parseNavigationPath } from '../hooks/useAppNavigation';
-import { buildTaskQueryString, createDefaultTaskIntentFromRoute, getTaskRouteBookId } from '../shared/learningTask';
+import {
+  buildTaskQueryString,
+  createDefaultTaskIntentFromRoute,
+  createTodayFocusTaskIntent,
+  getTaskRouteBookId,
+} from '../shared/learningTask';
 import { PUBLIC_BUSINESS_ROLE_KEYS, getPublicBusinessRolePath } from '../shared/publicBusinessRoles';
 
 describe('app navigation paths', () => {
@@ -43,6 +48,24 @@ describe('app navigation paths', () => {
       selectedTask: task,
       publicRole: null,
     })).toBe(`/study/${encodeURIComponent(getTaskRouteBookId(task))}${buildTaskQueryString(task)}`);
+  });
+
+  it('round-trips task query state for smart study routes', () => {
+    const task = createTodayFocusTaskIntent();
+    const path = buildNavigationPath({
+      currentView: 'study',
+      returnView: 'dashboard',
+      selectedTask: task,
+      publicRole: null,
+    });
+    const url = new URL(path, 'https://example.test');
+
+    expect(parseNavigationPath(url.pathname, url.search)).toEqual({
+      currentView: 'study',
+      returnView: 'dashboard',
+      selectedTask: task,
+      publicRole: null,
+    });
   });
 
   it('round-trips public role detail routes', () => {

@@ -1,7 +1,8 @@
-import { UserRole } from '../../../types';
+import { UserRole, type WorksheetQuestionMode } from '../../../types';
+import { WORKSHEET_QUESTION_MODES } from '../../../shared/worksheetQuestionMode';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectBoolean, expectEmptyPayload, expectNumber, expectObject, expectOptionalNumber, expectOptionalString, expectString } from '../request-validation';
+import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalNumber, expectOptionalString, expectString } from '../request-validation';
 import {
   handleAddXP,
   handleGetActivityLogs,
@@ -61,7 +62,7 @@ export const learningStorageActionDefinitions = {
         wordId: expectString(record, 'wordId'),
         bookId: expectString(record, 'bookId'),
         correct: expectBoolean(record, 'correct'),
-        questionMode: expectString(record, 'questionMode') as 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+        questionMode: expectEnum(record.questionMode, WORKSHEET_QUESTION_MODES, 'questionMode') as WorksheetQuestionMode,
         responseTimeMs: expectOptionalNumber(record, 'responseTimeMs') || 0,
         missionAssignmentId: expectOptionalString(record, 'missionAssignmentId'),
         taskIntentType: expectOptionalString(record, 'taskIntentType') as never,

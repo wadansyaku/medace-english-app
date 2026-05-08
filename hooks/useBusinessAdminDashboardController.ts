@@ -1,17 +1,20 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import type {
+  BusinessAdminWorkspaceView,
   BookMetadata,
   OrganizationDashboardSnapshot,
   OrganizationSettingsSnapshot,
   WeeklyMissionBoard,
   WritingAssignment,
+  WritingQueueItem,
 } from '../types';
 import { useAssignmentManagement } from './businessAdmin/useAssignmentManagement';
 import { useActivationBootstrap } from './businessAdmin/useActivationBootstrap';
 import { useFirstNotificationAction } from './businessAdmin/useFirstNotificationAction';
 import { useOrganizationSettingsForm } from './businessAdmin/useOrganizationSettingsForm';
 import { useWeeklyMissionComposer } from './businessAdmin/useWeeklyMissionComposer';
+import { buildBusinessAdminDecisionModel } from '../utils/businessAdminDashboard';
 
 interface NoticeState {
   tone: 'success' | 'error';
@@ -24,6 +27,8 @@ interface UseBusinessAdminDashboardControllerParams {
   missionBoard: WeeklyMissionBoard | null;
   books: BookMetadata[];
   writingAssignments: WritingAssignment[];
+  writingQueue: WritingQueueItem[];
+  activeView: BusinessAdminWorkspaceView;
   refresh: () => Promise<void>;
 }
 
@@ -33,6 +38,8 @@ export const useBusinessAdminDashboardController = ({
   missionBoard,
   books,
   writingAssignments,
+  writingQueue,
+  activeView,
   refresh,
 }: UseBusinessAdminDashboardControllerParams) => {
   const [notice, setNotice] = useState<NoticeState | null>(null);
@@ -65,9 +72,20 @@ export const useBusinessAdminDashboardController = ({
     setNotice,
     writingAssignments,
   });
+  const decisionModel = useMemo(() => (
+    snapshot
+      ? buildBusinessAdminDecisionModel({
+        snapshot,
+        activeView,
+        writingAssignments,
+        writingQueue,
+      })
+      : null
+  ), [activeView, snapshot, writingAssignments, writingQueue]);
 
   return {
     notice: firstNotificationAction.firstNotificationNotice || notice,
+    decisionModel,
     activationNotificationPending: firstNotificationAction.firstNotificationSending,
     firstNotificationNotice: firstNotificationAction.firstNotificationNotice,
     firstNotificationTarget: firstNotificationAction.firstNotificationTarget,

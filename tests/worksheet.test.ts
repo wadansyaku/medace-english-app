@@ -9,6 +9,8 @@ const sourceWords = [
     definition: '安定させる',
     bookId: 'level4-book',
     bookTitle: 'レベル4',
+    exampleSentence: 'Doctors stabilize the patient before surgery.',
+    exampleMeaning: '医師は 手術前に 患者を 安定させる。',
   },
   {
     id: 'w2',
@@ -16,6 +18,8 @@ const sourceWords = [
     definition: 'トリアージ',
     bookId: 'level4-book',
     bookTitle: 'レベル4',
+    exampleSentence: 'Nurses triage patients in the emergency room.',
+    exampleMeaning: '看護師は 救急室で 患者を トリアージする。',
   },
 ];
 
@@ -59,5 +63,58 @@ describe('generateWorksheetQuestions', () => {
       hintPrefix: 'st',
       hintVisible: true,
     })).toBe('incorrect');
+  });
+
+  it('generates grammar cloze questions from studied vocabulary examples', () => {
+    const questions = generateWorksheetQuestions(sourceWords, 'GRAMMAR_CLOZE', 2);
+    const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
+
+    expect(stabilizeQuestion).toMatchObject({
+      interactionType: 'CHOICE',
+      promptText: 'Doctors ____ the patient before surgery.',
+      answer: 'stabilize',
+      sourceSentence: 'Doctors stabilize the patient before surgery.',
+    });
+    expect(stabilizeQuestion?.options).toContain('stabilize');
+  });
+
+  it('generates English word-order chip questions', () => {
+    const questions = generateWorksheetQuestions(sourceWords, 'EN_WORD_ORDER', 2);
+    const triageQuestion = questions.find((question) => question.wordId === 'w2');
+
+    expect(triageQuestion?.interactionType).toBe('ORDERING');
+    expect(triageQuestion?.tokens?.map((token) => token.text)).not.toEqual([
+      'Nurses',
+      'triage',
+      'patients',
+      'in',
+      'the',
+      'emergency',
+      'room.',
+    ]);
+    expect(triageQuestion?.answerTokenIds?.map((id) => triageQuestion.tokens?.find((token) => token.id === id)?.text)).toEqual([
+      'Nurses',
+      'triage',
+      'patients',
+      'in',
+      'the',
+      'emergency',
+      'room.',
+    ]);
+  });
+
+  it('generates Japanese translation-order chip questions', () => {
+    const questions = generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_ORDER', 2);
+    const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
+
+    expect(stabilizeQuestion?.interactionType).toBe('ORDERING');
+    expect(stabilizeQuestion?.sourceSentence).toBe('Doctors stabilize the patient before surgery.');
+    expect(stabilizeQuestion?.sourceTranslation).toBe('医師は 手術前に 患者を 安定させる');
+    expect(stabilizeQuestion?.answerTokenIds?.map((id) => stabilizeQuestion.tokens?.find((token) => token.id === id)?.text)).toEqual([
+      '医師は',
+      '手術前に',
+      '患者を',
+      '安定させる',
+    ]);
   });
 });

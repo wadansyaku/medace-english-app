@@ -62,8 +62,15 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
   <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
     <div className="space-y-3" data-testid="writing-review-queue">
       {reviewList.length === 0 && (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
-          {tab === 'QUEUE' ? '講師確認待ちの提出はまだありません。' : '返却済みの履歴はまだありません。'}
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6">
+          <div className="text-sm font-black text-slate-900">
+            {tab === 'QUEUE' ? '講師確認待ちの提出はありません' : '返却済みの履歴はまだありません'}
+          </div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500">
+            {tab === 'QUEUE'
+              ? '生徒の提出または校舎スキャナー登録が完了すると、ここに返却判断待ちとして表示されます。'
+              : '承認返却や再提出依頼を行うと、返却内容をここから確認できます。'}
+          </div>
         </div>
       )}
       {reviewList.map((item) => (
@@ -93,14 +100,20 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
             <div>OCR {Math.round(item.transcriptConfidence * 100)}%</div>
             <div>{item.recommendedProvider ? WRITING_AI_PROVIDER_LABELS[item.recommendedProvider] : '未選択'}</div>
           </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+            {tab === 'QUEUE' ? '次: 採用候補を選び、講師コメントを書いて返却判断' : '次: 返却内容を確認し、必要なら完了へ'}
+          </div>
         </button>
       ))}
     </div>
 
     <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
       {!detail ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-5 py-6 text-sm text-slate-500">
-          左の一覧から答案を選ぶと、答案、OCR、AI比較、講師コメント、返却操作をまとめて確認できます。
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-5 py-6">
+          <div className="text-sm font-black text-slate-900">答案を選択してください</div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500">
+            左の一覧から答案を選ぶと、原本、OCR、AI比較、講師コメント、返却操作をまとめて確認できます。
+          </div>
         </div>
       ) : (
         <div className="space-y-5">
@@ -241,7 +254,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
               </section>
             </div>
 
-            <aside className="space-y-5">
+            <aside className="space-y-5 2xl:sticky 2xl:top-6 2xl:self-start">
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
                 <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">採用候補</div>
                 {selectedEvaluation ? (
@@ -273,19 +286,30 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
 
               {tab === 'QUEUE' ? (
                 <section className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">講師コメント</div>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">返却判断</div>
+                  <div className="mt-3 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm leading-relaxed text-medace-900/80">
+                    1. 採用候補を選ぶ  2. 生徒に見せるコメントを書く  3. 返却または再提出依頼を確定
+                  </div>
+                  <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">生徒に見せるコメント</div>
                   <textarea
                     data-testid="writing-review-public-comment"
                     value={reviewPublicComment}
                     onChange={(event) => onReviewPublicCommentChange(event.target.value)}
                     className="mt-3 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                    placeholder="良かった点と、次に直す点を生徒向けに短く書きます。"
                   />
                   <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">講師メモ</div>
                   <textarea
                     value={reviewPrivateMemo}
                     onChange={(event) => onReviewPrivateMemoChange(event.target.value)}
                     className="mt-3 min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+                    placeholder="面談や次回フォロー用の内部メモです。生徒には表示されません。"
                   />
+                  {!reviewPublicComment.trim() && (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                      返却または再提出依頼には、生徒向けコメントが必要です。
+                    </div>
+                  )}
                   <div className="mt-5 flex flex-col gap-3">
                     <button
                       type="button"

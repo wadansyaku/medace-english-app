@@ -131,6 +131,9 @@ export const createWeaknessTaskIntent = (signal: WeaknessSignalSummary | null | 
     signal.dimension === WeaknessDimension.MEANING_RECALL
     || signal.dimension === WeaknessDimension.MEANING_RECOGNITION
     || signal.dimension === WeaknessDimension.SPELLING_RECALL
+    || signal.dimension === WeaknessDimension.GRAMMAR_APPLICATION
+    || signal.dimension === WeaknessDimension.WORD_ORDER
+    || signal.dimension === WeaknessDimension.TRANSLATION_ORDER
   );
 
   return {

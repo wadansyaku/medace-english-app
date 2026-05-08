@@ -42,7 +42,7 @@ describe('learning tasks', () => {
     });
   });
 
-  it('routes meaning and spelling weaknesses into direct quiz tasks', () => {
+  it('routes meaning, spelling, and grammar weaknesses into direct quiz tasks', () => {
     const baseSignal: WeaknessSignalSummary = {
       dimension: WeaknessDimension.MEANING_RECALL,
       level: WeaknessSignalLevel.HIGH,
@@ -69,6 +69,18 @@ describe('learning tasks', () => {
     })).toMatchObject({
       mode: 'quiz',
       targetQuestionModes: ['SPELLING_HINT'],
+    });
+
+    expect(createWeaknessTaskIntent({
+      ...baseSignal,
+      dimension: WeaknessDimension.WORD_ORDER,
+      nextActionLabel: '英語語順を10問確認する',
+      targetQuestionModes: ['EN_WORD_ORDER'],
+    })).toMatchObject({
+      mode: 'quiz',
+      intentType: LearningTaskIntentType.WEAKNESS_QUIZ,
+      autoStart: true,
+      targetQuestionModes: ['EN_WORD_ORDER'],
     });
   });
 

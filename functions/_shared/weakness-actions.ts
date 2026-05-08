@@ -74,7 +74,12 @@ const mapSignalRow = (row: DbWeaknessSignalRow): WeaknessSignalSummary => {
     const parsed = JSON.parse(row.target_question_modes_json) as unknown;
     if (Array.isArray(parsed)) {
       targetQuestionModes = parsed.filter((value): value is WeaknessSignalSummary['targetQuestionModes'][number] => (
-        value === 'EN_TO_JA' || value === 'JA_TO_EN' || value === 'SPELLING_HINT'
+        value === 'EN_TO_JA'
+        || value === 'JA_TO_EN'
+        || value === 'SPELLING_HINT'
+        || value === 'GRAMMAR_CLOZE'
+        || value === 'EN_WORD_ORDER'
+        || value === 'JA_TRANSLATION_ORDER'
       ));
     }
   } catch {

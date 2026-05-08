@@ -108,7 +108,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Step 2</div>
       <h2 className="mt-1 text-xl font-black text-slate-950">出題方向を選ぶ</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-500">
-        英日・日英・スペルチェックのどれで確認するかを固定します。
+        英日・日英・スペルチェックに加えて、登場済み単語を使った文法穴埋め、英語語順、日本語並び替えも選べます。
       </p>
       <div className="mt-4 grid gap-3">
         {(Object.keys(WORKSHEET_MODE_COPY) as WorksheetQuestionMode[]).map((questionMode) => {

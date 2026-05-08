@@ -43,6 +43,24 @@ test('group admin can open the organization dashboard and update an assignment',
   await expect(page.getByTestId('assignment-history-section')).toContainText('変更者');
 });
 
+test('group admin can create a grammar worksheet from studied vocabulary', async ({ page }) => {
+  await loginGroupAdminDemo(page);
+
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await page.getByTestId('workspace-tab-worksheets').click();
+  await expect(page.getByText('配布用PDF問題を独立して作る')).toBeVisible();
+
+  await page.getByRole('button', { name: '生徒別にPDF問題を作る' }).click();
+  await expect(page.getByText('学習済み単語を A4 1枚で確認する')).toBeVisible();
+  await page.getByRole('button', { name: /英語語順並び替え/ }).click();
+  await expect(page.getByText('文法化できる語数')).toBeVisible();
+  await expect(page.getByText(/英字の単語と日本語の意味/)).toBeVisible();
+
+  await page.getByRole('button', { name: '問題を開く' }).click();
+  await expect(page.getByText('印刷プレビュー')).toBeVisible();
+  await expect(page.locator('iframe[title="Worksheet print preview"]')).toBeVisible();
+});
+
 test('group admin bootstrap seeds the demo activation loop and leaves guided next steps', async ({ page }) => {
   await loginGroupAdminDemo(page);
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
@@ -79,7 +97,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   expect(settings.cohorts.length).toBeGreaterThan(0);
 
   if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
-    await expect(page.getByRole('heading', { name: '最初のフォロー通知を送る' })).toBeVisible();
+    await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '最初のフォロー通知を送る' })).toBeVisible();
     const notificationTarget = snapshot.studentAssignments.find((student: {
       assignedInstructorUid?: string;
       assignedInstructorName?: string;
@@ -118,7 +136,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
   } else {
-    await expect(page.getByText('導入完了')).toBeVisible();
+    await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '導入完了' })).toBeVisible();
   }
 
   await page.getByTestId('workspace-tab-assignments').click();

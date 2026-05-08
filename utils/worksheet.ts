@@ -1,14 +1,31 @@
 import { StudentWorksheetWord, WordData, WorksheetQuestionMode } from '../types';
 import { getBookProgressionIndex } from '../shared/bookProgression';
+import {
+  buildGrammarPracticeItemsForWord,
+  hasEnoughGrammarPracticeData,
+  type GrammarPracticeChip,
+  type GrammarPracticeItem,
+} from './grammarPractice';
 
 type WorksheetSourceWord = Pick<StudentWorksheetWord, 'word' | 'definition' | 'bookId' | 'bookTitle'> & {
   wordId?: string;
   id?: string;
+  number?: number;
+  exampleSentence?: string | null;
+  exampleMeaning?: string | null;
+};
+
+export interface WorksheetOrderToken {
+  id: string;
+  text: string;
+  learnedWordId?: string;
+  learnedWord?: string;
 };
 
 export interface GeneratedWorksheetQuestion {
   id: string;
   mode: WorksheetQuestionMode;
+  interactionType: 'CHOICE' | 'TEXT_INPUT' | 'ORDERING';
   wordId: string;
   bookId: string;
   bookTitle?: string;
@@ -16,6 +33,12 @@ export interface GeneratedWorksheetQuestion {
   promptText: string;
   answer: string;
   options?: string[];
+  tokens?: WorksheetOrderToken[];
+  answerTokenIds?: string[];
+  sourceSentence?: string;
+  sourceTranslation?: string;
+  grammarFocus?: string;
+  instruction?: string;
   hintPrefix?: string;
   maskedAnswer?: string;
 }
@@ -33,6 +56,18 @@ export const WORKSHEET_MODE_COPY: Record<WorksheetQuestionMode, { label: string;
     label: 'スペルチェック',
     description: 'まずは全文入力し、必要なときだけ先頭2文字ヒントで確認します。',
   },
+  GRAMMAR_CLOZE: {
+    label: '文法穴埋め',
+    description: '登場済みの単語を英文の空所に入れて、単語と文の形を一緒に確認します。',
+  },
+  EN_WORD_ORDER: {
+    label: '英語語順並び替え',
+    description: '例文や復習文を英単語チップに分け、正しい英文の順番へ戻します。',
+  },
+  JA_TRANSLATION_ORDER: {
+    label: '日本語並び替え',
+    description: '英文を見て、日本語の意味チップを自然な順番へ戻します。',
+  },
 };
 
 const shuffle = <T>(items: T[]): T[] => {
@@ -45,6 +80,37 @@ const shuffle = <T>(items: T[]): T[] => {
 };
 
 const toWordId = (word: WorksheetSourceWord): string => word.wordId || word.id || `${word.bookId}:${word.word}`;
+
+export const isGrammarWorksheetMode = (mode: WorksheetQuestionMode): boolean => (
+  mode === 'GRAMMAR_CLOZE'
+  || mode === 'EN_WORD_ORDER'
+  || mode === 'JA_TRANSLATION_ORDER'
+);
+
+const toPracticeWord = (word: WorksheetSourceWord, index = 0): WordData => ({
+  id: toWordId(word),
+  bookId: word.bookId,
+  number: word.number ?? index + 1,
+  word: word.word,
+  definition: word.definition,
+  exampleSentence: word.exampleSentence,
+  exampleMeaning: word.exampleMeaning,
+});
+
+export const canGenerateWorksheetQuestionForWord = (
+  word: Pick<WordData, 'word' | 'definition'>,
+  mode: WorksheetQuestionMode,
+): boolean => {
+  if (isGrammarWorksheetMode(mode)) {
+    return hasEnoughGrammarPracticeData(word);
+  }
+  return Boolean(word.word.trim() && word.definition.trim());
+};
+
+export const filterWorksheetQuestionCandidates = <T extends Pick<WordData, 'word' | 'definition'>>(
+  words: T[],
+  mode: WorksheetQuestionMode,
+): T[] => words.filter((word) => canGenerateWorksheetQuestionForWord(word, mode));
 
 const uniqueValues = (values: string[]): string[] => [...new Set(values.filter(Boolean))];
 
@@ -324,6 +390,107 @@ export const resolveSpellingAttempt = ({
   return 'incorrect';
 };
 
+const toOrderTokens = (
+  chips: GrammarPracticeChip[],
+  learnedWordId: string,
+  learnedWord: string,
+): WorksheetOrderToken[] => chips.map((chip) => ({
+  id: chip.id,
+  text: chip.text,
+  learnedWordId,
+  learnedWord,
+}));
+
+const orderedAnswerText = (chips: GrammarPracticeChip[], correctChipIds: string[], separator: string): string => {
+  const chipMap = new Map(chips.map((chip) => [chip.id, chip.text]));
+  return correctChipIds
+    .map((chipId) => chipMap.get(chipId))
+    .filter((value): value is string => Boolean(value))
+    .join(separator);
+};
+
+const getGrammarPracticeItemForMode = (
+  word: WorksheetSourceWord,
+  mode: WorksheetQuestionMode,
+  index: number,
+): GrammarPracticeItem | null => {
+  const practiceWord = toPracticeWord(word, index);
+  const targetKind = mode === 'GRAMMAR_CLOZE'
+    ? 'GRAMMAR_CLOZE'
+    : mode === 'EN_WORD_ORDER'
+      ? 'ENGLISH_WORD_ORDER'
+      : mode === 'JA_TRANSLATION_ORDER'
+        ? 'JAPANESE_WORD_ORDER'
+        : null;
+  if (!targetKind) return null;
+
+  return buildGrammarPracticeItemsForWord(practiceWord, { seed: `${mode}:${practiceWord.id}` })
+    .find((item) => item.kind === targetKind) || null;
+};
+
+const toGrammarWorksheetQuestion = (
+  word: WorksheetSourceWord,
+  mode: Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>,
+  index: number,
+): GeneratedWorksheetQuestion | null => {
+  const wordId = toWordId(word);
+  const item = getGrammarPracticeItemForMode(word, mode, index);
+  if (!item) return null;
+
+  if (item.kind === 'GRAMMAR_CLOZE') {
+    return {
+      id: `${wordId}:${mode}:${index}`,
+      mode,
+      interactionType: 'CHOICE',
+      wordId,
+      bookId: word.bookId,
+      bookTitle: word.bookTitle,
+      promptLabel: item.grammarFocus,
+      promptText: item.clozeSentence,
+      answer: item.answer,
+      options: item.options,
+      sourceSentence: item.sourceSentence,
+      grammarFocus: item.grammarFocus,
+      instruction: '空所に入る単語を選び、文の中でどう使われているか確認します。',
+    };
+  }
+
+  if (item.kind === 'ENGLISH_WORD_ORDER') {
+    return {
+      id: `${wordId}:${mode}:${index}`,
+      mode,
+      interactionType: 'ORDERING',
+      wordId,
+      bookId: word.bookId,
+      bookTitle: word.bookTitle,
+      promptLabel: '英語語順',
+      promptText: item.prompt,
+      answer: orderedAnswerText(item.chips, item.correctChipIds, ' '),
+      tokens: toOrderTokens(item.chips, wordId, word.word),
+      answerTokenIds: item.correctChipIds,
+      sourceSentence: item.sourceSentence,
+      instruction: '登場済み単語を含む英文を、チップの順番で組み立てます。',
+    };
+  }
+
+  return {
+    id: `${wordId}:${mode}:${index}`,
+    mode,
+    interactionType: 'ORDERING',
+    wordId,
+    bookId: word.bookId,
+    bookTitle: word.bookTitle,
+    promptLabel: '日本語語順',
+    promptText: item.prompt,
+    answer: item.answerText,
+    tokens: toOrderTokens(item.chips, wordId, word.word),
+    answerTokenIds: item.correctChipIds,
+    sourceSentence: item.sourceSentence,
+    sourceTranslation: item.answerText,
+    instruction: '英文を手がかりに、日本語の意味を自然な順番へ戻します。',
+  };
+};
+
 export const generateWorksheetQuestions = (
   sourceWords: WorksheetSourceWord[],
   mode: WorksheetQuestionMode,
@@ -334,10 +501,19 @@ export const generateWorksheetQuestions = (
 ): GeneratedWorksheetQuestion[] => {
   if (sourceWords.length === 0) return [];
 
-  const selectedWords = shuffle(sourceWords).slice(0, Math.min(questionCount, sourceWords.length));
+  const eligibleWords = sourceWords.filter((word) => canGenerateWorksheetQuestionForWord(toPracticeWord(word), mode));
+  if (eligibleWords.length === 0) return [];
+
+  const selectedWords = shuffle(eligibleWords).slice(0, Math.min(questionCount, eligibleWords.length));
   const distractorWords = options.distractorWords && options.distractorWords.length > 0
     ? options.distractorWords
-    : sourceWords;
+    : eligibleWords;
+
+  if (mode === 'GRAMMAR_CLOZE' || mode === 'EN_WORD_ORDER' || mode === 'JA_TRANSLATION_ORDER') {
+    return selectedWords
+      .map((word, index) => toGrammarWorksheetQuestion(word, mode, index))
+      .filter((question): question is GeneratedWorksheetQuestion => Boolean(question));
+  }
 
   return selectedWords.map((word, index) => {
     const wordId = toWordId(word);
@@ -346,6 +522,7 @@ export const generateWorksheetQuestions = (
       return {
         id: `${wordId}:${mode}:${index}`,
         mode,
+        interactionType: 'CHOICE',
         wordId,
         bookId: word.bookId,
         bookTitle: word.bookTitle,
@@ -361,6 +538,7 @@ export const generateWorksheetQuestions = (
       return {
         id: `${wordId}:${mode}:${index}`,
         mode,
+        interactionType: 'TEXT_INPUT',
         wordId,
         bookId: word.bookId,
         bookTitle: word.bookTitle,
@@ -375,6 +553,7 @@ export const generateWorksheetQuestions = (
     return {
       id: `${wordId}:${mode}:${index}`,
       mode,
+      interactionType: 'CHOICE',
       wordId,
       bookId: word.bookId,
       bookTitle: word.bookTitle,
@@ -397,5 +576,8 @@ export const toWorksheetSourceWords = (
     definition: word.definition,
     bookId: word.bookId,
     bookTitle: 'bookTitle' in word ? word.bookTitle : bookTitles[word.bookId],
+    number: 'number' in word ? word.number : undefined,
+    exampleSentence: word.exampleSentence,
+    exampleMeaning: word.exampleMeaning,
   }));
 };

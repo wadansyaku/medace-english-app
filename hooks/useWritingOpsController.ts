@@ -32,6 +32,10 @@ import {
   type WritingOpsTab,
 } from '../utils/writingOps';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
+import {
+  resolveWritingUploadMimeType,
+  validateWritingSubmissionFiles,
+} from '../utils/writingSubmissionValidation';
 
 interface NoticeState {
   tone: 'success' | 'error';
@@ -293,23 +297,20 @@ export const useWritingOpsController = () => {
 
   const handleScannerSubmit = useCallback(async () => {
     if (!scannerTarget || scannerFiles.length === 0) return;
+    const validation = validateWritingSubmissionFiles(scannerFiles);
+    if (!validation.valid) {
+      setNotice({ tone: 'error', message: validation.message });
+      return;
+    }
 
     setSubmittingScan(true);
     try {
-      const isPdf = scannerFiles[0].type === 'application/pdf';
-      if (isPdf && scannerFiles.length > 1) {
-        throw new Error('PDF は1ファイルのみ提出できます。');
-      }
-      if (!isPdf && scannerFiles.length > 4) {
-        throw new Error('画像は最大4枚まで提出できます。');
-      }
-
       const assetIds: string[] = [];
       for (const [index, file] of scannerFiles.entries()) {
         const upload = await createWritingUploadUrl({
           assignmentId: scannerTarget.id,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType: resolveWritingUploadMimeType(file),
           byteSize: file.size,
           sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,

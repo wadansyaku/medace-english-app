@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, RefreshCcw } from 'lucide-react';
+import { CheckCircle2, Clock3, Loader2, MessageSquareText, RefreshCcw, Send } from 'lucide-react';
 
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import { type UserProfile } from '../types';
@@ -18,6 +18,33 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
   const refreshedAtLabel = controller.lastRefreshedAt
     ? new Date(controller.lastRefreshedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
     : '未取得';
+  const primaryStatus = controller.submitReadyCount > 0
+    ? {
+      icon: <Send className="h-4 w-4" />,
+      label: '提出できます',
+      body: `${controller.submitReadyCount}件の課題を提出できます。紙答案を撮影して進めます。`,
+      className: 'border-medace-200 bg-medace-50 text-medace-800',
+    }
+    : controller.feedbackReadyCount > 0
+      ? {
+        icon: <MessageSquareText className="h-4 w-4" />,
+        label: '返却があります',
+        body: `${controller.feedbackReadyCount}件の添削結果を確認できます。コメントから次の修正点を見ます。`,
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      }
+      : controller.waitingAssignmentCount > 0
+        ? {
+          icon: <Clock3 className="h-4 w-4" />,
+          label: '確認待ちです',
+          body: `${controller.waitingAssignmentCount}件が処理中です。講師からの返却を待っています。`,
+          className: 'border-sky-200 bg-sky-50 text-sky-800',
+        }
+        : {
+          icon: <CheckCircle2 className="h-4 w-4" />,
+          label: '対応待ちはありません',
+          body: '講師が新しい課題を配布すると、ここに次の提出が表示されます。',
+          className: 'border-slate-200 bg-slate-50 text-slate-700',
+        };
 
   return (
     <section data-testid="writing-student-section" className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
@@ -53,16 +80,34 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
         </div>
       )}
 
-      {isMobileViewport && (
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">対応中</div>
-            <div className="mt-2 text-lg font-black text-slate-950">{controller.actionableAssignmentCount}</div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.66fr))]">
+        <div className={`rounded-2xl border px-4 py-4 ${primaryStatus.className}`}>
+          <div className="flex items-center gap-2 text-sm font-black">
+            {primaryStatus.icon}
+            {primaryStatus.label}
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">課題数</div>
-            <div className="mt-2 text-lg font-black text-slate-950">{controller.assignments.length}</div>
-          </div>
+          <div className="mt-2 text-sm leading-relaxed opacity-85">{primaryStatus.body}</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">提出</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{controller.submitReadyCount}</div>
+          <div className="mt-1 text-xs text-slate-500">今すぐ送信可能</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">返却</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{controller.feedbackReadyCount}</div>
+          <div className="mt-1 text-xs text-slate-500">確認できる添削</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">合計</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{controller.assignments.length}</div>
+          <div className="mt-1 text-xs text-slate-500">{isMobileViewport ? '全課題' : '現在表示中'}</div>
+        </div>
+      </div>
+
+      {isMobileViewport && controller.assignments.length > 0 && (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-500">
+          スマホでは、操作が必要な課題から順に表示しています。
         </div>
       )}
 

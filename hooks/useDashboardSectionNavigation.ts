@@ -33,24 +33,39 @@ export const useDashboardSectionNavigation = ({
   const librarySectionRef = React.useRef<HTMLDivElement | null>(null);
   const [activeQuickNavId, setActiveQuickNavId] = React.useState('today');
 
-  const taskQuickNavTarget = React.useMemo<DashboardQuickNavItem>(() => (
-    hasActionableWriting
-      ? { id: 'task', label: '作文', kind: 'writing', ref: writingSectionRef }
-      : hasPrimaryMission
-      ? { id: 'task', label: '課題', kind: 'mission', ref: missionSectionRef }
-      : canShowWritingSection
-        ? { id: 'task', label: '作文', kind: 'writing', ref: writingSectionRef }
-        : hasCoachNotification
-          ? { id: 'task', label: '講師', kind: 'coach', ref: coachSectionRef }
-          : { id: 'task', label: 'プラン', kind: 'plan', ref: planSectionRef }
-  ), [canShowWritingSection, hasActionableWriting, hasCoachNotification, hasPrimaryMission]);
+  const missionQuickNavTarget = React.useMemo<DashboardQuickNavItem | null>(() => (
+    hasPrimaryMission
+      ? { id: 'mission', label: '課題', kind: 'mission', ref: missionSectionRef }
+      : null
+  ), [hasPrimaryMission]);
+
+  const writingQuickNavTarget = React.useMemo<DashboardQuickNavItem | null>(() => (
+    canShowWritingSection
+      ? {
+          id: 'writing',
+          label: hasActionableWriting ? '提出' : '作文',
+          kind: 'writing',
+          ref: writingSectionRef,
+        }
+      : null
+  ), [canShowWritingSection, hasActionableWriting]);
+
+  const fallbackQuickNavTarget = React.useMemo<DashboardQuickNavItem | null>(() => (
+    !hasPrimaryMission && !canShowWritingSection
+      ? hasCoachNotification
+        ? { id: 'coach', label: '講師', kind: 'coach', ref: coachSectionRef }
+        : { id: 'plan', label: 'プラン', kind: 'plan', ref: planSectionRef }
+      : null
+  ), [canShowWritingSection, hasCoachNotification, hasPrimaryMission]);
 
   const mobileQuickNavItems = React.useMemo<DashboardQuickNavItem[]>(() => ([
     { id: 'today', label: '今日', kind: 'today', ref: heroSectionRef },
-    { id: 'weakness', label: '苦手', kind: 'weakness', ref: weaknessSectionRef },
-    taskQuickNavTarget,
+    ...(missionQuickNavTarget ? [missionQuickNavTarget] : []),
+    { id: 'weakness', label: '弱点', kind: 'weakness', ref: weaknessSectionRef },
+    ...(writingQuickNavTarget ? [writingQuickNavTarget] : []),
+    ...(fallbackQuickNavTarget ? [fallbackQuickNavTarget] : []),
     { id: 'library', label: '教材', kind: 'library', ref: librarySectionRef },
-  ]), [taskQuickNavTarget]);
+  ]), [fallbackQuickNavTarget, missionQuickNavTarget, writingQuickNavTarget]);
 
   const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

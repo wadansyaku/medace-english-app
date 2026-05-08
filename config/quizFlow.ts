@@ -32,6 +32,9 @@ export const QUIZ_SELECTION_COPY: Array<{
 export const buildQuizLoadingMessage = (mode: WorksheetQuestionMode): string => {
   if (mode === 'JA_TO_EN') return '日本語から英語の確認テストを準備中...';
   if (mode === 'SPELLING_HINT') return 'スペルチェックを準備中...';
+  if (mode === 'GRAMMAR_CLOZE') return '登場した単語の文法穴埋めを準備中...';
+  if (mode === 'EN_WORD_ORDER') return '英語語順の並び替えを準備中...';
+  if (mode === 'JA_TRANSLATION_ORDER') return '日本語並び替えを準備中...';
   return '英語から日本語の確認テストを準備中...';
 };
 

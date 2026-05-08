@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
 import { type UserProfile } from '../types';
 import { useWritingOpsController } from '../hooks/useWritingOpsController';
@@ -9,6 +9,7 @@ import WritingOpsPrintSection from './writing/ops/WritingOpsPrintSection';
 import WritingOpsReviewSection from './writing/ops/WritingOpsReviewSection';
 import WritingOpsScannerModal from './writing/ops/WritingOpsScannerModal';
 import { TAB_COPY } from './writing/ops/presentation';
+import { getWritingOpsCounts, getWritingOpsTriage } from '../utils/writingOps';
 
 interface WritingOpsPanelProps {
   user: UserProfile;
@@ -30,6 +31,8 @@ const getCurrentStageCount = (
 const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
   const controller = useWritingOpsController();
   const viewCopy = TAB_COPY[controller.tab];
+  const opsCounts = getWritingOpsCounts(controller.assignments, controller.queue);
+  const triage = getWritingOpsTriage(opsCounts);
   const stageSteps = [
     {
       id: 'CREATE',
@@ -44,14 +47,14 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
       index: 2,
       label: '印刷 / 配布',
       value: `${controller.assignments.length}件`,
-      hint: `下書き ${controller.assignments.filter((assignment) => assignment.status === 'DRAFT').length} / 配布済み ${controller.assignments.filter((assignment) => assignment.status === 'ISSUED').length}`,
+      hint: `下書き ${opsCounts.draftCount} / 配布済み ${opsCounts.issuedCount}`,
       active: controller.tab === 'PRINT',
     },
     {
       id: 'QUEUE',
       index: 3,
       label: '添削キュー',
-      value: `${controller.queue.length}件`,
+      value: `${opsCounts.reviewReadyCount}件`,
       hint: '返却前の講師確認待ち',
       active: controller.tab === 'QUEUE',
     },
@@ -60,7 +63,7 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
       index: 4,
       label: '返却履歴',
       value: `${controller.history.length}件`,
-      hint: '返却済みと完了済みの履歴',
+      hint: `返却済み ${opsCounts.returnedCount} / 完了 ${opsCounts.completedCount}`,
       active: controller.tab === 'HISTORY',
     },
   ];
@@ -97,6 +100,24 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
         </div>
       )}
 
+      <div className="mt-6 rounded-[28px] border border-medace-100 bg-medace-50 px-5 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-medace-700/70">Current Priority</p>
+            <h4 className="mt-1 text-xl font-black tracking-tight text-medace-950">{triage.label}</h4>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-medace-900/80">{triage.message}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => controller.setTab(triage.tab)}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+          >
+            {triage.ctaLabel}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
       <div className="mt-6">
         <WorkspaceStageStrip steps={stageSteps} />
       </div>
@@ -121,6 +142,25 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
               <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">次にやること</div>
               <div className="mt-2 text-sm font-bold leading-relaxed text-slate-700">{viewCopy.nextAction}</div>
             </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-2xl border border-white bg-white px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">下書き</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{opsCounts.draftCount}</div>
+          </div>
+          <div className="rounded-2xl border border-white bg-white px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">提出待ち</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{opsCounts.issuedCount + opsCounts.revisionRequestedCount}</div>
+          </div>
+          <div className="rounded-2xl border border-white bg-white px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">確認待ち</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{opsCounts.reviewReadyCount}</div>
+          </div>
+          <div className="rounded-2xl border border-white bg-white px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">返却後</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{opsCounts.returnedCount + opsCounts.completedCount}</div>
           </div>
         </div>
 

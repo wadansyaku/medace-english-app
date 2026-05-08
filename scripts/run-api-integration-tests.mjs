@@ -1036,7 +1036,7 @@ const main = async () => {
     assert((studiedMission?.progress.newWordsCompleted || 0) >= 1, 'studying the mission book should advance mission new-word progress');
 
     const studentDashboardAfterMissionStudy = await orgStudent.storage('getDashboardSnapshot');
-    assert(studentDashboardAfterMissionStudy.weaknessProfile?.signals?.length === 5, 'student dashboard should materialize weakness signals after study');
+    assert(studentDashboardAfterMissionStudy.weaknessProfile?.signals?.length === 8, 'student dashboard should materialize weakness signals after study');
 
     const masteryBeforeQuiz = await orgStudent.storage('getMasteryDistribution');
     assert(masteryBeforeQuiz.total === 1, 'study history should create exactly one mastery row');

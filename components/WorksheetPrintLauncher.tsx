@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { STATUS_LABELS, StudentSummary, StudentWorksheetSnapshot, UserProfile, WorksheetQuestionMode } from '../types';
 import { workspaceService } from '../services/workspace';
-import { GeneratedWorksheetQuestion, generateWorksheetQuestions, WORKSHEET_MODE_COPY } from '../utils/worksheet';
+import {
+  filterWorksheetQuestionCandidates,
+  GeneratedWorksheetQuestion,
+  generateWorksheetQuestions,
+  isGrammarWorksheetMode,
+  WORKSHEET_MODE_COPY,
+} from '../utils/worksheet';
 import { BookOpen, ExternalLink, Eye, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
 import ModalOverlay from './ModalOverlay';
 
@@ -46,6 +52,13 @@ const shouldIncludeStatus = (filter: WorksheetStatusFilter, status: string): boo
 
 const MAX_PRINTABLE_WORDS = 40;
 
+export const escapeWorksheetHtml = (value: unknown): string => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
 const PRINT_VARIANT_COPY: Record<WorksheetPrintVariant, {
   label: string;
   shortLabel: string;
@@ -66,7 +79,7 @@ const PRINT_VARIANT_COPY: Record<WorksheetPrintVariant, {
   },
 };
 
-const buildPrintableWorksheetHtml = (
+export const buildPrintableWorksheetHtml = (
   user: UserProfile,
   student: StudentSummary | undefined,
   snapshot: StudentWorksheetSnapshot,
@@ -76,12 +89,29 @@ const buildPrintableWorksheetHtml = (
   const variantCopy = PRINT_VARIANT_COPY[variant];
   const isProblemSheet = variant === 'HANDOUT';
   const modeLabel = questions[0] ? WORKSHEET_MODE_COPY[questions[0].mode].label : '問題';
+  const escapedModeLabel = escapeWorksheetHtml(modeLabel);
+  const escapedStudentName = escapeWorksheetHtml(snapshot.studentName);
+  const escapedOrganizationName = escapeWorksheetHtml(snapshot.organizationName || 'Steady Study');
+  const escapedAuthorName = escapeWorksheetHtml(user.displayName);
+  const escapedSelectedStudentName = escapeWorksheetHtml(student?.name || snapshot.studentName);
   const promptColumnLabel = questions[0]?.mode === 'EN_TO_JA'
     ? '英単語'
     : questions[0]?.mode === 'JA_TO_EN'
       ? '日本語'
-      : '意味 / ヒント';
-  const answerLabel = questions[0]?.mode === 'EN_TO_JA' ? '和訳' : '答え';
+      : questions[0]?.mode === 'EN_WORD_ORDER'
+        ? '英文チップ'
+        : questions[0]?.mode === 'JA_TRANSLATION_ORDER'
+          ? '英文'
+          : questions[0]?.mode === 'GRAMMAR_CLOZE'
+            ? '文法穴埋め'
+            : '意味 / ヒント';
+  const answerLabel = questions[0]?.mode === 'EN_TO_JA'
+    ? '和訳'
+    : questions[0]?.mode === 'EN_WORD_ORDER'
+      ? '正しい英文'
+      : questions[0]?.mode === 'JA_TRANSLATION_ORDER'
+        ? '日本語'
+        : '答え';
   const wordsPerColumn = Math.ceil(questions.length / 2);
   const footerNote = isProblemSheet
     ? '問題: 答え欄は空欄です。鉛筆で書き込みながら確認できます。'
@@ -97,8 +127,8 @@ const buildPrintableWorksheetHtml = (
         <thead>
           <tr>
             <th class="index-head">No.</th>
-            <th>${promptColumnLabel}</th>
-            <th class="answer-head">${answerLabel}</th>
+            <th>${escapeWorksheetHtml(promptColumnLabel)}</th>
+            <th class="answer-head">${escapeWorksheetHtml(answerLabel)}</th>
           </tr>
         </thead>
         <tbody>
@@ -106,23 +136,30 @@ const buildPrintableWorksheetHtml = (
         const questionIndex = columnIndex * wordsPerColumn + index + 1;
         const promptText = question.mode === 'SPELLING_HINT'
           ? `${question.promptText} / ${question.maskedAnswer || question.answer}`
-          : question.promptText;
+          : question.mode === 'EN_WORD_ORDER'
+            ? (question.tokens || []).map((token) => token.text).join(' / ')
+            : question.mode === 'JA_TRANSLATION_ORDER'
+              ? `${question.sourceSentence || question.promptText} / ${(question.tokens || []).map((token) => token.text).join(' / ')}`
+              : question.promptText;
+        const escapedPromptText = escapeWorksheetHtml(promptText);
+        const escapedAnswer = escapeWorksheetHtml(question.answer);
+        const escapedAnswerLabel = escapeWorksheetHtml(answerLabel);
         const answerMarkup = isProblemSheet
           ? `
-            <div class="answer-blank" aria-label="${answerLabel}記入欄">
+            <div class="answer-blank" aria-label="${escapedAnswerLabel}記入欄">
               <span class="answer-line"></span>
             </div>
           `
           : `
-            <div class="answer-blank answer-blank--filled" aria-label="${answerLabel}解答欄">
-              <span class="answer-fill">${question.answer}</span>
+            <div class="answer-blank answer-blank--filled" aria-label="${escapedAnswerLabel}解答欄">
+              <span class="answer-fill">${escapedAnswer}</span>
               <span class="answer-line"></span>
             </div>
           `;
         return `
           <tr>
             <td class="index-cell">${questionIndex}</td>
-            <td class="prompt-cell">${promptText}</td>
+            <td class="prompt-cell">${escapedPromptText}</td>
             <td class="answer-cell ${isProblemSheet ? 'answer-cell--blank' : 'answer-cell--key'}">${answerMarkup}</td>
           </tr>
         `;
@@ -136,7 +173,7 @@ const buildPrintableWorksheetHtml = (
   <html lang="ja">
     <head>
       <meta charset="UTF-8" />
-      <title>${snapshot.studentName} - ${modeLabel} ワークシート (${variantCopy.label})</title>
+      <title>${escapedStudentName} - ${escapedModeLabel} ワークシート (${escapeWorksheetHtml(variantCopy.label)})</title>
       <style>
         :root {
           color-scheme: light;
@@ -381,21 +418,21 @@ const buildPrintableWorksheetHtml = (
           <div class="header-top">
             <div>
               <div class="eyebrow">Vocabulary Check Sheet</div>
-              <h1 class="title">${snapshot.studentName} さん用 ${modeLabel} チェック</h1>
+              <h1 class="title">${escapedStudentName} さん用 ${escapedModeLabel} チェック</h1>
             </div>
             <div class="header-chips">
-              <div class="chip chip-subtle">${variantCopy.label}</div>
+              <div class="chip chip-subtle">${escapeWorksheetHtml(variantCopy.label)}</div>
               <div class="chip">A4 / 2列 / 最大 ${MAX_PRINTABLE_WORDS} 語</div>
             </div>
           </div>
           <div class="meta-grid">
             <div class="meta-card">
               <div class="label">作成者</div>
-              <div class="value">${user.displayName}</div>
+              <div class="value">${escapedAuthorName}</div>
             </div>
             <div class="meta-card">
               <div class="label">生徒</div>
-              <div class="value">${student?.name || snapshot.studentName}</div>
+              <div class="value">${escapedSelectedStudentName}</div>
             </div>
             <div class="meta-card">
               <div class="label">語数</div>
@@ -412,7 +449,7 @@ const buildPrintableWorksheetHtml = (
 
         <footer class="footer">
           <span>${footerNote}</span>
-          <span>${snapshot.organizationName || 'Steady Study'}</span>
+          <span>${escapedOrganizationName}</span>
         </footer>
       </main>
     </body>
@@ -500,6 +537,12 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       return shouldIncludeStatus(statusFilter, word.status);
     });
   }, [selectedBookId, snapshot, statusFilter]);
+
+  const eligibleQuestionWords = useMemo(
+    () => filterWorksheetQuestionCandidates(filteredWords, questionMode),
+    [filteredWords, questionMode],
+  );
+  const grammarModeSelected = isGrammarWorksheetMode(questionMode);
 
   const generatedQuestions = useMemo(() => {
     if (!snapshot || filteredWords.length === 0) return [];
@@ -596,7 +639,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">PDF Worksheet</p>
                 <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学習済み単語を A4 1枚で確認する</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  問題と解答を分けて作れます。解答は問題シートと同じ欄に赤字で答えを入れ、主に英語から和訳を確認しやすい A4 1枚の確認シートです。
+                  問題と解答を分けて作れます。英単語テストだけでなく、登場済み単語を使った文法穴埋め、英語語順、日本語並び替えまで A4 1枚にまとめます。
                 </p>
               </div>
               <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
@@ -726,7 +769,18 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                       </div>
                       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                         <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">出力数</div>
-                        <div className="mt-2 text-3xl font-black text-slate-950">{Math.min(questionCount, filteredWords.length)}</div>
+                        <div className="mt-2 text-3xl font-black text-slate-950">{generatedQuestions.length}</div>
+                      </div>
+                      <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 sm:col-span-2">
+                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-500">
+                          {grammarModeSelected ? '文法化できる語数' : '出題可能'}
+                        </div>
+                        <div className="mt-2 text-3xl font-black text-orange-900">{eligibleQuestionWords.length}</div>
+                        <p className="mt-1 text-sm font-medium leading-relaxed text-orange-900/80">
+                          {grammarModeSelected
+                            ? '英字の単語と日本語の意味がある既習語を、文法・語順の復習へ再利用します。例文がある場合は例文を優先します。'
+                            : '現在の出題モードで問題に使える単語数です。'}
+                        </p>
                       </div>
                     </div>
 

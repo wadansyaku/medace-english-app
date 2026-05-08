@@ -95,7 +95,7 @@ test('group admin and business student can complete the writing workflow with on
 
   await adminPage.reload();
   await adminPage.getByTestId('workspace-tab-writing').click();
-  await adminPage.getByRole('button', { name: '添削キュー' }).click();
+  await adminPage.getByRole('button', { name: '添削キュー', exact: true }).click();
   await expect(adminPage.getByTestId('writing-review-queue')).toBeVisible();
   await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
   await expect(adminPage.getByTestId('writing-review-public-comment')).toBeVisible();
@@ -119,7 +119,7 @@ test('group admin and business student can complete the writing workflow with on
 
   await adminPage.reload();
   await adminPage.getByTestId('workspace-tab-writing').click();
-  await adminPage.getByRole('button', { name: '添削キュー' }).click();
+  await adminPage.getByRole('button', { name: '添削キュー', exact: true }).click();
   await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
   await adminPage.getByTestId('writing-review-public-comment').fill('構成が安定しました。次は語彙の幅も意識しましょう。');
   await adminPage.getByTestId('writing-approve-return').click();

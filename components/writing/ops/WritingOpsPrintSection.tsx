@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Loader2, ScanText } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Clock3, Loader2, ScanText } from 'lucide-react';
 
 import type { WritingAssignment } from '../../../types';
 import WritingPrintLauncher from '../../WritingPrintLauncher';
@@ -19,6 +19,46 @@ interface WritingOpsPrintSectionProps {
   onOpenScanner: (assignment: WritingAssignment) => void;
 }
 
+const getPrintActionCopy = (assignment: WritingAssignment) => {
+  switch (assignment.status) {
+    case 'DRAFT':
+      return {
+        title: '印刷内容を確認して配布',
+        body: '問題文と提出コードを確認し、必要なら印刷してから配布状態にします。',
+        tone: 'border-medace-200 bg-medace-50 text-medace-800',
+        icon: <ClipboardCheck className="h-4 w-4" />,
+      };
+    case 'ISSUED':
+      return {
+        title: '生徒の提出待ち',
+        body: '生徒がスマホで提出できます。校舎で回収した場合はスキャナー提出を登録します。',
+        tone: 'border-sky-200 bg-sky-50 text-sky-800',
+        icon: <Clock3 className="h-4 w-4" />,
+      };
+    case 'REVISION_REQUESTED':
+      return {
+        title: '再提出待ち',
+        body: '返却コメントを受けて書き直し待ちです。校舎回収の場合はここで再提出を登録します。',
+        tone: 'border-amber-200 bg-amber-50 text-amber-800',
+        icon: <Clock3 className="h-4 w-4" />,
+      };
+    case 'REVIEW_READY':
+      return {
+        title: '添削キューで返却判断',
+        body: 'AI 比較が済んでいます。添削キューで講師コメントと返却判断を確定します。',
+        tone: 'border-amber-200 bg-amber-50 text-amber-800',
+        icon: <ScanText className="h-4 w-4" />,
+      };
+    default:
+      return {
+        title: '履歴で確認',
+        body: '返却済みまたは完了済みの課題です。返却履歴でコメントと採用結果を確認できます。',
+        tone: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        icon: <CheckCircle2 className="h-4 w-4" />,
+      };
+  }
+};
+
 const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
   assignments,
   selectedAssignment,
@@ -31,8 +71,11 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
   <div className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
     <div className="space-y-3">
       {assignments.length === 0 && (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
-          まだ自由英作文課題はありません。先に問題作成タブで生成してください。
+        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6">
+          <div className="text-sm font-black text-slate-900">配布待ちの課題はありません</div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500">
+            先に問題作成で生徒とテンプレートを選び、配布前の課題を生成してください。
+          </div>
         </div>
       )}
       {assignments.map((assignment) => (
@@ -55,6 +98,10 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
               {WRITING_ASSIGNMENT_STATUS_LABELS[assignment.status]}
             </span>
           </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="text-xs font-bold text-slate-500">次の判断</div>
+            <div className="mt-1 text-sm font-bold text-slate-900">{getPrintActionCopy(assignment).title}</div>
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
               語数
@@ -76,6 +123,9 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
     <div className="space-y-5">
       <section className="rounded-[28px] border border-slate-200 bg-white p-5">
         {selectedAssignment ? (
+          (() => {
+            const actionCopy = getPrintActionCopy(selectedAssignment);
+            return (
           <>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -85,6 +135,14 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
               <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusTone(selectedAssignment.status)}`}>
                 {WRITING_ASSIGNMENT_STATUS_LABELS[selectedAssignment.status]}
               </span>
+            </div>
+
+            <div className={`mt-5 rounded-3xl border px-5 py-5 ${actionCopy.tone}`}>
+              <div className="flex items-center gap-2 text-sm font-black">
+                {actionCopy.icon}
+                {actionCopy.title}
+              </div>
+              <div className="mt-2 text-sm leading-relaxed opacity-85">{actionCopy.body}</div>
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -136,6 +194,8 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
               <WritingPrintLauncher assignment={selectedAssignment} />
             </div>
           </>
+            );
+          })()
         ) : (
           <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
             印刷したい課題を左から選択してください。

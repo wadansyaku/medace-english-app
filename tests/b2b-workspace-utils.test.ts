@@ -7,12 +7,14 @@ import {
   SubscriptionPlan,
   StudentRiskLevel,
   BusinessAdminWorkspaceView,
+  type OrganizationDashboardSnapshot,
   type StudentSummary,
   type WritingAssignment,
   type WritingQueueItem,
 } from '../types';
 import { buildBusinessActivationProgress } from '../utils/businessActivation';
 import {
+  buildBusinessAdminDecisionModel,
   filterAssignmentStudents,
   resolveSelectedAssignmentStudentUid,
 } from '../utils/businessAdminDashboard';
@@ -35,6 +37,147 @@ const makeStudent = (overrides: Partial<StudentSummary>): StudentSummary => ({
   totalAttempts: overrides.totalAttempts || 12,
   lastActive: overrides.lastActive || 100,
   riskLevel: overrides.riskLevel || StudentRiskLevel.SAFE,
+  ...overrides,
+});
+
+const makeDashboardSnapshot = (overrides: Partial<OrganizationDashboardSnapshot> = {}): OrganizationDashboardSnapshot => ({
+  organizationId: 'org-1',
+  organizationName: 'Demo School',
+  subscriptionPlan: SubscriptionPlan.TOB_PAID,
+  totalMembers: 3,
+  totalStudents: 2,
+  totalInstructors: 1,
+  activeStudents7d: 0,
+  atRiskStudents: 1,
+  learningPlanCount: 0,
+  notifications7d: 0,
+  reactivatedStudents7d: 0,
+  reactivationRate7d: 0,
+  weeklyContinuityRate: 0,
+  followUpCoverageRate48h: 0,
+  interventionBacklogCount: 1,
+  overdueMissionCount: 0,
+  missionStartedRate: 0,
+  overdueMissionRecoveryRate: 0,
+  assignmentCoverageRate: 50,
+  planCoverageRate: 0,
+  unassignedStudents: 1,
+  unassignedAtRiskCount: 1,
+  trackCompletion: [],
+  writingReturnRateByTrack: [],
+  instructors: [
+    {
+      uid: 'inst-1',
+      displayName: 'Oak 先生',
+      email: 'oak@example.com',
+      notifiedStudentCount: 0,
+      notifications7d: 0,
+      assignedStudentCount: 1,
+    },
+  ],
+  instructorBacklog: [
+    {
+      uid: 'inst-1',
+      displayName: 'Oak 先生',
+      email: 'oak@example.com',
+      assignedStudentCount: 1,
+      immediateCount: 1,
+      waitingCount: 0,
+      reactivatedCount: 0,
+      backlogCount: 1,
+    },
+  ],
+  atRiskStudentList: [],
+  studentAssignments: [
+    makeStudent({
+      uid: 'student-a',
+      name: 'Alpha',
+      email: 'alpha@example.com',
+      riskLevel: StudentRiskLevel.DANGER,
+      needsFollowUpNow: true,
+      recommendedAction: '担当講師を決めて初回ミッションを配布する',
+    }),
+    makeStudent({
+      uid: 'student-b',
+      name: 'Beta',
+      email: 'beta@example.com',
+      riskLevel: StudentRiskLevel.SAFE,
+      assignedInstructorUid: 'inst-1',
+      assignedInstructorName: 'Oak 先生',
+    }),
+  ],
+  assignmentEvents: [],
+  trend: [],
+  activationState: 'ASSIGN_STUDENTS',
+  nextRequiredAction: 'ASSIGN_STUDENTS',
+  nextRequiredActionLabel: '最初の生徒担当を決める',
+  nextRequiredActionDescription: 'at-risk 生徒を1人だけ担当講師に割り当てます。',
+  activationSteps: [
+    {
+      id: 'CREATE_COHORT',
+      label: 'cohort を1つ作成する',
+      description: 'sample',
+      done: true,
+      target: {
+        kind: 'ORGANIZATION_SETTINGS',
+        targetView: BusinessAdminWorkspaceView.SETTINGS,
+        organizationId: 'org-1',
+      },
+    },
+    {
+      id: 'ASSIGN_STUDENTS',
+      label: '最初の生徒担当を決める',
+      description: 'sample',
+      done: false,
+      target: {
+        kind: 'STUDENT_ASSIGNMENT',
+        targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+        organizationId: 'org-1',
+        studentUid: 'student-a',
+        studentName: 'Alpha',
+      },
+    },
+    {
+      id: 'CREATE_FIRST_MISSION',
+      label: '初回ミッションを配布する',
+      description: 'sample',
+      done: false,
+      target: {
+        kind: 'MISSION_ASSIGNMENT',
+        targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+        organizationId: 'org-1',
+      },
+    },
+    {
+      id: 'SEND_FIRST_NOTIFICATION',
+      label: '最初のフォロー通知を送る',
+      description: 'sample',
+      done: false,
+      target: {
+        kind: 'INSTRUCTOR_NOTIFICATION',
+        targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+        organizationId: 'org-1',
+      },
+    },
+    {
+      id: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+      label: '初回作文を配布する',
+      description: 'sample',
+      done: false,
+      target: {
+        kind: 'WRITING_ASSIGNMENT',
+        targetView: BusinessAdminWorkspaceView.WRITING,
+        organizationId: 'org-1',
+      },
+    },
+  ],
+  nextRequiredActionTarget: {
+    kind: 'STUDENT_ASSIGNMENT',
+    targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+    organizationId: 'org-1',
+    studentUid: 'student-a',
+    studentName: 'Alpha',
+  },
   ...overrides,
 });
 
@@ -246,5 +389,77 @@ describe('b2b workspace helpers', () => {
       targetView: BusinessAdminWorkspaceView.WRITING,
     });
     expect(progress.progressPercent).toBe(80);
+  });
+
+  it('builds an overview decision brief from the activation contract', () => {
+    const decision = buildBusinessAdminDecisionModel({
+      snapshot: makeDashboardSnapshot(),
+      activeView: BusinessAdminWorkspaceView.OVERVIEW,
+      writingAssignments: [],
+      writingQueue: [{ submissionId: 'submission-1' }] as WritingQueueItem[],
+    });
+
+    expect(decision.title).toBe('最初の生徒担当を決める');
+    expect(decision.primaryAction).toMatchObject({
+      kind: 'OPEN_VIEW',
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+    });
+    expect(decision.secondaryAction).toMatchObject({
+      kind: 'SET_ASSIGNMENT_FILTER',
+      assignmentFilter: 'UNASSIGNED_AT_RISK',
+    });
+    expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['作文滞留', '1件']);
+  });
+
+  it('points assignment triage at the highest priority student and filter', () => {
+    const decision = buildBusinessAdminDecisionModel({
+      snapshot: makeDashboardSnapshot(),
+      activeView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      writingAssignments: [],
+      writingQueue: [],
+    });
+
+    expect(decision.title).toContain('Alpha');
+    expect(decision.primaryAction).toMatchObject({
+      kind: 'SET_ASSIGNMENT_FILTER',
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      assignmentFilter: 'UNASSIGNED_AT_RISK',
+    });
+    expect(decision.focusItems[0]).toMatchObject({
+      label: '最初に見る生徒',
+      value: 'Alpha',
+    });
+  });
+
+  it('switches instructor brief to first notification send when the contract is waiting for notification', () => {
+    const decision = buildBusinessAdminDecisionModel({
+      snapshot: makeDashboardSnapshot({
+        activationState: 'SEND_FIRST_NOTIFICATION',
+        nextRequiredAction: 'SEND_FIRST_NOTIFICATION',
+        nextRequiredActionLabel: '最初のフォロー通知を送る',
+        nextRequiredActionDescription: '通知を送ります。',
+        nextRequiredActionTarget: {
+          kind: 'INSTRUCTOR_NOTIFICATION',
+          targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+          organizationId: 'org-1',
+          studentUid: 'student-b',
+          studentName: 'Beta',
+          instructorUid: 'inst-1',
+          instructorName: 'Oak 先生',
+          missionTitle: 'Alpha Mission',
+        },
+      }),
+      activeView: BusinessAdminWorkspaceView.INSTRUCTORS,
+      writingAssignments: [],
+      writingQueue: [],
+    });
+
+    expect(decision.primaryAction).toMatchObject({
+      kind: 'SEND_FIRST_NOTIFICATION',
+      targetView: BusinessAdminWorkspaceView.INSTRUCTORS,
+    });
+    expect(decision.focusItems.find((item) => item.label === '通知判断')).toMatchObject({
+      value: '送信待ち',
+    });
   });
 });
