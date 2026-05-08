@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+const colorVar = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 export default {
   content: [
     './index.html',
@@ -10,20 +12,46 @@ export default {
     extend: {
       colors: {
         medace: {
-          50: '#fff8f1',
-          100: '#ffe9d1',
-          200: '#ffd1a3',
-          300: '#ffb874',
-          400: '#ff9a3c',
-          500: '#ff8216',
-          600: '#ef6f00',
-          700: '#c85a00',
-          800: '#944300',
-          900: '#5f2b00',
+          50: colorVar('--color-medace-50'),
+          100: colorVar('--color-medace-100'),
+          200: colorVar('--color-medace-200'),
+          300: colorVar('--color-medace-300'),
+          400: colorVar('--color-medace-400'),
+          500: colorVar('--color-medace-500'),
+          600: colorVar('--color-medace-600'),
+          700: colorVar('--color-medace-700'),
+          800: colorVar('--color-medace-800'),
+          900: colorVar('--color-medace-900'),
+          950: colorVar('--color-medace-950'),
+        },
+        steady: {
+          ink: colorVar('--color-ink'),
+          muted: colorVar('--color-muted'),
+          canvas: colorVar('--color-canvas'),
+          panel: colorVar('--color-panel'),
+          line: colorVar('--color-line'),
+        },
+        signal: {
+          amber: colorVar('--color-signal-amber'),
+          coral: colorVar('--color-signal-coral'),
+          blue: colorVar('--color-signal-blue'),
         },
       },
       fontFamily: {
-        sans: ['"Space Grotesk"', '"Noto Sans JP"', 'system-ui', 'sans-serif'],
+        sans: ['"Noto Sans JP"', '"Hiragino Kaku Gothic ProN"', '"Yu Gothic"', '"Space Grotesk"', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        ui: 'var(--radius-control)',
+        card: 'var(--radius-card)',
+        panel: 'var(--radius-panel)',
+      },
+      boxShadow: {
+        panel: 'var(--shadow-panel)',
+        raised: 'var(--shadow-raised)',
+        inset: 'var(--shadow-inset)',
+      },
+      maxWidth: {
+        readable: '68ch',
       },
       animation: {
         'ping-slow': 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',

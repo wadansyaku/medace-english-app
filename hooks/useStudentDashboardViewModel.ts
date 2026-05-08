@@ -1,18 +1,36 @@
 import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription';
 import { getTodayDateKey } from '../utils/date';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
+import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/weakness';
 import {
   EnglishLevel,
+  MissionNextActionType,
   SubscriptionPlan,
   type DashboardSnapshot,
   type UserProfile,
   UserGrade,
   UserStudyMode,
+  WEAKNESS_DIMENSION_LABELS,
+  WEEKLY_MISSION_STATUS_LABELS,
+  WeeklyMissionStatus,
 } from '../types';
 
 interface UseStudentDashboardViewModelParams {
   user: UserProfile;
   snapshot: DashboardSnapshot | null;
+}
+
+export type StudentDashboardLearningRouteId = 'today' | 'mission' | 'weakness' | 'writing';
+
+export interface StudentDashboardLearningRouteCard {
+  id: StudentDashboardLearningRouteId;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  metricLabel: string;
+  stateLabel: string;
+  tone: 'primary' | 'mission' | 'weakness' | 'writing';
+  isPrimary: boolean;
 }
 
 const getLeague = (level: number) => {
@@ -150,6 +168,91 @@ export const useStudentDashboardViewModel = ({
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
   const latestCoachNotification = coachNotifications[0] || null;
   const canShowWritingSection = currentPlan === SubscriptionPlan.TOB_PAID && Boolean(user.organizationName);
+  const topWeakness = weaknessProfile?.topWeaknesses[0] || null;
+  const hasWeaknessSignals = Boolean(weaknessProfile?.hasSufficientData && topWeakness);
+  const hasActionableWriting = Boolean(
+    canShowWritingSection
+      && primaryMission
+      && (
+        primaryMission.nextActionType === MissionNextActionType.OPEN_WRITING
+        || (primaryMission.writingRequired && !primaryMission.writingCompleted)
+      ),
+  );
+  const hasActiveMission = Boolean(
+    primaryMission
+      && primaryMission.status !== WeeklyMissionStatus.COMPLETED
+      && primaryMission.completionRate < 100,
+  );
+  const primaryLearningRouteId: StudentDashboardLearningRouteId = !hasStudyBooks
+    ? 'today'
+    : hasActionableWriting
+      ? 'writing'
+      : hasActiveMission
+        ? 'mission'
+        : remainingWords > 0
+          ? 'today'
+          : hasWeaknessSignals
+            ? 'weakness'
+            : canShowWritingSection
+              ? 'writing'
+              : 'today';
+
+  const learningRouteCardDrafts: Array<Omit<StudentDashboardLearningRouteCard, 'isPrimary'> | null> = [
+    {
+      id: 'today' as const,
+      title: '今日の学習',
+      body: !hasStudyBooks
+        ? '最初のMy単語帳を作ると、今日の学習をすぐ始められます。'
+        : remainingWords > 0
+          ? dueCount > 0
+            ? `復習待ちを先に消化してから、残り${remainingWords}語を進めます。`
+            : `短いセッションで残り${remainingWords}語を進めます。`
+          : '今日の目標は達成済みです。余力があれば追加復習だけ進めます。',
+      ctaLabel: questButtonLabel,
+      metricLabel: hasStudyBooks ? `${remainingWords}語` : '教材未作成',
+      stateLabel: hasStudyBooks ? `${estimatedMinutes}分目安` : '準備',
+      tone: 'primary' as const,
+    },
+    primaryMission ? {
+      id: 'mission' as const,
+      title: 'ミッション',
+      body: primaryMission.blockers.length > 0
+        ? `残り: ${primaryMission.blockers.join(' / ')}。次に押すべき操作をここにまとめています。`
+        : '今週のミッションは完了済みです。必要なら追加の復習へ進めます。',
+      ctaLabel: primaryMission.nextActionLabel,
+      metricLabel: `${primaryMission.completionRate}%`,
+      stateLabel: WEEKLY_MISSION_STATUS_LABELS[primaryMission.status],
+      tone: 'mission' as const,
+    } : null,
+    {
+      id: 'weakness' as const,
+      title: hasWeaknessSignals ? '弱点集中' : '弱点診断',
+      body: hasWeaknessSignals && topWeakness
+        ? topWeakness.reason
+        : `まず${WEAKNESS_MIN_SAMPLE}問以上の学習ログを作ると、苦手だけを絞って復習できます。`,
+      ctaLabel: topWeakness?.nextActionLabel || buildWeaknessEmptyStateLabel(),
+      metricLabel: topWeakness ? WEAKNESS_DIMENSION_LABELS[topWeakness.dimension] : 'ログ収集中',
+      stateLabel: hasWeaknessSignals ? '優先' : `${WEAKNESS_MIN_SAMPLE}問から判定`,
+      tone: 'weakness' as const,
+    },
+    canShowWritingSection ? {
+      id: 'writing' as const,
+      title: 'Writing',
+      body: hasActionableWriting
+        ? 'ミッションに紐づくWritingが残っています。提出画面まで迷わず移動できます。'
+        : '配布済み課題、提出、返却コメントをまとめて確認できます。',
+      ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || 'Writingを提出') : 'Writingを確認',
+      metricLabel: primaryMission?.writingPromptTitle || '講師課題',
+      stateLabel: hasActionableWriting ? '未提出' : '確認',
+      tone: 'writing' as const,
+    } : null,
+  ];
+  const learningRouteCards = learningRouteCardDrafts
+    .filter((card): card is Omit<StudentDashboardLearningRouteCard, 'isPrimary'> => card !== null)
+    .map((card) => ({
+      ...card,
+      isPrimary: card.id === primaryLearningRouteId,
+    }));
 
   return {
     dueCount,
@@ -199,5 +302,10 @@ export const useStudentDashboardViewModel = ({
     canShowAccountDetails,
     latestCoachNotification,
     canShowWritingSection,
+    topWeakness,
+    hasWeaknessSignals,
+    hasActionableWriting,
+    primaryLearningRouteId,
+    learningRouteCards,
   };
 };

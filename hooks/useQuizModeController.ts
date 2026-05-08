@@ -10,6 +10,7 @@ import type {
 import {
   type GeneratedWorksheetQuestion,
   WORKSHEET_MODE_COPY,
+  filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
   resolveSpellingAttempt,
   toWorksheetSourceWords,
@@ -55,6 +56,8 @@ export const useQuizModeController = ({
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [orderedTokenIds, setOrderedTokenIds] = useState<string[]>([]);
+  const [orderFeedback, setOrderFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [answerInput, setAnswerInput] = useState('');
   const [inputResult, setInputResult] = useState<'correct' | 'incorrect' | null>(null);
   const [showSpellingHint, setShowSpellingHint] = useState(false);
@@ -89,21 +92,25 @@ export const useQuizModeController = ({
 
   const studiedWordIdSet = useMemo(() => new Set(studiedWordIds), [studiedWordIds]);
   const setupCandidateWords = useMemo(
-    () => getQuizCandidateWords({
-      words: allWords,
-      selectionMode: setupConfig.selectionMode,
-      rangeStart: normalizedSetupRange.start,
-      rangeEnd: normalizedSetupRange.end,
-      minWordNumber,
-      maxWordNumber,
-      learnedWordIds: studiedWordIdSet,
-    }),
+    () => filterWorksheetQuestionCandidates(
+      getQuizCandidateWords({
+        words: allWords,
+        selectionMode: setupConfig.selectionMode,
+        rangeStart: normalizedSetupRange.start,
+        rangeEnd: normalizedSetupRange.end,
+        minWordNumber,
+        maxWordNumber,
+        learnedWordIds: studiedWordIdSet,
+      }),
+      setupConfig.questionMode,
+    ),
     [
       allWords,
       maxWordNumber,
       minWordNumber,
       normalizedSetupRange.end,
       normalizedSetupRange.start,
+      setupConfig.questionMode,
       setupConfig.selectionMode,
       studiedWordIdSet,
     ],
@@ -120,6 +127,7 @@ export const useQuizModeController = ({
   const currentQuestion = questions[currentQIndex];
   const currentModeCopy = WORKSHEET_MODE_COPY[(activeConfig || setupConfig).questionMode];
   const isHintMode = currentQuestion?.mode === 'SPELLING_HINT';
+  const isOrderMode = currentQuestion?.interactionType === 'ORDERING';
   const reviewTargets = useMemo(() => missedQuestions.slice(0, 3), [missedQuestions]);
   const activeSummary = activeConfig
     ? formatQuizSelectionSummary(activeConfig, questions.length)
@@ -130,6 +138,8 @@ export const useQuizModeController = ({
     setCurrentQIndex(0);
     setShowOptions(false);
     setSelectedOption(null);
+    setOrderedTokenIds([]);
+    setOrderFeedback(null);
     setAnswerInput('');
     setInputResult(null);
     setShowSpellingHint(false);
@@ -150,7 +160,8 @@ export const useQuizModeController = ({
   };
 
   const startQuizWithWords = (config: QuizSessionConfig, candidateWords: WordData[]) => {
-    const actualQuestionCount = getActualQuizQuestionCount(config.questionCount, candidateWords.length);
+    const eligibleCandidateWords = filterWorksheetQuestionCandidates(candidateWords, config.questionMode);
+    const actualQuestionCount = getActualQuizQuestionCount(config.questionCount, eligibleCandidateWords.length);
     if (actualQuestionCount === 0) {
       setActiveConfig(null);
       setScreen('SETUP');
@@ -158,10 +169,15 @@ export const useQuizModeController = ({
     }
 
     const nextQuestions = generateWorksheetQuestions(
-      toWorksheetSourceWords(candidateWords),
+      toWorksheetSourceWords(eligibleCandidateWords),
       config.questionMode,
       actualQuestionCount,
     );
+    if (nextQuestions.length === 0) {
+      setActiveConfig(null);
+      setScreen('SETUP');
+      return;
+    }
     quizStartedEventRef.current = false;
     spellingStartedEventRef.current = false;
 
@@ -287,6 +303,13 @@ export const useQuizModeController = ({
 
   const setupEmptyCopy = useMemo(() => {
     if (allWords.length === 0) return '学習する単語がまだありません。先に単語帳を1冊用意してください。';
+    if (
+      setupConfig.questionMode === 'GRAMMAR_CLOZE'
+      || setupConfig.questionMode === 'EN_WORD_ORDER'
+      || setupConfig.questionMode === 'JA_TRANSLATION_ORDER'
+    ) {
+      return '文法復習に使える英単語がありません。英字の単語と日本語の意味がある教材を選ぶか、範囲を広げてください。';
+    }
     if (setupConfig.selectionMode === 'LEARNED_ONLY') {
       return '学習済みのみは、学習モードで評価した単語が1語以上あると使えます。先にカード学習で評価を付けてください。';
     }
@@ -294,7 +317,7 @@ export const useQuizModeController = ({
       return `No. ${normalizedSetupRange.start} - ${normalizedSetupRange.end} には出題できる単語がありません。範囲を広げてください。`;
     }
     return '出題条件に合う単語がありません。';
-  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.selectionMode]);
+  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode]);
 
   const startQuiz = (config: QuizSessionConfig) => {
     const normalizedRange = normalizeQuizRange(
@@ -308,15 +331,18 @@ export const useQuizModeController = ({
       rangeStart: normalizedRange.start,
       rangeEnd: normalizedRange.end,
     };
-    const candidateWords = getQuizCandidateWords({
-      words: allWords,
-      selectionMode: normalizedConfig.selectionMode,
-      rangeStart: normalizedConfig.rangeStart,
-      rangeEnd: normalizedConfig.rangeEnd,
-      minWordNumber,
-      maxWordNumber,
-      learnedWordIds: studiedWordIdSet,
-    });
+    const candidateWords = filterWorksheetQuestionCandidates(
+      getQuizCandidateWords({
+        words: allWords,
+        selectionMode: normalizedConfig.selectionMode,
+        rangeStart: normalizedConfig.rangeStart,
+        rangeEnd: normalizedConfig.rangeEnd,
+        minWordNumber,
+        maxWordNumber,
+        learnedWordIds: studiedWordIdSet,
+      }),
+      normalizedConfig.questionMode,
+    );
     const actualQuestionCount = getActualQuizQuestionCount(
       normalizedConfig.questionCount,
       candidateWords.length,
@@ -379,6 +405,8 @@ export const useQuizModeController = ({
       if (currentQIndex < questions.length - 1) {
         setCurrentQIndex((previous) => previous + 1);
         setSelectedOption(null);
+        setOrderedTokenIds([]);
+        setOrderFeedback(null);
         setShowOptions(false);
         setAnswerInput('');
         setInputResult(null);
@@ -400,6 +428,47 @@ export const useQuizModeController = ({
       option === currentQuestion.answer,
       Math.max(0, Date.now() - questionStartedAtRef.current),
     );
+  };
+
+  const handleOrderTokenSelect = (tokenId: string) => {
+    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt) return;
+    const answerTokenCount = currentQuestion.answerTokenIds?.length || 0;
+    setOrderedTokenIds((current) => {
+      if (current.includes(tokenId) || current.length >= answerTokenCount) return current;
+      return [...current, tokenId];
+    });
+  };
+
+  const handleOrderTokenRemove = (tokenId: string) => {
+    if (orderFeedback || persistingAttempt) return;
+    setOrderedTokenIds((current) => current.filter((id) => id !== tokenId));
+  };
+
+  const handleOrderTokenMove = (tokenId: string, direction: -1 | 1) => {
+    if (orderFeedback || persistingAttempt) return;
+    setOrderedTokenIds((current) => {
+      const index = current.indexOf(tokenId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  };
+
+  const handleOrderTokensClear = () => {
+    if (orderFeedback || persistingAttempt) return;
+    setOrderedTokenIds([]);
+  };
+
+  const handleOrderSubmit = async () => {
+    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt) return;
+    const answerTokenIds = currentQuestion.answerTokenIds || [];
+    if (answerTokenIds.length === 0 || orderedTokenIds.length !== answerTokenIds.length) return;
+    const correct = orderedTokenIds.every((tokenId, index) => tokenId === answerTokenIds[index]);
+    setOrderFeedback(correct ? 'correct' : 'incorrect');
+    await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
 
   const handleHintSubmit = async (event: FormEvent) => {
@@ -467,6 +536,8 @@ export const useQuizModeController = ({
     currentQIndex,
     showOptions,
     selectedOption,
+    orderedTokenIds,
+    orderFeedback,
     answerInput,
     inputResult,
     score,
@@ -486,6 +557,7 @@ export const useQuizModeController = ({
     currentQuestion,
     currentModeLabel: currentModeCopy.label,
     isHintMode,
+    isOrderMode,
     showSpellingHint,
     spellingFeedbackTone,
     spellingFeedbackMessage,
@@ -498,6 +570,11 @@ export const useQuizModeController = ({
     updateSetupConfig,
     startQuiz,
     handleOptionClick,
+    handleOrderTokenSelect,
+    handleOrderTokenRemove,
+    handleOrderTokenMove,
+    handleOrderTokensClear,
+    handleOrderSubmit,
     handleHintSubmit,
     revealSpellingHint,
     handleRetrySave,

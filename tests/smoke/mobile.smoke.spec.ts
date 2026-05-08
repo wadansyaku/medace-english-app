@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import {
   MOBILE_FLOW_TEST_IDS,
@@ -12,6 +12,8 @@ import {
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
   maybeCompleteOnboarding,
+  resolveWritingStudentSelectValue,
+  runtimeAdminPost,
   seedLeveledPhrasebooks,
   seedPhrasebook,
   storageAction,
@@ -19,6 +21,85 @@ import {
   updateSessionProfile,
   waitForWritingAssignment,
 } from './smoke-support';
+
+const openWritingOpsPanel = async (page: Page) => {
+  await page.reload();
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await page.getByTestId('workspace-tab-writing').click();
+  await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+};
+
+const dismissAnnouncementModalIfPresent = async (page: Page) => {
+  const modal = page.getByTestId('announcement-modal');
+  const isVisible = await modal.isVisible({ timeout: 500 }).catch(() => false);
+  if (!isVisible) return;
+
+  await modal.getByRole('button', { name: '閉じる' }).click();
+  await expect(modal).toHaveCount(0);
+};
+
+const bootstrapDemoWritingOps = async (page: Page) => {
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(page, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(page, 'sendInstructorNotification', {
+    studentUid: bootstrap.studentUid,
+    message: '導入確認のため、最初のフォロー通知を送ります。',
+    triggerReason: 'smoke-mobile-writing-bootstrap',
+    usedAi: false,
+    interventionKind: 'REVIEW_RESTART',
+  });
+  await openWritingOpsPanel(page);
+};
+
+const selectWritingStudent = async (
+  adminPage: Page,
+  student: { uid?: string | null; email?: string | null; displayName?: string | null },
+) => {
+  const selectedStudentUid = await resolveWritingStudentSelectValue(adminPage, student, {
+    timeoutMs: 10_000,
+    onRetry: async () => openWritingOpsPanel(adminPage),
+  });
+  await adminPage.getByTestId('writing-student-select').selectOption(selectedStudentUid);
+  return selectedStudentUid;
+};
+
+const expectMobileFeedbackSingleColumn = async (page: Page) => {
+  const sectionBoxes: Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    right: number;
+  }> = [];
+
+  for (const id of MOBILE_FLOW_WRITING.feedbackSectionOrder) {
+    const section = page.getByTestId(id);
+    await expect(section).toBeVisible();
+    const box = await section.boundingBox();
+    expect(box, `${id} should render with a measurable mobile box`).not.toBeNull();
+    sectionBoxes.push({
+      id,
+      x: box?.x ?? 0,
+      y: box?.y ?? 0,
+      width: box?.width ?? 0,
+      right: (box?.x ?? 0) + (box?.width ?? 0),
+    });
+  }
+
+  const firstLeft = Math.round(sectionBoxes[0]?.x ?? 0);
+  for (const box of sectionBoxes) {
+    expect(Math.round(box.x), `${box.id} should align to the feedback column`).toBeGreaterThanOrEqual(firstLeft - 2);
+    expect(Math.round(box.x), `${box.id} should align to the feedback column`).toBeLessThanOrEqual(firstLeft + 2);
+    expect(box.width, `${box.id} should fit within the mobile viewport`).toBeLessThanOrEqual(390);
+    expect(box.right, `${box.id} should not overflow the mobile viewport`).toBeLessThanOrEqual(391);
+  }
+
+  for (let index = 1; index < sectionBoxes.length; index += 1) {
+    expect(sectionBoxes[index].y, `${sectionBoxes[index].id} should remain below ${sectionBoxes[index - 1].id}`).toBeGreaterThan(sectionBoxes[index - 1].y);
+  }
+
+  const offenders = await findUnexpectedHorizontalOverflow(page);
+  expect(offenders).toEqual([]);
+};
 
 test.describe('student mobile ux', () => {
   test.use({
@@ -95,6 +176,7 @@ test.describe('student mobile ux', () => {
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await dismissAnnouncementModalIfPresent(page);
 
     await page.getByRole('button', { name: /くわしい学習記録/ }).click();
     await page.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
@@ -512,7 +594,7 @@ test.describe('student mobile ux', () => {
 
     await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
-    await adminPage.getByTestId('workspace-tab-writing').click();
+    await bootstrapDemoWritingOps(adminPage);
 
     await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
@@ -521,14 +603,12 @@ test.describe('student mobile ux', () => {
     const businessStudent = await getCurrentSessionUser(studentPage);
     expect(businessStudent?.uid).toBeTruthy();
 
-    await adminPage.reload();
-    await adminPage.getByTestId('workspace-tab-writing').click();
-
-    await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
+    await openWritingOpsPanel(adminPage);
+    const selectedStudentUid = await selectWritingStudent(adminPage, businessStudent!);
     await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
     await adminPage.getByTestId('writing-generate-submit').click();
     await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
-    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', selectedStudentUid, 'DRAFT');
     expect(generatedAssignment?.id).toBeTruthy();
     await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
     await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
@@ -585,7 +665,7 @@ test.describe('student mobile ux', () => {
 
     await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
-    await adminPage.getByTestId('workspace-tab-writing').click();
+    await bootstrapDemoWritingOps(adminPage);
 
     await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
@@ -594,14 +674,12 @@ test.describe('student mobile ux', () => {
     const businessStudent = await getCurrentSessionUser(studentPage);
     expect(businessStudent?.uid).toBeTruthy();
 
-    await adminPage.reload();
-    await adminPage.getByTestId('workspace-tab-writing').click();
-
-    await adminPage.getByTestId('writing-student-select').selectOption(businessStudent!.uid);
+    await openWritingOpsPanel(adminPage);
+    const selectedStudentUid = await selectWritingStudent(adminPage, businessStudent!);
     await adminPage.getByTestId('writing-template-select').selectOption({ index: 1 });
     await adminPage.getByTestId('writing-generate-submit').click();
     await expect(adminPage.getByText(/自由英作文課題を生成しました/)).toBeVisible();
-    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', businessStudent!.uid, 'DRAFT');
+    const generatedAssignment = await getLatestWritingAssignmentForStudentUid(adminPage, 'all', selectedStudentUid, 'DRAFT');
     expect(generatedAssignment?.id).toBeTruthy();
     await adminPage.getByRole('button', { name: new RegExp(generatedAssignment.submissionCode) }).click();
     await expect(adminPage.getByTestId('writing-issue-assignment')).toBeVisible();
@@ -628,7 +706,7 @@ test.describe('student mobile ux', () => {
 
     await adminPage.reload();
     await adminPage.getByTestId('workspace-tab-writing').click();
-    await adminPage.getByRole('button', { name: '添削キュー' }).click();
+    await adminPage.getByRole('button', { name: '添削キュー', exact: true }).click();
     await adminPage.locator('[data-testid^="writing-review-item-"]').first().click();
     await adminPage.getByTestId('writing-review-public-comment').fill('理由のつながりが伝わっています。次は語彙の選び方も広げましょう。');
     await adminPage.getByTestId('writing-approve-return').click();
@@ -637,8 +715,10 @@ test.describe('student mobile ux', () => {
     await studentPage.reload();
     await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
     await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
+    await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
+    await expectMobileFeedbackSingleColumn(studentPage);
 
     await adminContext.close();
     await studentContext.close();

@@ -44,6 +44,8 @@ export const handleGetStudentWorksheetSnapshot = async (
     last_studied_at: number;
     attempt_count: number;
     correct_count: number;
+    example_sentence: string | null;
+    example_meaning: string | null;
   }>(
     env,
     `SELECT
@@ -52,6 +54,8 @@ export const handleGetStudentWorksheetSnapshot = async (
        b.title AS book_title,
        w.word AS word,
        w.definition AS definition,
+       w.example_sentence AS example_sentence,
+       w.example_meaning AS example_meaning,
        h.status AS status,
        h.last_studied_at AS last_studied_at,
        h.attempt_count AS attempt_count,
@@ -100,6 +104,8 @@ export const handleGetStudentWorksheetSnapshot = async (
           bookTitle: book.title,
           word: word.word,
           definition: word.definition,
+          exampleSentence: word.example_sentence,
+          exampleMeaning: word.example_meaning,
           status: WORKSHEET_STATUSES[wordIndex % WORKSHEET_STATUSES.length],
           lastStudiedAt: Date.now() - (bookIndex + wordIndex + 1) * DAY_MS,
           attemptCount: 3 + wordIndex,
@@ -129,6 +135,8 @@ export const handleGetStudentWorksheetSnapshot = async (
           bookTitle: 'スターター確認問題',
           word: 'diagnosis',
           definition: '診断',
+          exampleSentence: 'Doctors confirm the diagnosis before treatment.',
+          exampleMeaning: '医師は 治療前に 診断を 確認する。',
           status: 'graduated',
           lastStudiedAt: Date.now() - DAY_MS,
           attemptCount: 6,
@@ -140,6 +148,8 @@ export const handleGetStudentWorksheetSnapshot = async (
           bookTitle: 'スターター確認問題',
           word: 'treatment',
           definition: '治療',
+          exampleSentence: 'The patient received treatment at the clinic.',
+          exampleMeaning: '患者は クリニックで 治療を 受けた。',
           status: 'review',
           lastStudiedAt: Date.now() - 2 * DAY_MS,
           attemptCount: 4,
@@ -151,6 +161,8 @@ export const handleGetStudentWorksheetSnapshot = async (
           bookTitle: '医療英語ベーシック',
           word: 'symptom',
           definition: '症状',
+          exampleSentence: 'A fever can be a symptom of infection.',
+          exampleMeaning: '発熱は 感染の 症状に なり得る。',
           status: 'learning',
           lastStudiedAt: Date.now() - 3 * DAY_MS,
           attemptCount: 2,
@@ -170,6 +182,8 @@ export const handleGetStudentWorksheetSnapshot = async (
       bookTitle: row.book_title,
       word: row.word,
       definition: row.definition,
+      exampleSentence: row.example_sentence,
+      exampleMeaning: row.example_meaning,
       status: row.status,
       lastStudiedAt: Number(row.last_studied_at || 0),
       attemptCount: Number(row.attempt_count || 0),

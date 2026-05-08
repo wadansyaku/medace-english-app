@@ -21,6 +21,25 @@ export interface WritingAssignmentPhase {
   activeStep: number;
 }
 
+export const getWritingStudentAssignmentPriority = (assignment: WritingAssignment): number => {
+  switch (assignment.status) {
+    case 'REVISION_REQUESTED':
+      return 0;
+    case 'RETURNED':
+      return 1;
+    case 'ISSUED':
+      return 2;
+    case 'REVIEW_READY':
+      return 3;
+    case 'SUBMITTED':
+      return 4;
+    case 'COMPLETED':
+      return 5;
+    default:
+      return 6;
+  }
+};
+
 export const formatWritingDateTime = (timestamp?: number): string => {
   if (!timestamp) return '未提出';
   return new Date(timestamp).toLocaleString('ja-JP', {
@@ -49,28 +68,28 @@ export const getWritingAssignmentPhase = (
     case 'ISSUED':
       return {
         label: '課題',
-        description: '紙で答案を書いて、スマホから提出してください。',
+        description: '紙で答案を書いたら、スマホで撮影して提出します。',
         tone: 'border-medace-200 bg-medace-50 text-medace-700',
         activeStep: 1,
       };
     case 'SUBMITTED':
       return {
         label: '提出済み',
-        description: 'アップロード済みです。OCR と評価処理が進んでいます。',
+        description: '答案は届いています。OCR と評価処理が進んでいます。',
         tone: 'border-sky-200 bg-sky-50 text-sky-700',
         activeStep: 2,
       };
     case 'REVIEW_READY':
       return {
         label: '処理中',
-        description: 'AI 比較の下書きができ、講師の最終確認を待っています。',
+        description: 'AI 比較の下書きができました。講師の最終確認を待っています。',
         tone: 'border-sky-200 bg-sky-50 text-sky-700',
         activeStep: 3,
       };
     case 'REVISION_REQUESTED':
       return {
         label: '再提出',
-        description: '返却コメントを確認して、1 回だけ書き直し提出ができます。',
+        description: '返却コメントを確認してから、書き直した答案を提出します。',
         tone: 'border-amber-200 bg-amber-50 text-amber-700',
         activeStep: 4,
       };

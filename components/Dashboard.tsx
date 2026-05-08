@@ -1,7 +1,23 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Flag,
+  Loader2,
+  NotebookPen,
+  Play,
+  Target,
+  type LucideIcon,
+} from 'lucide-react';
 
-import { GRADE_LABELS, MissionNextActionType, UserGrade, type LearningTaskIntent, type UserProfile } from '../types';
+import {
+  GRADE_LABELS,
+  MissionNextActionType,
+  MissionProgressEventType,
+  RecommendedActionType,
+  UserGrade,
+  type LearningTaskIntent,
+  type UserProfile,
+} from '../types';
 import Onboarding from './Onboarding';
 import { useDashboardData } from '../hooks/useDashboardData';
 import type { AnnouncementFeedController } from '../hooks/useAnnouncementFeed';
@@ -9,9 +25,19 @@ import { useDashboardSectionNavigation } from '../hooks/useDashboardSectionNavig
 import useIsMobileViewport from '../hooks/useIsMobileViewport';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
-import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
+import {
+  useStudentDashboardViewModel,
+  type StudentDashboardLearningRouteCard,
+  type StudentDashboardLearningRouteId,
+} from '../hooks/useStudentDashboardViewModel';
 import { submitCommercialRequest } from '../services/commercial';
+import { workspaceService } from '../services/workspace';
 import type { CommercialRequestPayload } from '../contracts/storage';
+import {
+  createMissionTaskIntent,
+  createTodayFocusTaskIntent,
+  createWeaknessTaskIntent,
+} from '../shared/learningTask';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
 
@@ -22,6 +48,106 @@ interface DashboardProps {
   onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
 }
+
+const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> = {
+  today: Play,
+  mission: Flag,
+  weakness: Target,
+  writing: NotebookPen,
+};
+
+const LEARNING_ROUTE_TONE: Record<StudentDashboardLearningRouteCard['tone'], string> = {
+  primary: 'border-medace-200 bg-medace-50 text-medace-900',
+  mission: 'border-sky-200 bg-sky-50 text-sky-900',
+  weakness: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  writing: 'border-violet-200 bg-violet-50 text-violet-900',
+};
+
+interface StudentLearningLaunchPanelProps {
+  cards: StudentDashboardLearningRouteCard[];
+  isMobileCompact: boolean;
+  onSelectRoute: (routeId: StudentDashboardLearningRouteId) => void;
+}
+
+const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
+  cards,
+  isMobileCompact,
+  onSelectRoute,
+}) => {
+  const orderedCards = React.useMemo(
+    () => [...cards].sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary)),
+    [cards],
+  );
+
+  return (
+    <section data-testid="dashboard-learning-launch-panel" className="order-2 min-w-0">
+      <div className="mb-3 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-bold text-slate-400">開始</p>
+          <h2 className="text-xl font-black text-slate-950">次に始める場所</h2>
+        </div>
+        <p className="text-sm font-medium text-slate-500">重要タスクを一列で確認</p>
+      </div>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
+        {orderedCards.map((card) => {
+          const Icon = LEARNING_ROUTE_ICON[card.id];
+          const isPrimary = card.isPrimary;
+          return (
+            <article
+              key={card.id}
+              data-testid={`dashboard-learning-route-${card.id}`}
+              aria-current={isPrimary ? 'step' : undefined}
+              className={`flex min-w-[78vw] flex-col rounded-lg border p-4 shadow-sm sm:min-w-0 ${
+                isPrimary
+                  ? `${LEARNING_ROUTE_TONE[card.tone]} shadow-[0_12px_28px_rgba(15,23,42,0.10)]`
+                  : 'border-slate-200 bg-white text-slate-900'
+              }`}
+            >
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className={`rounded-lg border p-2 ${
+                  isPrimary ? 'border-white/70 bg-white/70' : LEARNING_ROUTE_TONE[card.tone]
+                }`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                  isPrimary ? 'border-white/70 bg-white/70' : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}>
+                  {card.stateLabel}
+                </span>
+              </div>
+
+              <div className="mt-3 min-w-0">
+                <div className="text-sm font-black">{card.title}</div>
+                <div className={`mt-1 min-w-0 font-black ${isMobileCompact ? 'text-lg' : 'text-xl'}`}>
+                  {card.metricLabel}
+                </div>
+                <p className={`mt-2 min-h-[2.6rem] text-sm leading-relaxed ${
+                  isPrimary ? 'text-slate-700' : 'text-slate-600'
+                }`}>
+                  {card.body}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                data-testid={`dashboard-learning-route-${card.id}-cta`}
+                onClick={() => onSelectRoute(card.id)}
+                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${
+                  isPrimary
+                    ? 'bg-slate-950 text-white hover:bg-slate-800'
+                    : 'border border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <span className="min-w-0 whitespace-normal leading-snug">{card.ctaLabel}</span>
+                <ArrowRight className="h-4 w-4 shrink-0" />
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
 const Dashboard: React.FC<DashboardProps> = ({
   user,
@@ -57,22 +183,101 @@ const Dashboard: React.FC<DashboardProps> = ({
   const navigation = useDashboardSectionNavigation({
     isStudentMobileShell,
     hasPrimaryMission: Boolean(viewModel.primaryMission),
-    hasActionableWriting: Boolean(
-      viewModel.canShowWritingSection
-        && viewModel.primaryMission
-        && (
-          viewModel.primaryMission.nextActionType === MissionNextActionType.OPEN_WRITING
-          || (viewModel.primaryMission.writingRequired && !viewModel.primaryMission.writingCompleted)
-        ),
-    ),
+    hasActionableWriting: viewModel.hasActionableWriting,
     canShowWritingSection: viewModel.canShowWritingSection,
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
+
+  const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
+  const weaknessTaskIntent = React.useMemo(
+    () => createWeaknessTaskIntent(viewModel.topWeakness),
+    [viewModel.topWeakness],
+  );
+  const missionTaskIntent = React.useMemo(
+    () => (
+      viewModel.primaryMission?.nextTaskIntent
+      || (viewModel.primaryMission ? createMissionTaskIntent(viewModel.primaryMission) : null)
+    ),
+    [viewModel.primaryMission],
+  );
 
   const handleSubmitCommercialRequest = React.useCallback(async (payload: CommercialRequestPayload) => {
     await submitCommercialRequest(payload);
     await refreshDashboard();
   }, [refreshDashboard]);
+
+  const handleLearningRouteSelect = React.useCallback(async (routeId: StudentDashboardLearningRouteId) => {
+    if (routeId === 'today') {
+      if (viewModel.hasStudyBooks) {
+        onStartTask(todayTaskIntent);
+        return;
+      }
+      controller.setShowCreateModal(true);
+      return;
+    }
+
+    if (routeId === 'mission') {
+      const mission = viewModel.primaryMission;
+      if (!mission) return;
+      if (mission.assignmentId) {
+        try {
+          await workspaceService.updateMissionProgress(mission.assignmentId, MissionProgressEventType.OPENED);
+        } catch (missionError) {
+          console.error(missionError);
+        }
+      }
+      if (mission.nextActionType === MissionNextActionType.OPEN_PLAN) {
+        controller.setShowPlanEditModal(true);
+        return;
+      }
+      if (mission.nextActionType === MissionNextActionType.OPEN_WRITING && viewModel.canShowWritingSection) {
+        navigation.scrollToSection(navigation.writingSectionRef);
+        return;
+      }
+      if (mission.nextActionType === MissionNextActionType.OPEN_WRITING) {
+        controller.setShowPlanEditModal(true);
+        return;
+      }
+      if (!viewModel.hasStudyBooks) {
+        controller.setShowCreateModal(true);
+        return;
+      }
+      if (missionTaskIntent) {
+        onStartTask(missionTaskIntent);
+        return;
+      }
+      navigation.scrollToSection(navigation.missionSectionRef);
+      return;
+    }
+
+    if (routeId === 'weakness') {
+      if (viewModel.topWeakness?.recommendedActionType === RecommendedActionType.OPEN_PLAN) {
+        controller.setShowPlanEditModal(true);
+        return;
+      }
+      if (viewModel.hasStudyBooks) {
+        onStartTask(weaknessTaskIntent);
+        return;
+      }
+      controller.setShowCreateModal(true);
+      return;
+    }
+
+    if (routeId === 'writing') {
+      navigation.scrollToSection(navigation.writingSectionRef);
+    }
+  }, [
+    controller,
+    missionTaskIntent,
+    navigation,
+    onStartTask,
+    todayTaskIntent,
+    viewModel.hasStudyBooks,
+    viewModel.canShowWritingSection,
+    viewModel.primaryMission,
+    viewModel.topWeakness,
+    weaknessTaskIntent,
+  ]);
 
   if (controller.showOnboarding) {
     return (
@@ -129,6 +334,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         isMobileViewport={isMobileViewport}
         onUserUpdate={onUserUpdate}
         onSubmitCommercialRequest={handleSubmitCommercialRequest}
+      />
+
+      <StudentLearningLaunchPanel
+        cards={viewModel.learningRouteCards}
+        isMobileCompact={isStudentMobileShell}
+        onSelectRoute={(routeId) => {
+          void handleLearningRouteSelect(routeId);
+        }}
       />
 
       <StudentDashboardSections

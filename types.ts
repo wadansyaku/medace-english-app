@@ -349,6 +349,9 @@ export enum WeaknessDimension {
   MEANING_RECALL = 'MEANING_RECALL',
   MEANING_RECOGNITION = 'MEANING_RECOGNITION',
   SPELLING_RECALL = 'SPELLING_RECALL',
+  GRAMMAR_APPLICATION = 'GRAMMAR_APPLICATION',
+  WORD_ORDER = 'WORD_ORDER',
+  TRANSLATION_ORDER = 'TRANSLATION_ORDER',
   RETENTION_STABILITY = 'RETENTION_STABILITY',
   ADVANCED_BAND_CONFIDENCE = 'ADVANCED_BAND_CONFIDENCE',
 }
@@ -357,6 +360,9 @@ export const WEAKNESS_DIMENSION_LABELS: Record<WeaknessDimension, string> = {
   [WeaknessDimension.MEANING_RECALL]: '意味から英語を思い出す力',
   [WeaknessDimension.MEANING_RECOGNITION]: '英語を見て意味を取る力',
   [WeaknessDimension.SPELLING_RECALL]: 'スペリング想起',
+  [WeaknessDimension.GRAMMAR_APPLICATION]: '単語を文法の中で使う力',
+  [WeaknessDimension.WORD_ORDER]: '英文の語順を組み立てる力',
+  [WeaknessDimension.TRANSLATION_ORDER]: '英文から日本語を組み立てる力',
   [WeaknessDimension.RETENTION_STABILITY]: '復習の定着安定度',
   [WeaknessDimension.ADVANCED_BAND_CONFIDENCE]: '今の難度帯への自信',
 };
@@ -383,7 +389,7 @@ export interface WeaknessSignalSummary {
   reason: string;
   nextActionLabel: string;
   recommendedActionType: RecommendedActionType;
-  targetQuestionModes: Array<'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT'>;
+  targetQuestionModes: WorksheetQuestionMode[];
   targetBandIndex?: number;
   updatedAt: number;
 }
@@ -1151,7 +1157,13 @@ export interface WorkspaceSectionDefinition<T extends string = string> {
   description?: string;
 }
 
-export type WorksheetQuestionMode = 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
+export type WorksheetQuestionMode =
+  | 'EN_TO_JA'
+  | 'JA_TO_EN'
+  | 'SPELLING_HINT'
+  | 'GRAMMAR_CLOZE'
+  | 'EN_WORD_ORDER'
+  | 'JA_TRANSLATION_ORDER';
 
 export type LearningInteractionSource = 'STUDY' | 'QUIZ';
 
@@ -1171,6 +1183,8 @@ export interface StudentWorksheetWord {
   bookTitle: string;
   word: string;
   definition: string;
+  exampleSentence?: string | null;
+  exampleMeaning?: string | null;
   status: LearningHistory['status'];
   lastStudiedAt: number;
   attemptCount: number;

@@ -1,9 +1,12 @@
 import React, { type FormEvent } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
+  ArrowRight,
   CheckCircle,
   Eye,
   HelpCircle,
+  RotateCcw,
   SpellCheck,
 } from 'lucide-react';
 
@@ -21,6 +24,8 @@ interface QuizRunningViewProps {
   showSpellingHint: boolean;
   showOptions: boolean;
   selectedOption: string | null;
+  orderedTokenIds: string[];
+  orderFeedback: 'correct' | 'incorrect' | null;
   answerInput: string;
   inputResult: 'correct' | 'incorrect' | null;
   spellingFeedbackTone: 'info' | 'correct' | 'incorrect' | null;
@@ -33,6 +38,11 @@ interface QuizRunningViewProps {
   onHintSubmit: (event: FormEvent) => void;
   onRevealSpellingHint: () => void;
   onOptionClick: (option: string) => void;
+  onOrderTokenSelect: (tokenId: string) => void;
+  onOrderTokenRemove: (tokenId: string) => void;
+  onOrderTokenMove: (tokenId: string, direction: -1 | 1) => void;
+  onOrderTokensClear: () => void;
+  onOrderSubmit: () => void;
   onRetrySave: () => void;
 }
 
@@ -47,6 +57,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   showSpellingHint,
   showOptions,
   selectedOption,
+  orderedTokenIds,
+  orderFeedback,
   answerInput,
   inputResult,
   spellingFeedbackTone,
@@ -59,8 +71,45 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   onHintSubmit,
   onRevealSpellingHint,
   onOptionClick,
+  onOrderTokenSelect,
+  onOrderTokenRemove,
+  onOrderTokenMove,
+  onOrderTokensClear,
+  onOrderSubmit,
   onRetrySave,
-}) => (
+}) => {
+  const isOrderMode = currentQuestion.interactionType === 'ORDERING';
+  const selectedTokenIdSet = new Set(orderedTokenIds);
+  const tokenMap = new Map((currentQuestion.tokens || []).map((token) => [token.id, token]));
+  const selectedTokens = orderedTokenIds
+    .map((tokenId) => tokenMap.get(tokenId))
+    .filter((token): token is NonNullable<typeof currentQuestion.tokens>[number] => Boolean(token));
+  const expectedTokenCount = currentQuestion.answerTokenIds?.length || 0;
+  const canSubmitOrder = isOrderMode && expectedTokenCount > 0 && orderedTokenIds.length === expectedTokenCount && !orderFeedback && !persistingAttempt;
+  const hasAnsweredQuestion = isOrderMode
+    ? Boolean(orderFeedback)
+    : isHintMode
+      ? Boolean(inputResult)
+      : Boolean(selectedOption);
+  const shouldHideSourceSentenceUntilAnswered = currentQuestion.mode === 'GRAMMAR_CLOZE' || currentQuestion.mode === 'EN_WORD_ORDER';
+  const shouldHideSourceTranslationUntilAnswered = currentQuestion.mode === 'JA_TRANSLATION_ORDER';
+  const visibleSourceSentence = currentQuestion.sourceSentence && (!shouldHideSourceSentenceUntilAnswered || hasAnsweredQuestion)
+    ? currentQuestion.sourceSentence
+    : null;
+  const visibleSourceTranslation = currentQuestion.sourceTranslation && (!shouldHideSourceTranslationUntilAnswered || hasAnsweredQuestion)
+    ? currentQuestion.sourceTranslation
+    : null;
+  const hasHiddenSourceSentence = Boolean(currentQuestion.sourceSentence && shouldHideSourceSentenceUntilAnswered && !hasAnsweredQuestion);
+  const hasHiddenSourceTranslation = Boolean(currentQuestion.sourceTranslation && shouldHideSourceTranslationUntilAnswered && !hasAnsweredQuestion);
+  const shouldShowReferencePanel = Boolean(
+    visibleSourceSentence
+    || visibleSourceTranslation
+    || currentQuestion.grammarFocus
+    || hasHiddenSourceSentence
+    || hasHiddenSourceTranslation,
+  );
+
+  return (
   <div data-testid="quiz-running-view" className="space-y-4">
     <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -90,6 +139,38 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       <h2 className="mt-3 text-3xl font-black leading-tight text-slate-800 sm:text-4xl">
         {currentQuestion.promptText}
       </h2>
+      {currentQuestion.instruction && (
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">{currentQuestion.instruction}</p>
+      )}
+
+      {shouldShowReferencePanel && (
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+          {visibleSourceSentence && (
+            <div className="rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">English</div>
+              <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">{visibleSourceSentence}</div>
+            </div>
+          )}
+          {hasHiddenSourceSentence && (
+            <div className="rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">English</div>
+              <div className="mt-2 text-sm font-bold leading-relaxed text-orange-900">
+                元の英文は、判定後に表示します。
+              </div>
+            </div>
+          )}
+          {(visibleSourceTranslation || currentQuestion.grammarFocus || hasHiddenSourceTranslation) && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                {visibleSourceTranslation || hasHiddenSourceTranslation ? '日本語' : 'Grammar'}
+              </div>
+              <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">
+                {visibleSourceTranslation || (hasHiddenSourceTranslation ? '日本語訳は、判定後に表示します。' : currentQuestion.grammarFocus)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {isHintMode ? (
         <div className={`mt-6 rounded-2xl px-4 py-4 ${showSpellingHint ? 'border border-amber-200 bg-amber-50' : 'border border-slate-200 bg-slate-50'}`}>
@@ -111,6 +192,10 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               まずはヒントなしで全文を入力します。必要なときだけ先頭2文字ヒントを出せます。
             </div>
           )}
+        </div>
+      ) : isOrderMode ? (
+        <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-4 text-sm leading-relaxed text-orange-900">
+          チップをタップして解答欄に並べます。登場済み単語を文の中でどう使うかまで確認します。
         </div>
       ) : (
         !showOptions && (
@@ -170,6 +255,149 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           </div>
         </MobileStickyActionBar>
       </form>
+    ) : isOrderMode ? (
+      <div className="space-y-4 animate-in slide-in-from-bottom-2 fade-in">
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Answer</div>
+              <h3 className="mt-1 text-lg font-black text-slate-950">解答欄</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onOrderTokensClear}
+              disabled={orderedTokenIds.length === 0 || Boolean(orderFeedback) || persistingAttempt}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:border-orange-200 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RotateCcw className="h-4 w-4" />
+              やり直す
+            </button>
+          </div>
+
+          <div className={`mt-4 min-h-[96px] rounded-2xl border-2 border-dashed px-3 py-3 transition-colors ${
+            orderFeedback === 'correct'
+              ? 'border-emerald-300 bg-emerald-50'
+              : orderFeedback === 'incorrect'
+                ? 'border-red-300 bg-red-50'
+                : 'border-slate-200 bg-slate-50'
+          }`}>
+            {selectedTokens.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedTokens.map((token, index) => (
+                  <div
+                    key={`${token.id}-${index}`}
+                    className={`inline-flex min-h-11 items-center gap-1 rounded-2xl border bg-white px-3 py-2 text-sm font-black shadow-sm ${
+                      token.learnedWordId || token.learnedWord
+                        ? 'border-orange-300 text-orange-800 ring-2 ring-orange-100'
+                        : 'border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <span>{token.text}</span>
+                    {!orderFeedback && (
+                      <span className="ml-1 inline-flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          aria-label={`${token.text}を左へ`}
+                          onClick={() => onOrderTokenMove(token.id, -1)}
+                          disabled={index === 0 || persistingAttempt}
+                          className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25"
+                        >
+                          <ArrowLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${token.text}を右へ`}
+                          onClick={() => onOrderTokenMove(token.id, 1)}
+                          disabled={index === selectedTokens.length - 1 || persistingAttempt}
+                          className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25"
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    )}
+                    {!orderFeedback && (
+                      <button
+                        type="button"
+                        aria-label={`${token.text}を外す`}
+                        onClick={() => onOrderTokenRemove(token.id)}
+                        disabled={persistingAttempt}
+                        className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:opacity-25"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-[64px] items-center justify-center text-center text-sm font-bold text-slate-400">
+                正しい順番でチップを並べます
+              </div>
+            )}
+          </div>
+
+          {orderFeedback && (
+            <div className={`mt-4 flex items-start gap-3 rounded-2xl border px-4 py-4 text-sm font-bold ${
+              orderFeedback === 'correct'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-red-200 bg-red-50 text-red-700'
+            }`}>
+              {orderFeedback === 'correct' ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0" /> : <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />}
+              <div>
+                <div>{orderFeedback === 'correct' ? '正解です' : 'もう一度確認しましょう'}</div>
+                <div className="mt-1 font-medium leading-relaxed">正解: {currentQuestion.answer}</div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Chips</div>
+              <h3 className="mt-1 text-lg font-black text-slate-950">使う語句を選ぶ</h3>
+            </div>
+            <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+              {orderedTokenIds.length} / {expectedTokenCount}
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {currentQuestion.tokens?.map((token) => {
+              const isSelected = selectedTokenIdSet.has(token.id);
+              const isLearned = Boolean(token.learnedWordId || token.learnedWord);
+              return (
+                <button
+                  key={token.id}
+                  type="button"
+                  onClick={() => onOrderTokenSelect(token.id)}
+                  disabled={isSelected || Boolean(orderFeedback) || persistingAttempt}
+                  className={`min-h-11 rounded-2xl border px-4 py-2.5 text-sm font-black transition-all ${
+                    isSelected
+                      ? 'border-slate-200 bg-slate-100 text-slate-400'
+                      : isLearned
+                        ? 'border-orange-300 bg-orange-50 text-orange-800 shadow-sm hover:bg-orange-100'
+                        : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-700'
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  {token.text}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
+          <button
+            type="button"
+            data-testid="quiz-order-submit"
+            onClick={() => void onOrderSubmit()}
+            disabled={!canSubmitOrder}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '判定する'}
+          </button>
+        </MobileStickyActionBar>
+      </div>
     ) : !showOptions ? (
       <div className="animate-in slide-in-from-bottom-2 flex flex-col gap-4 fade-in">
         <button
@@ -234,6 +462,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       </div>
     )}
   </div>
-);
+  );
+};
 
 export default QuizRunningView;

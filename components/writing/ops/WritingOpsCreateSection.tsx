@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 
 import type { StudentSummary, WritingPromptTemplate } from '../../../types';
 
@@ -60,6 +60,11 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
               <option key={student.uid} value={student.uid}>{student.name} / {student.email}</option>
             ))}
           </select>
+          {students.length === 0 && (
+            <div className="mt-2 text-sm font-bold text-amber-700">
+              対象になる有料ビジネス生徒がまだいません。
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">テンプレート</label>
@@ -106,6 +111,12 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           課題を生成する
         </button>
+        {(!selectedStudentUid || !selectedTemplateId) && (
+          <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>対象生徒とテンプレートを選ぶと、配布前の課題を生成できます。</span>
+          </div>
+        )}
       </div>
     </div>
 
@@ -155,6 +166,11 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           </div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {templates.length === 0 && (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm leading-relaxed text-slate-500 sm:col-span-2">
+              利用できる Writing テンプレートがまだありません。テンプレートが同期されると、ここから選択できます。
+            </div>
+          )}
           {templates.map((template) => (
             <button
               key={template.id}

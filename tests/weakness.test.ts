@@ -37,7 +37,7 @@ const makeEvent = (overrides: Partial<WeaknessInteractionEvent>): WeaknessIntera
 });
 
 describe('weakness intelligence', () => {
-  it('classifies the five weakness dimensions from recent events', () => {
+  it('classifies vocabulary, grammar, retention, and difficulty weakness dimensions from recent events', () => {
     const events: WeaknessInteractionEvent[] = [
       ...Array.from({ length: 6 }, (_, index) => makeEvent({
         wordId: `meaning-recall-${index}`,
@@ -53,6 +53,21 @@ describe('weakness intelligence', () => {
         wordId: `spelling-${index}`,
         questionMode: 'SPELLING_HINT',
         correct: index < 3,
+      })),
+      ...Array.from({ length: 6 }, (_, index) => makeEvent({
+        wordId: `grammar-${index}`,
+        questionMode: 'GRAMMAR_CLOZE',
+        correct: index < 2,
+      })),
+      ...Array.from({ length: 6 }, (_, index) => makeEvent({
+        wordId: `word-order-${index}`,
+        questionMode: 'EN_WORD_ORDER',
+        correct: index < 3,
+      })),
+      ...Array.from({ length: 6 }, (_, index) => makeEvent({
+        wordId: `translation-order-${index}`,
+        questionMode: 'JA_TRANSLATION_ORDER',
+        correct: index < 4,
       })),
       ...Array.from({ length: 6 }, (_, index) => makeEvent({
         interactionSource: 'STUDY',
@@ -78,10 +93,13 @@ describe('weakness intelligence', () => {
       now,
     });
 
-    expect(signals).toHaveLength(5);
+    expect(signals).toHaveLength(8);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.MEANING_RECALL)?.level).toBe(WeaknessSignalLevel.HIGH);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.MEANING_RECOGNITION)?.level).toBe(WeaknessSignalLevel.LOW);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.SPELLING_RECALL)?.sampleSize).toBe(6);
+    expect(signals.find((signal) => signal.dimension === WeaknessDimension.GRAMMAR_APPLICATION)?.targetQuestionModes).toEqual(['GRAMMAR_CLOZE']);
+    expect(signals.find((signal) => signal.dimension === WeaknessDimension.WORD_ORDER)?.targetQuestionModes).toEqual(['EN_WORD_ORDER']);
+    expect(signals.find((signal) => signal.dimension === WeaknessDimension.TRANSLATION_ORDER)?.targetQuestionModes).toEqual(['JA_TRANSLATION_ORDER']);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.RETENTION_STABILITY)?.level).not.toBe(WeaknessSignalLevel.INSUFFICIENT_DATA);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.ADVANCED_BAND_CONFIDENCE)?.targetBandIndex).toBeGreaterThanOrEqual(1);
   });

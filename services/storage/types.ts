@@ -27,6 +27,7 @@ import type {
   UserRole,
   WeeklyMission,
   WeeklyMissionBoard,
+  WorksheetQuestionMode,
   WordData,
 } from '../../types';
 import type {
@@ -78,7 +79,7 @@ export interface LearningStorageService {
     wordId: string,
     bookId: string,
     correct: boolean,
-    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+    questionMode: WorksheetQuestionMode,
     responseTimeMs?: number,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,

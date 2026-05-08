@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, FileDown, MessageSquareText, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, FileDown, MessageSquareText, X } from 'lucide-react';
 
 import type { WritingSubmissionDetailResponse } from '../../contracts/writing';
 import {
@@ -92,6 +92,22 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
               <div className="mt-2 text-sm font-black leading-snug text-slate-950">{formatWritingDateTime(feedbackDetail.submission.teacherReview?.releasedAt)}</div>
             </div>
           </div>
+
+          {selectedEvaluation && (
+            <div className="rounded-3xl border border-medace-200 bg-medace-50 px-5 py-5">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-medace-700" />
+                <div>
+                  <div className="text-sm font-black text-medace-950">見直し順</div>
+                  <div className="mt-2 grid gap-2 text-sm leading-relaxed text-medace-900/80 md:grid-cols-3">
+                    <div className="rounded-2xl border border-medace-100 bg-white/80 px-4 py-3">1. 講師コメントで方針を確認</div>
+                    <div className="rounded-2xl border border-medace-100 bg-white/80 px-4 py-3">2. 改善点 {selectedEvaluation.improvementPoints.length}件を直す</div>
+                    <div className="rounded-2xl border border-medace-100 bg-white/80 px-4 py-3">3. 訂正文例と模範例を比較</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div data-testid="writing-feedback-comment" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
             <div className="flex items-start justify-between gap-3">

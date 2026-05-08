@@ -8,6 +8,52 @@ export const BRAND = {
   footerLabel: 'Steady Study',
 } as const;
 
+export const BRAND_VISUAL_SYSTEM = {
+  palette: {
+    primary: {
+      50: '#fff8f1',
+      100: '#ffe9d1',
+      200: '#ffd1a3',
+      300: '#ffb874',
+      400: '#ff9a3c',
+      500: '#ff8216',
+      600: '#ef6f00',
+      700: '#c85a00',
+      800: '#944300',
+      900: '#5f2b00',
+      950: '#3a1800',
+    },
+    neutral: {
+      ink: '#111827',
+      muted: '#475569',
+      canvas: '#fffaf5',
+      panel: '#ffffff',
+      line: '#ebdecc',
+    },
+    signal: {
+      amber: '#d97706',
+      coral: '#dc2626',
+      blue: '#2563eb',
+    },
+  },
+  radius: {
+    card: '12px',
+    panel: '16px',
+    control: '12px',
+    pill: '9999px',
+  },
+  mockAssets: {
+    root: 'docs/assets/ui-mocks',
+    naming: 'YYYY-MM-DD_surface_viewport_variant.png',
+  },
+  principles: [
+    'B2B workspace first: dense, calm, scannable screens over marketing decoration.',
+    'Use orange as the product anchor, with green, red, and blue reserved for status meaning.',
+    'Keep cards restrained; reserve pill shapes for chips, badges, and compact controls.',
+    'Mobile screens must fit 320px width without horizontal scroll or overlapping text.',
+  ],
+} as const;
+
 export const AUTH_COPY = {
   eyebrow: 'Steady Study',
   title: ['英単語学習を', '今日から迷わず', '続けられる場所'],

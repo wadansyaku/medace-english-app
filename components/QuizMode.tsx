@@ -117,6 +117,8 @@ const QuizMode: React.FC<QuizModeProps> = ({
           showSpellingHint={controller.showSpellingHint}
           showOptions={controller.showOptions}
           selectedOption={controller.selectedOption}
+          orderedTokenIds={controller.orderedTokenIds}
+          orderFeedback={controller.orderFeedback}
           answerInput={controller.answerInput}
           inputResult={controller.inputResult}
           spellingFeedbackTone={controller.spellingFeedbackTone}
@@ -129,6 +131,11 @@ const QuizMode: React.FC<QuizModeProps> = ({
           onHintSubmit={controller.handleHintSubmit}
           onRevealSpellingHint={controller.revealSpellingHint}
           onOptionClick={controller.handleOptionClick}
+          onOrderTokenSelect={controller.handleOrderTokenSelect}
+          onOrderTokenRemove={controller.handleOrderTokenRemove}
+          onOrderTokenMove={controller.handleOrderTokenMove}
+          onOrderTokensClear={controller.handleOrderTokensClear}
+          onOrderSubmit={controller.handleOrderSubmit}
           onRetrySave={controller.handleRetrySave}
         />
       )}

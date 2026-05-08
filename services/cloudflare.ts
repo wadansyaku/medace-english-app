@@ -10,7 +10,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
 import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
 
@@ -208,7 +208,7 @@ export class CloudflareStorageService implements IStorageService {
     wordId: string,
     bookId: string,
     correct: boolean,
-    questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+    questionMode: WorksheetQuestionMode,
     responseTimeMs = 0,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,

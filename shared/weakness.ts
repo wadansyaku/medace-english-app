@@ -8,6 +8,7 @@ import {
   type WeaknessDimension,
   type WeaknessSignalLevel,
   type WeaknessSignalSummary,
+  type WorksheetQuestionMode,
   type WordData,
 } from '../types';
 import {
@@ -22,7 +23,7 @@ export interface WeaknessInteractionEvent {
   bookId: string;
   createdAt: number;
   interactionSource: LearningInteractionSource;
-  questionMode?: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT';
+  questionMode?: WorksheetQuestionMode;
   correct?: boolean;
   rating?: number;
   responseTimeMs: number;
@@ -46,6 +47,9 @@ const DIMENSION_PRIORITY: Record<WeaknessSignalLevel, number> = {
 const DIMENSION_ORDER: WeaknessDimension[] = [
   WeaknessDimensionEnum.RETENTION_STABILITY,
   WeaknessDimensionEnum.MEANING_RECALL,
+  WeaknessDimensionEnum.GRAMMAR_APPLICATION,
+  WeaknessDimensionEnum.WORD_ORDER,
+  WeaknessDimensionEnum.TRANSLATION_ORDER,
   WeaknessDimensionEnum.SPELLING_RECALL,
   WeaknessDimensionEnum.ADVANCED_BAND_CONFIDENCE,
   WeaknessDimensionEnum.MEANING_RECOGNITION,
@@ -83,6 +87,12 @@ const buildReason = (dimension: WeaknessDimension, level: WeaknessSignalLevel): 
       return '英単語を見て意味を選ぶ場面で迷いが残っています。';
     case WeaknessDimensionEnum.SPELLING_RECALL:
       return 'スペリング問題で綴りの取りこぼしが続いています。';
+    case WeaknessDimensionEnum.GRAMMAR_APPLICATION:
+      return '登場済み単語を英文の中で使う問題に取りこぼしが出ています。';
+    case WeaknessDimensionEnum.WORD_ORDER:
+      return '英語の語順を組み立てる問題で迷いが残っています。';
+    case WeaknessDimensionEnum.TRANSLATION_ORDER:
+      return '英文をもとに日本語の意味を組み立てる問題で迷いが残っています。';
     case WeaknessDimensionEnum.RETENTION_STABILITY:
       return '復習間隔が空いた単語で忘れやすさが出ています。';
     case WeaknessDimensionEnum.ADVANCED_BAND_CONFIDENCE:
@@ -105,12 +115,18 @@ export const getWeaknessNextActionLabel = (dimension: WeaknessDimension): string
       ? '英語から意味を10語確認する'
       : dimension === WeaknessDimensionEnum.SPELLING_RECALL
         ? 'スペリングを10語確認する'
-        : getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
-          ? '今日のプランに戻る'
-          : '復習を10語始める'
+        : dimension === WeaknessDimensionEnum.GRAMMAR_APPLICATION
+          ? '文法穴埋めを10問確認する'
+          : dimension === WeaknessDimensionEnum.WORD_ORDER
+            ? '英語語順を10問確認する'
+            : dimension === WeaknessDimensionEnum.TRANSLATION_ORDER
+              ? '日本語並び替えを10問確認する'
+              : getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
+                ? '今日のプランに戻る'
+                : '復習を10語始める'
 );
 
-export const getWeaknessTargetQuestionModes = (dimension: WeaknessDimension): Array<'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT'> => {
+export const getWeaknessTargetQuestionModes = (dimension: WeaknessDimension): WorksheetQuestionMode[] => {
   switch (dimension) {
     case WeaknessDimensionEnum.MEANING_RECALL:
       return ['JA_TO_EN'];
@@ -118,6 +134,12 @@ export const getWeaknessTargetQuestionModes = (dimension: WeaknessDimension): Ar
       return ['EN_TO_JA'];
     case WeaknessDimensionEnum.SPELLING_RECALL:
       return ['SPELLING_HINT'];
+    case WeaknessDimensionEnum.GRAMMAR_APPLICATION:
+      return ['GRAMMAR_CLOZE'];
+    case WeaknessDimensionEnum.WORD_ORDER:
+      return ['EN_WORD_ORDER'];
+    case WeaknessDimensionEnum.TRANSLATION_ORDER:
+      return ['JA_TRANSLATION_ORDER'];
     default:
       return ['JA_TO_EN', 'EN_TO_JA'];
   }
@@ -171,7 +193,7 @@ const averageFailureRate = (weights: Array<{ attempt: number; failure: number }>
 const summarizeQuestionModeDimension = (
   events: WeaknessInteractionEvent[],
   dimension: WeaknessDimension,
-  questionMode: 'EN_TO_JA' | 'JA_TO_EN' | 'SPELLING_HINT',
+  questionMode: WorksheetQuestionMode,
   targetBandIndex: number,
 ): WeaknessSignalSummary => {
   const relevant = events.filter((event) => event.interactionSource === 'QUIZ' && event.questionMode === questionMode);
@@ -323,6 +345,24 @@ export const deriveWeaknessSignals = ({
     'SPELLING_HINT',
     targetBandIndex,
   );
+  const grammarApplication = summarizeQuestionModeDimension(
+    recentEvents,
+    WeaknessDimensionEnum.GRAMMAR_APPLICATION,
+    'GRAMMAR_CLOZE',
+    targetBandIndex,
+  );
+  const wordOrder = summarizeQuestionModeDimension(
+    recentEvents,
+    WeaknessDimensionEnum.WORD_ORDER,
+    'EN_WORD_ORDER',
+    targetBandIndex,
+  );
+  const translationOrder = summarizeQuestionModeDimension(
+    recentEvents,
+    WeaknessDimensionEnum.TRANSLATION_ORDER,
+    'JA_TRANSLATION_ORDER',
+    targetBandIndex,
+  );
 
   let retention = summarizeRetentionFromEvents(recentEvents, targetBandIndex);
   if (retention.level === WeaknessSignalLevelEnum.INSUFFICIENT_DATA) {
@@ -337,6 +377,9 @@ export const deriveWeaknessSignals = ({
   const allSignals = [
     retention,
     meaningRecall,
+    grammarApplication,
+    wordOrder,
+    translationOrder,
     spellingRecall,
     advanced,
     meaningRecognition,
@@ -457,6 +500,9 @@ export const getDefaultInterventionKindFromWeakness = (
   }
   if (topWeakness.dimension === WeaknessDimensionEnum.MEANING_RECALL
     || topWeakness.dimension === WeaknessDimensionEnum.SPELLING_RECALL
+    || topWeakness.dimension === WeaknessDimensionEnum.GRAMMAR_APPLICATION
+    || topWeakness.dimension === WeaknessDimensionEnum.WORD_ORDER
+    || topWeakness.dimension === WeaknessDimensionEnum.TRANSLATION_ORDER
     || topWeakness.dimension === WeaknessDimensionEnum.RETENTION_STABILITY) {
     return InterventionKind.REVIEW_RESTART;
   }
@@ -479,7 +525,12 @@ export const getWeaknessMissionDefaults = ({
       reviewWordsTarget: current.reviewWordsTarget + 6,
     };
   }
-  if (topWeakness.dimension === WeaknessDimensionEnum.SPELLING_RECALL) {
+  if (
+    topWeakness.dimension === WeaknessDimensionEnum.SPELLING_RECALL
+    || topWeakness.dimension === WeaknessDimensionEnum.GRAMMAR_APPLICATION
+    || topWeakness.dimension === WeaknessDimensionEnum.WORD_ORDER
+    || topWeakness.dimension === WeaknessDimensionEnum.TRANSLATION_ORDER
+  ) {
     return {
       ...current,
       quizTargetCount: current.quizTargetCount + 1,
@@ -510,6 +561,12 @@ export const buildWeaknessMissionRationale = ({
       return `${studentName}さんは復習間隔が空くと定着が崩れやすいため、今週は復習量を厚めにして流れを戻します。`;
     case WeaknessDimensionEnum.SPELLING_RECALL:
       return `${studentName}さんはスペリング想起で取りこぼしがあるため、確認クイズを増やして定着を固めます。`;
+    case WeaknessDimensionEnum.GRAMMAR_APPLICATION:
+      return `${studentName}さんは単語を文の中で使う場面に取りこぼしがあるため、文法穴埋めで語彙と文型を同時に戻します。`;
+    case WeaknessDimensionEnum.WORD_ORDER:
+      return `${studentName}さんは英文の語順で迷いやすいため、登場済み単語を使った並び替えで文の型を固めます。`;
+    case WeaknessDimensionEnum.TRANSLATION_ORDER:
+      return `${studentName}さんは英文の意味を日本語に組み立てる場面で迷いがあるため、日本語並び替えで意味のまとまりを確認します。`;
     case WeaknessDimensionEnum.ADVANCED_BAND_CONFIDENCE:
       return `${studentName}さんは今の難度帯で正答が揺れているため、新出を少し絞って同じ帯で安定化します。`;
     case WeaknessDimensionEnum.MEANING_RECALL:

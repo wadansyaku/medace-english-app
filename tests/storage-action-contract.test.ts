@@ -49,4 +49,44 @@ describe('storage action contract', () => {
   it('matches the storage action contract snapshot', () => {
     expect(summarizeStorageActionContracts()).toMatchSnapshot();
   });
+
+  it('accepts only declared worksheet question modes for quiz attempts', () => {
+    const definition = resolveStorageActionDefinition('recordQuizAttempt');
+
+    expect(definition.parse({
+      wordId: 'word-1',
+      bookId: 'book-1',
+      correct: true,
+      questionMode: 'GRAMMAR_CLOZE',
+      responseTimeMs: 1200,
+    })).toMatchObject({
+      questionMode: 'GRAMMAR_CLOZE',
+    });
+    expect(definition.parse({
+      wordId: 'word-1',
+      bookId: 'book-1',
+      correct: true,
+      questionMode: 'EN_WORD_ORDER',
+      responseTimeMs: 1200,
+    })).toMatchObject({
+      questionMode: 'EN_WORD_ORDER',
+    });
+    expect(definition.parse({
+      wordId: 'word-1',
+      bookId: 'book-1',
+      correct: true,
+      questionMode: 'JA_TRANSLATION_ORDER',
+      responseTimeMs: 1200,
+    })).toMatchObject({
+      questionMode: 'JA_TRANSLATION_ORDER',
+    });
+
+    expect(() => definition.parse({
+      wordId: 'word-1',
+      bookId: 'book-1',
+      correct: true,
+      questionMode: 'FREE_TEXT_MODE',
+      responseTimeMs: 1200,
+    })).toThrow('questionMode が不正です。');
+  });
 });
