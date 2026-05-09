@@ -109,6 +109,63 @@ describe('handleAiAction metering integration', () => {
     });
   });
 
+  it('generates grammar practice questions through the metered AI route', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify([
+        {
+          wordId: 'word-1',
+          mode: 'GRAMMAR_CLOZE',
+          promptText: 'Doctors ____ the patient before surgery.',
+          sourceSentence: 'Doctors stabilize the patient before surgery.',
+          sourceTranslation: '',
+          answer: 'stabilize',
+          options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+          orderedTokens: [],
+          grammarFocus: '時を表す副詞句',
+          instruction: '空所に入る語形を選びます。',
+        },
+      ]),
+    });
+
+    const env = {
+      GEMINI_API_KEY: 'test-key',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 1,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        mode: 'GRAMMAR_CLOZE',
+        promptText: 'Doctors ____ the patient before surgery.',
+        answer: 'stabilize',
+      }),
+    ]);
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions');
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: true,
+      model: 'gemini-2.5-flash',
+      providerInputUnits: 1,
+      providerOutputUnits: 1,
+    });
+  });
+
   it('keeps learning-plan fallback on access check only when GEMINI_API_KEY is missing', async () => {
     const env = {} as any;
     const user = createUser() as any;
