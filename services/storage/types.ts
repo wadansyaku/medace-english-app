@@ -83,6 +83,7 @@ export interface LearningStorageService {
     responseTimeMs?: number,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    generatedProblemId?: string,
   ): Promise<void>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;

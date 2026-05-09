@@ -209,6 +209,47 @@ export const LEARNING_PREFERENCE_INTENSITY_LABELS: Record<LearningPreferenceInte
   [LearningPreferenceIntensity.INTENSIVE]: '短期集中',
 };
 
+export type GrammarCurriculumScopeId =
+  | 'basic-svo'
+  | 'be-verb'
+  | 'modal-base-verb'
+  | 'time-preposition-phrase'
+  | 'to-infinitive'
+  | 'gerund'
+  | 'comparative'
+  | 'when-while-clause'
+  | 'passive-voice'
+  | 'present-perfect'
+  | 'relative-clause'
+  | 'first-conditional';
+
+export type GrammarCurriculumCategory =
+  | 'sentence-pattern'
+  | 'verb-form'
+  | 'phrase'
+  | 'clause'
+  | 'comparison';
+
+export type GrammarScopeSelectionSource = 'EXPLICIT' | 'INFERRED' | 'FALLBACK';
+
+export interface GrammarCurriculumScope {
+  id: GrammarCurriculumScopeId;
+  category: GrammarCurriculumCategory;
+  cefrLevel: EnglishLevel;
+  labelJa: string;
+  labelEn: string;
+  descriptionJa: string;
+  targetQuestionModes: WorksheetQuestionMode[];
+}
+
+export interface GrammarScopeSelection {
+  scopeId: GrammarCurriculumScopeId;
+  cefrLevel: EnglishLevel;
+  labelJa: string;
+  isExplicitScope: boolean;
+  source: GrammarScopeSelectionSource;
+}
+
 export interface UserStats {
   xp: number;
   level: number;
@@ -1163,7 +1204,8 @@ export type WorksheetQuestionMode =
   | 'SPELLING_HINT'
   | 'GRAMMAR_CLOZE'
   | 'EN_WORD_ORDER'
-  | 'JA_TRANSLATION_ORDER';
+  | 'JA_TRANSLATION_ORDER'
+  | 'JA_TRANSLATION_INPUT';
 
 export type LearningInteractionSource = 'STUDY' | 'QUIZ';
 
@@ -1175,6 +1217,8 @@ export interface QuizSessionConfig {
   questionCount: 5 | 10 | 20;
   rangeStart: number;
   rangeEnd: number;
+  grammarScopeId?: GrammarCurriculumScopeId;
+  showGrammarScopeHint?: boolean;
 }
 
 export interface StudentWorksheetWord {

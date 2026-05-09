@@ -7,6 +7,7 @@ export const WORKSHEET_QUESTION_MODES = [
   'GRAMMAR_CLOZE',
   'EN_WORD_ORDER',
   'JA_TRANSLATION_ORDER',
+  'JA_TRANSLATION_INPUT',
 ] as const satisfies readonly WorksheetQuestionMode[];
 
 export const isWorksheetQuestionMode = (value: unknown): value is WorksheetQuestionMode => (

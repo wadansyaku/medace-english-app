@@ -6,10 +6,13 @@ import type {
   WorksheetQuestionMode,
 } from '../../types';
 import { WORKSHEET_MODE_COPY } from '../../utils/worksheet';
+import { getGrammarScopesForMode } from '../../utils/grammarScope';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import {
   QUESTION_COUNT_OPTIONS,
   QUIZ_SELECTION_COPY,
+  getDefaultGrammarScopeIdForMode,
+  isGrammarQuizMode,
 } from '../../config/quizFlow';
 
 interface QuizSetupViewProps {
@@ -118,7 +121,10 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
               key={questionMode}
               type="button"
               data-testid={`quiz-direction-${questionMode.toLowerCase()}`}
-              onClick={() => onUpdateSetupConfig({ questionMode })}
+              onClick={() => onUpdateSetupConfig({
+                questionMode,
+                grammarScopeId: getDefaultGrammarScopeIdForMode(questionMode),
+              })}
               className={`ui-option-card ${isActive ? 'ui-option-card-active' : 'ui-option-card-inactive'}`}
             >
               <div className="text-base font-black text-slate-950">{WORKSHEET_MODE_COPY[questionMode].label}</div>
@@ -129,6 +135,61 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
           );
         })}
       </div>
+      {isGrammarQuizMode(setupConfig.questionMode) && (
+        <div className="mt-5 space-y-4 rounded-2xl border border-orange-100 bg-orange-50/50 px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-orange-500">Grammar Scope</div>
+              <h3 className="mt-1 text-lg font-black text-slate-950">文法範囲を選ぶ</h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                単語は同じでも、どの文法で使うかを固定できます。
+              </p>
+            </div>
+            <div className="inline-grid grid-cols-2 overflow-hidden rounded-2xl border border-orange-200 bg-white p-1">
+              {[
+                { value: true, label: '明示する' },
+                { value: false, label: '伏せる' },
+              ].map((item) => {
+                const isActive = (setupConfig.showGrammarScopeHint !== false) === item.value;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    data-testid={`quiz-grammar-scope-visibility-${item.value ? 'show' : 'hide'}`}
+                    onClick={() => onUpdateSetupConfig({ showGrammarScopeHint: item.value })}
+                    className={`min-h-10 rounded-xl px-3 text-sm font-bold transition-colors ${
+                      isActive ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {getGrammarScopesForMode(setupConfig.questionMode).map((scope) => {
+              const isActive = setupConfig.grammarScopeId === scope.id;
+              return (
+                <button
+                  key={scope.id}
+                  type="button"
+                  data-testid={`quiz-grammar-scope-${scope.id}`}
+                  onClick={() => onUpdateSetupConfig({ grammarScopeId: scope.id })}
+                  className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    isActive
+                      ? 'border-orange-400 bg-white text-slate-950 shadow-sm'
+                      : 'border-orange-100 bg-white/70 text-slate-600 hover:border-orange-300'
+                  }`}
+                >
+                  <div className="text-sm font-black">{scope.labelJa}</div>
+                  <div className="mt-1 text-xs leading-relaxed text-slate-500">{scope.cefrLevel} / {scope.descriptionJa}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
 
     <section className="ui-panel">

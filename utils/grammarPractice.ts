@@ -1,8 +1,15 @@
-import type { WordData } from '../types';
+import type { GrammarCurriculumScopeId, GrammarScopeSelection, WordData } from '../types';
+import { resolveGrammarScopeSelection } from './grammarScope';
 
 export type GrammarPracticeKind = 'ENGLISH_WORD_ORDER' | 'JAPANESE_WORD_ORDER' | 'GRAMMAR_CLOZE';
 
 export type GrammarPracticeSource = 'example' | 'fallback';
+
+interface ResolvedPracticeSentence {
+  sentence: string;
+  source: GrammarPracticeSource;
+  japaneseAnswerText?: string;
+}
 
 export interface GrammarPracticeChip {
   id: string;
@@ -17,6 +24,7 @@ interface GrammarPracticeBaseItem {
   word: string;
   source: GrammarPracticeSource;
   prompt: string;
+  grammarScope: GrammarScopeSelection;
 }
 
 export interface EnglishWordOrderPracticeItem extends GrammarPracticeBaseItem {
@@ -51,6 +59,8 @@ export type GrammarPracticeItem =
 export interface BuildGrammarPracticeOptions {
   seed?: string | number;
   maxItemsPerWord?: number;
+  requestedScopeId?: GrammarCurriculumScopeId | null;
+  japaneseQuestionMode?: 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT';
 }
 
 const ENGLISH_CHIP_MIN = 4;
@@ -62,6 +72,13 @@ const normalizeWhitespace = (value: string): string => value.trim().replace(/\s+
 
 const normalizeEnglish = (value: string): string => normalizeWhitespace(value).toLowerCase();
 
+const normalizeEnglishOrderToken = (value: string): string => (
+  normalizeWhitespace(value)
+    .replace(/^[“"‘'([{]+/g, '')
+    .replace(/[.,!?;:。．…、，"”’)\]}]+$/g, '')
+    .toLowerCase()
+);
+
 const normalizeJapanese = (value: string): string => (
   value
     .trim()
@@ -70,6 +87,17 @@ const normalizeJapanese = (value: string): string => (
     .replace(/[。．.]+$/g, '')
     .replace(/\s+/g, ' ')
 );
+
+const normalizeJapaneseOrderToken = (value: string): string => (
+  normalizeJapanese(value)
+    .replace(/^[「『（(【［\["'“‘]+/g, '')
+    .replace(/[」』）)】］\]"'”’、，,。．.!?！？]+$/g, '')
+);
+
+const hasUniqueOrderingTokens = (tokens: string[]): boolean => {
+  const normalizedTokens = tokens.map((token) => normalizeWhitespace(token).toLowerCase());
+  return normalizedTokens.length === new Set(normalizedTokens).size;
+};
 
 const hasLatinLetter = (value: string): boolean => /[A-Za-z]/.test(value);
 
@@ -146,7 +174,7 @@ const findStudyWordInSentence = (sentence: string, word: string): string | null 
 const tokenizeEnglishSentence = (sentence: string): string[] => (
   normalizeWhitespace(sentence)
     .split(' ')
-    .map((token) => token.trim())
+    .map((token) => normalizeEnglishOrderToken(token))
     .filter(Boolean)
 );
 
@@ -154,19 +182,94 @@ const isUsableEnglishSentence = (sentence: string, word: string): boolean => {
   const tokens = tokenizeEnglishSentence(sentence);
   return tokens.length >= ENGLISH_CHIP_MIN
     && tokens.length <= ENGLISH_CHIP_MAX
+    && hasUniqueOrderingTokens(tokens)
     && Boolean(findStudyWordInSentence(sentence, word));
 };
 
-const createFallbackSentence = (word: string): string => (
-  `I reviewed the word ${normalizeWhitespace(word)} after class.`
+const normalizeTermForSentence = (word: string): string => normalizeWhitespace(word).toLowerCase();
+
+const normalizeDefinitionForSentence = (definition: string): string => normalizeJapanese(definition);
+
+const createScopePracticeSentence = (
+  word: WordData,
+  scopeId: GrammarCurriculumScopeId,
+): ResolvedPracticeSentence => {
+  const term = normalizeTermForSentence(word.word);
+  const meaning = normalizeDefinitionForSentence(word.definition);
+  const byScope: Record<GrammarCurriculumScopeId, { sentence: string; japaneseAnswerText: string }> = {
+    'basic-svo': {
+      sentence: `Students learn the term ${term} today.`,
+      japaneseAnswerText: `生徒は ${meaning} という語を 学ぶ`,
+    },
+    'be-verb': {
+      sentence: `The term ${term} is useful today.`,
+      japaneseAnswerText: `${meaning} という語は 役に立つ`,
+    },
+    'modal-base-verb': {
+      sentence: `Learners can use the term ${term} today.`,
+      japaneseAnswerText: `生徒は ${meaning} という語を 使える`,
+    },
+    'time-preposition-phrase': {
+      sentence: `Learners study the term ${term} before class.`,
+      japaneseAnswerText: `生徒は 授業前に ${meaning} という語を 復習する`,
+    },
+    'to-infinitive': {
+      sentence: `Learners hope to master the term ${term}.`,
+      japaneseAnswerText: `生徒は ${meaning} という語を 復習する 予定だ`,
+    },
+    gerund: {
+      sentence: `Learners enjoy studying the term ${term}.`,
+      japaneseAnswerText: `生徒は ${meaning} という語を 復習することを 楽しむ`,
+    },
+    comparative: {
+      sentence: `The term ${term} is more useful than before.`,
+      japaneseAnswerText: `${meaning} という語は 前より 役に立つ`,
+    },
+    'when-while-clause': {
+      sentence: `Learners say the term ${term} when they practice.`,
+      japaneseAnswerText: `生徒は 復習するとき ${meaning} という語を 言う`,
+    },
+    'passive-voice': {
+      sentence: `The term ${term} is introduced by teachers today.`,
+      japaneseAnswerText: `${meaning} という語は 先生に 紹介される`,
+    },
+    'present-perfect': {
+      sentence: `Learners have practiced the term ${term} today.`,
+      japaneseAnswerText: `生徒は 今日 ${meaning} という語を 復習した`,
+    },
+    'relative-clause': {
+      sentence: `The term ${term} that teachers choose is useful.`,
+      japaneseAnswerText: `先生が選んだ ${meaning} という語は 役に立つ`,
+    },
+    'first-conditional': {
+      sentence: `If learners study the term ${term} they will remember.`,
+      japaneseAnswerText: `生徒が ${meaning} という語を 復習すれば 覚える`,
+    },
+  };
+  return {
+    ...byScope[scopeId],
+    source: 'fallback',
+  };
+};
+
+const createFallbackSentence = (word: WordData): ResolvedPracticeSentence => (
+  createScopePracticeSentence(word, 'basic-svo')
 );
 
-const resolveEnglishSentence = (word: WordData): { sentence: string; source: GrammarPracticeSource } => {
+const resolveEnglishSentence = (
+  word: WordData,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
+): ResolvedPracticeSentence => {
+  if (requestedScopeId) {
+    const scoped = createScopePracticeSentence(word, requestedScopeId);
+    if (isUsableEnglishSentence(scoped.sentence, word.word)) return scoped;
+  }
+
   const candidate = firstSentence(word.exampleSentence);
   if (candidate && isUsableEnglishSentence(candidate, word.word)) {
     return { sentence: candidate, source: 'example' };
   }
-  return { sentence: createFallbackSentence(word.word), source: 'fallback' };
+  return createFallbackSentence(word);
 };
 
 const createChips = (texts: string[], seed: string, idPrefix: string): {
@@ -217,7 +320,7 @@ const splitJapaneseDefinition = (value: string): string[] => {
 const compactJapaneseChips = (tokens: string[]): string[] => {
   const compacted: string[] = [];
   tokens.forEach((token) => {
-    const normalized = normalizeJapanese(token);
+    const normalized = normalizeJapaneseOrderToken(token);
     if (!normalized) return;
     if (normalized.length <= 9) {
       compacted.push(normalized);
@@ -240,27 +343,39 @@ const tokenizeJapaneseAnswer = (answer: string, definition: string): string[] =>
   return compactJapaneseChips(splitJapaneseDefinition(definition));
 };
 
-const createFallbackJapaneseAnswer = (word: WordData): string => (
-  `「${normalizeWhitespace(word.word)}」は${normalizeJapanese(word.definition)}という意味です。`
+const createFallbackJapaneseAnswer = (word: WordData, scopedAnswerText?: string): string => (
+  scopedAnswerText || `意味は ${normalizeJapanese(word.definition)} です。`
 );
 
-const resolveJapaneseAnswer = (word: WordData): { answerText: string; source: GrammarPracticeSource } => {
+const resolveJapaneseAnswer = (
+  word: WordData,
+  scopedAnswerText?: string,
+): { answerText: string; source: GrammarPracticeSource } => {
+  if (scopedAnswerText) {
+    const chips = tokenizeJapaneseAnswer(scopedAnswerText, word.definition);
+    if (chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX && hasUniqueOrderingTokens(chips)) {
+      return { answerText: scopedAnswerText, source: 'fallback' };
+    }
+  }
+
   const candidate = normalizeJapanese(word.exampleMeaning || '');
   const chips = tokenizeJapaneseAnswer(candidate, word.definition);
   if (candidate && chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX) {
     return { answerText: candidate, source: 'example' };
   }
-  return { answerText: createFallbackJapaneseAnswer(word), source: 'fallback' };
+  return { answerText: createFallbackJapaneseAnswer(word, scopedAnswerText), source: 'fallback' };
 };
 
 const createEnglishWordOrderItem = (
   word: WordData,
   sentence: string,
   source: GrammarPracticeSource,
+  grammarScope: GrammarScopeSelection,
   seed: string,
 ): EnglishWordOrderPracticeItem | null => {
   const tokens = tokenizeEnglishSentence(sentence);
   if (tokens.length < ENGLISH_CHIP_MIN || tokens.length > ENGLISH_CHIP_MAX) return null;
+  if (!hasUniqueOrderingTokens(tokens)) return null;
   const id = `${word.id}:english-word-order`;
   return {
     id,
@@ -270,6 +385,7 @@ const createEnglishWordOrderItem = (
     word: normalizeWhitespace(word.word),
     source,
     prompt: '英単語を正しい英文の順番に並べ替えましょう。',
+    grammarScope,
     sourceSentence: sentence,
     ...createChips(tokens, `${seed}:${id}`, id),
   };
@@ -278,11 +394,14 @@ const createEnglishWordOrderItem = (
 const createJapaneseWordOrderItem = (
   word: WordData,
   sourceSentence: string,
+  scopedAnswerText: string | undefined,
+  grammarScope: GrammarScopeSelection,
   seed: string,
 ): JapaneseWordOrderPracticeItem | null => {
-  const resolved = resolveJapaneseAnswer(word);
+  const resolved = resolveJapaneseAnswer(word, scopedAnswerText);
   const tokens = tokenizeJapaneseAnswer(resolved.answerText, word.definition);
   if (tokens.length < JAPANESE_CHIP_MIN || tokens.length > JAPANESE_CHIP_MAX) return null;
+  if (!hasUniqueOrderingTokens(tokens)) return null;
 
   const id = `${word.id}:japanese-word-order`;
   return {
@@ -293,6 +412,7 @@ const createJapaneseWordOrderItem = (
     word: normalizeWhitespace(word.word),
     source: resolved.source,
     prompt: '英文に合う日本語を正しい順番に並べ替えましょう。',
+    grammarScope,
     sourceSentence,
     answerText: resolved.answerText,
     ...createChips(tokens, `${seed}:${id}`, id),
@@ -307,17 +427,6 @@ const maskStudyWord = (sentence: string, word: string): { clozeSentence: string;
     clozeSentence: normalizeWhitespace(clozeSentence),
     answer: matchedWord,
   };
-};
-
-const detectGrammarFocus = (sentence: string): string => {
-  const normalized = ` ${normalizeEnglish(sentence)} `;
-  if (/\b(can|could|will|would|should|must|may|might)\s+[a-z]+/.test(normalized)) {
-    return '助動詞 + 動詞の原形';
-  }
-  if (/\b(to)\s+[a-z]+/.test(normalized)) return 'to不定詞';
-  if (/\b(is|am|are|was|were|be|been)\b/.test(normalized)) return 'be動詞を使った文';
-  if (/\b(after|before|during|when|while)\b/.test(normalized)) return '時を表す副詞句';
-  return '主語 + 動詞 + 目的語';
 };
 
 const buildWordFormOptions = (answer: string, seed: string): string[] => {
@@ -337,6 +446,7 @@ const createGrammarClozeItem = (
   word: WordData,
   sentence: string,
   source: GrammarPracticeSource,
+  grammarScope: GrammarScopeSelection,
   seed: string,
 ): GrammarClozePracticeItem | null => {
   const masked = maskStudyWord(sentence, word.word);
@@ -350,11 +460,12 @@ const createGrammarClozeItem = (
     word: normalizeWhitespace(word.word),
     source,
     prompt: '空所に入る単語を選び、文の形も確認しましょう。',
+    grammarScope,
     sourceSentence: sentence,
     clozeSentence: masked.clozeSentence,
     answer: masked.answer,
     options: buildWordFormOptions(masked.answer, `${seed}:${id}:options`),
-    grammarFocus: detectGrammarFocus(sentence),
+    grammarFocus: grammarScope.labelJa,
   };
 };
 
@@ -365,11 +476,26 @@ export const buildGrammarPracticeItemsForWord = (
   if (!hasEnoughGrammarPracticeData(word)) return [];
 
   const seed = String(options.seed ?? 'grammar-practice');
-  const english = resolveEnglishSentence(word);
+  const english = resolveEnglishSentence(word, options.requestedScopeId);
+  const englishGrammarScope = resolveGrammarScopeSelection({
+    mode: 'EN_WORD_ORDER',
+    requestedScopeId: options.requestedScopeId,
+    sentence: english.sentence,
+  });
+  const japaneseGrammarScope = resolveGrammarScopeSelection({
+    mode: options.japaneseQuestionMode ?? 'JA_TRANSLATION_ORDER',
+    requestedScopeId: options.requestedScopeId,
+    sentence: english.sentence,
+  });
+  const clozeGrammarScope = resolveGrammarScopeSelection({
+    mode: 'GRAMMAR_CLOZE',
+    requestedScopeId: options.requestedScopeId,
+    sentence: english.sentence,
+  });
   const items = [
-    createEnglishWordOrderItem(word, english.sentence, english.source, seed),
-    createJapaneseWordOrderItem(word, english.sentence, seed),
-    createGrammarClozeItem(word, english.sentence, english.source, seed),
+    createEnglishWordOrderItem(word, english.sentence, english.source, englishGrammarScope, seed),
+    createJapaneseWordOrderItem(word, english.sentence, english.japaneseAnswerText, japaneseGrammarScope, seed),
+    createGrammarClozeItem(word, english.sentence, english.source, clozeGrammarScope, seed),
   ].filter((item): item is GrammarPracticeItem => Boolean(item));
 
   return items.slice(0, Math.max(0, options.maxItemsPerWord ?? items.length));

@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, WorksheetQuestionMode } from '../../types';
-import type { MeteredAiAction } from '../../config/subscription';
+import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, type GrammarCurriculumScopeId, WorksheetQuestionMode } from '../../types';
+import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
 import { normalizeAiGrammarQuestionDrafts } from '../../utils/aiGrammarQuestions';
@@ -10,6 +10,7 @@ import {
   filterWorksheetQuestionCandidates,
   toWorksheetSourceWords,
 } from '../../utils/worksheet';
+import { getGrammarCurriculumScope } from '../../utils/grammarScope';
 import {
   assertAiActionAllowed,
   assertBudgetAvailable,
@@ -17,6 +18,10 @@ import {
   type AiUsageEventInput,
   type AiUsageLogContext,
 } from './ai-metering';
+import {
+  readReusableAiGrammarQuestions,
+  recordAiGeneratedProblem,
+} from './ai-cache-cbt';
 import { HttpError } from './http';
 import { AppEnv, DbUserRow } from './types';
 
@@ -40,7 +45,7 @@ interface AIQuizQuestion {
   correctOption: string;
 }
 
-type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>;
+type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
 
 interface ExtractedResult {
   words: { word: string; definition: string; }[];
@@ -63,7 +68,8 @@ const getAiClient = (env: AppEnv): GoogleGenAI => {
   return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 };
 
-const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-2.5-flash';
+const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-3-flash-preview';
+const GRAMMAR_PRACTICE_PROMPT_VERSION = 'grammar-practice-v2';
 
 const resolveGrammarPracticeModel = (env: AppEnv): string => (
   String(env.AI_GRAMMAR_MODEL || '').trim() || DEFAULT_GRAMMAR_PRACTICE_MODEL
@@ -86,7 +92,11 @@ const runMeteredAiAction = async <T>(
   logContext?: AiUsageLogContext,
   metering?: Partial<AiUsageEventInput>,
 ): Promise<T> => {
-  await assertBudgetAvailable(env, user, action);
+  if (typeof metering?.estimatedCostMilliYen === 'number') {
+    await assertBudgetAvailable(env, user, action, metering.estimatedCostMilliYen);
+  } else {
+    await assertBudgetAvailable(env, user, action);
+  }
   const result = await runner();
   await recordAiUsageEvent(env, user, {
     action,
@@ -254,6 +264,7 @@ const isGrammarQuestionMode = (value: unknown): value is GrammarQuestionMode => 
   value === 'GRAMMAR_CLOZE'
   || value === 'EN_WORD_ORDER'
   || value === 'JA_TRANSLATION_ORDER'
+  || value === 'JA_TRANSLATION_INPUT'
 );
 
 const buildGrammarPracticePrompt = (
@@ -261,7 +272,9 @@ const buildGrammarPracticePrompt = (
   mode: GrammarQuestionMode,
   questionCount: number,
   userLevel: EnglishLevel,
+  grammarScopeId?: GrammarCurriculumScopeId | null,
 ): string => {
+  const grammarScope = grammarScopeId ? getGrammarCurriculumScope(grammarScopeId) : null;
   const modeInstruction = mode === 'GRAMMAR_CLOZE'
     ? [
       'Mode: GRAMMAR_CLOZE.',
@@ -276,16 +289,27 @@ const buildGrammarPracticePrompt = (
         'Mode: EN_WORD_ORDER.',
         'Create a natural English sentence using the learned word.',
         'orderedTokens must be the correct English word order split into 4 to 14 chips.',
+        'Each orderedTokens value must be unique after lowercasing and removing punctuation.',
+        'Do not rely on first-word capitalization or sentence-final punctuation as clues.',
         'answer must be the full English sentence.',
         'options should be an empty array.',
       ].join('\n')
-      : [
+      : mode === 'JA_TRANSLATION_ORDER'
+        ? [
         'Mode: JA_TRANSLATION_ORDER.',
         'Create a natural English sentence using the learned word and a natural Japanese translation.',
         'orderedTokens must be the correct Japanese translation split into 2 to 8 meaningful chips.',
+        'Each Japanese chip must be unique and should not rely on punctuation or bracket position as clues.',
         'sourceTranslation and answer must be the full natural Japanese translation.',
         'options should be an empty array.',
-      ].join('\n');
+        ].join('\n')
+        : [
+          'Mode: JA_TRANSLATION_INPUT.',
+          'Create a natural English sentence using the learned word and a natural Japanese translation.',
+          'promptText and sourceSentence must be the complete English sentence.',
+          'sourceTranslation and answer must be the full natural Japanese translation.',
+          'options and orderedTokens should be empty arrays.',
+        ].join('\n');
 
   const inputWords = words.map((word) => ({
     wordId: word.id,
@@ -298,6 +322,7 @@ const buildGrammarPracticePrompt = (
   return `
 You are an English grammar question writer for Japanese learners.
 Generate exactly ${questionCount} questions for CEFR ${userLevel}.
+${grammarScope ? `Grammar range: ${grammarScope.labelJa} (${grammarScope.labelEn}). Every sentence must primarily practice this range.` : 'Choose a basic grammar range that fits the sentence naturally.'}
 Use only the provided wordId values. Generate at most one question per word.
 Prefer the provided example sentence/meaning when it is natural; otherwise write a new short sentence.
 Keep content school-safe, non-political, and non-medical-advice. Do not include explanations outside JSON.
@@ -328,23 +353,59 @@ const generateGrammarPracticeQuestions = async (
   env: AppEnv,
   payload: any,
   model = resolveGrammarPracticeModel(env),
-): Promise<GeneratedWorksheetQuestion[]> => {
-  const ai = getAiClient(env);
+  beforeAiGenerate?: (requestUnits: number) => Promise<void>,
+): Promise<{
+  questions: GeneratedWorksheetQuestion[];
+  usedAi: boolean;
+  generatedCount: number;
+}> => {
   const mode = isGrammarQuestionMode(payload?.mode) ? payload.mode : null;
   const targetWords = (Array.isArray(payload?.targetWords) ? payload.targetWords : []) as WordData[];
-  if (!mode || targetWords.length === 0) return [];
+  if (!mode || targetWords.length === 0) return { questions: [], usedAi: false, generatedCount: 0 };
 
   const requestedCount = Math.max(1, Math.min(10, Math.trunc(Number(payload?.questionCount || 5))));
   const userLevel = Object.values(EnglishLevel).includes(payload?.userLevel)
     ? payload.userLevel as EnglishLevel
     : EnglishLevel.B1;
+  const grammarScopeId = typeof payload?.grammarScopeId === 'string'
+    ? payload.grammarScopeId as GrammarCurriculumScopeId
+    : null;
   const candidateWords = filterWorksheetQuestionCandidates(targetWords, mode).slice(0, requestedCount);
-  if (candidateWords.length === 0) return [];
+  if (candidateWords.length === 0) return { questions: [], usedAi: false, generatedCount: 0 };
 
   try {
+    if (grammarScopeId) getGrammarCurriculumScope(grammarScopeId);
+    let cachedQuestions: GeneratedWorksheetQuestion[] = [];
+    if (env.DB) {
+      try {
+        cachedQuestions = await readReusableAiGrammarQuestions(env, {
+          wordIds: candidateWords.map((word) => word.id),
+          questionMode: mode,
+          grammarScopeId,
+          limit: requestedCount,
+        });
+      } catch (cacheError) {
+        console.warn('AI grammar cache read skipped:', cacheError);
+      }
+    }
+
+    const cachedWordIds = new Set(cachedQuestions.map((question) => question.wordId));
+    const missingWords = candidateWords.filter((word) => !cachedWordIds.has(word.id));
+    const remainingCount = Math.max(0, requestedCount - cachedQuestions.length);
+    if (remainingCount === 0 || missingWords.length === 0) {
+      return {
+        questions: cachedQuestions.slice(0, requestedCount),
+        usedAi: false,
+        generatedCount: 0,
+      };
+    }
+
+    const aiRequestCount = Math.min(remainingCount, missingWords.length);
+    await beforeAiGenerate?.(aiRequestCount);
+    const ai = getAiClient(env);
     const response = await ai.models.generateContent({
       model,
-      contents: buildGrammarPracticePrompt(candidateWords, mode, Math.min(requestedCount, candidateWords.length), userLevel),
+      contents: buildGrammarPracticePrompt(missingWords, mode, aiRequestCount, userLevel, grammarScopeId),
       config: {
         responseMimeType: 'application/json',
         responseSchema: {
@@ -380,15 +441,41 @@ const generateGrammarPracticeQuestions = async (
       },
     });
 
-    if (!response.text) return [];
+    if (!response.text) return { questions: cachedQuestions, usedAi: false, generatedCount: 0 };
     const parsed = JSON.parse(response.text) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return normalizeAiGrammarQuestionDrafts(
+    if (!Array.isArray(parsed)) return { questions: cachedQuestions, usedAi: false, generatedCount: 0 };
+    const generatedQuestions = normalizeAiGrammarQuestionDrafts(
       parsed as AiGrammarQuestionDraft[],
-      toWorksheetSourceWords(candidateWords),
+      toWorksheetSourceWords(missingWords),
       mode,
-      requestedCount,
+      remainingCount,
+      grammarScopeId,
     );
+    const persistedGeneratedQuestions = env.DB
+      ? await Promise.all(generatedQuestions.map(async (question) => {
+        try {
+          const row = await recordAiGeneratedProblem(env, {
+            question,
+            model,
+            promptVersion: GRAMMAR_PRACTICE_PROMPT_VERSION,
+            sourceText: `${question.wordId}:${question.mode}:${question.grammarScope?.scopeId || grammarScopeId || 'auto'}:${question.promptText}:${question.answer}`,
+          });
+          return {
+            ...question,
+            generatedProblemId: row.id,
+            aiContentId: row.content_id,
+          };
+        } catch (cacheError) {
+          console.warn('AI grammar cache write skipped:', cacheError);
+          return question;
+        }
+      }))
+      : generatedQuestions;
+    return {
+      questions: [...cachedQuestions, ...persistedGeneratedQuestions].slice(0, requestedCount),
+      usedAi: persistedGeneratedQuestions.length > 0,
+      generatedCount: persistedGeneratedQuestions.length,
+    };
   } catch (error) {
     handleAiError(error, 'AI文法問題生成に失敗しました。');
   }
@@ -749,18 +836,35 @@ export const handleAiAction = async (
     case 'generateGrammarPracticeQuestions': {
       const model = resolveGrammarPracticeModel(env);
       const requestUnits = Math.max(1, Math.min(10, Math.trunc(Number(body.payload?.questionCount || 1))));
-      return runMeteredAiAction(
+      const unitEstimate = getAiActionEstimate('generateGrammarPracticeQuestions').estimatedCostMilliYen;
+      assertAiActionAllowed(user, 'generateGrammarPracticeQuestions');
+      const result = await generateGrammarPracticeQuestions(
         env,
-        user,
-        'generateGrammarPracticeQuestions',
-        () => generateGrammarPracticeQuestions(env, body.payload, model),
-        logContext,
-        {
-          model,
-          providerInputUnits: requestUnits,
-          providerOutputUnits: requestUnits,
+        body.payload,
+        model,
+        async (generatedUnits) => {
+          await assertBudgetAvailable(
+            env,
+            user,
+            'generateGrammarPracticeQuestions',
+            unitEstimate * Math.max(1, generatedUnits),
+          );
         },
       );
+      await Promise.resolve(recordAiUsageEvent(env, user, {
+        action: 'generateGrammarPracticeQuestions',
+        usedAi: result.usedAi,
+        model,
+        estimatedCostMilliYen: result.usedAi ? unitEstimate * Math.max(1, result.generatedCount) : 0,
+        estimatedProviderCostMilliYen: result.usedAi ? unitEstimate * Math.max(1, result.generatedCount) : 0,
+        requestUnits,
+        providerInputUnits: result.usedAi ? Math.max(1, result.generatedCount) : 0,
+        providerOutputUnits: result.usedAi ? Math.max(1, result.generatedCount) : 0,
+        ...(logContext ? { logContext } : {}),
+      })).catch((error) => {
+        console.warn('AI grammar usage event write skipped:', error);
+      });
+      return result.questions;
     }
     case 'extractVocabularyFromText':
       return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload), logContext);

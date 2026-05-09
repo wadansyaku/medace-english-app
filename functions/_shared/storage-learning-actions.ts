@@ -31,6 +31,7 @@ import {
   type DbLearningPreferenceRow,
 } from './storage-support';
 import { HttpError } from './http';
+import { recordCbtProblemAttempt } from './ai-cache-cbt';
 
 const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
   const organization = await readActiveOrganizationContextForUser(env, userId);
@@ -81,6 +82,7 @@ export const handleSaveSrsHistory = async (
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
+  generatedProblemId?: string,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, word.bookId);
   const now = Date.now();
@@ -192,6 +194,7 @@ export const handleRecordQuizAttempt = async (
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
+  generatedProblemId?: string,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, bookId);
   const now = Date.now();
@@ -280,6 +283,20 @@ export const handleRecordQuizAttempt = async (
     missionAssignmentId: effectiveMissionAssignmentId,
     taskIntentType,
   });
+  if (generatedProblemId) {
+    try {
+      await recordCbtProblemAttempt(env, {
+        userId: user.id,
+        wordId,
+        problemId: generatedProblemId,
+        correct,
+        responseTimeMs,
+        now: nextHistory.lastStudiedAt,
+      });
+    } catch (error) {
+      console.warn('CBT problem attempt update skipped:', error);
+    }
+  }
   await rebuildWeaknessSignalsForUser(env, user.id, user);
 
   await touchWeeklyMissionProgressFromQuiz(env, user, {

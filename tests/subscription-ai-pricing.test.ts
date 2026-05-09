@@ -10,8 +10,8 @@ describe('AI pricing configuration', () => {
       model: 'imagen-4.0-generate-001',
     });
     expect(getAiActionEstimate('generateGrammarPracticeQuestions')).toMatchObject({
-      estimatedCostMilliYen: 260,
-      model: 'gemini-2.5-flash',
+      estimatedCostMilliYen: 340,
+      model: 'gemini-3-flash-preview',
     });
   });
 });

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateWorksheetQuestions, resolveSpellingAttempt } from '../utils/worksheet';
+import {
+  generateWorksheetQuestions,
+  resolveJapaneseTranslationAttempt,
+  resolveSpellingAttempt,
+} from '../utils/worksheet';
 
 const sourceWords = [
   {
@@ -65,6 +69,18 @@ describe('generateWorksheetQuestions', () => {
     })).toBe('incorrect');
   });
 
+  it('normalizes punctuation and spaces for Japanese full-translation input', () => {
+    expect(resolveJapaneseTranslationAttempt({
+      input: '医師は手術前に患者を安定させる',
+      answer: '医師は 手術前に 患者を 安定させる。',
+    })).toBe('correct');
+
+    expect(resolveJapaneseTranslationAttempt({
+      input: '医師は手術前に患者を確認する',
+      answer: '医師は 手術前に 患者を 安定させる。',
+    })).toBe('incorrect');
+  });
+
   it('generates grammar cloze questions from studied vocabulary examples', () => {
     const questions = generateWorksheetQuestions(sourceWords, 'GRAMMAR_CLOZE', 2);
     const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
@@ -84,23 +100,25 @@ describe('generateWorksheetQuestions', () => {
 
     expect(triageQuestion?.interactionType).toBe('ORDERING');
     expect(triageQuestion?.tokens?.map((token) => token.text)).not.toEqual([
-      'Nurses',
+      'nurses',
       'triage',
       'patients',
       'in',
       'the',
       'emergency',
-      'room.',
+      'room',
     ]);
     expect(triageQuestion?.answerTokenIds?.map((id) => triageQuestion.tokens?.find((token) => token.id === id)?.text)).toEqual([
-      'Nurses',
+      'nurses',
       'triage',
       'patients',
       'in',
       'the',
       'emergency',
-      'room.',
+      'room',
     ]);
+    expect(triageQuestion?.answer).toBe('nurses triage patients in the emergency room');
+    expect(triageQuestion?.tokens?.some((token) => /^[A-Z]/.test(token.text) || /[.!?。]$/.test(token.text))).toBe(false);
   });
 
   it('generates Japanese translation-order chip questions', () => {
@@ -116,5 +134,36 @@ describe('generateWorksheetQuestions', () => {
       '患者を',
       '安定させる',
     ]);
+  });
+
+  it('generates Japanese full-translation text input questions', () => {
+    const questions = generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_INPUT', 2);
+    const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
+
+    expect(stabilizeQuestion).toMatchObject({
+      interactionType: 'TEXT_INPUT',
+      promptLabel: '和訳全文入力',
+      promptText: 'Doctors stabilize the patient before surgery.',
+      answer: '医師は 手術前に 患者を 安定させる',
+      sourceTranslation: '医師は 手術前に 患者を 安定させる',
+    });
+  });
+
+  it('resolves Japanese full-translation scopes with the input mode, not ordering mode', () => {
+    const questions = generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_INPUT', 2, {
+      grammarScopeId: 'be-verb',
+    });
+    const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
+
+    expect(stabilizeQuestion).toMatchObject({
+      interactionType: 'TEXT_INPUT',
+      promptText: 'The term stabilize is useful today.',
+      answer: '安定させる という語は 役に立つ',
+      grammarScope: {
+        scopeId: 'be-verb',
+        labelJa: 'be動詞を使った文',
+        source: 'EXPLICIT',
+      },
+    });
   });
 });

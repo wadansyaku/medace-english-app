@@ -2,7 +2,9 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import type { QuizSessionConfig } from '../../types';
+import { getGrammarCurriculumScope } from '../../utils/grammarScope';
 import { WORKSHEET_MODE_COPY } from '../../utils/worksheet';
+import { isGrammarQuizMode } from '../../config/quizFlow';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 
 interface QuizReadyViewProps {
@@ -19,7 +21,9 @@ const QuizReadyView: React.FC<QuizReadyViewProps> = ({
   setupCandidateWordsLength,
   setupActualQuestionCount,
   onStart,
-}) => (
+}) => {
+  const grammarScope = setupConfig.grammarScopeId ? getGrammarCurriculumScope(setupConfig.grammarScopeId) : null;
+  return (
   <div data-testid="quiz-ready-view" className="space-y-4">
     <section className="ui-panel">
       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Ready</div>
@@ -44,6 +48,20 @@ const QuizReadyView: React.FC<QuizReadyViewProps> = ({
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">出題数</div>
           <div className="mt-1 text-lg font-black text-slate-950">{setupActualQuestionCount}問</div>
         </div>
+        {isGrammarQuizMode(setupConfig.questionMode) && grammarScope && (
+          <>
+            <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">文法範囲</div>
+              <div className="mt-1 text-lg font-black text-slate-950">{grammarScope.labelJa}</div>
+            </div>
+            <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">出題中の表示</div>
+              <div className="mt-1 text-lg font-black text-slate-950">
+                {setupConfig.showGrammarScopeHint === false ? '範囲を伏せる' : '範囲を明示'}
+              </div>
+            </div>
+          </>
+        )}
       </div>
       <div className="mt-4 rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-slate-700">
         {setupConfig.selectionMode === 'LEARNED_ONLY'
@@ -63,6 +81,7 @@ const QuizReadyView: React.FC<QuizReadyViewProps> = ({
       </button>
     </MobileStickyActionBar>
   </div>
-);
+  );
+};
 
 export default QuizReadyView;

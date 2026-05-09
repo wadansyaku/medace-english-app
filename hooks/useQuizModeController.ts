@@ -15,6 +15,7 @@ import {
   filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
   isGrammarWorksheetMode,
+  resolveJapaneseTranslationAttempt,
   resolveSpellingAttempt,
   toWorksheetSourceWords,
 } from '../utils/worksheet';
@@ -27,15 +28,29 @@ import {
 import {
   buildQuizLoadingMessage,
   createDefaultQuizConfig,
+  getDefaultGrammarScopeIdForMode,
+  isGrammarQuizMode,
 } from '../config/quizFlow';
 import { recordClientProductEvent } from '../services/productEvents';
 import { isSmartSessionBookId } from '../shared/studySession';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
 
-type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>;
+type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
 
-const isAiGrammarQuestionMode = (mode: QuizSessionConfig['questionMode']): mode is AiGrammarQuestionMode => isGrammarWorksheetMode(mode);
+const isAiGrammarQuestionMode = (mode: QuizSessionConfig['questionMode']): mode is AiGrammarQuestionMode => (
+  mode === 'GRAMMAR_CLOZE'
+  || mode === 'EN_WORD_ORDER'
+  || mode === 'JA_TRANSLATION_ORDER'
+  || mode === 'JA_TRANSLATION_INPUT'
+);
+
+const GENERIC_GRAMMAR_PROMPT_LABELS: Record<string, string> = {
+  GRAMMAR_CLOZE: '文法穴埋め',
+  EN_WORD_ORDER: '英語語順',
+  JA_TRANSLATION_ORDER: '日本語語順',
+  JA_TRANSLATION_INPUT: '和訳全文入力',
+};
 
 const shuffleWords = (words: WordData[]): WordData[] => {
   const next = [...words];
@@ -177,13 +192,31 @@ export const useQuizModeController = ({
 
   const buildRuleBasedQuestions = (
     words: WordData[],
-    mode: QuizSessionConfig['questionMode'],
+    config: QuizSessionConfig,
     questionCount: number,
   ) => generateWorksheetQuestions(
     toWorksheetSourceWords(words),
-    mode,
+    config.questionMode,
     questionCount,
+    {
+      grammarScopeId: config.grammarScopeId,
+    },
   );
+
+  const applyGrammarScopeVisibility = (
+    generatedQuestions: GeneratedWorksheetQuestion[],
+    config: QuizSessionConfig,
+  ): GeneratedWorksheetQuestion[] => {
+    if (!isGrammarQuizMode(config.questionMode)) return generatedQuestions;
+    const showGrammarScopeHint = config.showGrammarScopeHint !== false;
+    return generatedQuestions.map((question) => ({
+      ...question,
+      showGrammarScopeHint,
+      promptLabel: showGrammarScopeHint
+        ? question.grammarScope?.labelJa || question.grammarFocus || question.promptLabel
+        : GENERIC_GRAMMAR_PROMPT_LABELS[question.mode] || question.promptLabel,
+    }));
+  };
 
   const startQuizWithWords = async (config: QuizSessionConfig, candidateWords: WordData[]) => {
     setLoading(true);
@@ -206,21 +239,23 @@ export const useQuizModeController = ({
           config.questionMode,
           actualQuestionCount,
           user.englishLevel || EnglishLevel.B1,
+          config.grammarScopeId,
         );
         const aiWordIds = new Set(aiQuestions.map((question) => question.wordId));
         const fallbackQuestions = buildRuleBasedQuestions(
           eligibleCandidateWords.filter((word) => !aiWordIds.has(word.id)),
-          config.questionMode,
+          config,
           Math.max(0, actualQuestionCount - aiQuestions.length),
         );
         nextQuestions = [...aiQuestions, ...fallbackQuestions].slice(0, actualQuestionCount);
       } else {
         nextQuestions = buildRuleBasedQuestions(
           eligibleCandidateWords,
-          config.questionMode,
+          config,
           actualQuestionCount,
         );
       }
+      nextQuestions = applyGrammarScopeVisibility(nextQuestions, config);
 
       if (nextQuestions.length === 0) {
         setActiveConfig(null);
@@ -269,13 +304,15 @@ export const useQuizModeController = ({
         setAllWords(sortedWords);
         setStudiedWordIds(nextStudiedWordIds);
         const defaultConfig = createDefaultQuizConfig(nextMin, nextMax);
+        const presetQuestionMode = taskIntent?.targetQuestionModes?.[0] || defaultConfig.questionMode;
         const presetConfig: QuizSessionConfig = autoStart
           ? {
             ...defaultConfig,
-            questionMode: taskIntent?.targetQuestionModes?.[0] || defaultConfig.questionMode,
+            questionMode: presetQuestionMode,
             questionCount: toPresetQuestionCount(
               Math.min(taskIntent?.limit || defaultConfig.questionCount, Math.max(sortedWords.length, 1)),
             ),
+            grammarScopeId: getDefaultGrammarScopeIdForMode(presetQuestionMode),
           }
           : defaultConfig;
         setSetupConfig(presetConfig);
@@ -350,7 +387,15 @@ export const useQuizModeController = ({
   }, [activeConfig, bookId, questions.length, screen, taskIntent]);
 
   const updateSetupConfig = (nextPartial: Partial<QuizSessionConfig>) => {
-    setSetupConfig((previous) => ({ ...previous, ...nextPartial }));
+    setSetupConfig((previous) => {
+      const next = { ...previous, ...nextPartial };
+      if (nextPartial.questionMode) {
+        const defaultScopeId = getDefaultGrammarScopeIdForMode(nextPartial.questionMode);
+        next.grammarScopeId = defaultScopeId;
+        next.showGrammarScopeHint = defaultScopeId ? next.showGrammarScopeHint !== false : true;
+      }
+      return next;
+    });
   };
 
   const setupEmptyCopy = useMemo(() => {
@@ -359,6 +404,7 @@ export const useQuizModeController = ({
       setupConfig.questionMode === 'GRAMMAR_CLOZE'
       || setupConfig.questionMode === 'EN_WORD_ORDER'
       || setupConfig.questionMode === 'JA_TRANSLATION_ORDER'
+      || setupConfig.questionMode === 'JA_TRANSLATION_INPUT'
     ) {
       return '文法復習に使える英単語がありません。英字の単語と日本語の意味がある教材を選ぶか、範囲を広げてください。';
     }
@@ -432,6 +478,7 @@ export const useQuizModeController = ({
         responseTimeMs,
         taskIntent?.missionAssignmentId,
         taskIntent?.intentType,
+        question.generatedProblemId,
       );
     } catch (error) {
       console.error('Quiz attempt save failed', error);
@@ -526,6 +573,23 @@ export const useQuizModeController = ({
   const handleHintSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt) return;
+
+    if (currentQuestion.mode === 'JA_TRANSLATION_INPUT') {
+      const translationAttempt = resolveJapaneseTranslationAttempt({
+        input: answerInput,
+        answer: currentQuestion.answer,
+      });
+      const correct = translationAttempt === 'correct';
+      setInputResult(correct ? 'correct' : 'incorrect');
+      setSpellingFeedbackTone(correct ? 'correct' : 'incorrect');
+      setSpellingFeedbackMessage(
+        correct
+          ? '正解です。日本語訳を最後まで入力できました。'
+          : `不正解です。正解例: ${currentQuestion.answer}`,
+      );
+      await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
+      return;
+    }
 
     const spellingAttempt = resolveSpellingAttempt({
       input: answerInput,

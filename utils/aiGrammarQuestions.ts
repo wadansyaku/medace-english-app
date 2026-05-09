@@ -1,7 +1,8 @@
-import type { WorksheetQuestionMode } from '../types';
+import type { GrammarCurriculumScopeId, WorksheetQuestionMode } from '../types';
+import { resolveGrammarScopeSelection } from './grammarScope';
 import type { GeneratedWorksheetQuestion, WorksheetOrderToken } from './worksheet';
 
-type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>;
+type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
 
 export interface AiGrammarSourceWord {
   wordId?: string;
@@ -32,6 +33,13 @@ const JA_ORDER_MAX_TOKENS = 8;
 
 const normalizeWhitespace = (value: string): string => value.trim().replace(/\s+/g, ' ');
 
+const normalizeEnglishOrderToken = (value: string): string => (
+  normalizeWhitespace(value)
+    .replace(/^[“"‘'([{]+/g, '')
+    .replace(/[.,!?;:。．…、，"”’)\]}]+$/g, '')
+    .toLowerCase()
+);
+
 const normalizeJapanese = (value: string): string => (
   value
     .trim()
@@ -39,6 +47,17 @@ const normalizeJapanese = (value: string): string => (
     .replace(/[。．.]+$/g, '')
     .replace(/\s+/g, ' ')
 );
+
+const normalizeJapaneseOrderToken = (value: string): string => (
+  normalizeJapanese(value)
+    .replace(/^[「『（(【［\["'“‘]+/g, '')
+    .replace(/[」』）)】］\]"'”’、，,。．.!?！？]+$/g, '')
+);
+
+const hasUniqueOrderingTokens = (tokens: string[]): boolean => {
+  const normalizedTokens = tokens.map((token) => normalizeWhitespace(token).toLowerCase());
+  return normalizedTokens.length === new Set(normalizedTokens).size;
+};
 
 const toWordId = (word: AiGrammarSourceWord): string => word.wordId || word.id || `${word.bookId}:${word.word}`;
 
@@ -90,16 +109,16 @@ const uniqueNormalized = (values: string[]): string[] => {
   return next;
 };
 
-const cleanTokens = (values: string[]): string[] => (
+const cleanTokens = (values: string[], normalizeToken = normalizeWhitespace): string[] => (
   values
-    .map((value) => normalizeWhitespace(value))
+    .map((value) => normalizeToken(value))
     .filter(Boolean)
 );
 
 const tokenizeEnglish = (value: string): string[] => (
   normalizeWhitespace(value)
     .split(' ')
-    .map((token) => token.trim())
+    .map((token) => normalizeEnglishOrderToken(token))
     .filter(Boolean)
 );
 
@@ -107,14 +126,16 @@ const tokenizeJapanese = (value: string): string[] => {
   const normalized = normalizeJapanese(value);
   const separated = normalized
     .split(/[\s、，,／/・（）()「」『』]+/)
-    .map((token) => token.trim())
+    .map((token) => normalizeJapaneseOrderToken(token))
     .filter(Boolean);
   if (separated.length >= JA_ORDER_MIN_TOKENS) return separated.slice(0, JA_ORDER_MAX_TOKENS);
   if (normalized.length > 8) {
     const middle = Math.ceil(normalized.length / 2);
-    return [normalized.slice(0, middle), normalized.slice(middle)].filter(Boolean);
+    return [normalized.slice(0, middle), normalized.slice(middle)]
+      .map((token) => normalizeJapaneseOrderToken(token))
+      .filter(Boolean);
   }
-  return normalized ? [normalized] : [];
+  return normalized ? [normalizeJapaneseOrderToken(normalized)].filter(Boolean) : [];
 };
 
 const buildFallbackOptions = (answer: string, learnedWord: string): string[] => {
@@ -167,6 +188,7 @@ const normalizeClozeDraft = (
   draft: AiGrammarQuestionDraft,
   sourceWord: AiGrammarSourceWord,
   index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(sourceWord);
   const answer = normalizeWhitespace(draft.answer || sourceWord.word);
@@ -178,11 +200,16 @@ const normalizeClozeDraft = (
     answer,
     `${wordId}:ai-cloze:${index}`,
   );
-  if (!options.some((option) => option.toLowerCase() === answer.toLowerCase())) return null;
+  if (options.length < 3 || !options.some((option) => option.toLowerCase() === answer.toLowerCase())) return null;
 
   const sourceSentence = normalizeWhitespace(
     draft.sourceSentence || promptText.replace('____', answer),
   );
+  const grammarScope = resolveGrammarScopeSelection({
+    mode: 'GRAMMAR_CLOZE',
+    requestedScopeId,
+    sentence: sourceSentence,
+  });
 
   return {
     id: `${wordId}:ai:${draft.mode}:${index}`,
@@ -191,12 +218,13 @@ const normalizeClozeDraft = (
     wordId,
     bookId: sourceWord.bookId,
     bookTitle: sourceWord.bookTitle,
-    promptLabel: normalizeWhitespace(draft.grammarFocus || '文法穴埋め'),
+    promptLabel: grammarScope.labelJa,
     promptText,
     answer,
     options,
     sourceSentence,
-    grammarFocus: normalizeWhitespace(draft.grammarFocus || '文の中での語形'),
+    grammarFocus: grammarScope.labelJa,
+    grammarScope,
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った文で、空所に入る語形と文の形を確認します。'),
   };
 };
@@ -205,15 +233,22 @@ const normalizeEnglishOrderDraft = (
   draft: AiGrammarQuestionDraft,
   sourceWord: AiGrammarSourceWord,
   index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(sourceWord);
   const sourceSentence = normalizeWhitespace(draft.sourceSentence || '');
   const orderedTokens = cleanTokens(draft.orderedTokens && draft.orderedTokens.length > 0
     ? draft.orderedTokens
-    : tokenizeEnglish(sourceSentence));
+    : tokenizeEnglish(sourceSentence), normalizeEnglishOrderToken);
   if (orderedTokens.length < EN_ORDER_MIN_TOKENS || orderedTokens.length > EN_ORDER_MAX_TOKENS) return null;
+  if (!hasUniqueOrderingTokens(orderedTokens)) return null;
 
   const order = createOrderTokens(orderedTokens, wordId, sourceWord.word, `${wordId}:ai-en:${index}`);
+  const grammarScope = resolveGrammarScopeSelection({
+    mode: 'EN_WORD_ORDER',
+    requestedScopeId,
+    sentence: sourceSentence || orderedTokens.join(' '),
+  });
   return {
     id: `${wordId}:ai:${draft.mode}:${index}`,
     mode: 'EN_WORD_ORDER',
@@ -227,7 +262,8 @@ const normalizeEnglishOrderDraft = (
     tokens: order.tokens,
     answerTokenIds: order.answerTokenIds,
     sourceSentence: sourceSentence || orderedTokens.join(' '),
-    grammarFocus: normalizeWhitespace(draft.grammarFocus || ''),
+    grammarFocus: grammarScope.labelJa,
+    grammarScope,
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を、文の構造を意識して組み立てます。'),
   };
 };
@@ -236,16 +272,23 @@ const normalizeJapaneseOrderDraft = (
   draft: AiGrammarQuestionDraft,
   sourceWord: AiGrammarSourceWord,
   index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(sourceWord);
   const sourceSentence = normalizeWhitespace(draft.sourceSentence || '');
   const sourceTranslation = normalizeJapanese(draft.sourceTranslation || draft.answer || '');
   const orderedTokens = cleanTokens(draft.orderedTokens && draft.orderedTokens.length > 0
     ? draft.orderedTokens
-    : tokenizeJapanese(sourceTranslation));
+    : tokenizeJapanese(sourceTranslation), normalizeJapaneseOrderToken);
   if (!sourceSentence || orderedTokens.length < JA_ORDER_MIN_TOKENS || orderedTokens.length > JA_ORDER_MAX_TOKENS) return null;
+  if (!hasUniqueOrderingTokens(orderedTokens)) return null;
 
   const order = createOrderTokens(orderedTokens, wordId, sourceWord.word, `${wordId}:ai-ja:${index}`);
+  const grammarScope = resolveGrammarScopeSelection({
+    mode: 'JA_TRANSLATION_ORDER',
+    requestedScopeId,
+    sentence: sourceSentence,
+  });
   return {
     id: `${wordId}:ai:${draft.mode}:${index}`,
     mode: 'JA_TRANSLATION_ORDER',
@@ -260,8 +303,44 @@ const normalizeJapaneseOrderDraft = (
     answerTokenIds: order.answerTokenIds,
     sourceSentence,
     sourceTranslation: sourceTranslation || orderedTokens.join(''),
-    grammarFocus: normalizeWhitespace(draft.grammarFocus || ''),
+    grammarFocus: grammarScope.labelJa,
+    grammarScope,
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を手がかりに、自然な日本語の順番へ戻します。'),
+  };
+};
+
+const normalizeJapaneseInputDraft = (
+  draft: AiGrammarQuestionDraft,
+  sourceWord: AiGrammarSourceWord,
+  index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
+): GeneratedWorksheetQuestion | null => {
+  const wordId = toWordId(sourceWord);
+  const sourceSentence = normalizeWhitespace(draft.sourceSentence || draft.promptText || '');
+  const sourceTranslation = normalizeJapanese(draft.sourceTranslation || draft.answer || '');
+  if (!sourceSentence || !sourceTranslation) return null;
+
+  const grammarScope = resolveGrammarScopeSelection({
+    mode: 'JA_TRANSLATION_INPUT',
+    requestedScopeId,
+    sentence: sourceSentence,
+  });
+
+  return {
+    id: `${wordId}:ai:${draft.mode}:${index}`,
+    mode: 'JA_TRANSLATION_INPUT',
+    interactionType: 'TEXT_INPUT',
+    wordId,
+    bookId: sourceWord.bookId,
+    bookTitle: sourceWord.bookTitle,
+    promptLabel: '和訳全文入力',
+    promptText: sourceSentence,
+    answer: sourceTranslation,
+    sourceSentence,
+    sourceTranslation,
+    grammarFocus: grammarScope.labelJa,
+    grammarScope,
+    instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を読み、自然な日本語訳を最後まで入力します。'),
   };
 };
 
@@ -270,6 +349,7 @@ export const normalizeAiGrammarQuestionDrafts = (
   sourceWords: AiGrammarSourceWord[],
   mode: GrammarQuestionMode,
   questionCount: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GeneratedWorksheetQuestion[] => {
   const sourceById = new Map(sourceWords.map((word) => [toWordId(word), word]));
   const usedWordIds = new Set<string>();
@@ -280,10 +360,12 @@ export const normalizeAiGrammarQuestionDrafts = (
       const sourceWord = sourceById.get(draft.wordId);
       if (!sourceWord || usedWordIds.has(toWordId(sourceWord))) return null;
       const question = mode === 'GRAMMAR_CLOZE'
-        ? normalizeClozeDraft(draft, sourceWord, index)
+        ? normalizeClozeDraft(draft, sourceWord, index, requestedScopeId)
         : mode === 'EN_WORD_ORDER'
-          ? normalizeEnglishOrderDraft(draft, sourceWord, index)
-          : normalizeJapaneseOrderDraft(draft, sourceWord, index);
+          ? normalizeEnglishOrderDraft(draft, sourceWord, index, requestedScopeId)
+          : mode === 'JA_TRANSLATION_ORDER'
+            ? normalizeJapaneseOrderDraft(draft, sourceWord, index, requestedScopeId)
+            : normalizeJapaneseInputDraft(draft, sourceWord, index, requestedScopeId);
       if (!question) return null;
       usedWordIds.add(toWordId(sourceWord));
       return question;

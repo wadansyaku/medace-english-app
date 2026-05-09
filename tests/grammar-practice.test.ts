@@ -32,21 +32,22 @@ describe('grammar practice helpers', () => {
     expect(english?.source).toBe('example');
     expect(english?.sourceSentence).toBe('Doctors stabilize the patient before surgery.');
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'Doctors',
+      'doctors',
       'stabilize',
       'the',
       'patient',
       'before',
-      'surgery.',
+      'surgery',
     ]);
     expect(english?.chips.map((chip) => chip.text)).not.toEqual([
-      'Doctors',
+      'doctors',
       'stabilize',
       'the',
       'patient',
       'before',
-      'surgery.',
+      'surgery',
     ]);
+    expect(english?.chips.some((chip) => /^[A-Z]/.test(chip.text) || /[.!?。]$/.test(chip.text))).toBe(false);
 
     const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
     expect(japanese?.source).toBe('example');
@@ -80,24 +81,79 @@ describe('grammar practice helpers', () => {
     const cloze = items.find((item) => item.kind === 'GRAMMAR_CLOZE');
 
     expect(english?.source).toBe('fallback');
-    expect(english?.sourceSentence).toBe('I reviewed the word monitor after class.');
+    expect(english?.sourceSentence).toBe('Students learn the term monitor today.');
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'I',
-      'reviewed',
+      'students',
+      'learn',
       'the',
-      'word',
+      'term',
       'monitor',
-      'after',
-      'class.',
+      'today',
     ]);
 
     expect(japanese?.source).toBe('fallback');
-    expect(japanese?.answerText).toBe('「monitor」は観察するという意味です。');
+    expect(japanese?.answerText).toBe('生徒は 観察する という語を 学ぶ');
     expect(japanese?.chips.length).toBeGreaterThanOrEqual(2);
 
     expect(cloze?.source).toBe('fallback');
-    expect(cloze?.clozeSentence).toBe('I reviewed the word ____ after class.');
-    expect(cloze?.grammarFocus).toBe('時を表す副詞句');
+    expect(cloze?.clozeSentence).toBe('Students learn the term ____ today.');
+    expect(cloze?.grammarFocus).toBe('主語 + 動詞 + 目的語');
+  });
+
+  it('rejects English ordering examples that would produce duplicate visible chips', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-protect',
+      word: 'protect',
+      definition: '守る',
+      exampleSentence: 'Doctors protect the patient before the operation.',
+      exampleMeaning: '医師は 患者を 守る。',
+    }), { seed: 'duplicate-token' });
+
+    const english = items.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
+
+    expect(english?.source).toBe('fallback');
+    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
+      'students',
+      'learn',
+      'the',
+      'term',
+      'protect',
+      'today',
+    ]);
+  });
+
+  it('uses a sentence that matches the explicitly selected grammar scope', () => {
+    const passiveItems = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-monitor',
+      word: 'monitor',
+      definition: '観察する',
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), { seed: 'scope-passive', requestedScopeId: 'passive-voice' });
+
+    const english = passiveItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
+    const japanese = passiveItems.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
+    const cloze = passiveItems.find((item) => item.kind === 'GRAMMAR_CLOZE');
+
+    expect(english?.grammarScope).toMatchObject({
+      scopeId: 'passive-voice',
+      source: 'EXPLICIT',
+      labelJa: '受け身',
+    });
+    expect(english?.sourceSentence).toBe('The term monitor is introduced by teachers today.');
+    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
+      'the',
+      'term',
+      'monitor',
+      'is',
+      'introduced',
+      'by',
+      'teachers',
+      'today',
+    ]);
+    expect(japanese?.answerText).toBe('観察する という語は 先生に 紹介される');
+    expect(cloze?.grammarFocus).toBe('受け身');
+    expect(cloze?.clozeSentence).toBe('The term ____ is introduced by teachers today.');
   });
 
   it('keeps chip order deterministic for the same seed', () => {
