@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
+import { EnglishLevel } from '../types';
 import { learningService } from '../services/learning';
+import { generateGrammarPracticeQuestions } from '../services/gemini';
 import type {
   LearningTaskIntent,
   QuizSessionConfig,
@@ -12,6 +14,7 @@ import {
   WORKSHEET_MODE_COPY,
   filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
+  isGrammarWorksheetMode,
   resolveSpellingAttempt,
   toWorksheetSourceWords,
 } from '../utils/worksheet';
@@ -29,6 +32,19 @@ import { recordClientProductEvent } from '../services/productEvents';
 import { isSmartSessionBookId } from '../shared/studySession';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
+
+type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>;
+
+const isAiGrammarQuestionMode = (mode: QuizSessionConfig['questionMode']): mode is AiGrammarQuestionMode => isGrammarWorksheetMode(mode);
+
+const shuffleWords = (words: WordData[]): WordData[] => {
+  const next = [...words];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+};
 
 interface UseQuizModeControllerParams {
   user: UserProfile;
@@ -159,33 +175,69 @@ export const useQuizModeController = ({
     resetAttemptState();
   };
 
-  const startQuizWithWords = (config: QuizSessionConfig, candidateWords: WordData[]) => {
+  const buildRuleBasedQuestions = (
+    words: WordData[],
+    mode: QuizSessionConfig['questionMode'],
+    questionCount: number,
+  ) => generateWorksheetQuestions(
+    toWorksheetSourceWords(words),
+    mode,
+    questionCount,
+  );
+
+  const startQuizWithWords = async (config: QuizSessionConfig, candidateWords: WordData[]) => {
+    setLoading(true);
+    setLoadingMessage(buildQuizLoadingMessage(config.questionMode));
     const eligibleCandidateWords = filterWorksheetQuestionCandidates(candidateWords, config.questionMode);
     const actualQuestionCount = getActualQuizQuestionCount(config.questionCount, eligibleCandidateWords.length);
-    if (actualQuestionCount === 0) {
-      setActiveConfig(null);
-      setScreen('SETUP');
-      return;
-    }
+    try {
+      if (actualQuestionCount === 0) {
+        setActiveConfig(null);
+        setScreen('SETUP');
+        return;
+      }
 
-    const nextQuestions = generateWorksheetQuestions(
-      toWorksheetSourceWords(eligibleCandidateWords),
-      config.questionMode,
-      actualQuestionCount,
-    );
-    if (nextQuestions.length === 0) {
-      setActiveConfig(null);
-      setScreen('SETUP');
-      return;
-    }
-    quizStartedEventRef.current = false;
-    spellingStartedEventRef.current = false;
+      let nextQuestions: GeneratedWorksheetQuestion[] = [];
+      if (isAiGrammarQuestionMode(config.questionMode)) {
+        setLoadingMessage('AIで文法問題を生成中...');
+        const selectedWords = shuffleWords(eligibleCandidateWords).slice(0, actualQuestionCount);
+        const aiQuestions = await generateGrammarPracticeQuestions(
+          selectedWords,
+          config.questionMode,
+          actualQuestionCount,
+          user.englishLevel || EnglishLevel.B1,
+        );
+        const aiWordIds = new Set(aiQuestions.map((question) => question.wordId));
+        const fallbackQuestions = buildRuleBasedQuestions(
+          eligibleCandidateWords.filter((word) => !aiWordIds.has(word.id)),
+          config.questionMode,
+          Math.max(0, actualQuestionCount - aiQuestions.length),
+        );
+        nextQuestions = [...aiQuestions, ...fallbackQuestions].slice(0, actualQuestionCount);
+      } else {
+        nextQuestions = buildRuleBasedQuestions(
+          eligibleCandidateWords,
+          config.questionMode,
+          actualQuestionCount,
+        );
+      }
 
-    setActiveConfig(config);
-    setShowExitConfirm(false);
-    resetAttemptState();
-    setQuestions(nextQuestions);
-    setScreen('RUNNING');
+      if (nextQuestions.length === 0) {
+        setActiveConfig(null);
+        setScreen('SETUP');
+        return;
+      }
+      quizStartedEventRef.current = false;
+      spellingStartedEventRef.current = false;
+
+      setActiveConfig(config);
+      setShowExitConfirm(false);
+      resetAttemptState();
+      setQuestions(nextQuestions);
+      setScreen('RUNNING');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -229,7 +281,7 @@ export const useQuizModeController = ({
         setSetupConfig(presetConfig);
 
         if (autoStart) {
-          startQuizWithWords(presetConfig, sortedWords);
+          await startQuizWithWords(presetConfig, sortedWords);
         } else {
           resetToSetup();
         }
@@ -354,7 +406,7 @@ export const useQuizModeController = ({
       return;
     }
 
-    startQuizWithWords(normalizedConfig, candidateWords);
+    void startQuizWithWords(normalizedConfig, candidateWords);
   };
 
   const goToReady = () => {

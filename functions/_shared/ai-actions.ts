@@ -1,8 +1,15 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData } from '../../types';
+import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, WorksheetQuestionMode } from '../../types';
 import type { MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
+import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
+import { normalizeAiGrammarQuestionDrafts } from '../../utils/aiGrammarQuestions';
 import { buildFallbackLearningPlan } from '../../utils/learningPlan';
+import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
+import {
+  filterWorksheetQuestionCandidates,
+  toWorksheetSourceWords,
+} from '../../utils/worksheet';
 import {
   assertAiActionAllowed,
   assertBudgetAvailable,
@@ -33,6 +40,8 @@ interface AIQuizQuestion {
   correctOption: string;
 }
 
+type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>;
+
 interface ExtractedResult {
   words: { word: string; definition: string; }[];
   contextSummary: string;
@@ -53,6 +62,12 @@ const getAiClient = (env: AppEnv): GoogleGenAI => {
   }
   return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
 };
+
+const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-2.5-flash';
+
+const resolveGrammarPracticeModel = (env: AppEnv): string => (
+  String(env.AI_GRAMMAR_MODEL || '').trim() || DEFAULT_GRAMMAR_PRACTICE_MODEL
+);
 
 const handleAiError = (error: unknown, fallbackMessage: string): never => {
   const maybe = error as { status?: number; message?: string };
@@ -232,6 +247,150 @@ const generateAIQuiz = async (env: AppEnv, payload: any): Promise<AIQuizQuestion
     return JSON.parse(response.text) as AIQuizQuestion[];
   } catch (error) {
     handleAiError(error, 'AIクイズ生成に失敗しました。');
+  }
+};
+
+const isGrammarQuestionMode = (value: unknown): value is GrammarQuestionMode => (
+  value === 'GRAMMAR_CLOZE'
+  || value === 'EN_WORD_ORDER'
+  || value === 'JA_TRANSLATION_ORDER'
+);
+
+const buildGrammarPracticePrompt = (
+  words: WordData[],
+  mode: GrammarQuestionMode,
+  questionCount: number,
+  userLevel: EnglishLevel,
+): string => {
+  const modeInstruction = mode === 'GRAMMAR_CLOZE'
+    ? [
+      'Mode: GRAMMAR_CLOZE.',
+      'Create a natural English sentence using the learned word or a grammatically correct inflected form.',
+      'promptText must be the same sentence with exactly one blank written as ____.',
+      'answer must be the blanked word or phrase.',
+      'options must contain 3 or 4 short unique English options including answer. Prefer tense, number, or word-form distractors.',
+      'orderedTokens should be an empty array.',
+    ].join('\n')
+    : mode === 'EN_WORD_ORDER'
+      ? [
+        'Mode: EN_WORD_ORDER.',
+        'Create a natural English sentence using the learned word.',
+        'orderedTokens must be the correct English word order split into 4 to 14 chips.',
+        'answer must be the full English sentence.',
+        'options should be an empty array.',
+      ].join('\n')
+      : [
+        'Mode: JA_TRANSLATION_ORDER.',
+        'Create a natural English sentence using the learned word and a natural Japanese translation.',
+        'orderedTokens must be the correct Japanese translation split into 2 to 8 meaningful chips.',
+        'sourceTranslation and answer must be the full natural Japanese translation.',
+        'options should be an empty array.',
+      ].join('\n');
+
+  const inputWords = words.map((word) => ({
+    wordId: word.id,
+    word: word.word,
+    definition: word.definition,
+    exampleSentence: word.exampleSentence || null,
+    exampleMeaning: word.exampleMeaning || null,
+  }));
+
+  return `
+You are an English grammar question writer for Japanese learners.
+Generate exactly ${questionCount} questions for CEFR ${userLevel}.
+Use only the provided wordId values. Generate at most one question per word.
+Prefer the provided example sentence/meaning when it is natural; otherwise write a new short sentence.
+Keep content school-safe, non-political, and non-medical-advice. Do not include explanations outside JSON.
+All Japanese text must be natural for a learner-facing app.
+
+${modeInstruction}
+
+Every item must have:
+{
+  "wordId": "one of the input wordId values",
+  "mode": "${mode}",
+  "promptText": "learner-facing question prompt",
+  "sourceSentence": "complete English sentence",
+  "sourceTranslation": "Japanese translation, or empty string when not needed",
+  "answer": "correct answer text",
+  "options": ["choice", "..."],
+  "orderedTokens": ["correct", "order", "chips"],
+  "grammarFocus": "short Japanese grammar label",
+  "instruction": "short Japanese instruction"
+}
+
+Input words:
+${JSON.stringify(inputWords)}
+  `.trim();
+};
+
+const generateGrammarPracticeQuestions = async (
+  env: AppEnv,
+  payload: any,
+  model = resolveGrammarPracticeModel(env),
+): Promise<GeneratedWorksheetQuestion[]> => {
+  const ai = getAiClient(env);
+  const mode = isGrammarQuestionMode(payload?.mode) ? payload.mode : null;
+  const targetWords = (Array.isArray(payload?.targetWords) ? payload.targetWords : []) as WordData[];
+  if (!mode || targetWords.length === 0) return [];
+
+  const requestedCount = Math.max(1, Math.min(10, Math.trunc(Number(payload?.questionCount || 5))));
+  const userLevel = Object.values(EnglishLevel).includes(payload?.userLevel)
+    ? payload.userLevel as EnglishLevel
+    : EnglishLevel.B1;
+  const candidateWords = filterWorksheetQuestionCandidates(targetWords, mode).slice(0, requestedCount);
+  if (candidateWords.length === 0) return [];
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: buildGrammarPracticePrompt(candidateWords, mode, Math.min(requestedCount, candidateWords.length), userLevel),
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              wordId: { type: Type.STRING },
+              mode: { type: Type.STRING, enum: [mode] },
+              promptText: { type: Type.STRING },
+              sourceSentence: { type: Type.STRING },
+              sourceTranslation: { type: Type.STRING },
+              answer: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              orderedTokens: { type: Type.ARRAY, items: { type: Type.STRING } },
+              grammarFocus: { type: Type.STRING },
+              instruction: { type: Type.STRING },
+            },
+            required: [
+              'wordId',
+              'mode',
+              'promptText',
+              'sourceSentence',
+              'sourceTranslation',
+              'answer',
+              'options',
+              'orderedTokens',
+              'grammarFocus',
+              'instruction',
+            ],
+          },
+        },
+      },
+    });
+
+    if (!response.text) return [];
+    const parsed = JSON.parse(response.text) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return normalizeAiGrammarQuestionDrafts(
+      parsed as AiGrammarQuestionDraft[],
+      toWorksheetSourceWords(candidateWords),
+      mode,
+      requestedCount,
+    );
+  } catch (error) {
+    handleAiError(error, 'AI文法問題生成に失敗しました。');
   }
 };
 
@@ -587,6 +746,22 @@ export const handleAiAction = async (
       return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, body.payload), logContext);
     case 'generateAIQuiz':
       return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, body.payload), logContext);
+    case 'generateGrammarPracticeQuestions': {
+      const model = resolveGrammarPracticeModel(env);
+      const requestUnits = Math.max(1, Math.min(10, Math.trunc(Number(body.payload?.questionCount || 1))));
+      return runMeteredAiAction(
+        env,
+        user,
+        'generateGrammarPracticeQuestions',
+        () => generateGrammarPracticeQuestions(env, body.payload, model),
+        logContext,
+        {
+          model,
+          providerInputUnits: requestUnits,
+          providerOutputUnits: requestUnits,
+        },
+      );
+    }
     case 'extractVocabularyFromText':
       return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload), logContext);
     case 'extractVocabularyFromMedia':
