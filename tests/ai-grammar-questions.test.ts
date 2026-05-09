@@ -46,6 +46,7 @@ describe('AI grammar question normalization', () => {
       grammarFocus: '時を表す副詞句',
     });
     expect(question.options).toContain('stabilize');
+    expect(question.options[0]).not.toBe('stabilize');
     expect(question.promptText).not.toContain('stabilize the patient');
   });
 
@@ -110,4 +111,3 @@ describe('AI grammar question normalization', () => {
     expect(normalizeAiGrammarQuestionDrafts(drafts, sourceWords, 'GRAMMAR_CLOZE', 2)).toEqual([]);
   });
 });
-

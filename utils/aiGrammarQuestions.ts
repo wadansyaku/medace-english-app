@@ -134,6 +134,16 @@ const ensureOptions = (options: string[] | undefined, answer: string, learnedWor
   return merged.slice(0, Math.max(3, Math.min(4, merged.length)));
 };
 
+const shuffleOptions = (options: string[], answer: string, seed: string): string[] => {
+  const shuffled = shuffleStable(options, seed);
+  const answerIndex = shuffled.findIndex((option) => option.toLowerCase() === answer.toLowerCase());
+  if (answerIndex !== 0 || shuffled.length < 2) return shuffled;
+
+  const swapIndex = 1 + (stableHash(`${seed}:answer-position`) % (shuffled.length - 1));
+  [shuffled[0], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[0]];
+  return shuffled;
+};
+
 const createOrderTokens = (
   orderedTexts: string[],
   wordId: string,
@@ -163,7 +173,11 @@ const normalizeClozeDraft = (
   const promptText = normalizeWhitespace(draft.promptText || '');
   if (!answer || !promptText.includes('____')) return null;
 
-  const options = ensureOptions(draft.options, answer, sourceWord.word);
+  const options = shuffleOptions(
+    ensureOptions(draft.options, answer, sourceWord.word),
+    answer,
+    `${wordId}:ai-cloze:${index}`,
+  );
   if (!options.some((option) => option.toLowerCase() === answer.toLowerCase())) return null;
 
   const sourceSentence = normalizeWhitespace(

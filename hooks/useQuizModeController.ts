@@ -37,6 +37,15 @@ type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR
 
 const isAiGrammarQuestionMode = (mode: QuizSessionConfig['questionMode']): mode is AiGrammarQuestionMode => isGrammarWorksheetMode(mode);
 
+const shuffleWords = (words: WordData[]): WordData[] => {
+  const next = [...words];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+};
+
 interface UseQuizModeControllerParams {
   user: UserProfile;
   bookId: string;
@@ -191,7 +200,7 @@ export const useQuizModeController = ({
       let nextQuestions: GeneratedWorksheetQuestion[] = [];
       if (isAiGrammarQuestionMode(config.questionMode)) {
         setLoadingMessage('AIで文法問題を生成中...');
-        const selectedWords = eligibleCandidateWords.slice(0, actualQuestionCount);
+        const selectedWords = shuffleWords(eligibleCandidateWords).slice(0, actualQuestionCount);
         const aiQuestions = await generateGrammarPracticeQuestions(
           selectedWords,
           config.questionMode,
