@@ -156,14 +156,91 @@ describe('handleAiAction metering integration', () => {
         answer: 'stabilize',
       }),
     ]);
-    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions');
+    expect(assertAiActionAllowedMock).toHaveBeenCalledWith(user, 'generateGrammarPracticeQuestions');
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
     expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, {
       action: 'generateGrammarPracticeQuestions',
       usedAi: true,
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
+      estimatedCostMilliYen: 340,
+      estimatedProviderCostMilliYen: 340,
+      requestUnits: 1,
       providerInputUnits: 1,
       providerOutputUnits: 1,
     });
+  });
+
+  it('scales grammar practice budget to generated AI misses and keeps the result when usage logging fails', async () => {
+    recordAiUsageEventMock.mockRejectedValueOnce(new Error('usage write failed'));
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify([
+        {
+          wordId: 'word-1',
+          mode: 'GRAMMAR_CLOZE',
+          promptText: 'Doctors ____ the patient before surgery.',
+          sourceSentence: 'Doctors stabilize the patient before surgery.',
+          sourceTranslation: '',
+          answer: 'stabilize',
+          options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+          orderedTokens: [],
+          grammarFocus: '時を表す副詞句',
+          instruction: '空所に入る語形を選びます。',
+        },
+        {
+          wordId: 'word-2',
+          mode: 'GRAMMAR_CLOZE',
+          promptText: 'Nurses ____ the patient after admission.',
+          sourceSentence: 'Nurses monitor the patient after admission.',
+          sourceTranslation: '',
+          answer: 'monitor',
+          options: ['monitor', 'monitored', 'monitors', 'monitoring'],
+          orderedTokens: [],
+          grammarFocus: '時を表す副詞句',
+          instruction: '空所に入る語形を選びます。',
+        },
+      ]),
+    });
+
+    const env = {
+      GEMINI_API_KEY: 'test-key',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 5,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+          {
+            id: 'word-2',
+            bookId: 'book-1',
+            number: 2,
+            word: 'monitor',
+            definition: '観察する',
+          },
+        ],
+      },
+    });
+
+    expect(result).toHaveLength(2);
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 680);
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: true,
+      estimatedCostMilliYen: 680,
+      estimatedProviderCostMilliYen: 680,
+      requestUnits: 5,
+      providerInputUnits: 2,
+      providerOutputUnits: 2,
+    }));
   });
 
   it('keeps learning-plan fallback on access check only when GEMINI_API_KEY is missing', async () => {

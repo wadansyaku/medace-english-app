@@ -80,6 +80,15 @@ describe('storage action contract', () => {
     })).toMatchObject({
       questionMode: 'JA_TRANSLATION_ORDER',
     });
+    expect(definition.parse({
+      wordId: 'word-1',
+      bookId: 'book-1',
+      correct: true,
+      questionMode: 'JA_TRANSLATION_INPUT',
+      responseTimeMs: 1200,
+    })).toMatchObject({
+      questionMode: 'JA_TRANSLATION_INPUT',
+    });
 
     expect(() => definition.parse({
       wordId: 'word-1',

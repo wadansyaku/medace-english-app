@@ -80,6 +80,7 @@ const mapSignalRow = (row: DbWeaknessSignalRow): WeaknessSignalSummary => {
         || value === 'GRAMMAR_CLOZE'
         || value === 'EN_WORD_ORDER'
         || value === 'JA_TRANSLATION_ORDER'
+        || value === 'JA_TRANSLATION_INPUT'
       ));
     }
   } catch {

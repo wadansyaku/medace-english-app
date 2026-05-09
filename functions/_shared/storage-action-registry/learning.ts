@@ -66,6 +66,7 @@ export const learningStorageActionDefinitions = {
         responseTimeMs: expectOptionalNumber(record, 'responseTimeMs') || 0,
         missionAssignmentId: expectOptionalString(record, 'missionAssignmentId'),
         taskIntentType: expectOptionalString(record, 'taskIntentType') as never,
+        generatedProblemId: expectOptionalString(record, 'generatedProblemId'),
       };
     },
     execute: async ({ env, user }, payload) => {
@@ -79,6 +80,7 @@ export const learningStorageActionDefinitions = {
         payload.responseTimeMs,
         payload.missionAssignmentId,
         payload.taskIntentType,
+        payload.generatedProblemId,
       );
       return null;
     },

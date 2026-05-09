@@ -378,7 +378,9 @@ export const saveSrsHistory = async (
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
+  generatedProblemId?: string,
 ): Promise<void> => {
+  void generatedProblemId;
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, word.id);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);
@@ -452,7 +454,9 @@ export const recordQuizAttempt = async (
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
+  generatedProblemId?: string,
 ): Promise<void> => {
+  void generatedProblemId;
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, wordId);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);

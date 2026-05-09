@@ -587,6 +587,7 @@ export class IndexedDBStorageService implements IStorageService {
     responseTimeMs = 0,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    generatedProblemId?: string,
   ): Promise<void> {
     return recordQuizAttemptFromHistory(
       this.getLearningHistoryContext(),
@@ -598,6 +599,7 @@ export class IndexedDBStorageService implements IStorageService {
       responseTimeMs,
       missionAssignmentId,
       taskIntentType,
+      generatedProblemId,
     );
   }
 

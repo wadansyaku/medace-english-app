@@ -79,6 +79,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   onRetrySave,
 }) => {
   const isOrderMode = currentQuestion.interactionType === 'ORDERING';
+  const isTextInputMode = currentQuestion.interactionType === 'TEXT_INPUT';
+  const isTranslationInputMode = currentQuestion.mode === 'JA_TRANSLATION_INPUT';
   const selectedTokenIdSet = new Set(orderedTokenIds);
   const tokenMap = new Map((currentQuestion.tokens || []).map((token) => [token.id, token]));
   const selectedTokens = orderedTokenIds
@@ -88,11 +90,11 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   const canSubmitOrder = isOrderMode && expectedTokenCount > 0 && orderedTokenIds.length === expectedTokenCount && !orderFeedback && !persistingAttempt;
   const hasAnsweredQuestion = isOrderMode
     ? Boolean(orderFeedback)
-    : isHintMode
+    : isTextInputMode
       ? Boolean(inputResult)
       : Boolean(selectedOption);
   const shouldHideSourceSentenceUntilAnswered = currentQuestion.mode === 'GRAMMAR_CLOZE' || currentQuestion.mode === 'EN_WORD_ORDER';
-  const shouldHideSourceTranslationUntilAnswered = currentQuestion.mode === 'JA_TRANSLATION_ORDER';
+  const shouldHideSourceTranslationUntilAnswered = currentQuestion.mode === 'JA_TRANSLATION_ORDER' || isTranslationInputMode;
   const visibleSourceSentence = currentQuestion.sourceSentence && (!shouldHideSourceSentenceUntilAnswered || hasAnsweredQuestion)
     ? currentQuestion.sourceSentence
     : null;
@@ -101,12 +103,16 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     : null;
   const hasHiddenSourceSentence = Boolean(currentQuestion.sourceSentence && shouldHideSourceSentenceUntilAnswered && !hasAnsweredQuestion);
   const hasHiddenSourceTranslation = Boolean(currentQuestion.sourceTranslation && shouldHideSourceTranslationUntilAnswered && !hasAnsweredQuestion);
+  const grammarScopeText = currentQuestion.grammarScope?.labelJa || (hasAnsweredQuestion ? currentQuestion.grammarFocus : '') || '';
+  const shouldShowGrammarScope = Boolean(grammarScopeText && (currentQuestion.showGrammarScopeHint !== false || hasAnsweredQuestion));
+  const hasHiddenGrammarScope = Boolean(grammarScopeText && currentQuestion.showGrammarScopeHint === false && !hasAnsweredQuestion);
   const shouldShowReferencePanel = Boolean(
     visibleSourceSentence
     || visibleSourceTranslation
-    || currentQuestion.grammarFocus
+    || shouldShowGrammarScope
     || hasHiddenSourceSentence
-    || hasHiddenSourceTranslation,
+    || hasHiddenSourceTranslation
+    || hasHiddenGrammarScope,
   );
 
   return (
@@ -159,38 +165,63 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               </div>
             </div>
           )}
-          {(visibleSourceTranslation || currentQuestion.grammarFocus || hasHiddenSourceTranslation) && (
+          {(visibleSourceTranslation || hasHiddenSourceTranslation) && (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                {visibleSourceTranslation || hasHiddenSourceTranslation ? '日本語' : 'Grammar'}
+                日本語
               </div>
               <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">
-                {visibleSourceTranslation || (hasHiddenSourceTranslation ? '日本語訳は、判定後に表示します。' : currentQuestion.grammarFocus)}
+                {visibleSourceTranslation
+                  || (hasHiddenSourceTranslation ? '日本語訳は、判定後に表示します。' : '')}
+              </div>
+            </div>
+          )}
+          {(shouldShowGrammarScope || hasHiddenGrammarScope) && (
+            <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-600">
+                Grammar
+              </div>
+              <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">
+                {hasHiddenGrammarScope ? '文法範囲は、判定後に表示します。' : grammarScopeText}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {isHintMode ? (
+      {isTextInputMode ? (
         <div className={`mt-6 rounded-2xl px-4 py-4 ${showSpellingHint ? 'border border-amber-200 bg-amber-50' : 'border border-slate-200 bg-slate-50'}`}>
-          <div className={`flex items-center gap-2 text-sm font-bold ${showSpellingHint ? 'text-amber-800' : 'text-slate-700'}`}>
-            <SpellCheck className="h-4 w-4" />
-            スペルチェック
-          </div>
-          {showSpellingHint ? (
+          {isHintMode ? (
             <>
-              <div className="mt-3 text-2xl font-black tracking-[0.12em] text-slate-900">
-                {currentQuestion.maskedAnswer}
+              <div className={`flex items-center gap-2 text-sm font-bold ${showSpellingHint ? 'text-amber-800' : 'text-slate-700'}`}>
+                <SpellCheck className="h-4 w-4" />
+                スペルチェック
               </div>
-              <div className="mt-2 text-sm text-amber-800/80">
-                先頭2文字をヒントに、全文または残りを入力してください。
-              </div>
+              {showSpellingHint ? (
+                <>
+                  <div className="mt-3 text-2xl font-black tracking-[0.12em] text-slate-900">
+                    {currentQuestion.maskedAnswer}
+                  </div>
+                  <div className="mt-2 text-sm text-amber-800/80">
+                    先頭2文字をヒントに、全文または残りを入力してください。
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-sm text-slate-600">
+                  まずはヒントなしで全文を入力します。必要なときだけ先頭2文字ヒントを出せます。
+                </div>
+              )}
             </>
           ) : (
-            <div className="mt-2 text-sm text-slate-600">
-              まずはヒントなしで全文を入力します。必要なときだけ先頭2文字ヒントを出せます。
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                <SpellCheck className="h-4 w-4" />
+                和訳全文入力
+              </div>
+              <div className="mt-2 text-sm text-slate-600">
+                英文を見て、日本語訳を最後まで入力します。句読点や空白の違いは判定で吸収します。
+              </div>
+            </>
           )}
         </div>
       ) : isOrderMode ? (
@@ -208,19 +239,33 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       )}
     </section>
 
-    {isHintMode ? (
+    {isTextInputMode ? (
       <form onSubmit={onHintSubmit} className="space-y-4 animate-in slide-in-from-bottom-2 fade-in">
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">英語を入力</label>
-          <input
-            type="text"
-            value={answerInput}
-            onChange={(event) => onChangeAnswerInput(event.target.value)}
-            disabled={!!inputResult || persistingAttempt}
-            autoFocus
-            className="ui-input text-lg"
-            placeholder={showSpellingHint ? `${currentQuestion.hintPrefix || ''}...` : '英語をそのまま入力'}
-          />
+          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+            {isTranslationInputMode ? '日本語訳を入力' : '英語を入力'}
+          </label>
+          {isTranslationInputMode ? (
+            <textarea
+              value={answerInput}
+              onChange={(event) => onChangeAnswerInput(event.target.value)}
+              disabled={!!inputResult || persistingAttempt}
+              autoFocus
+              rows={4}
+              className="ui-input min-h-[132px] resize-y text-base leading-relaxed"
+              placeholder="英文の意味を日本語で全文入力"
+            />
+          ) : (
+            <input
+              type="text"
+              value={answerInput}
+              onChange={(event) => onChangeAnswerInput(event.target.value)}
+              disabled={!!inputResult || persistingAttempt}
+              autoFocus
+              className="ui-input text-lg"
+              placeholder={showSpellingHint ? `${currentQuestion.hintPrefix || ''}...` : '英語をそのまま入力'}
+            />
+          )}
           {spellingFeedbackMessage && spellingFeedbackTone && (
             <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
               spellingFeedbackTone === 'correct'
@@ -241,9 +286,9 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               disabled={!answerInput.trim() || !!inputResult || persistingAttempt}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '入力して判定する'}
+              <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
             </button>
-            {!showSpellingHint && !inputResult && (
+            {isHintMode && !showSpellingHint && !inputResult && (
               <button
                 type="button"
                 onClick={onRevealSpellingHint}

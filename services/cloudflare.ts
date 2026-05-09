@@ -212,10 +212,11 @@ export class CloudflareStorageService implements IStorageService {
     responseTimeMs = 0,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    generatedProblemId?: string,
   ): Promise<void> {
     await this.callStorage({
       action: 'recordQuizAttempt',
-      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType },
+      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId },
     });
   }
 

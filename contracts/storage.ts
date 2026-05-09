@@ -272,6 +272,7 @@ export interface StorageActionMap {
       responseTimeMs: number;
       missionAssignmentId?: string;
       taskIntentType?: LearningTaskIntentType;
+      generatedProblemId?: string;
     };
     response: null;
   };

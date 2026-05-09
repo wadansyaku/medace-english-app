@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import QuizRunningView from '../components/quiz/QuizRunningView';
+import { EnglishLevel } from '../types';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 
 const noop = () => {};
@@ -142,5 +143,97 @@ describe('QuizRunningView answer-bearing context', () => {
     });
 
     expect(afterAnswer).toContain('医師は 手術前に 患者を 安定させる');
+  });
+
+  it('renders a Japanese full-translation input flow and hides the answer until feedback', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion,
+      mode: 'JA_TRANSLATION_INPUT',
+      interactionType: 'TEXT_INPUT',
+      promptLabel: '和訳全文入力',
+      promptText: 'Doctors stabilize the patient before surgery.',
+      answer: '医師は 手術前に 患者を 安定させる',
+      sourceSentence: 'Doctors stabilize the patient before surgery.',
+      sourceTranslation: '医師は 手術前に 患者を 安定させる',
+      grammarFocus: undefined,
+      options: undefined,
+      instruction: '英文を読み、日本語訳を全文で入力します。',
+    };
+
+    const beforeAnswer = renderQuiz({
+      currentQuestion: question,
+      answerInput: '',
+    });
+
+    expect(beforeAnswer).toContain('和訳全文入力');
+    expect(beforeAnswer).toContain('日本語訳を入力');
+    expect(beforeAnswer).toContain('日本語訳は、判定後に表示します。');
+    expect(beforeAnswer).not.toContain('正解例');
+
+    const afterAnswer = renderQuiz({
+      currentQuestion: question,
+      answerInput: '医師は手術前に患者を安定させる',
+      inputResult: 'correct',
+      spellingFeedbackTone: 'correct',
+      spellingFeedbackMessage: '正解です。日本語訳を最後まで入力できました。',
+    });
+
+    expect(afterAnswer).toContain('医師は 手術前に 患者を 安定させる');
+    expect(afterAnswer).toContain('正解です。日本語訳を最後まで入力できました。');
+  });
+
+  it('reveals the hidden grammar scope after Japanese translation feedback', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion,
+      mode: 'JA_TRANSLATION_INPUT',
+      interactionType: 'TEXT_INPUT',
+      promptLabel: '和訳全文入力',
+      promptText: 'monitor is reviewed by students today.',
+      answer: '観察する という語は 生徒に 復習される',
+      sourceSentence: 'monitor is reviewed by students today.',
+      sourceTranslation: '観察する という語は 生徒に 復習される',
+      grammarFocus: undefined,
+      grammarScope: {
+        scopeId: 'passive-voice',
+        cefrLevel: EnglishLevel.B1,
+        labelJa: '受け身',
+        isExplicitScope: true,
+        source: 'EXPLICIT',
+      },
+      showGrammarScopeHint: false,
+      options: undefined,
+    };
+
+    const beforeAnswer = renderQuiz({ currentQuestion: question });
+    expect(beforeAnswer).toContain('文法範囲は、判定後に表示します。');
+    expect(beforeAnswer).not.toContain('受け身');
+
+    const afterAnswer = renderQuiz({
+      currentQuestion: question,
+      answerInput: '観察するという語は生徒に復習される',
+      inputResult: 'correct',
+    });
+
+    expect(afterAnswer).toContain('観察する という語は 生徒に 復習される');
+    expect(afterAnswer).toContain('受け身');
+  });
+
+  it('does not reveal unstructured AI grammar focus before answering', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion,
+      grammarScope: undefined,
+      grammarFocus: 'stabilize の語形',
+      showGrammarScopeHint: true,
+    };
+
+    const beforeAnswer = renderQuiz({ currentQuestion: question });
+    expect(beforeAnswer).not.toContain('stabilize の語形');
+
+    const afterAnswer = renderQuiz({
+      currentQuestion: question,
+      showOptions: true,
+      selectedOption: 'stabilize',
+    });
+    expect(afterAnswer).toContain('stabilize の語形');
   });
 });

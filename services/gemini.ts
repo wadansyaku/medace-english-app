@@ -1,4 +1,4 @@
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, WorksheetQuestionMode } from '../types';
+import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, type GrammarCurriculumScopeId, WorksheetQuestionMode } from '../types';
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
@@ -186,9 +186,10 @@ export const generateAIQuiz = async (targetWords: WordData[]): Promise<AIQuizQue
 
 export const generateGrammarPracticeQuestions = async (
   targetWords: WordData[],
-  mode: Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>,
+  mode: Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>,
   questionCount: number,
   userLevel: EnglishLevel = EnglishLevel.B1,
+  grammarScopeId?: GrammarCurriculumScopeId,
 ): Promise<GeneratedWorksheetQuestion[]> => {
   if (targetWords.length === 0 || questionCount <= 0) return [];
 
@@ -198,11 +199,13 @@ export const generateGrammarPracticeQuestions = async (
       mode: WorksheetQuestionMode;
       questionCount: number;
       userLevel: EnglishLevel;
+      grammarScopeId?: GrammarCurriculumScopeId;
     }>('generateGrammarPracticeQuestions', {
       targetWords,
       mode,
       questionCount,
       userLevel,
+      grammarScopeId,
     });
   } catch (error) {
     if (!isRateLimitError(error) && !isAiUnavailableError(error) && !isAccessDeniedError(error)) {

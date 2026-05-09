@@ -1,4 +1,5 @@
-import { StudentWorksheetWord, WordData, WorksheetQuestionMode } from '../types';
+import { StudentWorksheetWord, WordData, type GrammarCurriculumScopeId, type GrammarScopeSelection, WorksheetQuestionMode } from '../types';
+import { GRAMMAR_WORKSHEET_MODES } from '../config/grammarCurriculum';
 import { getBookProgressionIndex } from '../shared/bookProgression';
 import {
   buildGrammarPracticeItemsForWord,
@@ -38,6 +39,10 @@ export interface GeneratedWorksheetQuestion {
   sourceSentence?: string;
   sourceTranslation?: string;
   grammarFocus?: string;
+  grammarScope?: GrammarScopeSelection;
+  showGrammarScopeHint?: boolean;
+  generatedProblemId?: string;
+  aiContentId?: string;
   instruction?: string;
   hintPrefix?: string;
   maskedAnswer?: string;
@@ -68,6 +73,10 @@ export const WORKSHEET_MODE_COPY: Record<WorksheetQuestionMode, { label: string;
     label: '日本語並び替え',
     description: '英文を見て、日本語の意味チップを自然な順番へ戻します。',
   },
+  JA_TRANSLATION_INPUT: {
+    label: '日本語全文入力',
+    description: '英文を見て、日本語訳を全文で入力し、表現の抜けを確認します。',
+  },
 };
 
 const shuffle = <T>(items: T[]): T[] => {
@@ -82,9 +91,7 @@ const shuffle = <T>(items: T[]): T[] => {
 const toWordId = (word: WorksheetSourceWord): string => word.wordId || word.id || `${word.bookId}:${word.word}`;
 
 export const isGrammarWorksheetMode = (mode: WorksheetQuestionMode): boolean => (
-  mode === 'GRAMMAR_CLOZE'
-  || mode === 'EN_WORD_ORDER'
-  || mode === 'JA_TRANSLATION_ORDER'
+  (GRAMMAR_WORKSHEET_MODES as readonly WorksheetQuestionMode[]).includes(mode)
 );
 
 const toPracticeWord = (word: WorksheetSourceWord, index = 0): WordData => ({
@@ -101,7 +108,7 @@ export const canGenerateWorksheetQuestionForWord = (
   word: Pick<WordData, 'word' | 'definition'>,
   mode: WorksheetQuestionMode,
 ): boolean => {
-  if (isGrammarWorksheetMode(mode)) {
+  if (isGrammarWorksheetMode(mode) || mode === 'JA_TRANSLATION_INPUT') {
     return hasEnoughGrammarPracticeData(word);
   }
   return Boolean(word.word.trim() && word.definition.trim());
@@ -115,6 +122,9 @@ export const filterWorksheetQuestionCandidates = <T extends Pick<WordData, 'word
 const uniqueValues = (values: string[]): string[] => [...new Set(values.filter(Boolean))];
 
 const normalizeJapanese = (value: string): string => value.trim().normalize('NFKC').replace(/\s+/g, '');
+
+const normalizeJapaneseTextAnswer = (value: string): string => normalizeJapanese(value)
+  .replace(/[。、，．,.!?！？「」『』（）()[\]【】]/g, '');
 
 const tokenizeJapanese = (value: string): string[] => {
   const normalized = value.trim().normalize('NFKC');
@@ -390,6 +400,21 @@ export const resolveSpellingAttempt = ({
   return 'incorrect';
 };
 
+export const isCorrectJapaneseTranslationAnswer = (input: string, answer: string): boolean => (
+  Boolean(normalizeJapaneseTextAnswer(input))
+  && normalizeJapaneseTextAnswer(input) === normalizeJapaneseTextAnswer(answer)
+);
+
+export const resolveJapaneseTranslationAttempt = ({
+  input,
+  answer,
+}: {
+  input: string;
+  answer: string;
+}): 'correct' | 'incorrect' => (
+  isCorrectJapaneseTranslationAnswer(input, answer) ? 'correct' : 'incorrect'
+);
+
 const toOrderTokens = (
   chips: GrammarPracticeChip[],
   learnedWordId: string,
@@ -413,18 +438,23 @@ const getGrammarPracticeItemForMode = (
   word: WorksheetSourceWord,
   mode: WorksheetQuestionMode,
   index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GrammarPracticeItem | null => {
   const practiceWord = toPracticeWord(word, index);
   const targetKind = mode === 'GRAMMAR_CLOZE'
     ? 'GRAMMAR_CLOZE'
     : mode === 'EN_WORD_ORDER'
       ? 'ENGLISH_WORD_ORDER'
-      : mode === 'JA_TRANSLATION_ORDER'
+      : (mode === 'JA_TRANSLATION_ORDER' || mode === 'JA_TRANSLATION_INPUT')
         ? 'JAPANESE_WORD_ORDER'
         : null;
   if (!targetKind) return null;
 
-  return buildGrammarPracticeItemsForWord(practiceWord, { seed: `${mode}:${practiceWord.id}` })
+  return buildGrammarPracticeItemsForWord(practiceWord, {
+    seed: `${mode}:${practiceWord.id}`,
+    requestedScopeId,
+    japaneseQuestionMode: mode === 'JA_TRANSLATION_INPUT' ? 'JA_TRANSLATION_INPUT' : 'JA_TRANSLATION_ORDER',
+  })
     .find((item) => item.kind === targetKind) || null;
 };
 
@@ -432,9 +462,10 @@ const toGrammarWorksheetQuestion = (
   word: WorksheetSourceWord,
   mode: Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER'>,
   index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(word);
-  const item = getGrammarPracticeItemForMode(word, mode, index);
+  const item = getGrammarPracticeItemForMode(word, mode, index, requestedScopeId);
   if (!item) return null;
 
   if (item.kind === 'GRAMMAR_CLOZE') {
@@ -451,6 +482,7 @@ const toGrammarWorksheetQuestion = (
       options: item.options,
       sourceSentence: item.sourceSentence,
       grammarFocus: item.grammarFocus,
+      grammarScope: item.grammarScope,
       instruction: '空所に入る単語を選び、文の中でどう使われているか確認します。',
     };
   }
@@ -469,6 +501,7 @@ const toGrammarWorksheetQuestion = (
       tokens: toOrderTokens(item.chips, wordId, word.word),
       answerTokenIds: item.correctChipIds,
       sourceSentence: item.sourceSentence,
+      grammarScope: item.grammarScope,
       instruction: '登場済み単語を含む英文を、チップの順番で組み立てます。',
     };
   }
@@ -487,7 +520,34 @@ const toGrammarWorksheetQuestion = (
     answerTokenIds: item.correctChipIds,
     sourceSentence: item.sourceSentence,
     sourceTranslation: item.answerText,
+    grammarScope: item.grammarScope,
     instruction: '英文を手がかりに、日本語の意味を自然な順番へ戻します。',
+  };
+};
+
+const toJapaneseTranslationInputQuestion = (
+  word: WorksheetSourceWord,
+  index: number,
+  requestedScopeId?: GrammarCurriculumScopeId | null,
+): GeneratedWorksheetQuestion | null => {
+  const wordId = toWordId(word);
+  const item = getGrammarPracticeItemForMode(word, 'JA_TRANSLATION_INPUT', index, requestedScopeId);
+  if (!item || item.kind !== 'JAPANESE_WORD_ORDER') return null;
+
+  return {
+    id: `${wordId}:JA_TRANSLATION_INPUT:${index}`,
+    mode: 'JA_TRANSLATION_INPUT',
+    interactionType: 'TEXT_INPUT',
+    wordId,
+    bookId: word.bookId,
+    bookTitle: word.bookTitle,
+    promptLabel: '和訳全文入力',
+    promptText: item.sourceSentence,
+    answer: item.answerText,
+    sourceSentence: item.sourceSentence,
+    sourceTranslation: item.answerText,
+    grammarScope: item.grammarScope,
+    instruction: '英文を読み、日本語訳を全文で入力します。語順だけでなく、意味の抜けも確認します。',
   };
 };
 
@@ -497,6 +557,7 @@ export const generateWorksheetQuestions = (
   questionCount: number,
   options: {
     distractorWords?: WorksheetSourceWord[];
+    grammarScopeId?: GrammarCurriculumScopeId | null;
   } = {},
 ): GeneratedWorksheetQuestion[] => {
   if (sourceWords.length === 0) return [];
@@ -509,9 +570,15 @@ export const generateWorksheetQuestions = (
     ? options.distractorWords
     : eligibleWords;
 
+  if (mode === 'JA_TRANSLATION_INPUT') {
+    return selectedWords
+      .map((word, index) => toJapaneseTranslationInputQuestion(word, index, options.grammarScopeId))
+      .filter((question): question is GeneratedWorksheetQuestion => Boolean(question));
+  }
+
   if (mode === 'GRAMMAR_CLOZE' || mode === 'EN_WORD_ORDER' || mode === 'JA_TRANSLATION_ORDER') {
     return selectedWords
-      .map((word, index) => toGrammarWorksheetQuestion(word, mode, index))
+      .map((word, index) => toGrammarWorksheetQuestion(word, mode, index, options.grammarScopeId))
       .filter((question): question is GeneratedWorksheetQuestion => Boolean(question));
   }
 

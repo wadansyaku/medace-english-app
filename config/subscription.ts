@@ -149,8 +149,8 @@ export const AI_ACTION_ESTIMATES: Record<MeteredAiAction, AiActionEstimate> = {
   },
   generateGrammarPracticeQuestions: {
     label: 'AI文法問題生成',
-    estimatedCostMilliYen: 260,
-    model: 'gemini-2.5-flash',
+    estimatedCostMilliYen: 340,
+    model: 'gemini-3-flash-preview',
   },
   generateDiagnosticTest: {
     label: '標準診断テスト生成',
