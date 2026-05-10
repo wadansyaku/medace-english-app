@@ -45,6 +45,9 @@ describe('reading practice helpers', () => {
     expect(first).toEqual(second);
     expect(first[0].questions[0].options).not.toEqual(third[0].questions[0].options);
     expect(new Set(first[0].questions[0].options.map((option) => option.id))).toEqual(new Set(['a', 'b', 'c', 'd']));
+    expect(first[0].questions[0].options.map((option) => option.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(first[0].questions[0].options.find((option) => option.id === first[0].questions[0].correctOptionId)?.textJa)
+      .toBe('番号を渡し、窓の近くに座るよう頼む');
   });
 
   it('scores answers with evidence and Japanese explanation for reveal-after-answer UI', () => {
@@ -69,9 +72,12 @@ describe('reading practice helpers', () => {
   it('summarizes accuracy and weak question kinds across a reading session', () => {
     const passages = buildReadingPracticePassages({ level: EnglishLevel.B1, seed: 'summary' });
     const [passage] = passages;
+    const wrongMainIdeaOptionId = passage.questions[1].options.find(
+      (option) => option.id !== passage.questions[1].correctOptionId,
+    )?.id;
     const results = [
       scoreReadingAnswer(passage.questions[0], passage.questions[0].correctOptionId),
-      scoreReadingAnswer(passage.questions[1], 'b'),
+      scoreReadingAnswer(passage.questions[1], wrongMainIdeaOptionId),
     ];
 
     expect(summarizeReadingPracticeSession(passages, results)).toMatchObject({

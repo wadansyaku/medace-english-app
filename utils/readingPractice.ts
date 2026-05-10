@@ -577,10 +577,20 @@ const materializePassage = (
     seed,
     cacheKey: `reading:${passage.level}:${passage.id}:${SEED_VERSION}`,
   },
-  questions: passage.questions.map((question) => ({
-    ...question,
-    options: deterministicShuffle(question.options, `${seed}:${question.id}:options`),
-  })),
+  questions: passage.questions.map((question) => {
+    const shuffledOptions = deterministicShuffle(question.options, `${seed}:${question.id}:options`);
+    const visibleOptions = shuffledOptions.map((option, index) => ({
+      ...option,
+      id: String.fromCharCode(97 + index),
+    }));
+    const correctOptionIndex = shuffledOptions.findIndex((option) => option.id === question.correctOptionId);
+
+    return {
+      ...question,
+      options: visibleOptions,
+      correctOptionId: visibleOptions[correctOptionIndex]?.id ?? question.correctOptionId,
+    };
+  }),
 });
 
 export const buildReadingPracticePassages = (
