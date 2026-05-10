@@ -151,4 +151,30 @@ describe('AI grammar question normalization', () => {
       sourceTranslation: '医師は手術前に患者を安定させる',
     });
   });
+
+  it('marks explicit Japanese full-translation grammar scopes as reference metadata', () => {
+    const drafts: AiGrammarQuestionDraft[] = [
+      {
+        wordId: 'w1',
+        mode: 'JA_TRANSLATION_INPUT',
+        promptText: 'The term stabilize is useful today.',
+        sourceSentence: 'The term stabilize is useful today.',
+        sourceTranslation: 'stabilizeという語は今日役に立つ。',
+        answer: 'stabilizeという語は今日役に立つ。',
+      },
+    ];
+
+    const [question] = normalizeAiGrammarQuestionDrafts(drafts, sourceWords, 'JA_TRANSLATION_INPUT', 1, 'be-verb');
+
+    expect(question.grammarScope).toMatchObject({
+      scopeId: 'be-verb',
+      isExplicitScope: true,
+      isScopeLocked: false,
+      curriculumCategoryLabelJa: '動詞語法',
+    });
+    expect(question.grammarExplanation).toMatchObject({
+      groupLabelJa: '動詞まわり',
+      curriculumCategoryLabelJa: '動詞語法',
+    });
+  });
 });

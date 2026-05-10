@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WordData } from '../types';
+import { EnglishLevel, type WordData } from '../types';
 import {
   buildGrammarPracticeItems,
   buildGrammarPracticeItemsForWord,
@@ -81,23 +81,55 @@ describe('grammar practice helpers', () => {
     const cloze = items.find((item) => item.kind === 'GRAMMAR_CLOZE');
 
     expect(english?.source).toBe('fallback');
-    expect(english?.sourceSentence).toBe('Students learn the term monitor today.');
-    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'students',
-      'learn',
-      'the',
-      'term',
-      'monitor',
-      'today',
-    ]);
+    expect(english?.sourceSentence).toContain('monitor');
+    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toContain('monitor');
 
     expect(japanese?.source).toBe('fallback');
-    expect(japanese?.answerText).toBe('生徒は 観察する という語を 学ぶ');
+    expect(japanese?.answerText).toContain('観察する');
     expect(japanese?.chips.length).toBeGreaterThanOrEqual(2);
 
     expect(cloze?.source).toBe('fallback');
-    expect(cloze?.clozeSentence).toBe('Students learn the term ____ today.');
+    expect(cloze?.clozeSentence).toContain('____');
     expect(cloze?.grammarFocus).toBe('主語 + 動詞 + 目的語');
+  });
+
+  it('varies fallback grammar sentences by seed while keeping the target word', () => {
+    const word = createWord({
+      id: 'word-monitor',
+      word: 'monitor',
+      definition: '観察する',
+      exampleSentence: null,
+      exampleMeaning: null,
+    });
+    const generatedSentences = new Set(
+      Array.from({ length: 8 }, (_, index) => buildGrammarPracticeItemsForWord(word, { seed: `variation-${index}` })
+        .find((item) => item.kind === 'ENGLISH_WORD_ORDER')?.sourceSentence),
+    );
+
+    expect(generatedSentences.size).toBeGreaterThan(1);
+    expect([...generatedSentences].every((sentence) => sentence?.includes('monitor'))).toBe(true);
+  });
+
+  it('uses lower-level sentence templates when the learner level is lower than the scope range', () => {
+    const lowLevelItems = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-monitor',
+      word: 'monitor',
+      definition: '観察する',
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), {
+      seed: 'verb-pattern-low-level',
+      requestedScopeId: 'verb-patterns',
+      userLevel: EnglishLevel.A2,
+    });
+
+    const english = lowLevelItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
+
+    expect(english?.sourceSentence).toBe('Teachers ask learners to use the term monitor.');
+    expect(english?.grammarScope).toMatchObject({
+      scopeId: 'verb-patterns',
+      curriculumCategoryLabelJa: '動詞語法',
+    });
   });
 
   it('rejects English ordering examples that would produce duplicate visible chips', () => {
@@ -112,14 +144,7 @@ describe('grammar practice helpers', () => {
     const english = items.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
 
     expect(english?.source).toBe('fallback');
-    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'students',
-      'learn',
-      'the',
-      'term',
-      'protect',
-      'today',
-    ]);
+    expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toContain('protect');
   });
 
   it('uses a sentence that matches the explicitly selected grammar scope', () => {
@@ -129,7 +154,7 @@ describe('grammar practice helpers', () => {
       definition: '観察する',
       exampleSentence: null,
       exampleMeaning: null,
-    }), { seed: 'scope-passive', requestedScopeId: 'passive-voice' });
+    }), { seed: 'scope-passive', requestedScopeId: 'passive-voice', userLevel: EnglishLevel.A2 });
 
     const english = passiveItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
     const japanese = passiveItems.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
@@ -151,9 +176,47 @@ describe('grammar practice helpers', () => {
       'teachers',
       'today',
     ]);
-    expect(japanese?.answerText).toBe('観察する という語は 先生に 紹介される');
+    expect(japanese?.answerText).toBe('観察する という語は 今日 先生に 紹介される');
     expect(cloze?.grammarFocus).toBe('受け身');
     expect(cloze?.clozeSentence).toBe('The term ____ is introduced by teachers today.');
+  });
+
+  it('does not create Japanese order items for an explicit scope that does not support ordering', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-monitor',
+      word: 'monitor',
+      definition: '観察する',
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), { seed: 'scope-to-infinitive', requestedScopeId: 'to-infinitive', userLevel: EnglishLevel.A2 });
+
+    expect(items.map((item) => item.kind)).toEqual([
+      'ENGLISH_WORD_ORDER',
+      'GRAMMAR_CLOZE',
+    ]);
+    expect(items.every((item) => item.grammarScope.scopeId === 'to-infinitive')).toBe(true);
+  });
+
+  it('keeps Japanese full-translation input available without forcing a grammar drill scope', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-monitor',
+      word: 'monitor',
+      definition: '観察する',
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), {
+      seed: 'scope-to-infinitive-input',
+      requestedScopeId: 'to-infinitive',
+      japaneseQuestionMode: 'JA_TRANSLATION_INPUT',
+      userLevel: EnglishLevel.A2,
+    });
+
+    const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
+
+    expect(japanese?.grammarScope).toMatchObject({
+      scopeId: 'to-infinitive',
+      isScopeLocked: false,
+    });
   });
 
   it('keeps chip order deterministic for the same seed', () => {

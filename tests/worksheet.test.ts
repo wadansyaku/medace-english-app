@@ -166,7 +166,7 @@ describe('generateWorksheetQuestions', () => {
       grammarScopeId: 'basic-svo',
     });
 
-    expect(questions[0]?.answer).toBe('生徒は 繰り返す という語を 学ぶ');
+    expect(questions[0]?.answer).toBe('生徒は 今日 繰り返す という語を 学ぶ');
     expect(questions[0]?.tokens?.map((token) => token.text)).not.toContain('生徒は 生徒は');
   });
 
@@ -192,7 +192,7 @@ describe('generateWorksheetQuestions', () => {
     expect(stabilizeQuestion).toMatchObject({
       interactionType: 'TEXT_INPUT',
       promptText: 'The term stabilize is useful today.',
-      answer: '安定させる という語は 役に立つ',
+      answer: '安定させる という語は 今日 役に立つ',
       grammarScope: {
         scopeId: 'be-verb',
         labelJa: 'be動詞を使った文',

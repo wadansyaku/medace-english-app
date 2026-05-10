@@ -31,6 +31,13 @@ describe('app navigation paths', () => {
       selectedTask: createDefaultTaskIntentFromRoute('book-2', 'quiz'),
       publicRole: null,
     });
+
+    expect(parseNavigationPath('/english-practice')).toEqual({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+    });
   });
 
   it('builds stable paths for routing-backed views', () => {
@@ -48,6 +55,13 @@ describe('app navigation paths', () => {
       selectedTask: task,
       publicRole: null,
     })).toBe(`/study/${encodeURIComponent(getTaskRouteBookId(task))}${buildTaskQueryString(task)}`);
+
+    expect(buildNavigationPath({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+    })).toBe('/english-practice');
   });
 
   it('round-trips task query state for smart study routes', () => {
