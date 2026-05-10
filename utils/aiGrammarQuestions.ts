@@ -1,5 +1,5 @@
 import type { GrammarCurriculumScopeId, WorksheetQuestionMode } from '../types';
-import { resolveGrammarScopeSelection } from './grammarScope';
+import { buildGrammarScopeExplanation, resolveGrammarScopeSelection } from './grammarScope';
 import type { GeneratedWorksheetQuestion, WorksheetOrderToken } from './worksheet';
 
 type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
@@ -225,6 +225,7 @@ const normalizeClozeDraft = (
     sourceSentence,
     grammarFocus: grammarScope.labelJa,
     grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(grammarScope),
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った文で、空所に入る語形と文の形を確認します。'),
   };
 };
@@ -264,6 +265,7 @@ const normalizeEnglishOrderDraft = (
     sourceSentence: sourceSentence || orderedTokens.join(' '),
     grammarFocus: grammarScope.labelJa,
     grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(grammarScope),
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を、文の構造を意識して組み立てます。'),
   };
 };
@@ -305,6 +307,7 @@ const normalizeJapaneseOrderDraft = (
     sourceTranslation: sourceTranslation || orderedTokens.join(''),
     grammarFocus: grammarScope.labelJa,
     grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(grammarScope),
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を手がかりに、自然な日本語の順番へ戻します。'),
   };
 };
@@ -340,6 +343,7 @@ const normalizeJapaneseInputDraft = (
     sourceTranslation,
     grammarFocus: grammarScope.labelJa,
     grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(grammarScope),
     instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を読み、自然な日本語訳を最後まで入力します。'),
   };
 };

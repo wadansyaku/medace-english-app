@@ -14,7 +14,9 @@ import {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
+  GrammarCurriculumScopeId,
   InterventionKind,
+  JapaneseTranslationFeedback,
   LearningTrack,
   LearningTaskIntent,
   LearningTaskIntentType,
@@ -273,6 +275,8 @@ export interface StorageActionMap {
       missionAssignmentId?: string;
       taskIntentType?: LearningTaskIntentType;
       generatedProblemId?: string;
+      grammarScopeId?: GrammarCurriculumScopeId;
+      translationFeedback?: JapaneseTranslationFeedback;
     };
     response: null;
   };

@@ -40,6 +40,8 @@ const renderQuiz = (overrides: Partial<React.ComponentProps<typeof QuizRunningVi
     inputResult={null}
     spellingFeedbackTone={null}
     spellingFeedbackMessage={null}
+    translationFeedback={null}
+    checkingTranslationFeedback={false}
     persistingAttempt={false}
     saveError={null}
     hasPendingAttempt={false}
@@ -216,6 +218,70 @@ describe('QuizRunningView answer-bearing context', () => {
 
     expect(afterAnswer).toContain('観察する という語は 生徒に 復習される');
     expect(afterAnswer).toContain('受け身');
+  });
+
+  it('renders exam-oriented translation feedback and grammar explanation after scoring', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion,
+      mode: 'JA_TRANSLATION_INPUT',
+      interactionType: 'TEXT_INPUT',
+      promptLabel: '和訳全文入力',
+      promptText: 'The term is reviewed by students today.',
+      answer: 'その語は 今日 生徒によって 復習される',
+      sourceSentence: 'The term is reviewed by students today.',
+      sourceTranslation: 'その語は 今日 生徒によって 復習される',
+      grammarFocus: '受け身',
+      grammarScope: {
+        scopeId: 'passive-voice',
+        cefrLevel: EnglishLevel.B1,
+        labelJa: '受け身',
+        isExplicitScope: true,
+        source: 'EXPLICIT',
+      },
+      grammarExplanation: {
+        scopeId: 'passive-voice',
+        cefrLevel: EnglishLevel.B1,
+        labelJa: '受け身',
+        patternJa: 'be動詞 + 過去分詞で、される側を主語にします。',
+        examFocusJa: '誰が何をされたのかを補って訳します。',
+        commonMistakeJa: '過去形と過去分詞を混同しやすいです。',
+        automationDrillJa: 'be + 過去分詞をまとまりで反復します。',
+        threeSlotFrameJa: 'されるもの / be+過去分詞 / by+行為者',
+      },
+      options: undefined,
+    };
+
+    const rendered = renderQuiz({
+      currentQuestion: question,
+      answerInput: '生徒は今日その語を復習します',
+      inputResult: 'incorrect',
+      spellingFeedbackTone: 'incorrect',
+      spellingFeedbackMessage: '部分点: 受け身の関係を確認しましょう。',
+      translationFeedback: {
+        isCorrect: false,
+        score: 6,
+        maxScore: 10,
+        verdictLabel: '部分点',
+        examTarget: 'UNIVERSITY_ENTRANCE',
+        summaryJa: '意味の中心は取れていますが、受け身の関係が弱いです。',
+        strengths: ['主要語を訳せています。'],
+        issues: ['誰が何をされたかを補いましょう。'],
+        improvedTranslation: 'その語は今日、生徒によって復習される。',
+        grammarAdviceJa: 'be動詞 + 過去分詞を受け身として読みます。',
+        nextDrillJa: '主語 / be+過去分詞 / by の3ますで確認しましょう。',
+        criteria: [
+          { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
+          { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
+          { label: '受験答案らしさ', score: 2, maxScore: 3, comment: '答案として整えます。' },
+        ],
+      },
+    });
+
+    expect(rendered).toContain('6 / 10・部分点');
+    expect(rendered).toContain('大学受験');
+    expect(rendered).toContain('改善訳');
+    expect(rendered).toContain('その語は今日、生徒によって復習される。');
+    expect(rendered).toContain('3ます: されるもの / be+過去分詞 / by+行為者');
   });
 
   it('does not reveal unstructured AI grammar focus before answering', () => {

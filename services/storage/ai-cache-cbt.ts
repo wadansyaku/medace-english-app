@@ -22,6 +22,11 @@ export interface CbtObservation {
   difficultyLevel?: number | null;
 }
 
+export interface CbtDifficultyBand {
+  minDifficultyLevel: number;
+  maxDifficultyLevel: number;
+}
+
 export const clampCbtLevel = (value: number): number => {
   if (!Number.isFinite(value)) return 0.5;
   return Math.min(1, Math.max(0, value));
@@ -92,4 +97,17 @@ export const inferProblemDifficultyFromStats = (exposureCount: number, correctCo
   if (exposureCount <= 0) return 0.5;
   const correctRate = correctCount / exposureCount;
   return clampCbtLevel(1 - correctRate);
+};
+
+export const selectCbtDifficultyBand = (
+  state: CbtState | null | undefined,
+  width = 0.22,
+): CbtDifficultyBand => {
+  const level = clampCbtLevel(state?.level ?? 0.5);
+  const confidence = clampCbtLevel(state?.confidence ?? 0);
+  const adaptiveWidth = Math.max(0.14, width - (confidence * 0.08));
+  return {
+    minDifficultyLevel: clampCbtLevel(level - adaptiveWidth),
+    maxDifficultyLevel: clampCbtLevel(level + adaptiveWidth),
+  };
 };

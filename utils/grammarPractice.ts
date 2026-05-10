@@ -360,7 +360,7 @@ const resolveJapaneseAnswer = (
 
   const candidate = normalizeJapanese(word.exampleMeaning || '');
   const chips = tokenizeJapaneseAnswer(candidate, word.definition);
-  if (candidate && chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX) {
+  if (candidate && chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX && hasUniqueOrderingTokens(chips)) {
     return { answerText: candidate, source: 'example' };
   }
   return { answerText: createFallbackJapaneseAnswer(word, scopedAnswerText), source: 'fallback' };

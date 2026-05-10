@@ -44,6 +44,8 @@ export const learningService: LearningService = {
     missionAssignmentId,
     taskIntentType,
     generatedProblemId,
+    grammarScopeId,
+    translationFeedback,
   ) => learningClient.recordQuizAttempt(
     uid,
     wordId,
@@ -54,6 +56,8 @@ export const learningService: LearningService = {
     missionAssignmentId,
     taskIntentType,
     generatedProblemId,
+    grammarScopeId,
+    translationFeedback,
   ),
   reportWord: (wordId, reason) => catalogClient.reportWord(wordId, reason),
   saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType) => (

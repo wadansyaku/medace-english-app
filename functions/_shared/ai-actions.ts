@@ -1,5 +1,17 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, type GrammarCurriculumScopeId, WorksheetQuestionMode } from '../../types';
+import {
+  BookMetadata,
+  EnglishLevel,
+  LearningPlan,
+  LearningPreference,
+  StudentRiskLevel,
+  UserGrade,
+  WordData,
+  type GrammarCurriculumScopeId,
+  type JapaneseTranslationFeedback,
+  type TranslationExamTarget,
+  WorksheetQuestionMode,
+} from '../../types';
 import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
@@ -19,6 +31,7 @@ import {
   type AiUsageLogContext,
 } from './ai-metering';
 import {
+  readCbtLearnerSnapshot,
   readReusableAiGrammarQuestions,
   recordAiGeneratedProblem,
 } from './ai-cache-cbt';
@@ -70,9 +83,14 @@ const getAiClient = (env: AppEnv): GoogleGenAI => {
 
 const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-3-flash-preview';
 const GRAMMAR_PRACTICE_PROMPT_VERSION = 'grammar-practice-v2';
+const DEFAULT_TRANSLATION_FEEDBACK_MODEL = 'gemini-3-flash-preview';
 
 const resolveGrammarPracticeModel = (env: AppEnv): string => (
   String(env.AI_GRAMMAR_MODEL || '').trim() || DEFAULT_GRAMMAR_PRACTICE_MODEL
+);
+
+const resolveTranslationFeedbackModel = (env: AppEnv): string => (
+  String(env.AI_TRANSLATION_FEEDBACK_MODEL || '').trim() || DEFAULT_TRANSLATION_FEEDBACK_MODEL
 );
 
 const handleAiError = (error: unknown, fallbackMessage: string): never => {
@@ -325,6 +343,8 @@ Generate exactly ${questionCount} questions for CEFR ${userLevel}.
 ${grammarScope ? `Grammar range: ${grammarScope.labelJa} (${grammarScope.labelEn}). Every sentence must primarily practice this range.` : 'Choose a basic grammar range that fits the sentence naturally.'}
 Use only the provided wordId values. Generate at most one question per word.
 Prefer the provided example sentence/meaning when it is natural; otherwise write a new short sentence.
+Keep the sentence at i+1 difficulty: use the learned word plus mostly high-frequency A1-B1 words, and avoid long clauses unless the requested grammar range requires them.
+For Japanese learners, preserve the English word-order pattern clearly enough to support the "主語 / 動詞 / 目的語" habit.
 Keep content school-safe, non-political, and non-medical-advice. Do not include explanations outside JSON.
 All Japanese text must be natural for a learner-facing app.
 
@@ -354,6 +374,7 @@ const generateGrammarPracticeQuestions = async (
   payload: any,
   model = resolveGrammarPracticeModel(env),
   beforeAiGenerate?: (requestUnits: number) => Promise<void>,
+  userId?: string,
 ): Promise<{
   questions: GeneratedWorksheetQuestion[];
   usedAi: boolean;
@@ -375,6 +396,9 @@ const generateGrammarPracticeQuestions = async (
 
   try {
     if (grammarScopeId) getGrammarCurriculumScope(grammarScopeId);
+    const cbtSnapshot = env.DB
+      ? await readCbtLearnerSnapshot(env, userId).catch(() => null)
+      : null;
     let cachedQuestions: GeneratedWorksheetQuestion[] = [];
     if (env.DB) {
       try {
@@ -382,6 +406,7 @@ const generateGrammarPracticeQuestions = async (
           wordIds: candidateWords.map((word) => word.id),
           questionMode: mode,
           grammarScopeId,
+          ...(cbtSnapshot?.difficultyBand || {}),
           limit: requestedCount,
         });
       } catch (cacheError) {
@@ -478,6 +503,170 @@ const generateGrammarPracticeQuestions = async (
     };
   } catch (error) {
     handleAiError(error, 'AI文法問題生成に失敗しました。');
+  }
+};
+
+const clampScore = (value: unknown, min: number, max: number): number => {
+  const numeric = Math.round(Number(value));
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+};
+
+const toStringArray = (value: unknown, fallback: string[]): string[] => (
+  Array.isArray(value)
+    ? value.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
+    : fallback
+);
+
+const normalizeTranslationFeedback = (
+  parsed: any,
+  payload: {
+    sourceSentence?: string;
+    expectedTranslation: string;
+    userTranslation?: string;
+    examTarget: TranslationExamTarget;
+  },
+): JapaneseTranslationFeedback => {
+  const maxScore = 10;
+  const criteria = Array.isArray(parsed?.criteria)
+    ? parsed.criteria.slice(0, 4).map((criterion: any) => ({
+      label: String(criterion?.label || '観点').slice(0, 24),
+      score: clampScore(criterion?.score, 0, clampScore(criterion?.maxScore ?? 3, 1, 5)),
+      maxScore: clampScore(criterion?.maxScore ?? 3, 1, 5),
+      comment: String(criterion?.comment || '').trim().slice(0, 120),
+    }))
+    : [];
+  const rawScore = criteria.length > 0
+    ? criteria.reduce((sum, criterion) => sum + criterion.score, 0)
+    : parsed?.score;
+  const score = clampScore(rawScore, 0, maxScore);
+
+  return {
+    isCorrect: typeof parsed?.isCorrect === 'boolean' ? parsed.isCorrect : score >= 8,
+    score,
+    maxScore,
+    verdictLabel: String(parsed?.verdictLabel || (score >= 8 ? '合格答案' : '要復習')).slice(0, 24),
+    examTarget: payload.examTarget,
+    sourceSentence: payload.sourceSentence,
+    expectedTranslation: payload.expectedTranslation,
+    userTranslation: payload.userTranslation,
+    summaryJa: String(parsed?.summaryJa || '和訳を採点しました。').trim().slice(0, 180),
+    strengths: toStringArray(parsed?.strengths, []),
+    issues: toStringArray(parsed?.issues, score >= 8 ? [] : ['意味や文構造に確認点があります。']),
+    improvedTranslation: String(parsed?.improvedTranslation || payload.expectedTranslation).trim().slice(0, 240),
+    grammarAdviceJa: String(parsed?.grammarAdviceJa || '主語・動詞・修飾語の関係を確認しましょう。').trim().slice(0, 180),
+    nextDrillJa: String(parsed?.nextDrillJa || '同じ英文を3ますで分けてから、もう一度訳しましょう。').trim().slice(0, 160),
+    criteria: criteria.length > 0
+      ? criteria
+      : [
+        { label: '意味', score: Math.min(score, 4), maxScore: 4, comment: '英文全体の意味を確認します。' },
+        { label: '文法構造', score: Math.min(Math.max(score - 4, 0), 3), maxScore: 3, comment: '主語・動詞・修飾語の関係を確認します。' },
+        { label: '受験答案らしさ', score: Math.min(Math.max(score - 7, 0), 3), maxScore: 3, comment: '採点者に伝わる自然な日本語へ整えます。' },
+      ],
+    usedAi: true,
+  };
+};
+
+const evaluateJapaneseTranslationAnswer = async (
+  env: AppEnv,
+  payload: any,
+  model = resolveTranslationFeedbackModel(env),
+): Promise<JapaneseTranslationFeedback> => {
+  const ai = getAiClient(env);
+  const sourceSentence = String(payload?.sourceSentence || '').trim();
+  const expectedTranslation = String(payload?.expectedTranslation || '').trim();
+  const userTranslation = String(payload?.userTranslation || '').trim();
+  const grammarScopeLabel = String(payload?.grammarScopeLabel || '').trim() || '文法範囲未指定';
+  const examTarget = (
+    payload?.examTarget === 'HIGH_SCHOOL_ENTRANCE'
+    || payload?.examTarget === 'UNIVERSITY_ENTRANCE'
+    || payload?.examTarget === 'GENERAL'
+  )
+    ? payload.examTarget as TranslationExamTarget
+    : 'GENERAL';
+
+  if (!sourceSentence || !expectedTranslation || !userTranslation) {
+    throw new HttpError(400, '和訳フィードバックに必要な英文・正解例・解答が不足しています。');
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: `
+あなたは日本の高校受験・大学受験を見据えた英語講師です。
+生徒の和訳を、単なる完全一致ではなく、意味・文法構造・答案日本語の観点で採点してください。
+
+方針:
+- 公式試験の認定判定ではなく、学習用フィードバックとして扱う。
+- 正解例と語順や表現が違っても、意味と構造が保たれていれば部分点を与える。
+- ただし、主語・動詞・否定・時制・受け身・比較・関係詞など、入試で失点しやすい構造の取り違えは明確に指摘する。
+- 「知る→できる→自動化」に進むよう、最後に短い次の練習を1つ出す。
+- 直訳の強制ではなく、採点者に伝わる自然な日本語へ整える。
+- 3ます英語の観点で、必要なら「だれが / どうする / 何を」を使って助言する。
+
+受験ターゲット: ${examTarget}
+文法範囲: ${grammarScopeLabel}
+英文: ${sourceSentence}
+正解例: ${expectedTranslation}
+生徒の解答: ${userTranslation}
+
+JSONのみで返してください。
+      `.trim(),
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            isCorrect: { type: Type.BOOLEAN },
+            score: { type: Type.NUMBER },
+            maxScore: { type: Type.NUMBER },
+            verdictLabel: { type: Type.STRING },
+            summaryJa: { type: Type.STRING },
+            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+            issues: { type: Type.ARRAY, items: { type: Type.STRING } },
+            improvedTranslation: { type: Type.STRING },
+            grammarAdviceJa: { type: Type.STRING },
+            nextDrillJa: { type: Type.STRING },
+            criteria: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  label: { type: Type.STRING },
+                  score: { type: Type.NUMBER },
+                  maxScore: { type: Type.NUMBER },
+                  comment: { type: Type.STRING },
+                },
+                required: ['label', 'score', 'maxScore', 'comment'],
+              },
+            },
+          },
+          required: [
+            'isCorrect',
+            'score',
+            'maxScore',
+            'verdictLabel',
+            'summaryJa',
+            'strengths',
+            'issues',
+            'improvedTranslation',
+            'grammarAdviceJa',
+            'nextDrillJa',
+            'criteria',
+          ],
+        },
+      },
+    });
+
+    if (!response.text) throw new Error('Empty response');
+    return normalizeTranslationFeedback(JSON.parse(response.text), {
+      sourceSentence,
+      expectedTranslation,
+      userTranslation,
+      examTarget,
+    });
+  } catch (error) {
+    handleAiError(error, 'AI和訳フィードバックに失敗しました。');
   }
 };
 
@@ -850,6 +1039,7 @@ export const handleAiAction = async (
             unitEstimate * Math.max(1, generatedUnits),
           );
         },
+        user.id,
       );
       await Promise.resolve(recordAiUsageEvent(env, user, {
         action: 'generateGrammarPracticeQuestions',
@@ -865,6 +1055,24 @@ export const handleAiAction = async (
         console.warn('AI grammar usage event write skipped:', error);
       });
       return result.questions;
+    }
+    case 'evaluateJapaneseTranslationAnswer': {
+      const model = resolveTranslationFeedbackModel(env);
+      return runMeteredAiAction(
+        env,
+        user,
+        'evaluateJapaneseTranslationAnswer',
+        () => evaluateJapaneseTranslationAnswer(env, body.payload, model),
+        logContext,
+        {
+          model,
+          estimatedCostMilliYen: getAiActionEstimate('evaluateJapaneseTranslationAnswer').estimatedCostMilliYen,
+          estimatedProviderCostMilliYen: getAiActionEstimate('evaluateJapaneseTranslationAnswer').estimatedCostMilliYen,
+          requestUnits: 1,
+          providerInputUnits: 1,
+          providerOutputUnits: 1,
+        },
+      );
     }
     case 'extractVocabularyFromText':
       return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload), logContext);

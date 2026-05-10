@@ -4,10 +4,12 @@ import {
   advanceCbtState,
   createAiCacheKey,
   inferProblemDifficultyFromStats,
+  selectCbtDifficultyBand,
 } from '../services/storage/ai-cache-cbt';
 import {
   readReusableAiGrammarQuestions,
   readReusableAiGrammarProblems,
+  recordCbtScopeAttempt,
   recordAiGeneratedProblem,
 } from '../functions/_shared/ai-cache-cbt';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
@@ -89,6 +91,26 @@ describe('AI cache and CBT helpers', () => {
     expect(afterIncorrect.confidence).toBeGreaterThan(0);
     expect(afterIncorrect.confidence).toBeLessThanOrEqual(1);
     expect(inferProblemDifficultyFromStats(4, 1)).toBe(0.75);
+    expect(selectCbtDifficultyBand(afterCorrect)).toEqual(expect.objectContaining({
+      minDifficultyLevel: expect.any(Number),
+      maxDifficultyLevel: expect.any(Number),
+    }));
+  });
+
+  it('records CBT scope attempts separately from the global learner profile', async () => {
+    const db = createMockDb();
+    db.firstQueue.push(null);
+
+    await recordCbtScopeAttempt({ DB: db } as any, {
+      userId: 'user-1',
+      grammarScopeId: 'passive-voice',
+      questionMode: 'JA_TRANSLATION_INPUT',
+      correct: false,
+      now: 100,
+    });
+
+    expect(db.queries.some((queryText) => queryText.includes('cbt_learner_scope_states'))).toBe(true);
+    expect(db.binds.at(-1)?.values.slice(0, 3)).toEqual(['user-1', 'passive-voice', 'JA_TRANSLATION_INPUT']);
   });
 
   it('writes generated grammar problems through the cache table first', async () => {

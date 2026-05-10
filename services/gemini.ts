@@ -1,4 +1,16 @@
-import { BookMetadata, EnglishLevel, LearningPlan, LearningPreference, StudentRiskLevel, UserGrade, WordData, type GrammarCurriculumScopeId, WorksheetQuestionMode } from '../types';
+import {
+  BookMetadata,
+  EnglishLevel,
+  LearningPlan,
+  LearningPreference,
+  StudentRiskLevel,
+  UserGrade,
+  WordData,
+  type GrammarCurriculumScopeId,
+  type JapaneseTranslationFeedback,
+  type TranslationExamTarget,
+  WorksheetQuestionMode,
+} from '../types';
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
@@ -212,6 +224,24 @@ export const generateGrammarPracticeQuestions = async (
       console.error('AI grammar practice generation failed:', error);
     }
     return [];
+  }
+};
+
+export const evaluateJapaneseTranslationAnswer = async (payload: {
+  sourceSentence: string;
+  expectedTranslation: string;
+  userTranslation: string;
+  grammarScopeLabel?: string;
+  grammarScopeId?: GrammarCurriculumScopeId;
+  examTarget?: TranslationExamTarget;
+}): Promise<JapaneseTranslationFeedback | null> => {
+  try {
+    return await callAi<JapaneseTranslationFeedback, typeof payload>('evaluateJapaneseTranslationAnswer', payload);
+  } catch (error) {
+    if (!isRateLimitError(error) && !isAiUnavailableError(error) && !isAccessDeniedError(error)) {
+      console.error('Japanese translation feedback failed:', error);
+    }
+    return null;
   }
 };
 

@@ -4,9 +4,13 @@ import {
   createAiCacheKey,
   getInitialCbtState,
   inferProblemDifficultyFromStats,
+  selectCbtDifficultyBand,
   type AiGeneratedContentKind,
+  type CbtDifficultyBand,
   type CbtState,
 } from '../../services/storage/ai-cache-cbt';
+import type { GrammarCurriculumScopeId, JapaneseTranslationFeedback } from '../../types';
+import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import type { AppEnv } from './types';
 
 type QualityStatus = 'READY' | 'NEEDS_REVIEW' | 'REJECTED';
@@ -104,6 +108,11 @@ export interface ReusableGrammarProblemQuery {
   limit?: number;
   maxDifficultyLevel?: number;
   minDifficultyLevel?: number;
+}
+
+export interface CbtLearnerSnapshot {
+  learner: CbtState;
+  difficultyBand: CbtDifficultyBand;
 }
 
 const clampLimit = (value: number | undefined, fallback: number): number => (
@@ -253,6 +262,39 @@ export const recordAiGeneratedProblem = async (
     .bind(content.id)
     .first<AiGeneratedProblemRow>();
   if (!row) throw new Error('AI生成問題の保存後取得に失敗しました。');
+  try {
+    await env.DB.prepare(`
+      INSERT INTO assessment_item_metadata (
+        problem_id, construct_id, skill_area, item_format, cefr_target,
+        calibration_status, review_status, irt_model, difficulty,
+        discrimination, fit, sample_size, exposure_rate, version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'UNREVIEWED', 'PENDING', 'NONE', ?, NULL, NULL, 0, 0, 1, ?, ?)
+      ON CONFLICT(problem_id) DO UPDATE SET
+        construct_id = excluded.construct_id,
+        skill_area = excluded.skill_area,
+        item_format = excluded.item_format,
+        cefr_target = excluded.cefr_target,
+        difficulty = excluded.difficulty,
+        updated_at = excluded.updated_at
+    `).bind(
+      row.id,
+      question.grammarScope?.scopeId || 'grammar-general',
+      question.mode === 'JA_TRANSLATION_INPUT'
+        ? 'translation-input'
+        : question.mode === 'JA_TRANSLATION_ORDER'
+          ? 'translation-order'
+          : question.mode === 'EN_WORD_ORDER'
+            ? 'english-word-order'
+            : 'grammar-application',
+      question.interactionType,
+      question.grammarScope?.cefrLevel || null,
+      row.difficulty_level,
+      now,
+      now,
+    ).run();
+  } catch (metadataError) {
+    console.warn('Assessment item metadata write skipped:', metadataError);
+  }
   return row;
 };
 
@@ -384,6 +426,7 @@ export const readReusableAiGrammarQuestions = async (
         seenWordIds.add(parsed.wordId);
         questions.push({
           ...parsed,
+          grammarExplanation: parsed.grammarExplanation || buildGrammarScopeExplanation(parsed.grammarScope),
           generatedProblemId: row.id,
           aiContentId: row.content_id,
         });
@@ -396,6 +439,121 @@ export const readReusableAiGrammarQuestions = async (
 
   await Promise.all(contentIds.map((contentId) => markAiGeneratedContentUsed(env, contentId, now)));
   return questions.slice(0, clampLimit(query.limit, 10));
+};
+
+export const readCbtLearnerSnapshot = async (
+  env: AppEnv,
+  userId: string | null | undefined,
+): Promise<CbtLearnerSnapshot> => {
+  if (!userId) {
+    const learner = getInitialCbtState();
+    return { learner, difficultyBand: selectCbtDifficultyBand(learner, 0.28) };
+  }
+  const row = await env.DB.prepare('SELECT * FROM cbt_learner_profiles WHERE user_id = ?')
+    .bind(userId)
+    .first<CbtRow>();
+  const learner = toCbtState(row, 'ability_level');
+  return {
+    learner,
+    difficultyBand: selectCbtDifficultyBand(learner),
+  };
+};
+
+export const recordCbtScopeAttempt = async (
+  env: AppEnv,
+  input: {
+    userId: string;
+    grammarScopeId: GrammarCurriculumScopeId;
+    questionMode: string;
+    correct: boolean;
+    difficultyLevel?: number | null;
+    responseTimeMs?: number;
+    now?: number;
+  },
+): Promise<CbtState> => {
+  const now = input.now ?? Date.now();
+  const row = await env.DB.prepare(`
+    SELECT * FROM cbt_learner_scope_states
+    WHERE user_id = ? AND grammar_scope_id = ? AND question_mode = ?
+  `).bind(input.userId, input.grammarScopeId, input.questionMode).first<CbtRow>();
+  const state = advanceCbtState(toCbtState(row, 'mastery_level'), {
+    correct: input.correct,
+    difficultyLevel: input.difficultyLevel ?? 0.5,
+  });
+  await env.DB.prepare(`
+    INSERT INTO cbt_learner_scope_states (
+      user_id, grammar_scope_id, question_mode, mastery_level, confidence,
+      attempt_count, correct_count, last_attempt_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, grammar_scope_id, question_mode) DO UPDATE SET
+      mastery_level = excluded.mastery_level,
+      confidence = excluded.confidence,
+      attempt_count = excluded.attempt_count,
+      correct_count = excluded.correct_count,
+      last_attempt_at = excluded.last_attempt_at,
+      updated_at = excluded.updated_at
+  `).bind(
+    input.userId,
+    input.grammarScopeId,
+    input.questionMode,
+    state.level,
+    state.confidence,
+    state.attemptCount,
+    state.correctCount,
+    now,
+    now,
+  ).run();
+  return state;
+};
+
+export const recordJapaneseTranslationFeedbackEvent = async (
+  env: AppEnv,
+  input: {
+    userId: string;
+    wordId: string;
+    bookId: string;
+    questionMode: string;
+    grammarScopeId?: GrammarCurriculumScopeId | null;
+    sourceSentence: string;
+    expectedTranslation: string;
+    userTranslation: string;
+    feedback: JapaneseTranslationFeedback;
+    now?: number;
+  },
+): Promise<void> => {
+  const now = input.now ?? Date.now();
+  const id = `translation-feedback-${createAiCacheKey({
+    contentKind: 'GRAMMAR_PROBLEM',
+    model: 'feedback',
+    promptVersion: 'v1',
+    wordId: input.wordId,
+    questionMode: input.questionMode,
+    grammarScopeId: input.grammarScopeId,
+    sourceText: `${input.userId}:${input.sourceSentence}:${input.userTranslation}:${now}`,
+  }).sourceHash}-${now}`;
+  await env.DB.prepare(`
+    INSERT INTO japanese_translation_feedback_events (
+      id, user_id, word_id, book_id, question_mode, grammar_scope_id,
+      source_sentence, expected_translation, user_translation, score, max_score,
+      is_correct, verdict_label, feedback_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id,
+    input.userId,
+    input.wordId,
+    input.bookId,
+    input.questionMode,
+    input.grammarScopeId || null,
+    input.sourceSentence,
+    input.expectedTranslation,
+    input.userTranslation,
+    input.feedback.score,
+    input.feedback.maxScore,
+    input.feedback.isCorrect ? 1 : 0,
+    input.feedback.verdictLabel,
+    JSON.stringify(input.feedback),
+    now,
+  ).run();
 };
 
 interface CbtRow {

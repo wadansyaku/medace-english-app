@@ -588,6 +588,8 @@ export class IndexedDBStorageService implements IStorageService {
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
     generatedProblemId?: string,
+    grammarScopeId?: import('../types').GrammarCurriculumScopeId,
+    translationFeedback?: import('../types').JapaneseTranslationFeedback,
   ): Promise<void> {
     return recordQuizAttemptFromHistory(
       this.getLearningHistoryContext(),
@@ -600,6 +602,8 @@ export class IndexedDBStorageService implements IStorageService {
       missionAssignmentId,
       taskIntentType,
       generatedProblemId,
+      grammarScopeId,
+      translationFeedback,
     );
   }
 

@@ -58,6 +58,7 @@ export interface AppEnv {
   WRITING_AI_MODE?: string;
   GEMINI_API_KEY?: string;
   AI_GRAMMAR_MODEL?: string;
+  AI_TRANSLATION_FEEDBACK_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_OCR_MODEL?: string;
   OPENAI_EVAL_MODEL?: string;

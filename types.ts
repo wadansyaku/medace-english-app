@@ -239,6 +239,11 @@ export interface GrammarCurriculumScope {
   labelJa: string;
   labelEn: string;
   descriptionJa: string;
+  patternJa: string;
+  examFocusJa: string;
+  commonMistakeJa: string;
+  automationDrillJa: string;
+  threeSlotFrameJa?: string;
   targetQuestionModes: WorksheetQuestionMode[];
 }
 
@@ -248,6 +253,48 @@ export interface GrammarScopeSelection {
   labelJa: string;
   isExplicitScope: boolean;
   source: GrammarScopeSelectionSource;
+}
+
+export interface GrammarScopeExplanation {
+  scopeId: GrammarCurriculumScopeId;
+  labelJa: string;
+  cefrLevel: EnglishLevel;
+  patternJa: string;
+  examFocusJa: string;
+  commonMistakeJa: string;
+  automationDrillJa: string;
+  threeSlotFrameJa?: string;
+}
+
+export type TranslationExamTarget =
+  | 'HIGH_SCHOOL_ENTRANCE'
+  | 'UNIVERSITY_ENTRANCE'
+  | 'GENERAL';
+
+export interface TranslationFeedbackCriterion {
+  label: string;
+  score: number;
+  maxScore: number;
+  comment: string;
+}
+
+export interface JapaneseTranslationFeedback {
+  isCorrect: boolean;
+  score: number;
+  maxScore: number;
+  verdictLabel: string;
+  examTarget: TranslationExamTarget;
+  sourceSentence?: string;
+  expectedTranslation?: string;
+  userTranslation?: string;
+  summaryJa: string;
+  strengths: string[];
+  issues: string[];
+  improvedTranslation: string;
+  grammarAdviceJa: string;
+  nextDrillJa: string;
+  criteria: TranslationFeedbackCriterion[];
+  usedAi?: boolean;
 }
 
 export interface UserStats {

@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
+  BookOpenCheck,
   CheckCircle,
   Eye,
   HelpCircle,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
+import type { JapaneseTranslationFeedback } from '../../types';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 
 interface QuizRunningViewProps {
@@ -30,6 +32,8 @@ interface QuizRunningViewProps {
   inputResult: 'correct' | 'incorrect' | null;
   spellingFeedbackTone: 'info' | 'correct' | 'incorrect' | null;
   spellingFeedbackMessage: string | null;
+  translationFeedback: JapaneseTranslationFeedback | null;
+  checkingTranslationFeedback: boolean;
   persistingAttempt: boolean;
   saveError: string | null;
   hasPendingAttempt: boolean;
@@ -63,6 +67,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   inputResult,
   spellingFeedbackTone,
   spellingFeedbackMessage,
+  translationFeedback,
+  checkingTranslationFeedback,
   persistingAttempt,
   saveError,
   hasPendingAttempt,
@@ -106,6 +112,10 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   const grammarScopeText = currentQuestion.grammarScope?.labelJa || (hasAnsweredQuestion ? currentQuestion.grammarFocus : '') || '';
   const shouldShowGrammarScope = Boolean(grammarScopeText && (currentQuestion.showGrammarScopeHint !== false || hasAnsweredQuestion));
   const hasHiddenGrammarScope = Boolean(grammarScopeText && currentQuestion.showGrammarScopeHint === false && !hasAnsweredQuestion);
+  const shouldShowGrammarExplanation = Boolean(
+    currentQuestion.grammarExplanation
+    && (currentQuestion.showGrammarScopeHint !== false || hasAnsweredQuestion)
+  );
   const shouldShowReferencePanel = Boolean(
     visibleSourceSentence
     || visibleSourceTranslation
@@ -114,6 +124,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     || hasHiddenSourceTranslation
     || hasHiddenGrammarScope,
   );
+  const isInputBusy = persistingAttempt || checkingTranslationFeedback;
 
   return (
   <div data-testid="quiz-running-view" className="space-y-4">
@@ -189,6 +200,34 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
         </div>
       )}
 
+      {shouldShowGrammarExplanation && currentQuestion.grammarExplanation && (
+        <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-black text-orange-800">
+            <BookOpenCheck className="h-4 w-4" />
+            {currentQuestion.grammarExplanation.labelJa}
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Pattern</div>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.patternJa}</p>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Exam</div>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.examFocusJa}</p>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Auto</div>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.automationDrillJa}</p>
+            </div>
+          </div>
+          {currentQuestion.grammarExplanation.threeSlotFrameJa && (
+            <div className="mt-3 inline-flex rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+              3ます: {currentQuestion.grammarExplanation.threeSlotFrameJa}
+            </div>
+          )}
+        </div>
+      )}
+
       {isTextInputMode ? (
         <div className={`mt-6 rounded-2xl px-4 py-4 ${showSpellingHint ? 'border border-amber-200 bg-amber-50' : 'border border-slate-200 bg-slate-50'}`}>
           {isHintMode ? (
@@ -219,7 +258,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                 和訳全文入力
               </div>
               <div className="mt-2 text-sm text-slate-600">
-                英文を見て、日本語訳を最後まで入力します。句読点や空白の違いは判定で吸収します。
+                英文を見て、日本語訳を最後まで入力します。受験答案として意味・文法・自然さを確認します。
               </div>
             </>
           )}
@@ -249,7 +288,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             <textarea
               value={answerInput}
               onChange={(event) => onChangeAnswerInput(event.target.value)}
-              disabled={!!inputResult || persistingAttempt}
+              disabled={!!inputResult || isInputBusy}
               autoFocus
               rows={4}
               className="ui-input min-h-[132px] resize-y text-base leading-relaxed"
@@ -260,7 +299,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               type="text"
               value={answerInput}
               onChange={(event) => onChangeAnswerInput(event.target.value)}
-              disabled={!!inputResult || persistingAttempt}
+              disabled={!!inputResult || isInputBusy}
               autoFocus
               className="ui-input text-lg"
               placeholder={showSpellingHint ? `${currentQuestion.hintPrefix || ''}...` : '英語をそのまま入力'}
@@ -277,16 +316,87 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               {spellingFeedbackMessage}
             </div>
           )}
+          {isTranslationInputMode && translationFeedback && (
+            <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4" data-testid="translation-feedback-card">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">Feedback</div>
+                  <div className="mt-1 text-xl font-black text-slate-900">
+                    {translationFeedback.score} / {translationFeedback.maxScore}・{translationFeedback.verdictLabel}
+                  </div>
+                </div>
+                <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+                  {translationFeedback.examTarget === 'HIGH_SCHOOL_ENTRANCE'
+                    ? '高校受験'
+                    : translationFeedback.examTarget === 'UNIVERSITY_ENTRANCE'
+                      ? '大学受験'
+                      : '総合'}
+                </span>
+              </div>
+              <p className="mt-3 text-sm font-bold leading-relaxed text-slate-800">{translationFeedback.summaryJa}</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {translationFeedback.criteria.map((criterion) => {
+                  const width = `${Math.min(100, Math.max(0, (criterion.score / Math.max(criterion.maxScore, 1)) * 100))}%`;
+                  return (
+                    <div key={criterion.label} className="rounded-xl border border-orange-100 bg-white px-3 py-3">
+                      <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-700">
+                        <span>{criterion.label}</span>
+                        <span>{criterion.score}/{criterion.maxScore}</span>
+                      </div>
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-orange-100">
+                        <div className="h-full rounded-full bg-orange-500" style={{ width }} />
+                      </div>
+                      <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">{criterion.comment}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              {(translationFeedback.strengths.length > 0 || translationFeedback.issues.length > 0) && (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {translationFeedback.strengths.length > 0 && (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3">
+                      <div className="text-xs font-black text-emerald-700">できている点</div>
+                      <ul className="mt-2 space-y-1 text-sm font-medium leading-relaxed text-emerald-800">
+                        {translationFeedback.strengths.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {translationFeedback.issues.length > 0 && (
+                    <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-3">
+                      <div className="text-xs font-black text-red-700">次に直す点</div>
+                      <ul className="mt-2 space-y-1 text-sm font-medium leading-relaxed text-red-800">
+                        {translationFeedback.issues.map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                <div className="text-xs font-black text-slate-500">改善訳</div>
+                <div className="mt-1 text-sm font-black leading-relaxed text-slate-900">{translationFeedback.improvedTranslation}</div>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-orange-100 bg-white px-3 py-3">
+                  <div className="text-xs font-black text-orange-700">文法の見方</div>
+                  <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">{translationFeedback.grammarAdviceJa}</p>
+                </div>
+                <div className="rounded-xl border border-orange-100 bg-white px-3 py-3">
+                  <div className="text-xs font-black text-orange-700">次の1問</div>
+                  <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">{translationFeedback.nextDrillJa}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="submit"
-              disabled={!answerInput.trim() || !!inputResult || persistingAttempt}
+              disabled={!answerInput.trim() || !!inputResult || isInputBusy}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
+              <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? 'AI採点中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
             </button>
             {isHintMode && !showSpellingHint && !inputResult && (
               <button
