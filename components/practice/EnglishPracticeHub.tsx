@@ -19,6 +19,7 @@ import {
 
 import {
   EnglishLevel,
+  type GrammarCurriculumCategoryId,
   UserGrade,
   type GrammarCurriculumScope,
   type GrammarCurriculumScopeId,
@@ -39,12 +40,29 @@ import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import { buildDeterministicTranslationFeedback } from '../../utils/worksheet';
 import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
 import { learningService } from '../../services/learning';
+import {
+  clearEnglishPracticeProgress,
+  getEnglishPracticeLaneLabel,
+  loadEnglishPracticeProgress,
+  recordEnglishPracticeAttempt,
+  saveEnglishPracticeProgress,
+  summarizeEnglishPracticeProgress,
+  type EnglishPracticeAttemptInput,
+} from '../../utils/englishPracticeProgress';
 import ReadingPracticeView from './ReadingPracticeView';
-import { buildReadingPracticePassages } from '../../utils/readingPractice';
+import JapaneseTranslationFeedbackCard from './JapaneseTranslationFeedbackCard';
+import {
+  buildReadingPracticePassages,
+  getReadingQuestionKindLabel,
+  type ReadingPracticeAnswerResult,
+  type ReadingPracticeSessionSummary,
+} from '../../utils/readingPractice';
 
 type PracticeLane = 'overview' | 'grammar' | 'translation' | 'reading';
 type GrammarMode = 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER';
 type TranslationMode = 'input' | 'order';
+type ScopeViewFilter = 'recommended' | 'weak' | 'all';
+type ScopeCategoryFilter = GrammarCurriculumCategoryId | 'all';
 
 interface EnglishPracticeHubProps {
   user: UserProfile;
@@ -207,6 +225,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [wordLoadFailed, setWordLoadFailed] = useState(false);
   const [practiceSeed, setPracticeSeed] = useState(1);
   const [grammarMode, setGrammarMode] = useState<GrammarMode>('GRAMMAR_CLOZE');
+  const [scopeViewFilter, setScopeViewFilter] = useState<ScopeViewFilter>('recommended');
+  const [scopeCategoryFilter, setScopeCategoryFilter] = useState<ScopeCategoryFilter>('all');
   const [randomScopeMode, setRandomScopeMode] = useState(true);
   const [showScopeHint, setShowScopeHint] = useState(true);
   const [grammarSelections, setGrammarSelections] = useState<Record<string, string>>({});
@@ -219,6 +239,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [translationFeedback, setTranslationFeedback] = useState<Record<string, JapaneseTranslationFeedback>>({});
   const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
   const [readingLevel, setReadingLevel] = useState<EnglishLevel>(userLevel);
+  const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
+  const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
 
   const grammarScopes = useMemo(
     () => getGrammarScopesForPracticeSelection({ mode: grammarMode }),
@@ -227,6 +249,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [selectedScopeIds, setSelectedScopeIds] = useState<GrammarCurriculumScopeId[]>(
     () => selectDefaultScopeIds(getGrammarScopesForPracticeSelection({ mode: 'GRAMMAR_CLOZE' }), userLevel),
   );
+
+  React.useEffect(() => {
+    setPracticeProgress(loadEnglishPracticeProgress(user.uid));
+  }, [user.uid]);
+
+  React.useEffect(() => {
+    saveEnglishPracticeProgress(practiceProgress);
+  }, [practiceProgress]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -309,6 +339,68 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     })
   ), [practiceSeed, readingLevel]);
 
+  const progressSummary = useMemo(
+    () => summarizeEnglishPracticeProgress(practiceProgress),
+    [practiceProgress],
+  );
+
+  const weakScopeById = useMemo(
+    () => new Map(progressSummary.weakGrammarScopes.map((scope) => [scope.scopeId, scope])),
+    [progressSummary.weakGrammarScopes],
+  );
+
+  const recommendedScopeIds = useMemo(() => {
+    const availableIds = new Set(grammarScopes.map((scope) => scope.id));
+    const fromRecommendation = progressSummary.recommendation.scopeIds.filter((scopeId) => availableIds.has(scopeId));
+    if (fromRecommendation.length > 0) return fromRecommendation;
+    return selectDefaultScopeIds(grammarScopes, userLevel);
+  }, [grammarScopes, progressSummary.recommendation.scopeIds, userLevel]);
+
+  const visibleGrammarScopes = useMemo(() => {
+    const baseScopes = grammarScopes.filter((scope) => (
+      scopeCategoryFilter === 'all' || scope.curriculumCategoryId === scopeCategoryFilter
+    ));
+    if (scopeViewFilter === 'all') return baseScopes;
+    if (scopeViewFilter === 'weak') {
+      const weakIds = new Set(progressSummary.weakGrammarScopes.map((scope) => scope.scopeId));
+      return baseScopes.filter((scope) => weakIds.has(scope.id));
+    }
+    const recommendedIds = new Set(recommendedScopeIds);
+    return baseScopes.filter((scope) => recommendedIds.has(scope.id));
+  }, [grammarScopes, progressSummary.weakGrammarScopes, recommendedScopeIds, scopeCategoryFilter, scopeViewFilter]);
+
+  const grammarCategoryOptions = useMemo(() => {
+    const seen = new Set<GrammarCurriculumCategoryId>();
+    const categories: Array<{ id: GrammarCurriculumCategoryId; label: string; count: number }> = [];
+    grammarScopes.forEach((scope) => {
+      const current = categories.find((category) => category.id === scope.curriculumCategoryId);
+      if (current) {
+        current.count += 1;
+        return;
+      }
+      if (!seen.has(scope.curriculumCategoryId)) {
+        seen.add(scope.curriculumCategoryId);
+        categories.push({
+          id: scope.curriculumCategoryId,
+          label: scope.curriculumCategoryLabelJa,
+          count: 1,
+        });
+      }
+    });
+    return categories;
+  }, [grammarScopes]);
+
+  React.useEffect(() => {
+    setReadingSummary(null);
+  }, [readingPassages]);
+
+  const recordPracticeAttempt = React.useCallback((attempt: EnglishPracticeAttemptInput) => {
+    setPracticeProgress((current) => {
+      const base = current.userUid === user.uid ? current : loadEnglishPracticeProgress(user.uid);
+      return recordEnglishPracticeAttempt(base, attempt);
+    });
+  }, [user.uid]);
+
   const resetGeneratedPractice = () => {
     setPracticeSeed((current) => current + 1);
     setGrammarSelections({});
@@ -320,6 +412,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setTranslationFeedback({});
   };
 
+  const resetPracticeProgress = () => {
+    setPracticeProgress(clearEnglishPracticeProgress(user.uid));
+  };
+
   const toggleScope = (scopeId: GrammarCurriculumScopeId) => {
     setSelectedScopeIds((current) => {
       if (current.includes(scopeId)) {
@@ -327,6 +423,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       }
       return [...current, scopeId];
     });
+  };
+
+  const applyRecommendedScopes = () => {
+    setSelectedScopeIds(recommendedScopeIds.length > 0 ? recommendedScopeIds : selectDefaultScopeIds(grammarScopes, userLevel));
+    setScopeViewFilter(recommendedScopeIds.length > 0 ? 'recommended' : 'all');
+    setScopeCategoryFilter('all');
   };
 
   const addOrderChip = (itemId: string, chipId: string, surface: 'grammar' | 'translation') => {
@@ -344,6 +446,34 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       ...current,
       [itemId]: (current[itemId] || []).filter((id) => id !== chipId),
     }));
+  };
+
+  const handleGrammarCheck = (item: GrammarPracticeItem, correct: boolean) => {
+    setCheckedGrammarItems((current) => ({ ...current, [item.id]: true }));
+    recordPracticeAttempt({
+      lane: 'grammar',
+      mode: grammarMode,
+      correct,
+      wordId: item.wordId,
+      word: item.word,
+      scopeId: item.grammarScope.scopeId,
+      scopeLabelJa: item.grammarScope.labelJa,
+      level: userLevel,
+    });
+  };
+
+  const handleTranslationOrderCheck = (item: JapaneseWordOrderPracticeItem, correct: boolean) => {
+    setCheckedTranslationOrders((current) => ({ ...current, [item.id]: true }));
+    recordPracticeAttempt({
+      lane: 'translation',
+      mode: 'JA_TRANSLATION_ORDER',
+      correct,
+      wordId: item.wordId,
+      word: item.word,
+      scopeId: item.grammarScope.scopeId,
+      scopeLabelJa: item.grammarScope.labelJa,
+      level: userLevel,
+    });
   };
 
   const handleTranslationSubmit = async (item: JapaneseWordOrderPracticeItem) => {
@@ -365,82 +495,176 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
     if (!feedback.isCorrect) {
       setCheckingTranslationId(item.id);
-      const aiFeedback = await evaluateJapaneseTranslationAnswer({
-        sourceSentence: item.sourceSentence,
-        expectedTranslation: item.answerText,
-        userTranslation: input,
-        grammarScopeLabel: item.grammarScope.labelJa,
-        grammarScopeId: item.grammarScope.scopeId,
-        examTarget,
-      });
-      if (aiFeedback) {
-        feedback = aiFeedback;
+      try {
+        const aiFeedback = await evaluateJapaneseTranslationAnswer({
+          sourceSentence: item.sourceSentence,
+          expectedTranslation: item.answerText,
+          userTranslation: input,
+          grammarScopeLabel: item.grammarScope.labelJa,
+          grammarScopeId: item.grammarScope.scopeId,
+          examTarget,
+        });
+        if (aiFeedback) {
+          feedback = aiFeedback;
+        }
+      } catch {
+        feedback = {
+          ...feedback,
+          summaryJa: `${feedback.summaryJa} AI採点に接続できないため、今回は正解例との差分で暫定フィードバックを表示しています。`,
+          issues: feedback.issues.length > 0
+            ? feedback.issues
+            : ['AI採点が利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
+        };
+      } finally {
+        setCheckingTranslationId(null);
       }
-      setCheckingTranslationId(null);
     }
 
     setTranslationFeedback((current) => ({
       ...current,
       [item.id]: feedback,
     }));
+    recordPracticeAttempt({
+      lane: 'translation',
+      mode: 'JA_TRANSLATION_INPUT',
+      correct: feedback.isCorrect,
+      score: feedback.score,
+      maxScore: feedback.maxScore,
+      wordId: item.wordId,
+      word: item.word,
+      scopeId: item.grammarScope.scopeId,
+      scopeLabelJa: item.grammarScope.labelJa,
+      level: userLevel,
+    });
   };
 
-  const renderOverview = () => (
-    <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr]">
-      <section className="overflow-hidden rounded-lg border border-medace-200 bg-medace-700 text-white shadow-sm">
-        <div className="px-5 py-6 md:px-7 md:py-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/72">
-            Practice Hub
-          </div>
-          <h1 className="mt-4 max-w-2xl text-3xl font-black leading-tight tracking-tight md:text-5xl">
-            単語テストから独立した英語演習
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-white/78 md:text-base">
-            大手参考書型の文法範囲、受験答案としての和訳、根拠を確認する長文読解を、目的別に切り替えます。
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveLane('grammar')}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-black text-medace-900 transition-colors hover:bg-orange-50"
-            >
-              文法から始める <ArrowRight className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onStartVocabulary}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-white/15"
-            >
-              単語に戻る
-            </button>
-          </div>
-        </div>
-      </section>
+  const handleReadingAnswer = React.useCallback((result: ReadingPracticeAnswerResult) => {
+    recordPracticeAttempt({
+      lane: 'reading',
+      mode: 'READING',
+      correct: result.correct,
+      level: readingLevel,
+      readingQuestionKind: result.kind,
+    });
+  }, [readingLevel, recordPracticeAttempt]);
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        {laneConfig.slice(1).map((lane) => {
-          const Icon = lane.icon;
-          return (
-            <button
-              key={lane.id}
-              type="button"
-              onClick={() => setActiveLane(lane.id)}
-              className="rounded-lg border border-orange-100 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:border-medace-300 hover:bg-medace-50"
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-medace-50 text-medace-700">
-                <Icon className="h-5 w-5" />
-              </div>
-              <div className="mt-4 text-lg font-black text-slate-950">{lane.title}</div>
-              <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">{lane.description}</p>
-            </button>
-          );
-        })}
-        <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Level Adaptive</div>
-          <div className="mt-2 text-lg font-black text-slate-950">{LEVEL_LABELS[userLevel]}</div>
-          <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
-            例文と読解本文は現在の英語レベルを上限にし、難しすぎる構文を避けます。
-          </p>
+  const handleReadingComplete = React.useCallback((summary: ReadingPracticeSessionSummary) => {
+    setReadingSummary(summary);
+  }, []);
+
+  const renderOverview = () => (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr]">
+        <section className="overflow-hidden rounded-lg border border-medace-200 bg-medace-700 text-white shadow-sm">
+          <div className="px-5 py-6 md:px-7 md:py-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/72">
+              Practice Hub
+            </div>
+            <h1 className="mt-4 max-w-2xl text-3xl font-black leading-tight tracking-tight md:text-5xl">
+              単語テストから独立した英語演習
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm font-medium leading-relaxed text-white/78 md:text-base">
+              大手参考書型の文法範囲、受験答案としての和訳、根拠を確認する長文読解を、目的別に切り替えます。
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveLane(progressSummary.recommendation.lane)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-black text-medace-900 transition-colors hover:bg-orange-50"
+              >
+                {progressSummary.recommendation.actionJa} <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onStartVocabulary}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-white/15"
+              >
+                単語に戻る
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-3 sm:grid-cols-2">
+          {laneConfig.slice(1).map((lane) => {
+            const Icon = lane.icon;
+            const laneSummary = progressSummary.laneSummaries[lane.id as 'grammar' | 'translation' | 'reading'];
+            return (
+              <button
+                key={lane.id}
+                type="button"
+                onClick={() => setActiveLane(lane.id)}
+                className="rounded-lg border border-orange-100 bg-white px-4 py-4 text-left shadow-sm transition-colors hover:border-medace-300 hover:bg-medace-50"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-medace-50 text-medace-700">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div className="mt-4 text-lg font-black text-slate-950">{lane.title}</div>
+                <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">{lane.description}</p>
+                <div className="mt-3 text-xs font-black text-medace-700">
+                  {laneSummary.total > 0 ? `${laneSummary.total}回 / 正答率 ${laneSummary.accuracy}%` : '未演習'}
+                </div>
+              </button>
+            );
+          })}
+          <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Level Adaptive</div>
+            <div className="mt-2 text-lg font-black text-slate-950">{LEVEL_LABELS[userLevel]}</div>
+            <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
+              推奨範囲は現在レベルを中心にし、上位レベルは挑戦問題として明示します。
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Adaptive Review</div>
+            <h2 className="mt-1 text-xl font-black text-slate-950">{progressSummary.recommendation.labelJa}</h2>
+            <div className="mt-1 text-xs font-black text-medace-700">
+              おすすめレーン: {getEnglishPracticeLaneLabel(progressSummary.recommendation.lane)}
+            </div>
+            <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">{progressSummary.recommendation.reasonJa}</p>
+          </div>
+          <button
+            type="button"
+            onClick={resetPracticeProgress}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-500 transition-colors hover:border-orange-200 hover:text-medace-700"
+          >
+            履歴をリセット
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+            <div className="text-xs font-black text-medace-700">全体</div>
+            <div className="mt-2 text-2xl font-black text-slate-950">{progressSummary.total}回</div>
+            <p className="mt-1 text-sm font-bold text-slate-600">正答率 {progressSummary.accuracy}%</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+            <div className="text-xs font-black text-slate-500">弱い文法範囲</div>
+            <div className="mt-2 space-y-1">
+              {progressSummary.weakGrammarScopes.length > 0
+                ? progressSummary.weakGrammarScopes.slice(0, 2).map((scope) => (
+                  <div key={scope.scopeId} className="text-sm font-black text-slate-800">
+                    {scope.labelJa} <span className="text-medace-700">{scope.accuracy}%</span>
+                  </div>
+                ))
+                : <p className="text-sm font-bold text-slate-500">まだ偏りは出ていません</p>}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+            <div className="text-xs font-black text-slate-500">弱い読解設問</div>
+            <div className="mt-2 space-y-1">
+              {progressSummary.weakReadingKinds.length > 0
+                ? progressSummary.weakReadingKinds.slice(0, 2).map((kind) => (
+                  <div key={kind.kind} className="text-sm font-black text-slate-800">
+                    {kind.labelJa} <span className="text-medace-700">{kind.accuracy}%</span>
+                  </div>
+                ))
+                : <p className="text-sm font-bold text-slate-500">長文を解くと表示されます</p>}
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -482,7 +706,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <button
               type="button"
               disabled={!selected || isChecked}
-              onClick={() => setCheckedGrammarItems((current) => ({ ...current, [item.id]: true }))}
+              onClick={() => handleGrammarCheck(item, correct)}
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
@@ -547,7 +771,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <button
               type="button"
               disabled={orderedChipIds.length !== item.correctChipIds.length || isChecked}
-              onClick={() => setCheckedGrammarItems((current) => ({ ...current, [item.id]: true }))}
+              onClick={() => handleGrammarCheck(item, correct)}
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
@@ -584,6 +808,25 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
           Next Stage・Vintage・Scramble・Evergreen 型の章立てに近いカテゴリで、複数範囲を横断できます。
         </p>
+        <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Scope Coach</div>
+              <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">
+                {progressSummary.weakGrammarScopes.length > 0
+                  ? `${progressSummary.weakGrammarScopes[0].labelJa} を優先して復習します。`
+                  : 'まずは現在レベルの推奨範囲から始めます。'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={applyRecommendedScopes}
+              className="rounded-lg bg-white px-3 py-2 text-xs font-black text-medace-800 shadow-sm"
+            >
+              推奨範囲を選択
+            </button>
+          </div>
+        </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {[
@@ -634,10 +877,65 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           </button>
         </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { id: 'recommended' as ScopeViewFilter, label: '推奨' },
+            { id: 'weak' as ScopeViewFilter, label: '弱点' },
+            { id: 'all' as ScopeViewFilter, label: '全範囲' },
+          ].map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setScopeViewFilter(filter.id)}
+              className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+                scopeViewFilter === filter.id
+                  ? 'border-medace-500 bg-medace-50 text-medace-800'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setScopeCategoryFilter('all')}
+            className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+              scopeCategoryFilter === 'all'
+                ? 'border-medace-500 bg-medace-50 text-medace-800'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+            }`}
+          >
+            章すべて
+          </button>
+          {grammarCategoryOptions.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => setScopeCategoryFilter(category.id)}
+              className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+                scopeCategoryFilter === category.id
+                  ? 'border-medace-500 bg-medace-50 text-medace-800'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+              }`}
+            >
+              {category.label} {category.count}
+            </button>
+          ))}
+        </div>
+
         <div className="mt-4 max-h-[520px] overflow-y-auto pr-1">
           <div className="grid gap-2">
-            {grammarScopes.map((scope) => {
+            {visibleGrammarScopes.length === 0 && (
+              <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-3 py-4 text-sm font-bold text-medace-800">
+                この条件の範囲はまだありません。全範囲か別の章に切り替えてください。
+              </div>
+            )}
+            {visibleGrammarScopes.map((scope) => {
               const selected = selectedScopeIds.includes(scope.id);
+              const weakScope = weakScopeById.get(scope.id);
               return (
                 <button
                   key={scope.id}
@@ -654,7 +952,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       <div className="text-sm font-black">{scope.labelJa}</div>
                       <div className="mt-1 text-xs font-bold text-slate-500">{scope.curriculumCategoryLabelJa} / {scope.groupLabelJa}</div>
                     </div>
-                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[11px] font-black text-medace-700">{scope.levelMin}-{scope.levelMax}</span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-medace-700">{scope.levelMin}-{scope.levelMax}</span>
+                      {weakScope && (
+                        <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-black text-orange-800">
+                          弱点 {weakScope.accuracy}%
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -751,14 +1056,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     </button>
                   </div>
                   {feedback && (
-                    <div className={`mt-4 rounded-lg border px-4 py-4 ${
-                      feedback.isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'
-                    }`}>
-                      <div className="text-sm font-black text-slate-950">{feedback.verdictLabel} / {feedback.score}点</div>
-                      <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">{feedback.summaryJa}</p>
-                      <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">改善例: {feedback.improvedTranslation || feedback.expectedTranslation}</p>
-                      <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">次の練習: {feedback.nextDrillJa}</p>
-                    </div>
+                    <JapaneseTranslationFeedbackCard feedback={feedback} />
                   )}
                 </>
               ) : (
@@ -798,7 +1096,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     <button
                       type="button"
                       disabled={orderedChipIds.length !== item.correctChipIds.length || orderChecked}
-                      onClick={() => setCheckedTranslationOrders((current) => ({ ...current, [item.id]: true }))}
+                      onClick={() => handleTranslationOrderCheck(item, orderCorrect)}
                       className="inline-flex min-h-10 items-center rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                       判定する
@@ -827,7 +1125,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Reading</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">長文読解演習</h2>
             <p className="mt-1 text-sm font-bold leading-relaxed text-slate-500">
-              本文を読み、選択肢だけでなく根拠文と日本語解説まで確認します。
+              本文を読み、選択肢だけでなく根拠文と日本語解説まで確認します。上位レベルは挑戦として扱います。
             </p>
           </div>
           <button
@@ -840,23 +1138,45 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           </button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {Object.values(EnglishLevel).map((level) => (
-            <button
-              key={level}
-              type="button"
-              onClick={() => setReadingLevel(level)}
-              className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
-                readingLevel === level
-                  ? 'border-medace-600 bg-medace-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
-              }`}
-            >
-              {LEVEL_LABELS[level]}
-            </button>
-          ))}
+          {Object.values(EnglishLevel).map((level) => {
+            const isChallengeLevel = compareEnglishLevels(level, userLevel) > 0;
+            return (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setReadingLevel(level)}
+                className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
+                  readingLevel === level
+                    ? 'border-medace-600 bg-medace-600 text-white'
+                    : isChallengeLevel
+                      ? 'border-orange-200 bg-orange-50 text-orange-800 hover:border-medace-300'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
+                }`}
+              >
+                {LEVEL_LABELS[level]}{isChallengeLevel ? '・挑戦' : ''}
+              </button>
+            );
+          })}
         </div>
       </section>
-      <ReadingPracticeView passages={readingPassages} />
+      {readingSummary && (
+        <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+          <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Reading Review</div>
+          <h3 className="mt-1 text-lg font-black text-slate-950">
+            今回 {readingSummary.correct} / {readingSummary.total} 問正解
+          </h3>
+          <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
+            {readingSummary.weakQuestionKinds.length > 0
+              ? `次は ${readingSummary.weakQuestionKinds.map(getReadingQuestionKindLabel).join('・')} の根拠探しを短く復習します。`
+              : '設問種別の偏りはありません。次は1つ上の本文に挑戦できます。'}
+          </p>
+        </section>
+      )}
+      <ReadingPracticeView
+        passages={readingPassages}
+        onAnswer={handleReadingAnswer}
+        onComplete={handleReadingComplete}
+      />
     </div>
   );
 
@@ -892,6 +1212,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-500">
               {wordsLoading ? '単語を準備中' : wordLoadFailed || sessionWords.length === 0 ? 'サンプル問題' : `${sessionWords.length}語から生成`}
+            </span>
+            <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
+              演習 {progressSummary.total}回 / {progressSummary.accuracy}%
             </span>
           </div>
         </div>

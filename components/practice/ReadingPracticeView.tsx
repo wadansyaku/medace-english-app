@@ -54,6 +54,28 @@ const questionIconByKind: Record<ReadingQuestion['kind'], React.ElementType> = {
   GRAMMAR_STRUCTURE: FileText,
 };
 
+const readingQuestionKindOrder: ReadingQuestion['kind'][] = [
+  'CONTENT_MATCH',
+  'REFERENCE_OR_MAIN_IDEA',
+  'VOCAB_INFERENCE',
+  'GRAMMAR_STRUCTURE',
+];
+
+const getNextActionForQuestion = (
+  question: ReadingQuestion,
+  correct: boolean,
+): string => {
+  if (correct) {
+    if (question.kind === 'GRAMMAR_STRUCTURE') return '同じ文の主語・動詞・修飾語をもう一度声に出して確認します。';
+    if (question.kind === 'VOCAB_INFERENCE') return '根拠文の前後から、知らない語の意味を日本語で一言にまとめます。';
+    return '根拠文と選択肢の言い換えを1つだけメモします。';
+  }
+  if (question.kind === 'CONTENT_MATCH') return '選択肢の日本語を先に細かく読まず、本文中で同じ内容を述べる一文を探します。';
+  if (question.kind === 'REFERENCE_OR_MAIN_IDEA') return '指示語は直前の名詞、要旨は最初と最後の文を優先して確認します。';
+  if (question.kind === 'VOCAB_INFERENCE') return '知らない語だけを見ず、直前直後の動作・理由・結果から意味を絞ります。';
+  return 'その文の主語、動詞、後ろから説明する語句を線で分けます。';
+};
+
 const HighlightedPassage: React.FC<{ text: string; evidenceSentence?: string }> = ({
   text,
   evidenceSentence,
@@ -142,6 +164,25 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
     currentQuestion ? getReadingQuestionKindLabel(currentQuestion.kind) : ''
   ), [currentQuestion]);
 
+  const kindProgress = useMemo(() => readingQuestionKindOrder
+    .map((kind) => {
+      const total = passages.reduce(
+        (sum, passage) => sum + passage.questions.filter((question) => question.kind === kind).length,
+        0,
+      );
+      const answered = answeredResults.filter((result) => result.kind === kind);
+      const correct = answered.filter((result) => result.correct).length;
+      return {
+        kind,
+        label: getReadingQuestionKindLabel(kind),
+        total,
+        answered: answered.length,
+        correct,
+        accuracy: answered.length > 0 ? Math.round((correct / answered.length) * 100) : 0,
+      };
+    })
+    .filter((item) => item.total > 0), [answeredResults, passages]);
+
   if (!currentPassage || !currentQuestion) {
     return (
       <section className={`ui-panel ${className}`} data-testid="reading-practice-empty">
@@ -213,6 +254,33 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
           <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
             {currentKindLabel}
           </div>
+        </div>
+      </section>
+
+      <section className="ui-panel-subtle">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">設問タイプ</div>
+            <p className="mt-1 text-sm font-bold text-slate-700">設問ごとに弱点を残して、次の本文選びにつなげます。</p>
+          </div>
+          {completed && (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+              完了 {correctCount} / {totalQuestions}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {kindProgress.map((item) => (
+            <div key={item.kind} className="rounded-2xl border border-white/80 bg-white px-3 py-3">
+              <div className="text-xs font-black text-slate-500">{item.label}</div>
+              <div className="mt-2 flex items-end justify-between gap-2">
+                <span className="text-lg font-black text-slate-950">{item.answered}/{item.total}</span>
+                <span className={`text-xs font-black ${item.answered > 0 && item.accuracy < 70 ? 'text-red-600' : 'text-medace-700'}`}>
+                  {item.answered > 0 ? `${item.accuracy}%` : '未回答'}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -326,6 +394,12 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">解説</div>
                 <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.explanationJa}</p>
               </div>
+            </div>
+            <div className="mt-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">次の見方</div>
+              <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">
+                {getNextActionForQuestion(currentQuestion, answerResult.correct)}
+              </p>
             </div>
           </div>
         )}
