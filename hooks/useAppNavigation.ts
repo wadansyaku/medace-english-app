@@ -14,7 +14,7 @@ import {
   parseTaskIntentFromSearch,
 } from '../shared/learningTask';
 
-export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
+export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 
@@ -28,6 +28,7 @@ export interface AppNavigationState {
 export type AppNavigationAction =
   | { type: 'reset'; historyMode?: NavigationHistoryMode }
   | { type: 'go-home'; view: HomeAppRoute; historyMode?: NavigationHistoryMode }
+  | { type: 'open-english-practice'; historyMode?: NavigationHistoryMode }
   | { type: 'open-task'; task: LearningTaskIntent; historyMode?: NavigationHistoryMode }
   | { type: 'finish-book-view'; historyMode?: NavigationHistoryMode }
   | { type: 'open-public-info'; historyMode?: NavigationHistoryMode }
@@ -110,6 +111,14 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   }
 
   if (normalizedPath === '/dashboard') return buildHomeState('dashboard');
+  if (normalizedPath === '/english-practice') {
+    return {
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+    };
+  }
   if (normalizedPath === '/instructor') return buildHomeState('instructor');
   if (normalizedPath === '/admin') return buildHomeState('admin');
 
@@ -144,6 +153,8 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
       return state.publicRole ? getPublicBusinessRolePath(state.publicRole) : '/public';
     case 'dashboard':
       return '/dashboard';
+    case 'englishPractice':
+      return '/english-practice';
     case 'instructor':
       return '/instructor';
     case 'admin':
@@ -187,6 +198,13 @@ const navigationReducer = (
       return {
         currentView: action.view,
         returnView: action.view,
+        selectedTask: null,
+        publicRole: null,
+      };
+    case 'open-english-practice':
+      return {
+        currentView: 'englishPractice',
+        returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
         selectedTask: null,
         publicRole: null,
       };

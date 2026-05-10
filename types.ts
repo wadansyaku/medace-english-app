@@ -212,16 +212,30 @@ export const LEARNING_PREFERENCE_INTENSITY_LABELS: Record<LearningPreferenceInte
 export type GrammarCurriculumScopeId =
   | 'basic-svo'
   | 'be-verb'
+  | 'basic-tense'
+  | 'progressive-aspect'
   | 'modal-base-verb'
   | 'time-preposition-phrase'
   | 'to-infinitive'
   | 'gerund'
+  | 'participle-modifier'
   | 'comparative'
+  | 'pronoun-reference'
   | 'when-while-clause'
   | 'passive-voice'
   | 'present-perfect'
   | 'relative-clause'
-  | 'first-conditional';
+  | 'first-conditional'
+  | 'subjunctive-mood'
+  | 'subject-verb-agreement'
+  | 'interrogative-word-order'
+  | 'negation-emphasis'
+  | 'reported-speech'
+  | 'verb-patterns'
+  | 'adjective-adverb-usage'
+  | 'noun-usage'
+  | 'idiomatic-expression'
+  | 'conversation-expression';
 
 export type GrammarCurriculumCategory =
   | 'sentence-pattern'
@@ -230,12 +244,51 @@ export type GrammarCurriculumCategory =
   | 'clause'
   | 'comparison';
 
+export type GrammarCurriculumGroupId =
+  | 'sentence-basics'
+  | 'verb-system'
+  | 'verbals-and-modifiers'
+  | 'clauses-and-connectors'
+  | 'nominals-and-function-words'
+  | 'syntax-control'
+  | 'usage-and-expression';
+
+export type GrammarCurriculumCategoryId =
+  | 'sentence-patterns'
+  | 'tense'
+  | 'voice'
+  | 'modals'
+  | 'subjunctive'
+  | 'infinitive'
+  | 'gerund'
+  | 'participle'
+  | 'comparison'
+  | 'pronouns'
+  | 'relatives'
+  | 'conjunctions'
+  | 'prepositions'
+  | 'agreement'
+  | 'questions-and-word-order'
+  | 'negation-ellipsis-emphasis'
+  | 'sequence-and-speech'
+  | 'verb-usage'
+  | 'adjective-adverb-usage'
+  | 'noun-usage'
+  | 'idioms'
+  | 'conversation';
+
 export type GrammarScopeSelectionSource = 'EXPLICIT' | 'INFERRED' | 'FALLBACK';
 
 export interface GrammarCurriculumScope {
   id: GrammarCurriculumScopeId;
   category: GrammarCurriculumCategory;
+  groupId: GrammarCurriculumGroupId;
+  groupLabelJa: string;
+  curriculumCategoryId: GrammarCurriculumCategoryId;
+  curriculumCategoryLabelJa: string;
   cefrLevel: EnglishLevel;
+  levelMin: EnglishLevel;
+  levelMax: EnglishLevel;
   labelJa: string;
   labelEn: string;
   descriptionJa: string;
@@ -250,8 +303,15 @@ export interface GrammarCurriculumScope {
 export interface GrammarScopeSelection {
   scopeId: GrammarCurriculumScopeId;
   cefrLevel: EnglishLevel;
+  levelMin?: EnglishLevel;
+  levelMax?: EnglishLevel;
+  groupId?: GrammarCurriculumGroupId;
+  groupLabelJa?: string;
+  curriculumCategoryId?: GrammarCurriculumCategoryId;
+  curriculumCategoryLabelJa?: string;
   labelJa: string;
   isExplicitScope: boolean;
+  isScopeLocked?: boolean;
   source: GrammarScopeSelectionSource;
 }
 
@@ -259,6 +319,10 @@ export interface GrammarScopeExplanation {
   scopeId: GrammarCurriculumScopeId;
   labelJa: string;
   cefrLevel: EnglishLevel;
+  levelMin?: EnglishLevel;
+  levelMax?: EnglishLevel;
+  groupLabelJa?: string;
+  curriculumCategoryLabelJa?: string;
   patternJa: string;
   examFocusJa: string;
   commonMistakeJa: string;

@@ -1,5 +1,15 @@
-import type { GrammarCurriculumScopeId, GrammarScopeSelection, WordData } from '../types';
-import { resolveGrammarScopeSelection } from './grammarScope';
+import {
+  EnglishLevel,
+  type GrammarCurriculumScopeId,
+  type GrammarScopeSelection,
+  type WordData,
+} from '../types';
+import {
+  getGrammarCurriculumScope,
+  isEnglishLevelAtLeast,
+  isGrammarScopeCompatibleWithMode,
+  resolveGrammarScopeSelection,
+} from './grammarScope';
 
 export type GrammarPracticeKind = 'ENGLISH_WORD_ORDER' | 'JAPANESE_WORD_ORDER' | 'GRAMMAR_CLOZE';
 
@@ -61,6 +71,7 @@ export interface BuildGrammarPracticeOptions {
   maxItemsPerWord?: number;
   requestedScopeId?: GrammarCurriculumScopeId | null;
   japaneseQuestionMode?: 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT';
+  userLevel?: EnglishLevel;
 }
 
 const ENGLISH_CHIP_MIN = 4;
@@ -190,78 +201,176 @@ const normalizeTermForSentence = (word: string): string => normalizeWhitespace(w
 
 const normalizeDefinitionForSentence = (definition: string): string => normalizeJapanese(definition);
 
+interface ScopePracticeSentenceTemplate {
+  levelMin: EnglishLevel;
+  sentence: (term: string) => string;
+  japaneseAnswerText: (meaning: string) => string;
+}
+
+const template = (
+  levelMin: EnglishLevel,
+  sentence: ScopePracticeSentenceTemplate['sentence'],
+  japaneseAnswerText: ScopePracticeSentenceTemplate['japaneseAnswerText'],
+): ScopePracticeSentenceTemplate => ({
+  levelMin,
+  sentence,
+  japaneseAnswerText,
+});
+
+const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePracticeSentenceTemplate[]> = {
+  'basic-svo': [
+    template(EnglishLevel.A1, (term) => `Students learn the term ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 学ぶ`),
+    template(EnglishLevel.A1, (term) => `Teachers review the term ${term} after lunch.`, (meaning) => `先生は 昼食後に ${meaning} という語を 復習する`),
+    template(EnglishLevel.A2, (term) => `Learners use the term ${term} in class.`, (meaning) => `生徒は 授業で ${meaning} という語を 使う`),
+  ],
+  'be-verb': [
+    template(EnglishLevel.A1, (term) => `The term ${term} is useful today.`, (meaning) => `${meaning} という語は 今日 役に立つ`),
+    template(EnglishLevel.A1, (term) => `${term} is a useful word today.`, (meaning) => `${meaning} は 今日 役に立つ 語だ`),
+  ],
+  'basic-tense': [
+    template(EnglishLevel.A1, (term) => `Students reviewed the term ${term} yesterday.`, (meaning) => `生徒は 昨日 ${meaning} という語を 復習した`),
+    template(EnglishLevel.A2, (term) => `Students will review the term ${term} tomorrow.`, (meaning) => `生徒は 明日 ${meaning} という語を 復習する`),
+  ],
+  'progressive-aspect': [
+    template(EnglishLevel.A2, (term) => `Students are reviewing the term ${term} now.`, (meaning) => `生徒は 今 ${meaning} という語を 復習している`),
+    template(EnglishLevel.A2, (term) => `Teachers are explaining the term ${term} today.`, (meaning) => `先生は 今日 ${meaning} という語を 説明している`),
+  ],
+  'modal-base-verb': [
+    template(EnglishLevel.A1, (term) => `Learners can use the term ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 使える`),
+    template(EnglishLevel.A2, (term) => `Students should review the term ${term} again.`, (meaning) => `生徒は もう一度 ${meaning} という語を 復習すべきだ`),
+  ],
+  'time-preposition-phrase': [
+    template(EnglishLevel.A1, (term) => `Learners study the term ${term} before class.`, (meaning) => `生徒は 授業前に ${meaning} という語を 復習する`),
+    template(EnglishLevel.A2, (term) => `Students review the term ${term} during lunch.`, (meaning) => `生徒は 昼食中に ${meaning} という語を 復習する`),
+  ],
+  'to-infinitive': [
+    template(EnglishLevel.A2, (term) => `Learners hope to master the term ${term}.`, (meaning) => `生徒は ${meaning} という語を 身につけたい`),
+    template(EnglishLevel.A2, (term) => `Students need to review the term ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 復習する 必要がある`),
+  ],
+  gerund: [
+    template(EnglishLevel.A2, (term) => `Learners enjoy studying the term ${term}.`, (meaning) => `生徒は ${meaning} という語を 学ぶことを 楽しむ`),
+    template(EnglishLevel.B1, (term) => `Students avoid forgetting the term ${term}.`, (meaning) => `生徒は ${meaning} という語を 忘れることを 避ける`),
+  ],
+  'participle-modifier': [
+    template(EnglishLevel.B1, (term) => `The term ${term} used in class is useful.`, (meaning) => `授業で使われた ${meaning} という語は 役に立つ`),
+    template(EnglishLevel.B1, (term) => `Learners reading the term ${term} speak carefully.`, (meaning) => `${meaning} という語を 読んでいる 生徒は 慎重に話す`),
+  ],
+  comparative: [
+    template(EnglishLevel.A2, (term) => `The term ${term} is more useful than before.`, (meaning) => `${meaning} という語は 以前より 役に立つ`),
+    template(EnglishLevel.B1, (term) => `Students remember the term ${term} better today.`, (meaning) => `生徒は 今日 ${meaning} という語を よりよく 覚えている`),
+  ],
+  'pronoun-reference': [
+    template(EnglishLevel.A1, (term) => `Students learn the term ${term} and use it.`, (meaning) => `生徒は ${meaning} という語を 学び それを使う`),
+    template(EnglishLevel.A2, (term) => `Teachers write the term ${term} because it matters.`, (meaning) => `先生は 大切なので ${meaning} という語を 書く`),
+  ],
+  'when-while-clause': [
+    template(EnglishLevel.A2, (term) => `Learners say the term ${term} when they practice.`, (meaning) => `生徒は 練習するとき ${meaning} という語を 言う`),
+    template(EnglishLevel.A2, (term) => `Students review the term ${term} while they listen.`, (meaning) => `生徒は 聞きながら ${meaning} という語を 復習する`),
+  ],
+  'passive-voice': [
+    template(EnglishLevel.A2, (term) => `The term ${term} is introduced by teachers today.`, (meaning) => `${meaning} という語は 今日 先生に 紹介される`),
+    template(EnglishLevel.B1, (term) => `The term ${term} was chosen by students yesterday.`, (meaning) => `${meaning} という語は 昨日 生徒に 選ばれた`),
+  ],
+  'present-perfect': [
+    template(EnglishLevel.A2, (term) => `Learners have practiced the term ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 復習した`),
+    template(EnglishLevel.B1, (term) => `Teachers have used the term ${term} for weeks.`, (meaning) => `先生は 何週間も ${meaning} という語を 使っている`),
+  ],
+  'relative-clause': [
+    template(EnglishLevel.B1, (term) => `The term ${term} that teachers choose is useful.`, (meaning) => `先生が選んだ ${meaning} という語は 役に立つ`),
+    template(EnglishLevel.B1, (term) => `Students like the term ${term} which appears often.`, (meaning) => `生徒は よく出る ${meaning} という語を 好む`),
+  ],
+  'first-conditional': [
+    template(EnglishLevel.A2, (term) => `If learners study the term ${term} they will remember it.`, (meaning) => `生徒が ${meaning} という語を 学べば それを覚える`),
+    template(EnglishLevel.B1, (term) => `If students review the term ${term} they can answer.`, (meaning) => `生徒が ${meaning} という語を 復習すれば 答えられる`),
+  ],
+  'subjunctive-mood': [
+    template(EnglishLevel.B1, (term) => `If learners knew the term ${term} they would answer quickly.`, (meaning) => `生徒が ${meaning} という語を 知っていれば すぐ答えるだろう`),
+    template(EnglishLevel.B2, (term) => `If students had reviewed the term ${term} they would remember.`, (meaning) => `生徒が ${meaning} という語を 復習していたら 覚えていただろう`),
+  ],
+  'subject-verb-agreement': [
+    template(EnglishLevel.A2, (term) => `The list of terms includes ${term} today.`, (meaning) => `語の一覧には 今日 ${meaning} が 含まれる`),
+    template(EnglishLevel.B1, (term) => `Each student reviews the term ${term}.`, (meaning) => `それぞれの 生徒が ${meaning} という語を 復習する`),
+  ],
+  'interrogative-word-order': [
+    template(EnglishLevel.A1, (term) => `How do learners use the term ${term}?`, (meaning) => `生徒は どのように ${meaning} という語を 使うか`),
+    template(EnglishLevel.A2, (term) => `Why should students review the term ${term}?`, (meaning) => `なぜ 生徒は ${meaning} という語を 復習すべきか`),
+  ],
+  'negation-emphasis': [
+    template(EnglishLevel.A2, (term) => `Learners do not ignore the term ${term}.`, (meaning) => `生徒は ${meaning} という語を 無視しない`),
+    template(EnglishLevel.B1, (term) => `Students do remember the term ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 本当に 覚えている`),
+  ],
+  'reported-speech': [
+    template(EnglishLevel.B1, (term) => `Teachers said that learners used the term ${term}.`, (meaning) => `先生は 生徒が ${meaning} という語を 使ったと 言った`),
+    template(EnglishLevel.B1, (term) => `Students reported that the term ${term} was clear.`, (meaning) => `生徒は ${meaning} という語が 明確だったと 報告した`),
+  ],
+  'verb-patterns': [
+    template(EnglishLevel.A2, (term) => `Teachers ask learners to use the term ${term}.`, (meaning) => `先生は 生徒に ${meaning} という語を 使うよう 求める`),
+    template(EnglishLevel.B1, (term) => `Students spend time reviewing the term ${term}.`, (meaning) => `生徒は ${meaning} という語を 復習するのに 時間を使う`),
+  ],
+  'adjective-adverb-usage': [
+    template(EnglishLevel.A2, (term) => `Learners use the term ${term} carefully.`, (meaning) => `生徒は ${meaning} という語を 慎重に 使う`),
+    template(EnglishLevel.B1, (term) => `The term ${term} is clear enough today.`, (meaning) => `${meaning} という語は 今日 十分に 明確だ`),
+  ],
+  'noun-usage': [
+    template(EnglishLevel.A2, (term) => `The term ${term} has a clear meaning.`, (meaning) => `${meaning} という語には 明確な 意味がある`),
+    template(EnglishLevel.B1, (term) => `A learner records the term ${term} as information.`, (meaning) => `生徒は ${meaning} という語を 情報として 記録する`),
+  ],
+  'idiomatic-expression': [
+    template(EnglishLevel.B1, (term) => `Learners look up the term ${term} after class.`, (meaning) => `生徒は 授業後に ${meaning} という語を 調べる`),
+    template(EnglishLevel.B1, (term) => `Students take note of the term ${term}.`, (meaning) => `生徒は ${meaning} という語に 注意を払う`),
+  ],
+  'conversation-expression': [
+    template(EnglishLevel.A1, (term) => `Could you explain the term ${term} today?`, (meaning) => `今日 ${meaning} という語を 説明してくれますか`),
+    template(EnglishLevel.A2, (term) => `Would you like to review the term ${term}?`, (meaning) => `${meaning} という語を 復習したいですか`),
+  ],
+};
+
+const selectScopePracticeTemplate = (
+  scopeId: GrammarCurriculumScopeId,
+  seed: string,
+  userLevel?: EnglishLevel,
+): ScopePracticeSentenceTemplate => {
+  const scope = getGrammarCurriculumScope(scopeId);
+  const levelCeiling = userLevel ?? scope.levelMin;
+  const templates = SCOPE_PRACTICE_SENTENCE_POOLS[scopeId];
+  const eligibleTemplates = templates.filter((item) => isEnglishLevelAtLeast(levelCeiling, item.levelMin));
+  const pool = eligibleTemplates.length > 0 ? eligibleTemplates : templates;
+  const random = createSeededRandom(`${seed}:${scopeId}:template`);
+  return pool[Math.floor(random() * pool.length)] || pool[0];
+};
+
 const createScopePracticeSentence = (
   word: WordData,
   scopeId: GrammarCurriculumScopeId,
+  seed: string,
+  userLevel?: EnglishLevel,
 ): ResolvedPracticeSentence => {
   const term = normalizeTermForSentence(word.word);
   const meaning = normalizeDefinitionForSentence(word.definition);
-  const byScope: Record<GrammarCurriculumScopeId, { sentence: string; japaneseAnswerText: string }> = {
-    'basic-svo': {
-      sentence: `Students learn the term ${term} today.`,
-      japaneseAnswerText: `生徒は ${meaning} という語を 学ぶ`,
-    },
-    'be-verb': {
-      sentence: `The term ${term} is useful today.`,
-      japaneseAnswerText: `${meaning} という語は 役に立つ`,
-    },
-    'modal-base-verb': {
-      sentence: `Learners can use the term ${term} today.`,
-      japaneseAnswerText: `生徒は ${meaning} という語を 使える`,
-    },
-    'time-preposition-phrase': {
-      sentence: `Learners study the term ${term} before class.`,
-      japaneseAnswerText: `生徒は 授業前に ${meaning} という語を 復習する`,
-    },
-    'to-infinitive': {
-      sentence: `Learners hope to master the term ${term}.`,
-      japaneseAnswerText: `生徒は ${meaning} という語を 復習する 予定だ`,
-    },
-    gerund: {
-      sentence: `Learners enjoy studying the term ${term}.`,
-      japaneseAnswerText: `生徒は ${meaning} という語を 復習することを 楽しむ`,
-    },
-    comparative: {
-      sentence: `The term ${term} is more useful than before.`,
-      japaneseAnswerText: `${meaning} という語は 前より 役に立つ`,
-    },
-    'when-while-clause': {
-      sentence: `Learners say the term ${term} when they practice.`,
-      japaneseAnswerText: `生徒は 復習するとき ${meaning} という語を 言う`,
-    },
-    'passive-voice': {
-      sentence: `The term ${term} is introduced by teachers today.`,
-      japaneseAnswerText: `${meaning} という語は 先生に 紹介される`,
-    },
-    'present-perfect': {
-      sentence: `Learners have practiced the term ${term} today.`,
-      japaneseAnswerText: `生徒は 今日 ${meaning} という語を 復習した`,
-    },
-    'relative-clause': {
-      sentence: `The term ${term} that teachers choose is useful.`,
-      japaneseAnswerText: `先生が選んだ ${meaning} という語は 役に立つ`,
-    },
-    'first-conditional': {
-      sentence: `If learners study the term ${term} they will remember.`,
-      japaneseAnswerText: `生徒が ${meaning} という語を 復習すれば 覚える`,
-    },
-  };
+  const selectedTemplate = selectScopePracticeTemplate(scopeId, `${seed}:${word.id}:${term}`, userLevel);
   return {
-    ...byScope[scopeId],
+    sentence: selectedTemplate.sentence(term),
+    japaneseAnswerText: selectedTemplate.japaneseAnswerText(meaning),
     source: 'fallback',
   };
 };
 
-const createFallbackSentence = (word: WordData): ResolvedPracticeSentence => (
-  createScopePracticeSentence(word, 'basic-svo')
+const createFallbackSentence = (
+  word: WordData,
+  seed = 'fallback',
+  userLevel?: EnglishLevel,
+): ResolvedPracticeSentence => (
+  createScopePracticeSentence(word, 'basic-svo', seed, userLevel)
 );
 
 const resolveEnglishSentence = (
   word: WordData,
   requestedScopeId?: GrammarCurriculumScopeId | null,
+  seed = 'grammar-practice',
+  userLevel?: EnglishLevel,
 ): ResolvedPracticeSentence => {
   if (requestedScopeId) {
-    const scoped = createScopePracticeSentence(word, requestedScopeId);
+    const scoped = createScopePracticeSentence(word, requestedScopeId, seed, userLevel);
     if (isUsableEnglishSentence(scoped.sentence, word.word)) return scoped;
   }
 
@@ -269,7 +378,7 @@ const resolveEnglishSentence = (
   if (candidate && isUsableEnglishSentence(candidate, word.word)) {
     return { sentence: candidate, source: 'example' };
   }
-  return createFallbackSentence(word);
+  return createFallbackSentence(word, seed, userLevel);
 };
 
 const createChips = (texts: string[], seed: string, idPrefix: string): {
@@ -476,17 +585,22 @@ export const buildGrammarPracticeItemsForWord = (
   if (!hasEnoughGrammarPracticeData(word)) return [];
 
   const seed = String(options.seed ?? 'grammar-practice');
-  const english = resolveEnglishSentence(word, options.requestedScopeId);
+  const japaneseQuestionMode = options.japaneseQuestionMode ?? 'JA_TRANSLATION_ORDER';
+  const canBuildJapaneseItem = !options.requestedScopeId
+    || isGrammarScopeCompatibleWithMode(options.requestedScopeId, japaneseQuestionMode);
+  const english = resolveEnglishSentence(word, options.requestedScopeId, seed, options.userLevel);
   const englishGrammarScope = resolveGrammarScopeSelection({
     mode: 'EN_WORD_ORDER',
     requestedScopeId: options.requestedScopeId,
     sentence: english.sentence,
   });
-  const japaneseGrammarScope = resolveGrammarScopeSelection({
-    mode: options.japaneseQuestionMode ?? 'JA_TRANSLATION_ORDER',
-    requestedScopeId: options.requestedScopeId,
-    sentence: english.sentence,
-  });
+  const japaneseGrammarScope = canBuildJapaneseItem
+    ? resolveGrammarScopeSelection({
+      mode: japaneseQuestionMode,
+      requestedScopeId: options.requestedScopeId,
+      sentence: english.sentence,
+    })
+    : null;
   const clozeGrammarScope = resolveGrammarScopeSelection({
     mode: 'GRAMMAR_CLOZE',
     requestedScopeId: options.requestedScopeId,
@@ -494,7 +608,9 @@ export const buildGrammarPracticeItemsForWord = (
   });
   const items = [
     createEnglishWordOrderItem(word, english.sentence, english.source, englishGrammarScope, seed),
-    createJapaneseWordOrderItem(word, english.sentence, english.japaneseAnswerText, japaneseGrammarScope, seed),
+    japaneseGrammarScope
+      ? createJapaneseWordOrderItem(word, english.sentence, english.japaneseAnswerText, japaneseGrammarScope, seed)
+      : null,
     createGrammarClozeItem(word, english.sentence, english.source, clozeGrammarScope, seed),
   ].filter((item): item is GrammarPracticeItem => Boolean(item));
 
