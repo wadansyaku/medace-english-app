@@ -26,6 +26,7 @@ vi.mock('@google/genai', () => ({
   },
   Type: {
     ARRAY: 'ARRAY',
+    BOOLEAN: 'BOOLEAN',
     NUMBER: 'NUMBER',
     OBJECT: 'OBJECT',
     STRING: 'STRING',
@@ -240,6 +241,62 @@ describe('handleAiAction metering integration', () => {
       requestUnits: 5,
       providerInputUnits: 2,
       providerOutputUnits: 2,
+    }));
+  });
+
+  it('meters Japanese translation feedback and returns exam rubric details', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        isCorrect: false,
+        score: 6,
+        maxScore: 10,
+        verdictLabel: '部分点',
+        summaryJa: '意味の中心は取れていますが、受け身の関係が弱いです。',
+        strengths: ['主要語を訳せています。'],
+        issues: ['誰が何をされたかを補いましょう。'],
+        improvedTranslation: 'その語は今日、生徒によって復習される。',
+        grammarAdviceJa: 'be動詞 + 過去分詞を受け身として読みます。',
+        nextDrillJa: '主語 / be+過去分詞 / by の3ますで確認しましょう。',
+        criteria: [
+          { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
+          { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
+          { label: '受験答案らしさ', score: 2, maxScore: 3, comment: '答案として整えます。' },
+        ],
+      }),
+    });
+
+    const env = {
+      GEMINI_API_KEY: 'test-key',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'evaluateJapaneseTranslationAnswer',
+      payload: {
+        sourceSentence: 'The term is reviewed by students today.',
+        expectedTranslation: 'その語は今日、生徒によって復習される。',
+        userTranslation: '生徒は今日その語を復習します。',
+        grammarScopeLabel: '受け身',
+        examTarget: 'UNIVERSITY_ENTRANCE',
+      },
+    });
+
+    expect(result).toMatchObject({
+      isCorrect: false,
+      score: 6,
+      maxScore: 10,
+      examTarget: 'UNIVERSITY_ENTRANCE',
+      sourceSentence: 'The term is reviewed by students today.',
+      expectedTranslation: 'その語は今日、生徒によって復習される。',
+      userTranslation: '生徒は今日その語を復習します。',
+    });
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'evaluateJapaneseTranslationAnswer', 260);
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'evaluateJapaneseTranslationAnswer',
+      usedAi: true,
+      model: 'gemini-3-flash-preview',
+      estimatedCostMilliYen: 260,
+      requestUnits: 1,
     }));
   });
 

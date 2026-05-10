@@ -1,8 +1,8 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import { EnglishLevel } from '../types';
+import { EnglishLevel, UserGrade, type JapaneseTranslationFeedback, type TranslationExamTarget } from '../types';
 import { learningService } from '../services/learning';
-import { generateGrammarPracticeQuestions } from '../services/gemini';
+import { evaluateJapaneseTranslationAnswer, generateGrammarPracticeQuestions } from '../services/gemini';
 import type {
   LearningTaskIntent,
   QuizSessionConfig,
@@ -12,6 +12,7 @@ import type {
 import {
   type GeneratedWorksheetQuestion,
   WORKSHEET_MODE_COPY,
+  buildDeterministicTranslationFeedback,
   filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
   isGrammarWorksheetMode,
@@ -94,6 +95,8 @@ export const useQuizModeController = ({
   const [showSpellingHint, setShowSpellingHint] = useState(false);
   const [spellingFeedbackTone, setSpellingFeedbackTone] = useState<'info' | 'correct' | 'incorrect' | null>(null);
   const [spellingFeedbackMessage, setSpellingFeedbackMessage] = useState<string | null>(null);
+  const [translationFeedback, setTranslationFeedback] = useState<JapaneseTranslationFeedback | null>(null);
+  const [checkingTranslationFeedback, setCheckingTranslationFeedback] = useState(false);
   const [score, setScore] = useState(0);
   const [missedQuestions, setMissedQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,6 +179,8 @@ export const useQuizModeController = ({
     setShowSpellingHint(false);
     setSpellingFeedbackTone(null);
     setSpellingFeedbackMessage(null);
+    setTranslationFeedback(null);
+    setCheckingTranslationFeedback(false);
     setScore(0);
     setMissedQuestions([]);
     setSaveError(null);
@@ -460,7 +465,21 @@ export const useQuizModeController = ({
     setScreen('READY');
   };
 
-  const persistAttempt = async (correct: boolean, responseTimeMs: number) => {
+  const resolveTranslationExamTarget = (): TranslationExamTarget => {
+    if (user.grade === UserGrade.JHS1 || user.grade === UserGrade.JHS2 || user.grade === UserGrade.JHS3) {
+      return 'HIGH_SCHOOL_ENTRANCE';
+    }
+    if (user.grade === UserGrade.SHS1 || user.grade === UserGrade.SHS2 || user.grade === UserGrade.SHS3) {
+      return 'UNIVERSITY_ENTRANCE';
+    }
+    return 'GENERAL';
+  };
+
+  const persistAttempt = async (
+    correct: boolean,
+    responseTimeMs: number,
+    feedback?: JapaneseTranslationFeedback | null,
+  ) => {
     const question = questions[currentQIndex];
     if (!question) return;
 
@@ -479,6 +498,8 @@ export const useQuizModeController = ({
         taskIntent?.missionAssignmentId,
         taskIntent?.intentType,
         question.generatedProblemId,
+        question.grammarScope?.scopeId,
+        feedback || undefined,
       );
     } catch (error) {
       console.error('Quiz attempt save failed', error);
@@ -512,6 +533,8 @@ export const useQuizModeController = ({
         setShowSpellingHint(false);
         setSpellingFeedbackTone(null);
         setSpellingFeedbackMessage(null);
+        setTranslationFeedback(null);
+        setCheckingTranslationFeedback(false);
         setSaveError(null);
         return;
       }
@@ -575,19 +598,52 @@ export const useQuizModeController = ({
     if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt) return;
 
     if (currentQuestion.mode === 'JA_TRANSLATION_INPUT') {
+      const responseTimeMs = Math.max(0, Date.now() - questionStartedAtRef.current);
       const translationAttempt = resolveJapaneseTranslationAttempt({
         input: answerInput,
         answer: currentQuestion.answer,
       });
-      const correct = translationAttempt === 'correct';
+      let feedback = buildDeterministicTranslationFeedback({
+        input: answerInput,
+        answer: currentQuestion.answer,
+        grammarExplanation: currentQuestion.grammarExplanation,
+      });
+      feedback = {
+        ...feedback,
+        examTarget: resolveTranslationExamTarget(),
+        sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
+        expectedTranslation: currentQuestion.answer,
+        userTranslation: answerInput,
+      };
+
+      if (translationAttempt !== 'correct') {
+        setCheckingTranslationFeedback(true);
+        setSpellingFeedbackTone('info');
+        setSpellingFeedbackMessage('AIが受験答案として採点しています...');
+        const aiFeedback = await evaluateJapaneseTranslationAnswer({
+          sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
+          expectedTranslation: currentQuestion.answer,
+          userTranslation: answerInput,
+          grammarScopeLabel: currentQuestion.grammarScope?.labelJa || currentQuestion.grammarFocus,
+          grammarScopeId: currentQuestion.grammarScope?.scopeId,
+          examTarget: resolveTranslationExamTarget(),
+        });
+        if (aiFeedback) {
+          feedback = aiFeedback;
+        }
+        setCheckingTranslationFeedback(false);
+      }
+
+      const correct = feedback.isCorrect;
+      setTranslationFeedback(feedback);
       setInputResult(correct ? 'correct' : 'incorrect');
       setSpellingFeedbackTone(correct ? 'correct' : 'incorrect');
       setSpellingFeedbackMessage(
         correct
-          ? '正解です。日本語訳を最後まで入力できました。'
-          : `不正解です。正解例: ${currentQuestion.answer}`,
+          ? `${feedback.verdictLabel}: ${feedback.summaryJa}`
+          : `${feedback.verdictLabel}: ${feedback.summaryJa}`,
       );
-      await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
+      await persistAttempt(correct, responseTimeMs, feedback);
       return;
     }
 
@@ -663,6 +719,8 @@ export const useQuizModeController = ({
     saveError,
     pendingAttempt,
     persistingAttempt,
+    translationFeedback,
+    checkingTranslationFeedback,
     minWordNumber,
     maxWordNumber,
     normalizedSetupRange,

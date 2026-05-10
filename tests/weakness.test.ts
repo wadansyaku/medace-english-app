@@ -66,7 +66,7 @@ describe('weakness intelligence', () => {
       })),
       ...Array.from({ length: 6 }, (_, index) => makeEvent({
         wordId: `translation-order-${index}`,
-        questionMode: 'JA_TRANSLATION_ORDER',
+        questionMode: index < 3 ? 'JA_TRANSLATION_ORDER' : 'JA_TRANSLATION_INPUT',
         correct: index < 4,
       })),
       ...Array.from({ length: 6 }, (_, index) => makeEvent({
@@ -99,7 +99,7 @@ describe('weakness intelligence', () => {
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.SPELLING_RECALL)?.sampleSize).toBe(6);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.GRAMMAR_APPLICATION)?.targetQuestionModes).toEqual(['GRAMMAR_CLOZE']);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.WORD_ORDER)?.targetQuestionModes).toEqual(['EN_WORD_ORDER']);
-    expect(signals.find((signal) => signal.dimension === WeaknessDimension.TRANSLATION_ORDER)?.targetQuestionModes).toEqual(['JA_TRANSLATION_ORDER']);
+    expect(signals.find((signal) => signal.dimension === WeaknessDimension.TRANSLATION_ORDER)?.targetQuestionModes).toEqual(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT']);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.RETENTION_STABILITY)?.level).not.toBe(WeaknessSignalLevel.INSUFFICIENT_DATA);
     expect(signals.find((signal) => signal.dimension === WeaknessDimension.ADVANCED_BAND_CONFIDENCE)?.targetBandIndex).toBeGreaterThanOrEqual(1);
   });

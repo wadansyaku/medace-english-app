@@ -1,6 +1,8 @@
 import type {
   BookMetadata,
   BookProgress,
+  GrammarCurriculumScopeId,
+  JapaneseTranslationFeedback,
   LearningHistory,
   LearningTaskIntent,
   LearningTaskIntentType,
@@ -379,8 +381,12 @@ export const saveSrsHistory = async (
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
   generatedProblemId?: string,
+  grammarScopeId?: GrammarCurriculumScopeId,
+  translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
   void generatedProblemId;
+  void grammarScopeId;
+  void translationFeedback;
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, word.id);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);
@@ -455,8 +461,12 @@ export const recordQuizAttempt = async (
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
   generatedProblemId?: string,
+  grammarScopeId?: GrammarCurriculumScopeId,
+  translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
   void generatedProblemId;
+  void grammarScopeId;
+  void translationFeedback;
   const historyStore = await context.getStore(STORES.HISTORY, 'readwrite');
   const id = buildUserScopedRecordId(uid, wordId);
   const existing = await readStoreRecord<StoredLearningHistoryRecord>(historyStore, id);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildDeterministicTranslationFeedback,
   generateWorksheetQuestions,
   resolveJapaneseTranslationAttempt,
   resolveSpellingAttempt,
@@ -81,6 +82,20 @@ describe('generateWorksheetQuestions', () => {
     })).toBe('incorrect');
   });
 
+  it('builds deterministic translation feedback when AI is bypassed or unavailable', () => {
+    const feedback = buildDeterministicTranslationFeedback({
+      input: '医師は手術前に患者を安定させる',
+      answer: '医師は 手術前に 患者を 安定させる。',
+    });
+
+    expect(feedback).toMatchObject({
+      isCorrect: true,
+      score: 10,
+      maxScore: 10,
+      usedAi: false,
+    });
+  });
+
   it('generates grammar cloze questions from studied vocabulary examples', () => {
     const questions = generateWorksheetQuestions(sourceWords, 'GRAMMAR_CLOZE', 2);
     const stabilizeQuestion = questions.find((question) => question.wordId === 'w1');
@@ -134,6 +149,25 @@ describe('generateWorksheetQuestions', () => {
       '患者を',
       '安定させる',
     ]);
+  });
+
+  it('falls back instead of generating Japanese order questions with duplicate visible chips', () => {
+    const questions = generateWorksheetQuestions([
+      {
+        id: 'w-dup',
+        word: 'repeat',
+        definition: '繰り返す',
+        bookId: 'book-1',
+        bookTitle: 'Book',
+        exampleSentence: 'Students repeat the word after class.',
+        exampleMeaning: '生徒は 生徒は 授業後に 語を 繰り返す。',
+      },
+    ], 'JA_TRANSLATION_ORDER', 1, {
+      grammarScopeId: 'basic-svo',
+    });
+
+    expect(questions[0]?.answer).toBe('生徒は 繰り返す という語を 学ぶ');
+    expect(questions[0]?.tokens?.map((token) => token.text)).not.toContain('生徒は 生徒は');
   });
 
   it('generates Japanese full-translation text input questions', () => {

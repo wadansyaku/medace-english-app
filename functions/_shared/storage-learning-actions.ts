@@ -1,4 +1,14 @@
-import { ActivityLog, LearningPlan, LearningPreference, LearningPreferenceIntensity, type LearningTaskIntentType, UserProfile, type WorksheetQuestionMode } from '../../types';
+import {
+  ActivityLog,
+  type GrammarCurriculumScopeId,
+  type JapaneseTranslationFeedback,
+  LearningPlan,
+  LearningPreference,
+  LearningPreferenceIntensity,
+  type LearningTaskIntentType,
+  UserProfile,
+  type WorksheetQuestionMode,
+} from '../../types';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
@@ -31,7 +41,7 @@ import {
   type DbLearningPreferenceRow,
 } from './storage-support';
 import { HttpError } from './http';
-import { recordCbtProblemAttempt } from './ai-cache-cbt';
+import { recordCbtProblemAttempt, recordCbtScopeAttempt, recordJapaneseTranslationFeedbackEvent } from './ai-cache-cbt';
 
 const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
   const organization = await readActiveOrganizationContextForUser(env, userId);
@@ -83,6 +93,8 @@ export const handleSaveSrsHistory = async (
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
   generatedProblemId?: string,
+  grammarScopeId?: GrammarCurriculumScopeId,
+  translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, word.bookId);
   const now = Date.now();
@@ -195,6 +207,8 @@ export const handleRecordQuizAttempt = async (
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
   generatedProblemId?: string,
+  grammarScopeId?: GrammarCurriculumScopeId,
+  translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, bookId);
   const now = Date.now();
@@ -295,6 +309,38 @@ export const handleRecordQuizAttempt = async (
       });
     } catch (error) {
       console.warn('CBT problem attempt update skipped:', error);
+    }
+  }
+  if (grammarScopeId) {
+    try {
+      await recordCbtScopeAttempt(env, {
+        userId: user.id,
+        grammarScopeId,
+        questionMode,
+        correct,
+        responseTimeMs,
+        now: nextHistory.lastStudiedAt,
+      });
+    } catch (error) {
+      console.warn('CBT scope attempt update skipped:', error);
+    }
+  }
+  if (translationFeedback && questionMode === 'JA_TRANSLATION_INPUT') {
+    try {
+      await recordJapaneseTranslationFeedbackEvent(env, {
+        userId: user.id,
+        wordId,
+        bookId,
+        questionMode,
+        grammarScopeId,
+        sourceSentence: translationFeedback.sourceSentence || '',
+        expectedTranslation: translationFeedback.expectedTranslation || translationFeedback.improvedTranslation || '',
+        userTranslation: translationFeedback.userTranslation || '',
+        feedback: translationFeedback,
+        now: nextHistory.lastStudiedAt,
+      });
+    } catch (error) {
+      console.warn('Japanese translation feedback event write skipped:', error);
     }
   }
   await rebuildWeaknessSignalsForUser(env, user.id, user);

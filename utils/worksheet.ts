@@ -1,6 +1,15 @@
-import { StudentWorksheetWord, WordData, type GrammarCurriculumScopeId, type GrammarScopeSelection, WorksheetQuestionMode } from '../types';
+import {
+  StudentWorksheetWord,
+  WordData,
+  type GrammarCurriculumScopeId,
+  type GrammarScopeExplanation,
+  type GrammarScopeSelection,
+  type JapaneseTranslationFeedback,
+  WorksheetQuestionMode,
+} from '../types';
 import { GRAMMAR_WORKSHEET_MODES } from '../config/grammarCurriculum';
 import { getBookProgressionIndex } from '../shared/bookProgression';
+import { buildGrammarScopeExplanation } from './grammarScope';
 import {
   buildGrammarPracticeItemsForWord,
   hasEnoughGrammarPracticeData,
@@ -40,6 +49,8 @@ export interface GeneratedWorksheetQuestion {
   sourceTranslation?: string;
   grammarFocus?: string;
   grammarScope?: GrammarScopeSelection;
+  grammarExplanation?: GrammarScopeExplanation;
+  translationFeedback?: JapaneseTranslationFeedback;
   showGrammarScopeHint?: boolean;
   generatedProblemId?: string;
   aiContentId?: string;
@@ -415,6 +426,61 @@ export const resolveJapaneseTranslationAttempt = ({
   isCorrectJapaneseTranslationAnswer(input, answer) ? 'correct' : 'incorrect'
 );
 
+export const buildDeterministicTranslationFeedback = ({
+  input,
+  answer,
+  grammarExplanation,
+}: {
+  input: string;
+  answer: string;
+  grammarExplanation?: GrammarScopeExplanation;
+}): JapaneseTranslationFeedback => {
+  const correct = isCorrectJapaneseTranslationAnswer(input, answer);
+  const criteria = [
+    {
+      label: '意味',
+      score: correct ? 4 : 1,
+      maxScore: 4,
+      comment: correct ? '英文全体の意味を押さえています。' : '正解例と意味のずれが残っています。',
+    },
+    {
+      label: '文法構造',
+      score: correct ? 3 : 1,
+      maxScore: 3,
+      comment: correct
+        ? '主語・動詞・修飾語の関係を訳に反映できています。'
+        : grammarExplanation?.commonMistakeJa || '文の骨組みをもう一度確認しましょう。',
+    },
+    {
+      label: '受験答案らしさ',
+      score: correct ? 3 : 1,
+      maxScore: 3,
+      comment: correct ? '高校受験・大学受験の答案として自然な範囲です。' : '採点者に伝わる日本語へ整える余地があります。',
+    },
+  ];
+
+  const score = criteria.reduce((sum, criterion) => sum + criterion.score, 0);
+  return {
+    isCorrect: correct,
+    score,
+    maxScore: 10,
+    verdictLabel: correct ? '満点答案' : '要復習',
+    examTarget: 'GENERAL',
+    expectedTranslation: answer,
+    userTranslation: input,
+    summaryJa: correct
+      ? '正解例と同じ意味で訳せています。次は同じ型を速く処理できるようにしましょう。'
+      : '正解例と一致していません。まず3ますで主語・動詞・目的語を固定してから訳しましょう。',
+    strengths: correct ? ['意味の中心を落とさず訳せています。'] : [],
+    issues: correct ? [] : ['正解例との差が大きいため、AI採点が利用できない場合は不正解扱いにします。'],
+    improvedTranslation: answer,
+    grammarAdviceJa: grammarExplanation?.patternJa || '英文の主語・動詞・目的語を先に固定します。',
+    nextDrillJa: grammarExplanation?.automationDrillJa || '同じ型の短文を3回読み直してから、もう一度訳します。',
+    criteria,
+    usedAi: false,
+  };
+};
+
 const toOrderTokens = (
   chips: GrammarPracticeChip[],
   learnedWordId: string,
@@ -483,6 +549,7 @@ const toGrammarWorksheetQuestion = (
       sourceSentence: item.sourceSentence,
       grammarFocus: item.grammarFocus,
       grammarScope: item.grammarScope,
+      grammarExplanation: buildGrammarScopeExplanation(item.grammarScope),
       instruction: '空所に入る単語を選び、文の中でどう使われているか確認します。',
     };
   }
@@ -502,6 +569,7 @@ const toGrammarWorksheetQuestion = (
       answerTokenIds: item.correctChipIds,
       sourceSentence: item.sourceSentence,
       grammarScope: item.grammarScope,
+      grammarExplanation: buildGrammarScopeExplanation(item.grammarScope),
       instruction: '登場済み単語を含む英文を、チップの順番で組み立てます。',
     };
   }
@@ -521,6 +589,7 @@ const toGrammarWorksheetQuestion = (
     sourceSentence: item.sourceSentence,
     sourceTranslation: item.answerText,
     grammarScope: item.grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(item.grammarScope),
     instruction: '英文を手がかりに、日本語の意味を自然な順番へ戻します。',
   };
 };
@@ -547,6 +616,7 @@ const toJapaneseTranslationInputQuestion = (
     sourceSentence: item.sourceSentence,
     sourceTranslation: item.answerText,
     grammarScope: item.grammarScope,
+    grammarExplanation: buildGrammarScopeExplanation(item.grammarScope),
     instruction: '英文を読み、日本語訳を全文で入力します。語順だけでなく、意味の抜けも確認します。',
   };
 };

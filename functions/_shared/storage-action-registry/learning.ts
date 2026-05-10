@@ -2,7 +2,7 @@ import { UserRole, type WorksheetQuestionMode } from '../../../types';
 import { WORKSHEET_QUESTION_MODES } from '../../../shared/worksheetQuestionMode';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalNumber, expectOptionalString, expectString } from '../request-validation';
+import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalNumber, expectOptionalObject, expectOptionalString, expectString } from '../request-validation';
 import {
   handleAddXP,
   handleGetActivityLogs,
@@ -67,6 +67,8 @@ export const learningStorageActionDefinitions = {
         missionAssignmentId: expectOptionalString(record, 'missionAssignmentId'),
         taskIntentType: expectOptionalString(record, 'taskIntentType') as never,
         generatedProblemId: expectOptionalString(record, 'generatedProblemId'),
+        grammarScopeId: expectOptionalString(record, 'grammarScopeId') as never,
+        translationFeedback: expectOptionalObject(record.translationFeedback, 'translationFeedback') as never,
       };
     },
     execute: async ({ env, user }, payload) => {
@@ -81,6 +83,8 @@ export const learningStorageActionDefinitions = {
         payload.missionAssignmentId,
         payload.taskIntentType,
         payload.generatedProblemId,
+        payload.grammarScopeId,
+        payload.translationFeedback,
       );
       return null;
     },

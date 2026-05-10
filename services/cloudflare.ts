@@ -10,7 +10,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, InterventionKind, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
 import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
 
@@ -213,10 +213,12 @@ export class CloudflareStorageService implements IStorageService {
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
     generatedProblemId?: string,
+    grammarScopeId?: GrammarCurriculumScopeId,
+    translationFeedback?: JapaneseTranslationFeedback,
   ): Promise<void> {
     await this.callStorage({
       action: 'recordQuizAttempt',
-      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId },
+      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId, grammarScopeId, translationFeedback },
     });
   }
 

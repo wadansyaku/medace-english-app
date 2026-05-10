@@ -5,6 +5,7 @@ export type MeteredAiAction =
   | 'generateWordImage'
   | 'generateAIQuiz'
   | 'generateGrammarPracticeQuestions'
+  | 'evaluateJapaneseTranslationAnswer'
   | 'generateDiagnosticTest'
   | 'generateAdvancedDiagnosticTest'
   | 'evaluateAdvancedTest'
@@ -33,7 +34,7 @@ export interface AiActionEstimate {
   model: string;
 }
 
-export const AI_PRICING_VERSION = '2026-05-09';
+export const AI_PRICING_VERSION = '2026-05-10';
 
 export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy> = {
   [SubscriptionPlan.TOC_FREE]: {
@@ -43,7 +44,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     priceLabel: '無料',
     pricingNote: '広告付きのセルフサーブ導線。スターター公式教材と基本学習を利用できます',
     monthlyAiBudgetMilliYen: 1200,
-    allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz', 'generateGrammarPracticeQuestions', 'generateDiagnosticTest'],
+    allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz', 'generateGrammarPracticeQuestions', 'evaluateJapaneseTranslationAnswer', 'generateDiagnosticTest'],
     featureSummary: [
       'オリジナル単語データベースのスターター教材と通常学習を無理なく始められます',
       '学習プランはAIではなく標準ロジックで自動提案します',
@@ -63,6 +64,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
+      'evaluateJapaneseTranslationAnswer',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',
       'evaluateAdvancedTest',
@@ -88,6 +90,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
+      'evaluateJapaneseTranslationAnswer',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',
       'evaluateAdvancedTest',
@@ -112,6 +115,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
+      'evaluateJapaneseTranslationAnswer',
       'generateDiagnosticTest',
       'generateAdvancedDiagnosticTest',
       'evaluateAdvancedTest',
@@ -150,6 +154,11 @@ export const AI_ACTION_ESTIMATES: Record<MeteredAiAction, AiActionEstimate> = {
   generateGrammarPracticeQuestions: {
     label: 'AI文法問題生成',
     estimatedCostMilliYen: 340,
+    model: 'gemini-3-flash-preview',
+  },
+  evaluateJapaneseTranslationAnswer: {
+    label: 'AI和訳フィードバック',
+    estimatedCostMilliYen: 260,
     model: 'gemini-3-flash-preview',
   },
   generateDiagnosticTest: {

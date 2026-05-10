@@ -7,6 +7,7 @@ import {
 import type {
   GrammarCurriculumScope,
   GrammarCurriculumScopeId,
+  GrammarScopeExplanation,
   GrammarScopeSelection,
   WorksheetQuestionMode,
 } from '../types';
@@ -107,4 +108,23 @@ export const resolveGrammarScopeSelection = ({
     ? DEFAULT_GRAMMAR_SCOPE_ID_BY_MODE[mode]
     : 'basic-svo';
   return toSelection(getGrammarCurriculumScope(defaultScopeId), false, 'FALLBACK');
+};
+
+export const buildGrammarScopeExplanation = (
+  selection: GrammarScopeSelection | GrammarCurriculumScopeId | null | undefined,
+): GrammarScopeExplanation | undefined => {
+  if (!selection) return undefined;
+  const scope = getGrammarCurriculumScope(
+    typeof selection === 'string' ? selection : selection.scopeId,
+  );
+  return {
+    scopeId: scope.id,
+    labelJa: scope.labelJa,
+    cefrLevel: scope.cefrLevel,
+    patternJa: scope.patternJa,
+    examFocusJa: scope.examFocusJa,
+    commonMistakeJa: scope.commonMistakeJa,
+    automationDrillJa: scope.automationDrillJa,
+    threeSlotFrameJa: scope.threeSlotFrameJa,
+  };
 };

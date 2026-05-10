@@ -4,7 +4,9 @@ import type {
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
+  GrammarCurriculumScopeId,
   InterventionKind,
+  JapaneseTranslationFeedback,
   LeaderboardEntry,
   LearningPlan,
   LearningPreference,
@@ -84,6 +86,8 @@ export interface LearningStorageService {
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
     generatedProblemId?: string,
+    grammarScopeId?: GrammarCurriculumScopeId,
+    translationFeedback?: JapaneseTranslationFeedback,
   ): Promise<void>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;

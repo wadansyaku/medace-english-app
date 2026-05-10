@@ -120,7 +120,7 @@ export const getWeaknessNextActionLabel = (dimension: WeaknessDimension): string
           : dimension === WeaknessDimensionEnum.WORD_ORDER
             ? '英語語順を10問確認する'
             : dimension === WeaknessDimensionEnum.TRANSLATION_ORDER
-              ? '日本語並び替えを10問確認する'
+              ? '日本語訳を10問確認する'
               : getWeaknessRecommendedActionType(dimension) === RecommendedActionType.OPEN_PLAN
                 ? '今日のプランに戻る'
                 : '復習を10語始める'
@@ -139,7 +139,7 @@ export const getWeaknessTargetQuestionModes = (dimension: WeaknessDimension): Wo
     case WeaknessDimensionEnum.WORD_ORDER:
       return ['EN_WORD_ORDER'];
     case WeaknessDimensionEnum.TRANSLATION_ORDER:
-      return ['JA_TRANSLATION_ORDER'];
+      return ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'];
     default:
       return ['JA_TO_EN', 'EN_TO_JA'];
   }
@@ -193,10 +193,14 @@ const averageFailureRate = (weights: Array<{ attempt: number; failure: number }>
 const summarizeQuestionModeDimension = (
   events: WeaknessInteractionEvent[],
   dimension: WeaknessDimension,
-  questionMode: WorksheetQuestionMode,
+  questionModes: WorksheetQuestionMode | WorksheetQuestionMode[],
   targetBandIndex: number,
 ): WeaknessSignalSummary => {
-  const relevant = events.filter((event) => event.interactionSource === 'QUIZ' && event.questionMode === questionMode);
+  const modes = Array.isArray(questionModes) ? questionModes : [questionModes];
+  const relevant = events.filter((event) => (
+    event.interactionSource === 'QUIZ'
+    && Boolean(event.questionMode && modes.includes(event.questionMode))
+  ));
   const weighted = relevant.map((event) => {
     const bandWeight = event.bookProgressionBand && event.bookProgressionBand >= targetBandIndex ? 1.15 : 1;
     const responseWeight = event.responseTimeMs >= 9000 ? 1.12 : event.responseTimeMs >= 6000 ? 1.05 : 1;
@@ -360,7 +364,7 @@ export const deriveWeaknessSignals = ({
   const translationOrder = summarizeQuestionModeDimension(
     recentEvents,
     WeaknessDimensionEnum.TRANSLATION_ORDER,
-    'JA_TRANSLATION_ORDER',
+    ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'],
     targetBandIndex,
   );
 
