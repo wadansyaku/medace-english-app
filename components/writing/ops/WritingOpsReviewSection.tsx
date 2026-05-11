@@ -96,7 +96,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
           </div>
           <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
             <div>提出: {formatDateTime(item.submittedAt)}</div>
-            <div>Attempt {item.attemptNo}</div>
+            <div>{item.attemptNo}回目</div>
             <div>OCR {Math.round(item.transcriptConfidence * 100)}%</div>
             <div>{item.recommendedProvider ? WRITING_AI_PROVIDER_LABELS[item.recommendedProvider] : '未選択'}</div>
           </div>
@@ -127,7 +127,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                   </div>
                   <div className="text-right text-xs text-slate-500">
                     <div>{formatDateTime(detail.submission.submittedAt)}</div>
-                    <div className="mt-1">Attempt {detail.submission.attemptNo}</div>
+                    <div className="mt-1">{detail.submission.attemptNo}回目</div>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -256,7 +256,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
 
             <aside className="space-y-5 2xl:sticky 2xl:top-6 2xl:self-start">
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">採用候補</div>
+                <div className="text-xs font-bold text-slate-400">採用候補</div>
                 {selectedEvaluation ? (
                   <>
                     <div className="mt-3 flex items-center justify-between gap-3">
@@ -286,11 +286,11 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
 
               {tab === 'QUEUE' ? (
                 <section className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">返却判断</div>
+                  <div className="text-xs font-bold text-slate-400">返却判断</div>
                   <div className="mt-3 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm leading-relaxed text-medace-900/80">
                     1. 採用候補を選ぶ  2. 生徒に見せるコメントを書く  3. 返却または再提出依頼を確定
                   </div>
-                  <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">生徒に見せるコメント</div>
+                  <div className="mt-4 text-xs font-bold text-slate-400">生徒に見せるコメント</div>
                   <textarea
                     data-testid="writing-review-public-comment"
                     value={reviewPublicComment}
@@ -298,7 +298,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                     className="mt-3 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
                     placeholder="良かった点と、次に直す点を生徒向けに短く書きます。"
                   />
-                  <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">講師メモ</div>
+                  <div className="mt-4 text-xs font-bold text-slate-400">講師メモ</div>
                   <textarea
                     value={reviewPrivateMemo}
                     onChange={(event) => onReviewPrivateMemoChange(event.target.value)}
@@ -331,25 +331,20 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                         再提出を依頼
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={onComplete}
-                      disabled={reviewing}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700 disabled:opacity-50"
-                    >
-                      完了にする
-                    </button>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold leading-relaxed text-slate-600">
+                      完了処理は、生徒へ返却した内容を確認した後に有効になります。
+                    </div>
                   </div>
                 </section>
               ) : (
                 <section className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">返却済みコメント</div>
+                  <div className="text-xs font-bold text-slate-400">返却済みコメント</div>
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-relaxed text-slate-700">
                     {detail.submission.teacherReview?.publicComment || '講師コメントはまだありません。'}
                   </div>
                   {detail.submission.teacherReview?.privateMemo && (
                     <>
-                      <div className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">内部メモ</div>
+                      <div className="mt-4 text-xs font-bold text-slate-400">内部メモ</div>
                       <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-relaxed text-slate-700">
                         {detail.submission.teacherReview.privateMemo}
                       </div>

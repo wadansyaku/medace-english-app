@@ -51,15 +51,15 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
       <div className="relative overflow-hidden rounded-[32px] bg-medace-500 p-6 text-white shadow-[0_24px_70px_rgba(255,130,22,0.2)] md:p-8">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.24),_transparent_28%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_24%)]"></div>
         <div className="relative min-w-0">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-white/72">
-            <Radar className="h-4 w-4" /> Placement Design
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold text-white/72">
+            <Radar className="h-4 w-4" /> 初回レベル診断
           </div>
           <h1 className="mt-4 text-[1.8rem] font-black leading-tight tracking-tight md:text-[2.35rem]">
             {isRetake ? '学習スタート帯を再診断する' : '最初のスタート帯を、短時間で決める'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/78 md:text-base">
             文法・語彙・読解を 12 問で確認し、Steady Study を始めるための推定レベルを出します。
-            公式資格の判定ではなく、最初の学習導線を揃えるための placement です。
+            公式資格の判定ではなく、最初の学習導線を揃えるための目安です。
           </p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -70,7 +70,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
             ].map((item) => (
               <div key={item.label} className="rounded-2xl border border-white/10 bg-white/6 px-4 py-4">
                 <div className="text-2xl font-black text-white">{item.value}</div>
-                <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/58">{item.label}</div>
+                <div className="mt-1 text-[11px] font-bold text-white/58">{item.label}</div>
               </div>
             ))}
           </div>
@@ -86,7 +86,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
 
           {isRetake && historySummary && (
             <div className="mt-5 rounded-[28px] border border-white/10 bg-white/8 px-5 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/58">前回の学習サマリー</div>
+                <div className="text-[11px] font-bold text-white/58">前回の学習サマリー</div>
               <p className="mt-2 text-sm leading-relaxed text-white/84">{historySummary}</p>
             </div>
           )}
@@ -96,7 +96,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
       <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-xl md:p-7">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Setup</p>
+            <p className="text-xs font-bold text-slate-400">診断準備</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">
               {isRetake ? 'いまの実感を更新する' : '学年と現在地を選ぶ'}
             </h2>
@@ -181,7 +181,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
                       {option.estimatedBand}
                     </span>
                   </div>
-                  <div className={`mt-2 text-[11px] font-bold uppercase tracking-[0.14em] ${isSelected ? 'text-medace-200' : 'text-medace-600'}`}>
+                  <div className={`mt-2 text-[11px] font-bold ${isSelected ? 'text-medace-200' : 'text-medace-600'}`}>
                     {option.helper}
                   </div>
                 </button>

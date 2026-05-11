@@ -166,7 +166,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
             <X className="h-5 w-5" />
           </button>
           <div className="pr-12">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Profile Settings</p>
+            <p className="text-xs font-bold text-slate-400">プロフィール設定</p>
             <h3 className="mt-2 text-[1.55rem] font-black tracking-tight text-slate-950">設定・プロフィール</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
               今日はここだけ決めれば十分です。細かい項目は下のセクションであとから調整できます。
@@ -177,7 +177,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
         <div className="flex-1 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
             <section className="rounded-[28px] bg-medace-500 px-4 py-4 text-white shadow-[0_18px_45px_rgba(255,130,22,0.2)]">
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/58">Today Summary</div>
+              <div className="text-xs font-bold text-white/58">今日の設定</div>
               <div className="mt-2 text-xl font-black tracking-tight">いまの学習条件を 1 画面で確認</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold">
@@ -194,7 +194,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                 </span>
               </div>
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/58">現在のレベル</div>
+                <div className="text-[11px] font-bold text-white/58">現在のレベル</div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="text-lg font-black">{currentEnglishLevel || '未診断'}</span>
                   <button
@@ -549,7 +549,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
             <User className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-sm font-bold text-slate-500">Profile Settings</p>
+            <p className="text-sm font-bold text-slate-500">プロフィール設定</p>
             <h3 className="mt-2 text-[1.7rem] font-black tracking-tight text-slate-950 sm:text-[1.9rem]">設定・プロフィール</h3>
             <p className="mt-2 max-w-2xl text-[0.95rem] leading-relaxed text-slate-500 sm:text-[0.98rem]">
               よく使う項目はタップだけで埋められるようにしました。自由入力もそのまま使えます。

@@ -237,11 +237,11 @@ export const useStudentDashboardViewModel = ({
     },
     canShowWritingSection ? {
       id: 'writing' as const,
-      title: 'Writing',
+      title: '英作文',
       body: hasActionableWriting
-        ? 'ミッションに紐づくWritingが残っています。提出画面まで迷わず移動できます。'
+        ? 'ミッションに紐づく英作文が残っています。提出画面まで迷わず移動できます。'
         : '配布済み課題、提出、返却コメントをまとめて確認できます。',
-      ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || 'Writingを提出') : 'Writingを確認',
+      ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || '英作文を提出') : '英作文を確認',
       metricLabel: primaryMission?.writingPromptTitle || '講師課題',
       stateLabel: hasActionableWriting ? '未提出' : '確認',
       tone: 'writing' as const,

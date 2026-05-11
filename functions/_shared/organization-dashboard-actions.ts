@@ -14,7 +14,7 @@ import { handleGetWeeklyMissionBoard } from './storage-mission-actions';
 import { requireActiveOrganizationContext } from './organization-memberships';
 import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import type { AppEnv, DbUserRow } from './types';
-import { DAY_MS, readAll, readFirst, type DbAssignmentEventRow } from './storage-support';
+import { DAY_MS, getMasteryProgressSql, readAll, readFirst, type DbAssignmentEventRow } from './storage-support';
 
 export const handleGetOrganizationDashboardSnapshot = async (
   env: AppEnv,
@@ -31,6 +31,7 @@ export const handleGetOrganizationDashboardSnapshot = async (
     cohortCountRow,
     assignmentCountRow,
     notificationCountRow,
+    worksheetReadinessRow,
     writingAssignmentCountRow,
     instructorRows,
     assignmentEvents,
@@ -87,11 +88,37 @@ export const handleGetOrganizationDashboardSnapshot = async (
        WHERE m.organization_id = ?`,
       organization.organizationId,
     ),
-    readFirst<{ total_count: number; issued_count: number }>(
+    readFirst<{ history_based_student_count: number; fallback_student_count: number }>(
+      env,
+      `SELECT
+         COUNT(DISTINCT CASE WHEN h.user_id IS NOT NULL THEN u.id END) AS history_based_student_count,
+         COUNT(DISTINCT u.id) - COUNT(DISTINCT CASE WHEN h.user_id IS NOT NULL THEN u.id END) AS fallback_student_count
+       FROM organization_memberships m
+       JOIN users u ON u.id = m.user_id
+       LEFT JOIN learning_histories h
+         ON h.user_id = u.id
+        AND ${getMasteryProgressSql('h')}
+       WHERE m.organization_id = ?
+         AND m.status = 'ACTIVE'
+         AND u.role = ?
+         AND u.email NOT GLOB 'demo_*@medace.app'`,
+      organization.organizationId,
+      UserRole.STUDENT,
+    ),
+    readFirst<{
+      total_count: number;
+      issued_count: number;
+      submitted_count: number;
+      review_ready_count: number;
+      reviewed_count: number;
+    }>(
       env,
       `SELECT
          COUNT(*) AS total_count,
-         COALESCE(SUM(CASE WHEN status != 'DRAFT' THEN 1 ELSE 0 END), 0) AS issued_count
+         COALESCE(SUM(CASE WHEN status != 'DRAFT' THEN 1 ELSE 0 END), 0) AS issued_count,
+         COALESCE(SUM(CASE WHEN status IN ('SUBMITTED', 'REVIEW_READY') THEN 1 ELSE 0 END), 0) AS submitted_count,
+         COALESCE(SUM(CASE WHEN status = 'REVIEW_READY' THEN 1 ELSE 0 END), 0) AS review_ready_count,
+         COALESCE(SUM(CASE WHEN status IN ('RETURNED', 'REVISION_REQUESTED', 'COMPLETED') THEN 1 ELSE 0 END), 0) AS reviewed_count
        FROM writing_assignments
        WHERE organization_id = ?
           OR (organization_id IS NULL AND organization_name = ?)`,
@@ -224,6 +251,11 @@ export const handleGetOrganizationDashboardSnapshot = async (
     totalNotificationCount: Number(notificationCountRow?.count || 0),
     writingAssignmentCount: Number(writingAssignmentCountRow?.total_count || 0),
     issuedWritingAssignmentCount: Number(writingAssignmentCountRow?.issued_count || 0),
+    submittedWritingAssignmentCount: Number(writingAssignmentCountRow?.submitted_count || 0),
+    reviewReadyWritingAssignmentCount: Number(writingAssignmentCountRow?.review_ready_count || 0),
+    reviewedWritingAssignmentCount: Number(writingAssignmentCountRow?.reviewed_count || 0),
+    historyBasedWorksheetStudentCount: Number(worksheetReadinessRow?.history_based_student_count || 0),
+    fallbackWorksheetStudentCount: Number(worksheetReadinessRow?.fallback_student_count || 0),
     instructors,
     students,
     missionAssignments: missionBoard.assignments,

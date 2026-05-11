@@ -42,6 +42,7 @@ const renderQuiz = (overrides: Partial<React.ComponentProps<typeof QuizRunningVi
     spellingFeedbackMessage={null}
     translationFeedback={null}
     checkingTranslationFeedback={false}
+    translationAwaitingAdvance={false}
     persistingAttempt={false}
     saveError={null}
     hasPendingAttempt={false}
@@ -56,6 +57,7 @@ const renderQuiz = (overrides: Partial<React.ComponentProps<typeof QuizRunningVi
     onOrderTokensClear={noop}
     onOrderSubmit={noop}
     onRetrySave={noop}
+    onAdvanceAfterTranslationFeedback={noop}
     {...overrides}
   />,
 );
@@ -282,6 +284,52 @@ describe('QuizRunningView answer-bearing context', () => {
     expect(rendered).toContain('改善訳');
     expect(rendered).toContain('その語は今日、生徒によって復習される。');
     expect(rendered).toContain('3ます: されるもの / be+過去分詞 / by+行為者');
+  });
+
+  it('shows an explicit next action after Japanese translation feedback instead of another submit action', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion,
+      mode: 'JA_TRANSLATION_INPUT',
+      interactionType: 'TEXT_INPUT',
+      promptLabel: '和訳全文入力',
+      promptText: 'The term is reviewed by students today.',
+      answer: 'その語は 今日 生徒によって 復習される',
+      sourceSentence: 'The term is reviewed by students today.',
+      sourceTranslation: 'その語は 今日 生徒によって 復習される',
+      grammarFocus: '受け身',
+      options: undefined,
+    };
+
+    const rendered = renderQuiz({
+      currentQuestion: question,
+      answerInput: '生徒は今日その語を復習します',
+      inputResult: 'incorrect',
+      translationAwaitingAdvance: true,
+      translationFeedback: {
+        isCorrect: false,
+        score: 6,
+        maxScore: 10,
+        verdictLabel: '部分点',
+        examTarget: 'UNIVERSITY_ENTRANCE',
+        summaryJa: '意味の中心は取れていますが、受け身の関係が弱いです。',
+        strengths: ['主要語を訳せています。'],
+        issues: ['誰が何をされたかを補いましょう。'],
+        improvedTranslation: 'その語は今日、生徒によって復習される。',
+        grammarAdviceJa: 'be動詞 + 過去分詞を受け身として読みます。',
+        nextDrillJa: '主語 / be+過去分詞 / by の3ますで確認しましょう。',
+        criteria: [
+          { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
+          { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
+          { label: '受験答案らしさ', score: 2, maxScore: 3, comment: '答案として整えます。' },
+        ],
+      },
+    });
+
+    expect(rendered).toContain('data-testid="translation-feedback-next"');
+    expect(rendered).toContain('フィードバックを読んだので次へ');
+    expect(rendered).not.toContain('type="submit"');
+    expect(rendered).not.toContain('和訳を判定する');
+    expect(rendered).not.toContain('ヒントを見る');
   });
 
   it('does not reveal unstructured AI grammar focus before answering', () => {

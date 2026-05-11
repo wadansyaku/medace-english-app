@@ -185,6 +185,59 @@ export enum GeneratedAssetAuditStatus {
   FAILED = 'FAILED',
 }
 
+export type AiGeneratedContentQualityStatus = 'READY' | 'NEEDS_REVIEW' | 'REJECTED';
+
+export type AiGeneratedProblemReviewStatus = 'PENDING' | 'APPROVED' | 'NEEDS_REVIEW' | 'REJECTED';
+
+export type AiGeneratedProblemReviewDecision = 'APPROVE' | 'REJECT' | 'NEEDS_REVIEW';
+
+export type AiGeneratedProblemReviewQueueStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL';
+
+export type AiGeneratedProblemReusableBucket = 'APPROVED' | 'LEGACY_READY' | 'BLOCKED';
+
+export interface AiGeneratedProblemReviewQueueItem {
+  problemId: string;
+  contentId: string;
+  wordId: string;
+  bookId: string;
+  bookTitle: string;
+  word: string;
+  definition: string;
+  questionMode: WorksheetQuestionMode;
+  grammarScopeId: GrammarCurriculumScopeId | null;
+  promptText: string;
+  answerText: string;
+  options: string[];
+  orderedTokens: string[];
+  sourceSentence: string | null;
+  sourceTranslation: string | null;
+  grammarFocus: string | null;
+  difficultyLevel: number;
+  contentQualityStatus: AiGeneratedContentQualityStatus;
+  reviewStatus: AiGeneratedProblemReviewStatus;
+  calibrationStatus: string;
+  constructId: string;
+  skillArea: string;
+  itemFormat: string;
+  cefrTarget: string | null;
+  usageCount: number;
+  lastUsedAt: number | null;
+  sampleSize: number;
+  exposureRate: number;
+  version: number;
+  isActive: boolean;
+  hasAssessmentMetadata: boolean;
+  isLegacyReady: boolean;
+  reusableBucket: AiGeneratedProblemReusableBucket;
+  isReusable: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AiGeneratedProblemReviewQueueResponse {
+  items: AiGeneratedProblemReviewQueueItem[];
+}
+
 export const USER_STUDY_MODE_LABELS: Record<UserStudyMode, string> = {
   [UserStudyMode.FOCUS]: '集中モード',
   [UserStudyMode.GAME]: 'ゲームモード',
@@ -1221,7 +1274,8 @@ export type OrganizationActivationActionTargetKind =
   | 'STUDENT_ASSIGNMENT'
   | 'MISSION_ASSIGNMENT'
   | 'INSTRUCTOR_NOTIFICATION'
-  | 'WRITING_ASSIGNMENT';
+  | 'WRITING_ASSIGNMENT'
+  | 'WORKSHEET';
 
 export interface OrganizationActivationActionTarget {
   kind: OrganizationActivationActionTargetKind;
@@ -1243,6 +1297,69 @@ export interface OrganizationActivationStep {
   description: string;
   done: boolean;
   target: OrganizationActivationActionTarget | null;
+}
+
+export type OrganizationActivationRunbookStageId =
+  | 'cohort'
+  | 'assignment'
+  | 'mission'
+  | 'notification'
+  | 'worksheet'
+  | 'writing'
+  | 'review';
+
+export type OrganizationActivationRunbookStageStatus = 'complete' | 'stalled' | 'pending';
+
+export interface OrganizationActivationRunbookStage {
+  id: OrganizationActivationRunbookStageId;
+  label: string;
+  detail: string;
+  done: boolean;
+  status: OrganizationActivationRunbookStageStatus;
+  stalledReason: string | null;
+  actionLabel: string;
+  target: OrganizationActivationActionTarget | null;
+  evidenceLabel: string;
+}
+
+export interface OrganizationActivationRunbookWorksheetSummary {
+  historyBasedStudentCount: number;
+  fallbackStudentCount: number;
+  sourceLabel: string;
+  hasOnlyFallback: boolean;
+}
+
+export interface OrganizationActivationRunbookSummary {
+  stages: OrganizationActivationRunbookStage[];
+  currentStage: OrganizationActivationRunbookStage | null;
+  stalledStage: OrganizationActivationRunbookStage | null;
+  completedStageCount: number;
+  totalStageCount: number;
+  progressPercent: number;
+  worksheet: OrganizationActivationRunbookWorksheetSummary;
+}
+
+export type ClassroomActivationLifecycleStage =
+  | 'cohort'
+  | 'student'
+  | 'instructor'
+  | 'mission'
+  | 'notification'
+  | 'worksheet'
+  | 'writing'
+  | 'review';
+
+export type ClassroomWorksheetSource = 'history' | 'catalog_fallback' | 'starter_fallback';
+
+export type ClassroomWorksheetLifecycleStatus = 'printed' | 'issued' | 'collected' | 'scored';
+
+export interface ClassroomWorksheetLifecycleEventResult {
+  runId: string;
+  eventId: string;
+  worksheetEventId: string;
+  worksheetSource: ClassroomWorksheetSource;
+  lifecycleStatus: ClassroomWorksheetLifecycleStatus;
+  occurredAt: number;
 }
 
 export interface OrganizationDashboardSnapshot {
@@ -1282,6 +1399,7 @@ export interface OrganizationDashboardSnapshot {
   nextRequiredActionDescription: string;
   activationSteps: OrganizationActivationStep[];
   nextRequiredActionTarget: OrganizationActivationActionTarget | null;
+  activationRunbook?: OrganizationActivationRunbookSummary;
 }
 
 export enum InstructorWorkspaceView {
@@ -1350,6 +1468,8 @@ export interface StudentWorksheetSnapshot {
   studentUid: string;
   studentName: string;
   organizationName?: string;
+  source?: ClassroomWorksheetSource;
+  sourceLabel?: string;
   words: StudentWorksheetWord[];
 }
 

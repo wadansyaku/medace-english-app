@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { UserRole } from '../types';
+import { aiRoutes } from '../functions/_shared/api-routes/ai';
 import { authProfileRoutes } from '../functions/_shared/api-routes/auth-profile';
 import { publicCommercialRoutes } from '../functions/_shared/api-routes/public-commercial';
 import { handleAiAction } from '../functions/_shared/ai-actions';
@@ -127,6 +128,39 @@ describe('negative route guards', () => {
     );
   });
 
+  it('rejects cross-origin ai requests before auth and AI execution', async () => {
+    const request = new Request('https://medace-english-app.pages.dev/api/ai', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'generateGeminiSentence',
+        payload: {
+          word: 'stabilize',
+          definition: '安定させる',
+        },
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'https://attacker.example',
+      },
+    });
+    const route = aiRoutes.find((candidate) => candidate.matches({
+      env: {} as never,
+      request,
+      pathname: 'ai',
+    }));
+
+    expect(route).toBeDefined();
+    await expectHttpError(
+      route!.handle({
+        env: {} as never,
+        request,
+        pathname: 'ai',
+      }),
+      403,
+      'Cross-origin な mutation は許可されていません。',
+    );
+  });
+
   it('keeps destructive storage actions blocked on production hosts before execution', async () => {
     await expectHttpError(
       handleStorageAction(
@@ -162,6 +196,23 @@ describe('negative route guards', () => {
       ),
       404,
       '未知のAI操作です。',
+    );
+  });
+
+  it('rejects invalid ai action payloads before metering or provider calls', async () => {
+    await expectHttpError(
+      handleAiAction(
+        {} as never,
+        createUser(),
+        {
+          action: 'generateAIQuiz',
+          payload: {
+            targetWords: 'not-an-array',
+          },
+        },
+      ),
+      400,
+      'targetWords は配列で指定してください。',
     );
   });
 });

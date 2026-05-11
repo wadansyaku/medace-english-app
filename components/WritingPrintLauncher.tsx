@@ -64,15 +64,15 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
               <div class="meta-value">${assignment.studentName}</div>
             </div>
             <div class="meta-card">
-              <div class="meta-label">Words</div>
+              <div class="meta-label">語数</div>
               <div class="meta-value">${assignment.wordCountMin} - ${assignment.wordCountMax} words</div>
             </div>
             <div class="meta-card">
-              <div class="meta-label">Submission Code</div>
+              <div class="meta-label">提出コード</div>
               <div class="meta-value">${assignment.submissionCode}</div>
             </div>
             <div class="meta-card">
-              <div class="meta-label">Attempt</div>
+              <div class="meta-label">提出回数</div>
               <div class="meta-value">${attemptNo} / ${assignment.maxAttempts}</div>
             </div>
           </div>

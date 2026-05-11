@@ -10,7 +10,7 @@ const DashboardAnnouncementSection: React.FC<DashboardAnnouncementSectionProps> 
 
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm" data-testid="dashboard-announcement-section">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Updates</p>
+      <p className="text-xs font-bold text-slate-400">お知らせ</p>
       <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">最近のお知らせ</h3>
       <div className="mt-5 space-y-3">
         {feed.announcements.slice(0, 3).map((announcement) => (

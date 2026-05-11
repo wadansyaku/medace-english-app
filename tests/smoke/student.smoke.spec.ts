@@ -51,3 +51,15 @@ test('study routes survive reload and finish back on the dashboard path', async 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 });
+
+test('student can open the english practice workspace from a direct route', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+
+  await page.goto('/english-practice');
+  await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await expect(page.getByTestId('english-practice-lane-overview')).toBeVisible();
+});

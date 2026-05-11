@@ -24,7 +24,7 @@ export const getSmartSessionConfig = (bookId: string): SmartSessionConfig | null
     return {
       bookId,
       limit: WEAKNESS_FOCUS_SESSION_LIMIT,
-      badgeLabel: 'Weakness Focus',
+      badgeLabel: '苦手フォーカス',
       isWeaknessFocus: true,
     };
   }

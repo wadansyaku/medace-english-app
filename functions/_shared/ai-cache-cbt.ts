@@ -2,18 +2,36 @@ import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import {
   advanceCbtState,
   createAiCacheKey,
+  DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS,
+  DEFAULT_ASSESSMENT_ITEM_REVIEW_STATUS,
+  classifyReusableAiProblemReviewState,
   getInitialCbtState,
   inferProblemDifficultyFromStats,
   selectCbtDifficultyBand,
+  type AiGeneratedContentQualityStatus,
   type AiGeneratedContentKind,
+  type AssessmentItemReviewStatus,
   type CbtDifficultyBand,
   type CbtState,
-} from '../../services/storage/ai-cache-cbt';
-import type { GrammarCurriculumScopeId, JapaneseTranslationFeedback } from '../../types';
+} from '../../shared/aiCacheCbt';
+import {
+  OrganizationRole,
+  UserRole,
+  type AiGeneratedProblemReviewDecision,
+  type AiGeneratedProblemReviewQueueItem,
+  type AiGeneratedProblemReviewQueueResponse,
+  type AiGeneratedProblemReviewQueueStatus,
+  type GrammarCurriculumScopeId,
+  type JapaneseTranslationFeedback,
+} from '../../types';
 import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
-import type { AppEnv } from './types';
+import { HttpError } from './http';
+import { requireActiveOrganizationContext } from './organization-memberships';
+import { assertBookReadAccess, buildInClause, readVisibleBookRows } from './storage-support';
+import type { AppEnv, DbUserRow } from './types';
 
-type QualityStatus = 'READY' | 'NEEDS_REVIEW' | 'REJECTED';
+type QualityStatus = AiGeneratedContentQualityStatus;
+type ReviewStatus = AssessmentItemReviewStatus;
 
 interface AiContentRow {
   id: string;
@@ -59,6 +77,43 @@ interface AiGeneratedProblemRow {
 interface ReusableAiGeneratedQuestionRow extends AiGeneratedProblemRow {
   content_usage_count: number;
   payload_json: string;
+}
+
+interface AiGeneratedProblemReviewQueueRow {
+  id: string;
+  content_id: string;
+  word_id: string;
+  book_id: string;
+  book_title: string | null;
+  word: string | null;
+  definition: string | null;
+  question_mode: string;
+  grammar_scope_id: string | null;
+  prompt_text: string;
+  answer_text: string;
+  options_json: string;
+  ordered_tokens_json: string;
+  source_sentence: string | null;
+  source_translation: string | null;
+  grammar_focus: string | null;
+  difficulty_level: number;
+  active: number;
+  created_at: number;
+  updated_at: number;
+  quality_status: QualityStatus;
+  usage_count: number;
+  last_used_at: number | null;
+  payload_json: string;
+  metadata_problem_id: string | null;
+  construct_id: string | null;
+  skill_area: string | null;
+  item_format: string | null;
+  cefr_target: string | null;
+  calibration_status: string | null;
+  review_status: ReviewStatus | null;
+  sample_size: number | null;
+  exposure_rate: number | null;
+  version: number | null;
 }
 
 export interface AiGeneratedContentInput {
@@ -115,6 +170,29 @@ export interface CbtLearnerSnapshot {
   difficultyBand: CbtDifficultyBand;
 }
 
+export interface AiGeneratedProblemReviewQueueQuery {
+  status?: AiGeneratedProblemReviewQueueStatus;
+  limit?: number;
+  bookId?: string | null;
+  questionMode?: string | null;
+  grammarScopeId?: GrammarCurriculumScopeId | null;
+}
+
+export interface AiGeneratedProblemReviewInput {
+  problemId: string;
+  decision: AiGeneratedProblemReviewDecision;
+  reviewNote?: string;
+  now?: number;
+}
+
+const APPROVED_REVIEW_STATUS: ReviewStatus = 'APPROVED';
+const REUSABLE_CONTENT_QUALITY_STATUS: QualityStatus = 'READY';
+const REJECTED_CONTENT_QUALITY_STATUS: QualityStatus = 'REJECTED';
+const REVIEW_REQUIRED_CONTENT_QUALITY_STATUS: QualityStatus = DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS;
+const REJECTED_REVIEW_STATUS: ReviewStatus = 'REJECTED';
+const NEEDS_REVIEW_STATUS: ReviewStatus = 'NEEDS_REVIEW';
+const LEGACY_READY_REVIEW_STATUS: ReviewStatus = DEFAULT_ASSESSMENT_ITEM_REVIEW_STATUS;
+
 const clampLimit = (value: number | undefined, fallback: number): number => (
   Math.max(1, Math.min(25, Math.trunc(value || fallback)))
 );
@@ -133,6 +211,182 @@ const createContentId = (cacheKey: string): string => `ai-content-${createAiCach
   sourceText: cacheKey,
 }).sourceHash}`;
 
+const safeJsonStringArray = (value: string): string[] => {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const toReviewQueueItem = (row: AiGeneratedProblemReviewQueueRow): AiGeneratedProblemReviewQueueItem => {
+  const hasAssessmentMetadata = Boolean(row.metadata_problem_id);
+  const reviewStatus = row.review_status || LEGACY_READY_REVIEW_STATUS;
+  const contentQualityStatus = row.quality_status;
+  const reviewBucket = classifyReusableAiProblemReviewState({
+    contentQualityStatus,
+    assessmentReviewStatus: reviewStatus,
+    hasAssessmentMetadata,
+  });
+  return {
+    problemId: row.id,
+    contentId: row.content_id,
+    wordId: row.word_id,
+    bookId: row.book_id,
+    bookTitle: row.book_title || '',
+    word: row.word || '',
+    definition: row.definition || '',
+    questionMode: row.question_mode as AiGeneratedProblemReviewQueueItem['questionMode'],
+    grammarScopeId: row.grammar_scope_id as GrammarCurriculumScopeId | null,
+    promptText: row.prompt_text,
+    answerText: row.answer_text,
+    options: safeJsonStringArray(row.options_json),
+    orderedTokens: safeJsonStringArray(row.ordered_tokens_json),
+    sourceSentence: row.source_sentence,
+    sourceTranslation: row.source_translation,
+    grammarFocus: row.grammar_focus,
+    difficultyLevel: Number(row.difficulty_level ?? 0.5),
+    contentQualityStatus,
+    reviewStatus,
+    calibrationStatus: row.calibration_status || 'UNREVIEWED',
+    constructId: row.construct_id || 'grammar-general',
+    skillArea: row.skill_area || 'grammar-application',
+    itemFormat: row.item_format || '',
+    cefrTarget: row.cefr_target,
+    usageCount: Number(row.usage_count || 0),
+    lastUsedAt: row.last_used_at,
+    sampleSize: Number(row.sample_size || 0),
+    exposureRate: Number(row.exposure_rate || 0),
+    version: Number(row.version || 1),
+    isActive: Boolean(row.active),
+    hasAssessmentMetadata,
+    isLegacyReady: reviewBucket === 'LEGACY_READY',
+    reusableBucket: reviewBucket,
+    isReusable: reviewBucket === 'APPROVED',
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0),
+  };
+};
+
+const buildReviewQueueSql = (
+  query: AiGeneratedProblemReviewQueueQuery,
+  visibleBookIds: string[] | null,
+): { sql: string; bindings: unknown[] } => {
+  const status = query.status || 'PENDING';
+  const bindings: unknown[] = [];
+  const filters: string[] = ['p.active IN (0, 1)'];
+
+  if (visibleBookIds) {
+    if (visibleBookIds.length === 0) {
+      filters.push('1 = 0');
+    } else {
+      filters.push(`p.book_id IN (${buildInClause(visibleBookIds.length)})`);
+      bindings.push(...visibleBookIds);
+    }
+  }
+  if (query.bookId) {
+    filters.push('p.book_id = ?');
+    bindings.push(query.bookId);
+  }
+  if (query.questionMode) {
+    filters.push('p.question_mode = ?');
+    bindings.push(query.questionMode);
+  }
+  if (query.grammarScopeId) {
+    filters.push('p.grammar_scope_id = ?');
+    bindings.push(query.grammarScopeId);
+  }
+
+  if (status === 'PENDING') {
+    filters.push(`(
+      c.quality_status = '${REVIEW_REQUIRED_CONTENT_QUALITY_STATUS}'
+      OR (m.problem_id IS NULL AND c.quality_status = '${REUSABLE_CONTENT_QUALITY_STATUS}')
+      OR (m.review_status IN ('${LEGACY_READY_REVIEW_STATUS}', '${NEEDS_REVIEW_STATUS}') AND c.quality_status != '${REJECTED_CONTENT_QUALITY_STATUS}')
+    )`);
+  } else if (status === 'APPROVED') {
+    filters.push(`m.review_status = '${APPROVED_REVIEW_STATUS}' AND c.quality_status = '${REUSABLE_CONTENT_QUALITY_STATUS}'`);
+  } else if (status === 'REJECTED') {
+    filters.push(`(m.review_status = '${REJECTED_REVIEW_STATUS}' OR c.quality_status = '${REJECTED_CONTENT_QUALITY_STATUS}')`);
+  }
+
+  bindings.push(clampLimit(query.limit, 50));
+
+  return {
+    sql: `
+      SELECT
+        p.id, p.content_id, p.word_id, p.book_id, b.title AS book_title, w.word, w.definition,
+        p.question_mode, p.grammar_scope_id, p.prompt_text, p.answer_text,
+        p.options_json, p.ordered_tokens_json, p.source_sentence, p.source_translation,
+        p.grammar_focus, p.difficulty_level, p.active, p.created_at, p.updated_at,
+        c.quality_status, c.usage_count, c.last_used_at, c.payload_json,
+        m.problem_id AS metadata_problem_id, m.construct_id, m.skill_area, m.item_format,
+        m.cefr_target, m.calibration_status, m.review_status, m.sample_size, m.exposure_rate, m.version
+      FROM ai_generated_problems p
+      JOIN ai_generated_contents c ON c.id = p.content_id
+      LEFT JOIN assessment_item_metadata m ON m.problem_id = p.id
+      LEFT JOIN words w ON w.id = p.word_id
+      LEFT JOIN books b ON b.id = p.book_id
+      WHERE ${filters.join('\n        AND ')}
+      ORDER BY
+        CASE
+          WHEN c.quality_status = '${REVIEW_REQUIRED_CONTENT_QUALITY_STATUS}' THEN 0
+          WHEN m.review_status = '${NEEDS_REVIEW_STATUS}' THEN 1
+          WHEN m.problem_id IS NULL THEN 2
+          WHEN m.review_status = '${LEGACY_READY_REVIEW_STATUS}' THEN 3
+          ELSE 4
+        END,
+        p.updated_at DESC
+      LIMIT ?
+    `,
+    bindings,
+  };
+};
+
+const getVisibleAiReviewBookIds = async (
+  env: AppEnv,
+  user: DbUserRow,
+): Promise<string[] | null> => {
+  if (user.role === UserRole.ADMIN) return null;
+  await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN, OrganizationRole.INSTRUCTOR]);
+  const rows = await readVisibleBookRows(env, user);
+  return rows.map((row) => row.id);
+};
+
+const readAiGeneratedProblemReviewRow = async (
+  env: AppEnv,
+  problemId: string,
+): Promise<AiGeneratedProblemReviewQueueRow | null> => {
+  return env.DB.prepare(`
+    SELECT
+      p.id, p.content_id, p.word_id, p.book_id, b.title AS book_title, w.word, w.definition,
+      p.question_mode, p.grammar_scope_id, p.prompt_text, p.answer_text,
+      p.options_json, p.ordered_tokens_json, p.source_sentence, p.source_translation,
+      p.grammar_focus, p.difficulty_level, p.active, p.created_at, p.updated_at,
+      c.quality_status, c.usage_count, c.last_used_at, c.payload_json,
+      m.problem_id AS metadata_problem_id, m.construct_id, m.skill_area, m.item_format,
+      m.cefr_target, m.calibration_status, m.review_status, m.sample_size, m.exposure_rate, m.version
+    FROM ai_generated_problems p
+    JOIN ai_generated_contents c ON c.id = p.content_id
+    LEFT JOIN assessment_item_metadata m ON m.problem_id = p.id
+    LEFT JOIN words w ON w.id = p.word_id
+    LEFT JOIN books b ON b.id = p.book_id
+    WHERE p.id = ?
+  `).bind(problemId).first<AiGeneratedProblemReviewQueueRow>();
+};
+
+const assertAiGeneratedProblemReviewAccess = async (
+  env: AppEnv,
+  user: DbUserRow,
+  row: AiGeneratedProblemReviewQueueRow,
+): Promise<void> => {
+  if (user.role === UserRole.ADMIN) return;
+  await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN, OrganizationRole.INSTRUCTOR]);
+  await assertBookReadAccess(env, user, row.book_id);
+};
+
 export const upsertAiGeneratedContent = async (
   env: AppEnv,
   input: AiGeneratedContentInput,
@@ -149,6 +403,11 @@ export const upsertAiGeneratedContent = async (
   });
   const id = createContentId(key.cacheKey);
   const payloadJson = JSON.stringify(input.payload);
+  const qualityStatus = input.qualityStatus ?? (
+    input.contentKind === 'GRAMMAR_PROBLEM'
+      ? DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS
+      : REUSABLE_CONTENT_QUALITY_STATUS
+  );
 
   await env.DB.prepare(`
     INSERT INTO ai_generated_contents (
@@ -174,7 +433,7 @@ export const upsertAiGeneratedContent = async (
     input.grammarScopeId || null,
     key.sourceHash,
     payloadJson,
-    input.qualityStatus || 'READY',
+    qualityStatus,
     input.expiresAt ?? null,
     now,
     now,
@@ -215,7 +474,7 @@ export const recordAiGeneratedProblem = async (
     grammarScopeId: question.grammarScope?.scopeId || null,
     sourceText: input.sourceText || `${question.promptText}\n${question.answer}`,
     payload: question,
-    qualityStatus: input.qualityStatus,
+    qualityStatus: input.qualityStatus ?? DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS,
     now: input.now,
   });
   const now = input.now ?? Date.now();
@@ -268,7 +527,7 @@ export const recordAiGeneratedProblem = async (
         problem_id, construct_id, skill_area, item_format, cefr_target,
         calibration_status, review_status, irt_model, difficulty,
         discrimination, fit, sample_size, exposure_rate, version, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 'UNREVIEWED', 'PENDING', 'NONE', ?, NULL, NULL, 0, 0, 1, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, 'UNREVIEWED', ?, 'NONE', ?, NULL, NULL, 0, 0, 1, ?, ?)
       ON CONFLICT(problem_id) DO UPDATE SET
         construct_id = excluded.construct_id,
         skill_area = excluded.skill_area,
@@ -288,6 +547,7 @@ export const recordAiGeneratedProblem = async (
             : 'grammar-application',
       question.interactionType,
       question.grammarScope?.cefrLevel || null,
+      DEFAULT_ASSESSMENT_ITEM_REVIEW_STATUS,
       row.difficulty_level,
       now,
       now,
@@ -344,6 +604,129 @@ export const recordAiGeneratedExample = async (
   ).run();
 };
 
+export const listAiGeneratedProblemReviewQueue = async (
+  env: AppEnv,
+  user: DbUserRow,
+  query: AiGeneratedProblemReviewQueueQuery = {},
+): Promise<AiGeneratedProblemReviewQueueResponse> => {
+  const visibleBookIds = await getVisibleAiReviewBookIds(env, user);
+  const { sql, bindings } = buildReviewQueueSql(query, visibleBookIds);
+  const rows = await env.DB.prepare(sql).bind(...bindings).all<AiGeneratedProblemReviewQueueRow>();
+  return {
+    items: (rows.results || []).map(toReviewQueueItem),
+  };
+};
+
+const getSkillAreaForQuestionMode = (questionMode: string): string => {
+  if (questionMode === 'JA_TRANSLATION_INPUT') return 'translation-input';
+  if (questionMode === 'JA_TRANSLATION_ORDER') return 'translation-order';
+  if (questionMode === 'EN_WORD_ORDER') return 'english-word-order';
+  return 'grammar-application';
+};
+
+const resolveReviewDecisionState = (
+  decision: AiGeneratedProblemReviewDecision,
+): {
+  qualityStatus: QualityStatus;
+  reviewStatus: ReviewStatus;
+  calibrationStatus: 'UNREVIEWED' | 'TEACHER_REVIEWED' | 'REJECTED';
+  active: 0 | 1;
+} => {
+  if (decision === 'APPROVE') {
+    return {
+      qualityStatus: REUSABLE_CONTENT_QUALITY_STATUS,
+      reviewStatus: APPROVED_REVIEW_STATUS,
+      calibrationStatus: 'TEACHER_REVIEWED',
+      active: 1,
+    };
+  }
+  if (decision === 'REJECT') {
+    return {
+      qualityStatus: REJECTED_CONTENT_QUALITY_STATUS,
+      reviewStatus: REJECTED_REVIEW_STATUS,
+      calibrationStatus: 'REJECTED',
+      active: 0,
+    };
+  }
+  return {
+    qualityStatus: REVIEW_REQUIRED_CONTENT_QUALITY_STATUS,
+    reviewStatus: NEEDS_REVIEW_STATUS,
+    calibrationStatus: 'UNREVIEWED',
+    active: 1,
+  };
+};
+
+export const reviewAiGeneratedProblem = async (
+  env: AppEnv,
+  user: DbUserRow,
+  input: AiGeneratedProblemReviewInput,
+): Promise<AiGeneratedProblemReviewQueueItem> => {
+  const row = await readAiGeneratedProblemReviewRow(env, input.problemId);
+  if (!row) {
+    throw new HttpError(404, 'AI生成問題が見つかりません。');
+  }
+  await assertAiGeneratedProblemReviewAccess(env, user, row);
+
+  const now = input.now ?? Date.now();
+  const next = resolveReviewDecisionState(input.decision);
+
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE ai_generated_contents
+      SET quality_status = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(next.qualityStatus, now, row.content_id),
+    env.DB.prepare(`
+      UPDATE ai_generated_problems
+      SET active = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(next.active, now, row.id),
+    env.DB.prepare(`
+      INSERT INTO assessment_item_metadata (
+        problem_id, construct_id, skill_area, item_format, cefr_target,
+        calibration_status, review_status, irt_model, difficulty,
+        discrimination, fit, sample_size, exposure_rate, version,
+        reviewed_by, reviewed_at, review_note, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'NONE', ?, NULL, NULL, 0, 0, 1, ?, ?, ?, ?, ?)
+      ON CONFLICT(problem_id) DO UPDATE SET
+        calibration_status = excluded.calibration_status,
+        review_status = excluded.review_status,
+        difficulty = excluded.difficulty,
+        reviewed_by = excluded.reviewed_by,
+        reviewed_at = excluded.reviewed_at,
+        review_note = excluded.review_note,
+        updated_at = excluded.updated_at
+    `).bind(
+      row.id,
+      row.construct_id || row.grammar_scope_id || 'grammar-general',
+      row.skill_area || getSkillAreaForQuestionMode(row.question_mode),
+      row.item_format || row.question_mode,
+      row.cefr_target,
+      next.calibrationStatus,
+      next.reviewStatus,
+      row.difficulty_level,
+      user.id,
+      now,
+      input.reviewNote || null,
+      now,
+      now,
+    ),
+  ]);
+
+  return toReviewQueueItem({
+    ...row,
+    active: next.active,
+    quality_status: next.qualityStatus,
+    metadata_problem_id: row.metadata_problem_id || row.id,
+    construct_id: row.construct_id || row.grammar_scope_id || 'grammar-general',
+    skill_area: row.skill_area || getSkillAreaForQuestionMode(row.question_mode),
+    item_format: row.item_format || row.question_mode,
+    calibration_status: next.calibrationStatus,
+    review_status: next.reviewStatus,
+    updated_at: now,
+  });
+};
+
 export const readReusableAiGrammarProblems = async (
   env: AppEnv,
   query: ReusableGrammarProblemQuery,
@@ -357,13 +740,19 @@ export const readReusableAiGrammarProblems = async (
     SELECT p.*
     FROM ai_generated_problems p
     JOIN ai_generated_contents c ON c.id = p.content_id
+    LEFT JOIN assessment_item_metadata m ON m.problem_id = p.id
     WHERE p.word_id IN (${placeholders})
       AND p.question_mode = ?
       AND (? IS NULL OR p.grammar_scope_id = ?)
       AND p.active = 1
-      AND c.quality_status = 'READY'
+      AND (
+        (m.review_status = '${APPROVED_REVIEW_STATUS}' AND c.quality_status = '${REUSABLE_CONTENT_QUALITY_STATUS}')
+      )
       AND p.difficulty_level BETWEEN ? AND ?
-    ORDER BY c.usage_count ASC, p.updated_at DESC
+    ORDER BY
+      CASE WHEN m.review_status = '${APPROVED_REVIEW_STATUS}' THEN 0 ELSE 1 END,
+      c.usage_count ASC,
+      p.updated_at DESC
     LIMIT ?
   `).bind(
     ...query.wordIds,
@@ -396,14 +785,20 @@ export const readReusableAiGrammarQuestions = async (
     SELECT p.*, c.usage_count AS content_usage_count, c.payload_json
     FROM ai_generated_problems p
     JOIN ai_generated_contents c ON c.id = p.content_id
+    LEFT JOIN assessment_item_metadata m ON m.problem_id = p.id
     WHERE p.word_id IN (${placeholders})
       AND p.question_mode = ?
       AND (? IS NULL OR p.grammar_scope_id = ?)
       AND p.active = 1
-      AND c.quality_status = 'READY'
+      AND (
+        (m.review_status = '${APPROVED_REVIEW_STATUS}' AND c.quality_status = '${REUSABLE_CONTENT_QUALITY_STATUS}')
+      )
       AND (c.expires_at IS NULL OR c.expires_at > ?)
       AND p.difficulty_level BETWEEN ? AND ?
-    ORDER BY c.usage_count ASC, p.updated_at DESC
+    ORDER BY
+      CASE WHEN m.review_status = '${APPROVED_REVIEW_STATUS}' THEN 0 ELSE 1 END,
+      c.usage_count ASC,
+      p.updated_at DESC
     LIMIT ?
   `).bind(
     ...query.wordIds,
@@ -518,6 +913,10 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     expectedTranslation: string;
     userTranslation: string;
     feedback: JapaneseTranslationFeedback;
+    examTarget?: string | null;
+    organizationId?: string | null;
+    model?: string | null;
+    promptVersion?: string | null;
     now?: number;
   },
 ): Promise<void> => {
@@ -535,8 +934,9 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     INSERT INTO japanese_translation_feedback_events (
       id, user_id, word_id, book_id, question_mode, grammar_scope_id,
       source_sentence, expected_translation, user_translation, score, max_score,
-      is_correct, verdict_label, feedback_json, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_correct, verdict_label, feedback_json, created_at,
+      exam_target, organization_id, model, prompt_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
     input.userId,
@@ -553,6 +953,10 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     input.feedback.verdictLabel,
     JSON.stringify(input.feedback),
     now,
+    input.examTarget || input.feedback.examTarget || null,
+    input.organizationId || null,
+    input.model || null,
+    input.promptVersion || null,
   ).run();
 };
 
@@ -651,6 +1055,11 @@ export const recordCbtProblemAttempt = async (
         avg_response_time_ms = excluded.avg_response_time_ms,
         updated_at = excluded.updated_at
     `).bind(input.problemId, nextDifficulty, exposureCount, correctCount, avgResponseTimeMs, now),
+    env.DB.prepare(`
+      UPDATE ai_generated_problems
+      SET difficulty_level = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(nextDifficulty, now, input.problemId),
   ]);
 
   return { learner, word, problemDifficultyLevel: nextDifficulty };

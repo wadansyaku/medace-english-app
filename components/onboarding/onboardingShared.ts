@@ -22,9 +22,9 @@ export const LEVEL_BADGE_STYLE: Record<EnglishLevel, string> = {
 };
 
 const DIAGNOSTIC_SKILL_LABELS: Record<DiagnosticSkill, string> = {
-  grammar: 'Grammar',
-  vocabulary: 'Vocabulary',
-  reading: 'Reading',
+  grammar: '文法',
+  vocabulary: '語彙',
+  reading: '読解',
 };
 
 const DIAGNOSTIC_PHASE_EXPLANATIONS: Record<DiagnosticPhase, string> = {

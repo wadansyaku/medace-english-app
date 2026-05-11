@@ -144,6 +144,26 @@ exports[`storage action contract > matches the storage action contract snapshot 
     "roles": null,
   },
   {
+    "action": "listAiGeneratedProblemReviewQueue",
+    "alias": "listAiGeneratedProblemReviewQueue",
+    "domain": "aiReview",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+      "INSTRUCTOR",
+    ],
+  },
+  {
+    "action": "reviewAiGeneratedProblem",
+    "alias": "reviewAiGeneratedProblem",
+    "domain": "aiReview",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+      "INSTRUCTOR",
+    ],
+  },
+  {
     "action": "getStudiedWordIdsByBook",
     "alias": "getStudiedWordIdsByBook",
     "domain": "learning",
@@ -170,6 +190,16 @@ exports[`storage action contract > matches the storage action contract snapshot 
   {
     "action": "getStudentWorksheetSnapshot",
     "alias": "getStudentWorksheetSnapshot",
+    "domain": "organization",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+      "INSTRUCTOR",
+    ],
+  },
+  {
+    "action": "recordClassroomWorksheetLifecycleEvent",
+    "alias": "recordClassroomWorksheetLifecycleEvent",
     "domain": "organization",
     "requiresDestructiveAdminFlag": false,
     "roles": [

@@ -2,12 +2,15 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  AiGeneratedProblemReviewQueueItem,
+  AiGeneratedProblemReviewQueueResponse,
   CommercialRequest,
   CommercialRequestStatus,
   BookAccessScope,
   BookCatalogSource,
   BookMetadata,
   BookProgress,
+  ClassroomWorksheetLifecycleEventResult,
   DashboardSnapshot,
   LearningTrack,
   InterventionKind,
@@ -41,6 +44,9 @@ import {
 import {
   CatalogImportRequest,
   CatalogImportResult,
+  AiGeneratedProblemReviewPayload,
+  AiGeneratedProblemReviewQueueRequest,
+  ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
   GenerateWordHintAssetPayload,
@@ -607,6 +613,18 @@ export class IndexedDBStorageService implements IStorageService {
     );
   }
 
+  async listAiGeneratedProblemReviewQueue(
+    _payload: AiGeneratedProblemReviewQueueRequest = {},
+  ): Promise<AiGeneratedProblemReviewQueueResponse> {
+    return { items: [] };
+  }
+
+  async reviewAiGeneratedProblem(
+    _payload: AiGeneratedProblemReviewPayload,
+  ): Promise<AiGeneratedProblemReviewQueueItem> {
+    throw new Error('AI生成問題レビューはクラウド保存でのみ利用できます。');
+  }
+
   async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
     return getStudiedWordIdsByBookFromHistory(this.getLearningHistoryContext(), uid, bookId);
   }
@@ -621,6 +639,19 @@ export class IndexedDBStorageService implements IStorageService {
 
   async getStudentWorksheetSnapshot(studentUid: string): Promise<StudentWorksheetSnapshot> {
     return getStudentWorksheetSnapshotReadModel(this.getOrganizationReadModelContext(), studentUid);
+  }
+
+  async recordClassroomWorksheetLifecycleEvent(
+    payload: ClassroomWorksheetLifecycleEventPayload,
+  ): Promise<ClassroomWorksheetLifecycleEventResult> {
+    return {
+      runId: 'local-classroom-run',
+      eventId: `local-classroom-event-${Date.now()}`,
+      worksheetEventId: `local-worksheet-event-${Date.now()}`,
+      worksheetSource: payload.worksheetSource,
+      lifecycleStatus: payload.lifecycleStatus,
+      occurredAt: payload.occurredAt || Date.now(),
+    };
   }
 
   async sendInstructorNotification(

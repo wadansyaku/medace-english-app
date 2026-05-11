@@ -31,7 +31,7 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
             <MessageSquareText className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Coach Message</p>
+            <p className="text-xs font-bold text-slate-400">講師メッセージ</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師からのメッセージ</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
               課題や復習の進め方について、講師から届いた最新のフォローをここで確認できます。
@@ -47,7 +47,7 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
         <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-5 py-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-bold text-slate-900">{latestNotification.instructorName}</div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            <div className="text-[11px] font-bold text-slate-400">
               {latestNotification.usedAi ? 'AI下書き' : '手動'}
             </div>
           </div>
@@ -84,7 +84,7 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
               <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-bold text-slate-900">{notification.instructorName}</div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                  <div className="text-[11px] font-bold text-slate-400">
                     {notification.usedAi ? 'AI下書き' : '手動'}
                   </div>
                 </div>

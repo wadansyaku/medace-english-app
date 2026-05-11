@@ -47,7 +47,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
           <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-xl md:p-7">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Placement Result</p>
+                <p className="text-xs font-bold text-slate-400">診断結果</p>
                 <h2 className="mt-2 text-[1.85rem] font-black tracking-tight text-slate-950 md:text-[2.5rem]">
                   推定スタート帯は {finalLevel}
                 </h2>
@@ -67,15 +67,15 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className={`rounded-[28px] border px-5 py-5 ${LEVEL_BADGE_STYLE[finalLevel]}`}>
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em]">Estimated Level</div>
+                <div className="text-[11px] font-bold">推定レベル</div>
                 <div className="mt-2 text-4xl font-black tracking-tight">{finalLevel}</div>
                 <div className="mt-1 text-sm font-medium">{result.summaryTitle}</div>
               </div>
               <div className="rounded-[28px] border border-medace-100 bg-medace-50/75 px-5 py-5">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Confidence</div>
+                <div className="text-[11px] font-bold text-slate-400">判定の安定度</div>
                 <div className="mt-2 text-2xl font-black text-slate-900">{result.confidence === 'HIGH' ? '高め' : '標準'}</div>
                 <div className="mt-1 text-sm text-slate-600">{result.correctCount} / {result.totalQuestions} 問正解</div>
-                <div className="mt-1 text-sm text-slate-500">Weighted score {result.weightedScore}</div>
+                <div className="mt-1 text-sm text-slate-500">重み付きスコア {result.weightedScore}</div>
               </div>
             </div>
 

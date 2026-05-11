@@ -143,7 +143,7 @@ export const handleBatchImportWords = async (
 
   const isOfficialImport = user.role === UserRole.ADMIN && !createdByUid;
   if (isOfficialImport && runtimeFlags && !runtimeFlags.enableDestructiveAdminActions) {
-    throw new HttpError(403, '本番環境では公式教材の更新を API から実行できません。バックアップ付き CLI runbook を使用してください。');
+    throw new HttpError(403, '本番環境では公式教材の更新を API から実行できません。バックアップ付き運用手順を使用してください。');
   }
 
   const ownerId = isOfficialImport ? null : user.id;

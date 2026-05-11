@@ -47,7 +47,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
       panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
     >
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Staff Scanner Submit</p>
+        <p className="text-xs font-bold text-slate-400">スタッフ代理提出</p>
         <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{scannerTarget.promptTitle}</h3>
         <p className="mt-2 text-sm text-slate-500">
           校舎で取り込んだ PDF 1枚または画像最大4枚まで提出できます。OCR補助用のテキストも入力できます。

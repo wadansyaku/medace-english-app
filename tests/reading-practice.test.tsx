@@ -101,7 +101,7 @@ describe('ReadingPracticeView', () => {
     const rendered = renderToStaticMarkup(<ReadingPracticeView passages={[]} />);
 
     expect(rendered).toContain('長文読解の問題がありません');
-    expect(rendered).toContain('Reading Practice');
+    expect(rendered).toContain('長文読解');
   });
 
   it('renders a Japanese orange-toned reading practice surface and keeps explanations hidden before scoring', () => {

@@ -25,7 +25,7 @@ const catalogWeight = (book: BookMetadata): number => {
 const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
   user,
   onSelectBook,
-  eyebrow = 'Catalog Access',
+  eyebrow = '教材カタログ',
   title = '既存単語帳にそのままアクセスする',
   description = 'ビジネス体験アカウントでは、既存の公式単語帳をそのまま開けます。テストでは英日・日英・スペルチェックを切り替えて確認できます。',
 }) => {

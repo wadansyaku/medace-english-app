@@ -34,6 +34,7 @@ interface QuizRunningViewProps {
   spellingFeedbackMessage: string | null;
   translationFeedback: JapaneseTranslationFeedback | null;
   checkingTranslationFeedback: boolean;
+  translationAwaitingAdvance: boolean;
   persistingAttempt: boolean;
   saveError: string | null;
   hasPendingAttempt: boolean;
@@ -48,6 +49,7 @@ interface QuizRunningViewProps {
   onOrderTokensClear: () => void;
   onOrderSubmit: () => void;
   onRetrySave: () => void;
+  onAdvanceAfterTranslationFeedback: () => void;
 }
 
 const QuizRunningView: React.FC<QuizRunningViewProps> = ({
@@ -69,6 +71,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   spellingFeedbackMessage,
   translationFeedback,
   checkingTranslationFeedback,
+  translationAwaitingAdvance,
   persistingAttempt,
   saveError,
   hasPendingAttempt,
@@ -83,6 +86,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   onOrderTokensClear,
   onOrderSubmit,
   onRetrySave,
+  onAdvanceAfterTranslationFeedback,
 }) => {
   const isOrderMode = currentQuestion.interactionType === 'ORDERING';
   const isTextInputMode = currentQuestion.interactionType === 'TEXT_INPUT';
@@ -125,6 +129,10 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     || hasHiddenGrammarScope,
   );
   const isInputBusy = persistingAttempt || checkingTranslationFeedback;
+  const showTranslationAdvanceAction = isTranslationInputMode && Boolean(inputResult && translationFeedback);
+  const translationAdvanceLabel = currentQIndex < questionsLength - 1
+    ? 'フィードバックを読んだので次へ'
+    : 'フィードバックを読んだので結果を見る';
 
   return (
   <div data-testid="quiz-running-view" className="space-y-4">
@@ -190,7 +198,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           {(shouldShowGrammarScope || hasHiddenGrammarScope) && (
             <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-600">
-                Grammar
+                文法
               </div>
               <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">
                 {hasHiddenGrammarScope ? '文法範囲は、判定後に表示します。' : grammarScopeText}
@@ -320,7 +328,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4" data-testid="translation-feedback-card">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">Feedback</div>
+                  <div className="text-[11px] font-bold text-orange-500">採点フィードバック</div>
                   <div className="mt-1 text-xl font-black text-slate-900">
                     {translationFeedback.score} / {translationFeedback.maxScore}・{translationFeedback.verdictLabel}
                   </div>
@@ -390,24 +398,36 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
         </section>
 
         <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
-          <div className="flex flex-col gap-3 sm:flex-row">
+          {showTranslationAdvanceAction ? (
             <button
-              type="submit"
-              disabled={!answerInput.trim() || !!inputResult || isInputBusy}
+              type="button"
+              data-testid="translation-feedback-next"
+              onClick={onAdvanceAfterTranslationFeedback}
+              disabled={!translationAwaitingAdvance || isInputBusy || Boolean(saveError && hasPendingAttempt)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? 'AI採点中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
+              <ArrowRight className="h-5 w-5" /> {translationAdvanceLabel}
             </button>
-            {isHintMode && !showSpellingHint && !inputResult && (
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button
-                type="button"
-                onClick={onRevealSpellingHint}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"
+                type="submit"
+                disabled={!answerInput.trim() || !!inputResult || isInputBusy}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                <SpellCheck className="h-5 w-5" /> ヒントを見る
+                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? 'AI採点中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
               </button>
-            )}
-          </div>
+              {isHintMode && !showSpellingHint && !inputResult && (
+                <button
+                  type="button"
+                  onClick={onRevealSpellingHint}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"
+                >
+                  <SpellCheck className="h-5 w-5" /> ヒントを見る
+                </button>
+              )}
+            </div>
+          )}
         </MobileStickyActionBar>
       </form>
     ) : isOrderMode ? (

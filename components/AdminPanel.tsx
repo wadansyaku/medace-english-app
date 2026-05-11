@@ -64,7 +64,7 @@ const AdminPanel: React.FC = () => {
   const [resetting, setResetting] = useState(false);
   const runtimeFlags = getClientRuntimeFlags();
   const destructiveActionsEnabled = runtimeFlags.enableDestructiveAdminActions;
-  const destructiveActionsMessage = '本番/導入 pilot では教材更新と初期化を UI から実行できません。バックアップ付き CLI runbook で dry-run 確認後に反映してください。';
+  const destructiveActionsMessage = '本番/導入テストでは教材更新と初期化を UI から実行できません。バックアップ付き運用手順で事前確認後に反映してください。';
 
   const loadCatalogBooks = async () => {
     setLoadingCatalogBooks(true);
@@ -297,7 +297,7 @@ const AdminPanel: React.FC = () => {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-medace-500">運営画面</p>
+          <p className="text-xs font-bold text-medace-500">運営画面</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight text-medace-900">{BRAND.officialName} 運営ダッシュボード</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-medace-900/70">
             学習状況、停滞リスク、教材運用、報告対応、AI利用を一画面で見渡せるように整理しています。

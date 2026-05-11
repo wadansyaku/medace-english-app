@@ -46,14 +46,14 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <WorkspaceMetricCard label="割当対象" value={`${controller.filteredAssignments.length}名`} detail="現在の条件に一致する生徒" />
-        <WorkspaceMetricCard label="未割当 at-risk" value={`${snapshot.unassignedAtRiskCount}名`} detail="優先して再割当したい生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
+        <WorkspaceMetricCard label="未割当の要フォロー" value={`${snapshot.unassignedAtRiskCount}名`} detail="優先して再割当したい生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
         <WorkspaceMetricCard label="要即対応" value={`${snapshot.interventionBacklogCount}名`} detail="48時間以内に介入したい生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
-        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒へのフォロー進行" tone="accent" />
+        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="要フォロー生徒へのフォロー進行" tone="accent" />
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignments Split View</p>
+          <p className="text-xs font-bold text-slate-400">担当割当</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">一覧から選び、右側で担当を更新する</h3>
         </div>
         <div className="flex flex-col gap-3 md:flex-row">
@@ -61,7 +61,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
             {[
               { key: 'ALL', label: '全生徒' },
               { key: 'IMMEDIATE', label: '要即対応' },
-              { key: 'UNASSIGNED_AT_RISK', label: '未割当 at-risk' },
+              { key: 'UNASSIGNED_AT_RISK', label: '未割当の要フォロー' },
             ].map((option) => (
               <button
                 key={option.key}
@@ -146,7 +146,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
               <div className="space-y-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Detail</p>
+                    <p className="text-xs font-bold text-slate-400">割当詳細</p>
                     <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{controller.selectedAssignmentStudent.name}</h3>
                     <p className="mt-2 text-sm text-slate-500">{controller.selectedAssignmentStudent.email}</p>
                     <div className="mt-3">
@@ -325,7 +325,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                 <div data-testid="weekly-mission-form" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Weekly Mission</div>
+                      <div className="text-xs font-bold text-slate-400">週次ミッション</div>
                       <div className="mt-1 text-lg font-black tracking-tight text-slate-950">今週の主課題を配布する</div>
                       <div className="mt-2 text-sm text-slate-500">生徒に同時表示する主課題は1件だけに絞ります。</div>
                     </div>
@@ -437,7 +437,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
             <div className="flex items-center gap-3">
               <BellRing className="h-5 w-5 text-medace-600" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment History</p>
+                <p className="text-xs font-bold text-slate-400">割当履歴</p>
                 <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当変更の履歴</h3>
               </div>
             </div>

@@ -1,6 +1,9 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  AiGeneratedProblemReviewDecision,
+  AiGeneratedProblemReviewQueueResponse,
+  AiGeneratedProblemReviewQueueStatus,
   AnnouncementAudienceRole,
   AnnouncementSeverity,
   CommercialRequest,
@@ -13,6 +16,9 @@ import {
   BookCatalogSource,
   BookMetadata,
   BookProgress,
+  ClassroomWorksheetLifecycleEventResult,
+  ClassroomWorksheetLifecycleStatus,
+  ClassroomWorksheetSource,
   DashboardSnapshot,
   GrammarCurriculumScopeId,
   InterventionKind,
@@ -164,6 +170,20 @@ export interface GenerateWordHintAssetPayload {
   forceRefresh?: boolean;
 }
 
+export interface AiGeneratedProblemReviewQueueRequest {
+  status?: AiGeneratedProblemReviewQueueStatus;
+  limit?: number;
+  bookId?: string;
+  questionMode?: WorksheetQuestionMode;
+  grammarScopeId?: GrammarCurriculumScopeId;
+}
+
+export interface AiGeneratedProblemReviewPayload {
+  problemId: string;
+  decision: AiGeneratedProblemReviewDecision;
+  reviewNote?: string;
+}
+
 export interface CommercialRequestUpdatePayload {
   id: number;
   status: CommercialRequestStatus;
@@ -184,6 +204,15 @@ export interface ProductAnnouncementUpsertPayload {
   audienceRoles: AnnouncementAudienceRole[];
   startsAt?: number;
   endsAt?: number;
+}
+
+export interface ClassroomWorksheetLifecycleEventPayload {
+  studentUid: string;
+  worksheetSource: ClassroomWorksheetSource;
+  lifecycleStatus: ClassroomWorksheetLifecycleStatus;
+  cohortId?: string;
+  payload?: Record<string, unknown>;
+  occurredAt?: number;
 }
 
 export interface StorageActionMap {
@@ -280,6 +309,14 @@ export interface StorageActionMap {
     };
     response: null;
   };
+  listAiGeneratedProblemReviewQueue: {
+    payload: AiGeneratedProblemReviewQueueRequest;
+    response: AiGeneratedProblemReviewQueueResponse;
+  };
+  reviewAiGeneratedProblem: {
+    payload: AiGeneratedProblemReviewPayload;
+    response: AiGeneratedProblemReviewQueueResponse['items'][number];
+  };
   getStudiedWordIdsByBook: {
     payload: { bookId: string };
     response: string[];
@@ -295,6 +332,10 @@ export interface StorageActionMap {
   getStudentWorksheetSnapshot: {
     payload: { studentUid: string };
     response: StudentWorksheetSnapshot;
+  };
+  recordClassroomWorksheetLifecycleEvent: {
+    payload: ClassroomWorksheetLifecycleEventPayload;
+    response: ClassroomWorksheetLifecycleEventResult;
   };
   sendInstructorNotification: {
     payload: {
@@ -449,10 +490,13 @@ export const STORAGE_ACTIONS = [
   'getDueCount',
   'saveSRSHistory',
   'recordQuizAttempt',
+  'listAiGeneratedProblemReviewQueue',
+  'reviewAiGeneratedProblem',
   'getStudiedWordIdsByBook',
   'getBookProgress',
   'getAllStudentsProgress',
   'getStudentWorksheetSnapshot',
+  'recordClassroomWorksheetLifecycleEvent',
   'sendInstructorNotification',
   'resetAllData',
   'saveLearningPlan',

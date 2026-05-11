@@ -105,7 +105,7 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
 
       <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
         <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Commercial Requests</p>
+          <p className="text-xs font-bold text-slate-400">商談リクエスト</p>
           <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">導入・格上げキュー</h3>
           <div className="mt-5 space-y-3">
             {requests.length === 0 ? (
@@ -239,7 +239,7 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
 
         <section className="space-y-6">
           <div className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Announcements</p>
+            <p className="text-xs font-bold text-slate-400">お知らせ配信</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">お知らせを配信する</h3>
             <div className="mt-5 space-y-4">
               <div>

@@ -61,10 +61,10 @@ describe('grammar practice helpers', () => {
 
     const cloze = items.find((item) => item.kind === 'GRAMMAR_CLOZE');
     expect(cloze?.source).toBe('example');
-    expect(cloze?.clozeSentence).toBe('Doctors ____ the patient before surgery.');
-    expect(cloze?.answer).toBe('stabilize');
+    expect(cloze?.clozeSentence).toBe('Doctors stabilize the patient ____ surgery.');
+    expect(cloze?.answer).toBe('before');
     expect(cloze?.grammarFocus).toBe('時を表す副詞句');
-    expect(cloze?.options).toContain('stabilize');
+    expect(cloze?.options).toContain('before');
   });
 
   it('falls back to short deterministic practice when examples are missing or unusable', () => {
@@ -125,7 +125,7 @@ describe('grammar practice helpers', () => {
 
     const english = lowLevelItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
 
-    expect(english?.sourceSentence).toBe('Teachers ask learners to use the term monitor.');
+    expect(english?.sourceSentence).toBe('Teachers ask learners to use the word monitor.');
     expect(english?.grammarScope).toMatchObject({
       scopeId: 'verb-patterns',
       curriculumCategoryLabelJa: '動詞語法',
@@ -165,10 +165,10 @@ describe('grammar practice helpers', () => {
       source: 'EXPLICIT',
       labelJa: '受け身',
     });
-    expect(english?.sourceSentence).toBe('The term monitor is introduced by teachers today.');
+    expect(english?.sourceSentence).toBe('The word monitor is introduced by teachers today.');
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
       'the',
-      'term',
+      'word',
       'monitor',
       'is',
       'introduced',
@@ -178,7 +178,8 @@ describe('grammar practice helpers', () => {
     ]);
     expect(japanese?.answerText).toBe('観察する という語は 今日 先生に 紹介される');
     expect(cloze?.grammarFocus).toBe('受け身');
-    expect(cloze?.clozeSentence).toBe('The term ____ is introduced by teachers today.');
+    expect(cloze?.clozeSentence).toBe('The word monitor ____ by teachers today.');
+    expect(cloze?.answer).toBe('is introduced');
   });
 
   it('does not create Japanese order items for an explicit scope that does not support ordering', () => {

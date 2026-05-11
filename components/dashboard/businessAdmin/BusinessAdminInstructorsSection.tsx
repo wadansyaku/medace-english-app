@@ -49,10 +49,10 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
                 <BellRing className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-medace-700/70">Step 4 / First notification</p>
+                <p className="text-xs font-bold text-medace-700/70">ステップ4 / 初回通知</p>
                 <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">対象を確認して初回フォロー通知を送る</h3>
                 <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-700">
-                  cohort、担当割当、初回ミッションが揃った生徒だけを対象にします。送信先の生徒・担当講師・ミッションを固定し、通知記録は現在の管理者として保存します。
+                  クラス、担当割当、初回ミッションが揃った生徒だけを対象にします。送信先の生徒・担当講師・ミッションを固定し、通知記録は現在の管理者として保存します。
                 </p>
               </div>
             </div>
@@ -117,8 +117,8 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <WorkspaceMetricCard label="講師数" value={`${snapshot.totalInstructors}名`} detail="組織内で稼働中の講師" />
-        <WorkspaceMetricCard label="未処理 backlog" value={`${snapshot.interventionBacklogCount}名`} detail="講師に割り振るべき要対応件数" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
-        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒への介入進行" tone="accent" />
+        <WorkspaceMetricCard label="未処理バックログ" value={`${snapshot.interventionBacklogCount}名`} detail="講師に割り振るべき要対応件数" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
+        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="要フォロー生徒への介入進行" tone="accent" />
         <WorkspaceMetricCard label={reactivatedStudentsLabel} value={`${snapshot.reactivatedStudents7d}名`} detail={reactivatedStudentsDetail} tone="success" />
       </div>
 
@@ -126,7 +126,7 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Load</p>
+            <p className="text-xs font-bold text-slate-400">講師負荷</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師ごとの負荷比較</h3>
           </div>
         </div>
@@ -135,8 +135,8 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
             <div key={instructor.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-bold text-slate-950">{instructor.displayName}</div>
-                  <div className="mt-1 text-xs text-slate-400">{instructor.email}</div>
+                  <div className="content-safe text-sm font-bold text-slate-950">{instructor.displayName}</div>
+                  <div className="content-safe mt-1 text-xs text-slate-400">{instructor.email}</div>
                 </div>
                 <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
                   instructor.organizationRole === OrganizationRole.GROUP_ADMIN
@@ -148,19 +148,19 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
               </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
+                  <div className="text-xs font-bold text-slate-400">担当生徒</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
                 </div>
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">要即対応</div>
+                  <div className="text-xs font-bold text-slate-400">要即対応</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">{instructor.immediateCount}</div>
                 </div>
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開待ち</div>
+                  <div className="text-xs font-bold text-slate-400">再開待ち</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">{instructor.waitingCount}</div>
                 </div>
                 <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開済み</div>
+                  <div className="text-xs font-bold text-slate-400">再開済み</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">{instructor.reactivatedCount}</div>
                 </div>
               </div>

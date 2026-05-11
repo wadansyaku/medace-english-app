@@ -1,6 +1,9 @@
 import {
   CatalogImportRequest,
   CatalogImportResult,
+  AiGeneratedProblemReviewPayload,
+  AiGeneratedProblemReviewQueueRequest,
+  ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
   GenerateWordHintAssetPayload,
@@ -10,7 +13,7 @@ import {
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, BookMetadata, BookProgress, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, type AiGeneratedProblemReviewQueueItem, type AiGeneratedProblemReviewQueueResponse, BookMetadata, BookProgress, type ClassroomWorksheetLifecycleEventResult, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
 import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
 
@@ -222,6 +225,24 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
+  async listAiGeneratedProblemReviewQueue(
+    payload: AiGeneratedProblemReviewQueueRequest = {},
+  ): Promise<AiGeneratedProblemReviewQueueResponse> {
+    return this.callStorage({
+      action: 'listAiGeneratedProblemReviewQueue',
+      payload,
+    });
+  }
+
+  async reviewAiGeneratedProblem(
+    payload: AiGeneratedProblemReviewPayload,
+  ): Promise<AiGeneratedProblemReviewQueueItem> {
+    return this.callStorage({
+      action: 'reviewAiGeneratedProblem',
+      payload,
+    });
+  }
+
   async getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]> {
     return this.callStorage({
       action: 'getStudiedWordIdsByBook',
@@ -244,6 +265,15 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage({
       action: 'getStudentWorksheetSnapshot',
       payload: { studentUid },
+    });
+  }
+
+  async recordClassroomWorksheetLifecycleEvent(
+    payload: ClassroomWorksheetLifecycleEventPayload,
+  ): Promise<ClassroomWorksheetLifecycleEventResult> {
+    return this.callStorage({
+      action: 'recordClassroomWorksheetLifecycleEvent',
+      payload,
     });
   }
 

@@ -15,6 +15,7 @@ interface QuizResultViewProps {
   score: number;
   questionsLength: number;
   reviewTargets: GeneratedWorksheetQuestion[];
+  translationFeedbackSummaries: GeneratedWorksheetQuestion[];
   nextReviewCopy: string;
   onRetry: () => void;
   onReset: () => void;
@@ -28,6 +29,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
   score,
   questionsLength,
   reviewTargets,
+  translationFeedbackSummaries,
   nextReviewCopy,
   onRetry,
   onReset,
@@ -70,6 +72,18 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                   <div className="mt-1 text-sm text-slate-500">
                     {question.promptLabel} / 正解: {question.answer}
                   </div>
+                  {question.translationFeedback && (
+                    <div
+                      className="mt-3 rounded-xl border border-orange-100 bg-orange-50 px-3 py-3 text-sm leading-relaxed text-slate-700"
+                      data-testid="quiz-review-translation-feedback-summary"
+                    >
+                      <div className="font-black text-orange-800">
+                        {question.translationFeedback.score} / {question.translationFeedback.maxScore}・{question.translationFeedback.verdictLabel}
+                      </div>
+                      <div className="mt-1">改善訳: {question.translationFeedback.improvedTranslation}</div>
+                      <div className="mt-1">次ドリル: {question.translationFeedback.nextDrillJa}</div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -98,6 +112,46 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
           </div>
         </div>
       </div>
+
+      {translationFeedbackSummaries.length > 0 && (
+        <div
+          className="mt-6 rounded-3xl border border-orange-200 bg-orange-50 p-5"
+          data-testid="quiz-result-translation-feedback-summary"
+        >
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-orange-500">和訳フィードバック</div>
+          <div className="mt-4 space-y-3">
+            {translationFeedbackSummaries.map((question) => {
+              const feedback = question.translationFeedback;
+              if (!feedback) return null;
+              return (
+                <div
+                  key={question.id}
+                  className="rounded-2xl border border-orange-100 bg-white px-4 py-4"
+                  data-testid="quiz-result-translation-feedback-item"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="font-bold text-slate-900">{question.promptText}</div>
+                    <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-800">
+                      {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">{feedback.summaryJa}</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="text-xs font-black text-slate-500">改善訳</div>
+                      <div className="mt-1 text-sm font-bold leading-relaxed text-slate-900">{feedback.improvedTranslation}</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="text-xs font-black text-slate-500">次ドリル</div>
+                      <div className="mt-1 text-sm font-bold leading-relaxed text-slate-900">{feedback.nextDrillJa}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
 
     <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">

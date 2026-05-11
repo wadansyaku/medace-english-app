@@ -86,7 +86,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       )}
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Catalog Scope</div>
+        <div className="text-xs font-bold text-slate-400">教材カタログ範囲</div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           {[BookCatalogSource.STEADY_STUDY_ORIGINAL, BookCatalogSource.LICENSED_PARTNER].map((source) => (
             <button
@@ -226,7 +226,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
     <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Example Prep</div>
+          <div className="text-xs font-bold text-slate-400">例文準備</div>
           <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">公式教材の例文を先に保存する</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
             生徒の学習中にAIを呼ばないため、公式教材はここで未生成の例文だけを先に準備します。

@@ -39,37 +39,37 @@ interface BusinessAdminDashboardProps {
 
 const VIEW_COPY: Record<BusinessAdminWorkspaceView, { eyebrow: string; title: string; body: string }> = {
   [BusinessAdminWorkspaceView.OVERVIEW]: {
-    eyebrow: 'Organization Overview',
+    eyebrow: '組織ダッシュボード',
     title: '組織運用の詰まりを先に掴む',
     body: '要フォロー生徒、担当割当の滞留、講師負荷、自由英作文の滞留を分けて見ながら、今優先する作業を決めます。',
   },
   [BusinessAdminWorkspaceView.ASSIGNMENTS]: {
-    eyebrow: 'Assignments',
+    eyebrow: '担当割当',
     title: '担当割当だけを一覧と詳細で更新する',
     body: '生徒一覧から対象を絞り、右側で担当講師、要フォロー理由、最新履歴を見ながら割当を調整します。',
   },
   [BusinessAdminWorkspaceView.INSTRUCTORS]: {
-    eyebrow: 'Instructor Load',
+    eyebrow: '講師負荷',
     title: '講師ごとの負荷と稼働を比較する',
     body: '通知数、担当生徒数、接触生徒数を並べて、偏りや詰まりを確認します。',
   },
   [BusinessAdminWorkspaceView.SETTINGS]: {
-    eyebrow: 'Organization Settings',
+    eyebrow: '組織設定',
     title: '組織情報と監査履歴を tenant 単位で管理する',
     body: '表示名の更新、メンバー確認、最近の変更履歴を分けて見せ、組織名変更後も運用導線が崩れない状態を作ります。',
   },
   [BusinessAdminWorkspaceView.WRITING]: {
-    eyebrow: 'Writing Management',
+    eyebrow: '英作文管理',
     title: '自由英作文の進行状況と返却滞留を確認する',
     body: '問題作成、配布、添削キュー、返却履歴を学校運用の流れとして見える化します。',
   },
   [BusinessAdminWorkspaceView.WORKSHEETS]: {
-    eyebrow: 'Worksheet Ops',
+    eyebrow: 'PDF問題作成',
     title: '配布用PDF問題の作成に集中する',
     body: '生徒向け配布物は他の情報と切り離し、紙問題作成だけを素早く進めます。',
   },
   [BusinessAdminWorkspaceView.CATALOG]: {
-    eyebrow: 'Catalog Access',
+    eyebrow: '教材カタログ',
     title: '教材カタログは必要時だけ確認する',
     body: '運用画面を整理するため、教材確認は独立ビューで必要な時だけ開きます。',
   },
@@ -101,7 +101,7 @@ const DECISION_METRIC_CLASS: Record<BusinessAdminDecisionTone, string> = {
 
 const renderDecisionMetric = (metric: BusinessAdminDecisionMetric) => (
   <div key={metric.label} className={`rounded-[24px] border px-4 py-4 shadow-sm ${DECISION_METRIC_CLASS[metric.tone]}`}>
-    <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{metric.label}</div>
+    <div className="text-xs font-bold text-slate-500">{metric.label}</div>
     <div className="mt-2 text-2xl font-black tracking-tight">{metric.value}</div>
     <div className="mt-1 text-sm leading-relaxed text-slate-600">{metric.detail}</div>
   </div>
@@ -133,7 +133,7 @@ const BusinessAdminDecisionPanel: React.FC<BusinessAdminDecisionPanelProps> = ({
   <section data-testid="business-admin-decision-panel" className={`rounded-[32px] border p-5 shadow-sm sm:p-6 ${DECISION_PANEL_CLASS[model.tone]}`}>
     <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
       <div className="min-w-0">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{model.eyebrow}</p>
+        <p className="text-xs font-bold text-slate-500">{model.eyebrow}</p>
         <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{model.title}</h3>
         <p className="mt-2 max-w-4xl text-sm leading-relaxed text-slate-700">{model.body}</p>
         {model.emptyState && (
@@ -222,7 +222,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Business Admin</p>
+              <p className="text-xs font-bold text-slate-400">組織管理</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">組織データを集計中</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
                 次アクション、割当、講師負荷、作文キューをまとめて読み込んでいます。

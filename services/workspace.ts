@@ -11,6 +11,7 @@ export type WorkspaceService =
   | 'getOrganizationDashboardSnapshot'
   | 'getOrganizationSettingsSnapshot'
   | 'getStudentWorksheetSnapshot'
+  | 'recordClassroomWorksheetLifecycleEvent'
   | 'sendInstructorNotification'
   | 'setInstructorCohorts'
   | 'setStudentCohort'
@@ -43,6 +44,7 @@ const unavailableWorkspaceService: WorkspaceService = {
   getOrganizationDashboardSnapshot: unavailable,
   getOrganizationSettingsSnapshot: unavailable,
   getStudentWorksheetSnapshot: unavailable,
+  recordClassroomWorksheetLifecycleEvent: unavailable,
   getWeeklyMissionBoard: unavailable,
   sendInstructorNotification: unavailable,
   setInstructorCohorts: unavailable,

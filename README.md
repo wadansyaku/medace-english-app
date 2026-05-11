@@ -61,6 +61,7 @@ npm run cf:preview
   - `/api/session` などの Functions は起動しないため、認証や教材 API の検証には使えません。
 - `npm run test:smoke` は Playwright で `wrangler pages dev dist` を自前起動し、D1 migration 適用後の demo login / onboarding / 組織運用導線まで確認します。
 - `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
+  - release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred AI key や外部 inventory の一時問題として扱えますが、`error` が 1 件でも残る場合は deploy しません。
 - `npm run cf:sync` は `wrangler.jsonc` を基準に GitHub variables、Cloudflare Pages secrets、R2 バケットを同期します。R2 がアカウントで未有効化の場合はここで停止します。
 
 ## Storage Mode Policy
@@ -224,8 +225,8 @@ npx wrangler pages deploy dist --project-name medace-english-app
 GitHub Actions では次の流れで確認してから Cloudflare へ流します。
 
 - `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor`、その後に preview D1 remote migration / Pages deploy / deployed preview smoke
-- `deploy-pages.yml`: production deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor`、その後に D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke
+- `deploy-pages-preview.yml`: preview deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor` を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / Pages deploy / deployed preview smoke へ進む
+- `deploy-pages.yml`: production deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor` を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke へ進む
 - `analytics-snapshots.yml`: 毎日 03:40 JST に本番 `/api/internal/analytics-snapshots/run` を叩き、プロダクト KPI の日次 snapshot を保存
 - `word-hint-audit.yml`: 毎日 03:30 JST に本番 `/api/internal/word-hint-audits/run` を叩き、保存済みの例文・画像ヒントを小さなバッチで再監査
 

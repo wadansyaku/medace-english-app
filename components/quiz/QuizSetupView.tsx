@@ -139,7 +139,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         <div className="mt-5 space-y-4 rounded-2xl border border-orange-100 bg-orange-50/50 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-orange-500">Grammar Scope</div>
+              <div className="text-xs font-bold text-orange-500">文法範囲</div>
               <h3 className="mt-1 text-lg font-black text-slate-950">文法範囲を選ぶ</h3>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
                 単語は同じでも、どの文法で使うかを固定できます。

@@ -1,13 +1,18 @@
 import { UserRole } from '../../../types';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectBoolean, expectEmptyPayload, expectObject, expectOptionalString, expectString, expectStringArray, expectTrimmedString } from '../request-validation';
+import { expectBoolean, expectEmptyPayload, expectEnum, expectObject, expectOptionalNumber, expectOptionalObject, expectOptionalString, expectString, expectStringArray, expectTrimmedString } from '../request-validation';
+import {
+  CLASSROOM_WORKSHEET_LIFECYCLE_STATUSES,
+  CLASSROOM_WORKSHEET_SOURCES,
+} from '../organization-activation-events';
 import {
   handleAssignStudentInstructor,
   handleGetAllStudentsProgress,
   handleGetOrganizationDashboardSnapshot,
   handleGetOrganizationSettingsSnapshot,
   handleGetStudentWorksheetSnapshot,
+  handleRecordClassroomWorksheetLifecycleEvent,
   handleSetInstructorCohorts,
   handleSetStudentCohort,
   handleSendInstructorNotification,
@@ -28,6 +33,21 @@ export const organizationStorageActionDefinitions = {
     },
     roles: [UserRole.ADMIN, UserRole.INSTRUCTOR],
     execute: ({ env, user }, payload) => handleGetStudentWorksheetSnapshot(env, user, payload.studentUid),
+  }),
+  recordClassroomWorksheetLifecycleEvent: defineStorageAction({
+    parse: (payload) => {
+      const record = expectObject(payload);
+      return {
+        studentUid: expectString(record, 'studentUid'),
+        worksheetSource: expectEnum(record.worksheetSource, CLASSROOM_WORKSHEET_SOURCES, 'worksheetSource'),
+        lifecycleStatus: expectEnum(record.lifecycleStatus, CLASSROOM_WORKSHEET_LIFECYCLE_STATUSES, 'lifecycleStatus'),
+        cohortId: expectOptionalString(record, 'cohortId'),
+        payload: expectOptionalObject(record.payload, 'payload.payload'),
+        occurredAt: expectOptionalNumber(record, 'occurredAt'),
+      };
+    },
+    roles: [UserRole.ADMIN, UserRole.INSTRUCTOR],
+    execute: ({ env, user }, payload) => handleRecordClassroomWorksheetLifecycleEvent(env, user, payload),
   }),
   sendInstructorNotification: defineStorageAction({
     parse: (payload) => {
@@ -131,6 +151,7 @@ export const organizationStorageActionDefinitions = {
   StorageActionDefinitionMap,
   | 'getAllStudentsProgress'
   | 'getStudentWorksheetSnapshot'
+  | 'recordClassroomWorksheetLifecycleEvent'
   | 'sendInstructorNotification'
   | 'assignStudentInstructor'
   | 'getOrganizationDashboardSnapshot'

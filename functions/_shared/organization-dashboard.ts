@@ -23,6 +23,7 @@ import {
   calculateMissionOverdueRecoveryRate,
   calculateMissionStartedRate,
 } from '../../shared/missions';
+import { buildOrganizationActivationRunbook } from './organization-activation-runbook';
 
 const DAY_MS = 86400000;
 
@@ -40,6 +41,11 @@ interface BuildOrganizationDashboardSnapshotInput {
   totalNotificationCount: number;
   writingAssignmentCount?: number;
   issuedWritingAssignmentCount?: number;
+  submittedWritingAssignmentCount?: number;
+  reviewReadyWritingAssignmentCount?: number;
+  reviewedWritingAssignmentCount?: number;
+  historyBasedWorksheetStudentCount?: number;
+  fallbackWorksheetStudentCount?: number;
   instructors: OrganizationInstructorSummary[];
   students: StudentSummary[];
   missionAssignments: MissionAssignment[];
@@ -131,8 +137,8 @@ const buildActivationContract = ({
   const steps: OrganizationActivationStep[] = [
     {
       id: 'CREATE_COHORT',
-      label: 'cohort を1つ作成する',
-      description: 'まずは学年・クラス・講座のどれかで1つだけ cohort を作ると、その後の割当と配布が迷いません。',
+      label: 'クラスを1つ作成する',
+      description: 'まずは学年・クラス・講座のどれかで1つだけグループを作ると、その後の割当と配布が迷いません。',
       done: cohortCount > 0,
       target: {
         kind: 'ORGANIZATION_SETTINGS',
@@ -143,7 +149,7 @@ const buildActivationContract = ({
     {
       id: 'ASSIGN_STUDENTS',
       label: '最初の生徒担当を決める',
-      description: '最初は at-risk 生徒か直近で止まっている生徒を1人だけ担当講師に割り当ててください。',
+      description: '最初は要フォロー生徒か直近で止まっている生徒を1人だけ担当講師に割り当ててください。',
       done: hasAssignedStudent,
       target: toStudentTarget(
         organizationId,
@@ -218,6 +224,11 @@ export const buildOrganizationDashboardSnapshot = ({
   totalNotificationCount,
   writingAssignmentCount = 0,
   issuedWritingAssignmentCount = 0,
+  submittedWritingAssignmentCount = 0,
+  reviewReadyWritingAssignmentCount = 0,
+  reviewedWritingAssignmentCount = 0,
+  historyBasedWorksheetStudentCount,
+  fallbackWorksheetStudentCount,
   instructors,
   students,
   missionAssignments,
@@ -243,6 +254,10 @@ export const buildOrganizationDashboardSnapshot = ({
   const writingReturnRateByTrack = buildMissionWritingReturnRateByTrack(missionAssignments);
   const missionStartedRate = calculateMissionStartedRate(missionAssignments);
   const overdueMissionRecoveryRate = calculateMissionOverdueRecoveryRate(missionAssignments, now);
+  const inferredHistoryBasedWorksheetStudentCount = historyBasedWorksheetStudentCount
+    ?? students.filter((student) => student.totalAttempts > 0 || student.totalLearned > 0).length;
+  const inferredFallbackWorksheetStudentCount = fallbackWorksheetStudentCount
+    ?? Math.max(0, students.length - inferredHistoryBasedWorksheetStudentCount);
   const instructorBacklog: OrganizationInstructorBacklogSummary[] = instructors
     .map((instructor) => {
       const assigned = students.filter((student) => student.assignedInstructorUid === instructor.uid);
@@ -297,6 +312,17 @@ export const buildOrganizationDashboardSnapshot = ({
     students,
     missionAssignments,
   });
+  const activationRunbook = buildOrganizationActivationRunbook({
+    organizationId,
+    totalStudents: students.length,
+    activationSteps: activationContract.activationSteps,
+    historyBasedWorksheetStudentCount: inferredHistoryBasedWorksheetStudentCount,
+    fallbackWorksheetStudentCount: inferredFallbackWorksheetStudentCount,
+    issuedWritingAssignmentCount,
+    submittedWritingAssignmentCount,
+    reviewReadyWritingAssignmentCount,
+    reviewedWritingAssignmentCount,
+  });
 
   return {
     organizationId,
@@ -337,5 +363,6 @@ export const buildOrganizationDashboardSnapshot = ({
     nextRequiredActionDescription: activationContract.nextRequiredActionDescription,
     activationSteps: activationContract.activationSteps,
     nextRequiredActionTarget: activationContract.nextRequiredActionTarget,
+    activationRunbook,
   };
 };

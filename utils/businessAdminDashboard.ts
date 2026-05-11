@@ -59,6 +59,15 @@ export interface BusinessAdminWritingCounts {
   revisionRequestedCount: number;
 }
 
+export interface BusinessAdminRunbookSummaryModel {
+  title: string;
+  detail: string;
+  progressLabel: string;
+  worksheetSourceLabel: string;
+  tone: BusinessAdminDecisionTone;
+  targetView: BusinessAdminWorkspaceView;
+}
+
 const matchesStudentKeyword = (student: StudentSummary, query: string): boolean => {
   const keyword = query.trim().toLowerCase();
   if (!keyword) return true;
@@ -155,15 +164,48 @@ const formatCount = (value: number, unit: string): string => `${value}${unit}`;
 const getActivationProgressMetric = (
   snapshot: OrganizationDashboardSnapshot,
 ): BusinessAdminDecisionMetric => {
-  const totalCount = snapshot.activationSteps.length;
-  const completedCount = snapshot.activationSteps.filter((step) => step.done).length;
+  const totalCount = snapshot.activationRunbook?.totalStageCount ?? snapshot.activationSteps.length;
+  const completedCount = snapshot.activationRunbook?.completedStageCount ?? snapshot.activationSteps.filter((step) => step.done).length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return {
-    label: '導入ループ',
+    label: snapshot.activationRunbook ? '導入ランブック' : '導入ループ',
     value: `${progressPercent}%`,
     detail: `${completedCount}/${totalCount} ステップ完了`,
     tone: progressPercent >= 100 ? 'success' : progressPercent >= 60 ? 'accent' : 'warning',
+  };
+};
+
+export const getBusinessAdminRunbookSummary = (
+  snapshot: OrganizationDashboardSnapshot,
+): BusinessAdminRunbookSummaryModel => {
+  const runbook = snapshot.activationRunbook;
+  const currentStage = runbook?.currentStage || null;
+  const stalledStage = runbook?.stalledStage || null;
+  const targetView = currentStage?.target?.targetView
+    || snapshot.nextRequiredActionTarget?.targetView
+    || resolveNextRequiredActionView(snapshot);
+  const completedCount = runbook?.completedStageCount ?? snapshot.activationSteps.filter((step) => step.done).length;
+  const totalCount = runbook?.totalStageCount ?? snapshot.activationSteps.length;
+  const progressPercent = runbook?.progressPercent ?? (totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0);
+
+  return {
+    title: currentStage
+      ? `${currentStage.label}で停止`
+      : '導入ランブック完了',
+    detail: stalledStage?.stalledReason
+      || currentStage?.detail
+      || 'クラス作成から返却レビューまでの初回導入ランブックは完了しています。',
+    progressLabel: `${completedCount}/${totalCount} 完了 (${progressPercent}%)`,
+    worksheetSourceLabel: runbook?.worksheet.sourceLabel || 'PDF問題ソース未計測',
+    tone: runbook?.worksheet.hasOnlyFallback
+      ? 'warning'
+      : progressPercent >= 100
+        ? 'success'
+        : stalledStage
+          ? 'warning'
+          : 'accent',
+    targetView,
   };
 };
 
@@ -211,7 +253,7 @@ const buildBaseMetrics = (
 ): BusinessAdminDecisionMetric[] => [
   getActivationProgressMetric(snapshot),
   {
-    label: '未割当 at-risk',
+    label: '未割当の要フォロー',
     value: formatCount(snapshot.unassignedAtRiskCount, '名'),
     detail: '担当講師を先に固定したい生徒',
     tone: snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'success',
@@ -233,11 +275,12 @@ const buildOverviewDecision = (
   const nextActionView = resolveNextRequiredActionView(snapshot);
   const topInstructor = getTopInstructorLoad(snapshot);
   const priorityStudent = getPriorityStudent(snapshot);
+  const runbookSummary = getBusinessAdminRunbookSummary(snapshot);
   const shouldSendNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
 
   return {
-    eyebrow: 'Decision Brief',
+    eyebrow: '判断メモ',
     title: snapshot.nextRequiredActionLabel,
     body: snapshot.nextRequiredActionDescription,
     tone: snapshot.nextRequiredAction === 'ACTIVE' ? 'success' : 'accent',
@@ -261,10 +304,10 @@ const buildOverviewDecision = (
     metrics: buildBaseMetrics(snapshot, writingAssignments, writingQueue),
     focusItems: [
       {
-        label: '次に実行',
-        value: snapshot.nextRequiredActionLabel,
-        detail: snapshot.nextRequiredActionDescription,
-        tone: snapshot.nextRequiredAction === 'ACTIVE' ? 'success' : 'accent',
+        label: '導入ランブック',
+        value: runbookSummary.title,
+        detail: `${runbookSummary.detail} / ${runbookSummary.worksheetSourceLabel}`,
+        tone: runbookSummary.tone,
       },
       {
         label: '優先生徒',
@@ -284,7 +327,7 @@ const buildOverviewDecision = (
     emptyState: snapshot.totalStudents === 0
       ? {
         title: 'まだ生徒がいません',
-        body: 'cohort とメンバーを揃えると、担当割当、初回ミッション、通知までの判断材料が表示されます。',
+        body: 'クラスとメンバーを揃えると、担当割当、初回ミッション、通知までの判断材料が表示されます。',
       }
       : null,
   };
@@ -300,16 +343,16 @@ const buildAssignmentsDecision = (
   const hasPriorityStudent = Boolean(priorityStudent);
 
   return {
-    eyebrow: 'Assignment Triage',
+    eyebrow: '割当トリアージ',
     title: hasPriorityStudent ? `${priorityStudent!.name} から確認する` : '割当対象は落ち着いています',
     body: hasPriorityStudent
-      ? priorityStudent!.recommendedAction || '担当講師、cohort、今週ミッションの順に詰まりを外してください。'
+      ? priorityStudent!.recommendedAction || '担当講師、クラス、今週ミッションの順に詰まりを外してください。'
       : '未割当や即対応の生徒はいません。必要に応じて全生徒の担当更新履歴を確認します。',
     tone: snapshot.interventionBacklogCount > 0 ? 'danger' : snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'success',
     primaryAction: {
       kind: 'SET_ASSIGNMENT_FILTER',
       label: priorityFilter === 'UNASSIGNED_AT_RISK'
-        ? '未割当 at-risk に絞る'
+        ? '未割当の要フォローに絞る'
         : priorityFilter === 'IMMEDIATE'
           ? '要即対応に絞る'
           : '全生徒を見る',
@@ -335,7 +378,7 @@ const buildAssignmentsDecision = (
         label: '最初に見る生徒',
         value: priorityStudent?.name || '対象なし',
         detail: priorityStudent
-          ? `${priorityStudent.assignedInstructorName || '未割当'} / ${priorityStudent.cohortName || 'cohort 未設定'}`
+          ? `${priorityStudent.assignedInstructorName || '未割当'} / ${priorityStudent.cohortName || 'クラス未設定'}`
           : '割当対象の一覧は空です。',
         tone: priorityStudent?.needsFollowUpNow ? 'danger' : priorityStudent ? 'warning' : 'success',
       },
@@ -343,7 +386,7 @@ const buildAssignmentsDecision = (
         label: '詰まりの理由',
         value: snapshot.unassignedAtRiskCount > 0 ? '担当未設定' : snapshot.interventionBacklogCount > 0 ? '介入待ち' : '大きな詰まりなし',
         detail: snapshot.unassignedAtRiskCount > 0
-          ? 'at-risk 生徒に担当講師がいません。先に担当を固定します。'
+          ? '要フォロー生徒に担当講師がいません。先に担当を固定します。'
           : snapshot.interventionBacklogCount > 0
             ? '直近の声かけ・ミッション状況を見て介入順を決めます。'
             : '履歴確認とミッション配布に進めます。',
@@ -353,7 +396,7 @@ const buildAssignmentsDecision = (
     emptyState: snapshot.totalStudents === 0
       ? {
         title: '割当対象の生徒がいません',
-        body: 'メンバーと cohort を用意すると、このビューで担当講師と初回ミッションを固定できます。',
+        body: 'メンバーとクラスを用意すると、このビューで担当講師と初回ミッションを固定できます。',
       }
       : null,
   };
@@ -369,17 +412,17 @@ const buildInstructorsDecision = (
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
 
   return {
-    eyebrow: 'Instructor Load Brief',
+    eyebrow: '講師負荷メモ',
     title: shouldSendNotification
       ? '初回通知の対象を固定する'
       : topInstructor
         ? `${topInstructor.displayName} の負荷を先に確認する`
         : '講師負荷を比較する準備が必要です',
     body: shouldSendNotification
-      ? 'cohort、担当割当、初回ミッションが揃った対象に最初のフォロー通知を送ると、通知後再開率を測れます。'
+      ? 'クラス、担当割当、初回ミッションが揃った対象に最初のフォロー通知を送ると、通知後再開率を測れます。'
       : topInstructor
         ? `要即対応 ${topInstructor.immediateCount}、再開待ち ${topInstructor.waitingCount}、担当 ${topInstructor.assignedStudentCount} の順に偏りを見ます。`
-        : '講師または担当割当が揃うと、講師ごとの backlog と通知後再開を比較できます。',
+        : '講師または担当割当が揃うと、講師ごとの未対応件数と通知後再開を比較できます。',
     tone: shouldSendNotification ? 'accent' : topInstructor && topInstructor.immediateCount > 0 ? 'warning' : 'success',
     primaryAction: shouldSendNotification
       ? {
@@ -395,7 +438,7 @@ const buildInstructorsDecision = (
       },
     secondaryAction: {
       kind: 'OPEN_VIEW',
-      label: 'Overview に戻る',
+      label: '概要に戻る',
       targetView: BusinessAdminWorkspaceView.OVERVIEW,
     },
     metrics: [
@@ -414,7 +457,7 @@ const buildInstructorsDecision = (
       {
         label: '48時間介入率',
         value: `${snapshot.followUpCoverageRate48h}%`,
-        detail: 'at-risk 生徒へのフォロー進行',
+        detail: '要フォロー生徒へのフォロー進行',
         tone: snapshot.followUpCoverageRate48h >= 80 ? 'success' : snapshot.followUpCoverageRate48h >= 50 ? 'accent' : 'warning',
       },
       getWritingDecisionMetric(writingAssignments, writingQueue),
@@ -424,7 +467,7 @@ const buildInstructorsDecision = (
         label: '最初に見る講師',
         value: topInstructor?.displayName || '対象なし',
         detail: topInstructor
-          ? `担当 ${topInstructor.assignedStudentCount} / backlog ${topInstructor.backlogCount} / 再開済み ${topInstructor.reactivatedCount}`
+          ? `担当 ${topInstructor.assignedStudentCount} / 未対応 ${topInstructor.backlogCount} / 再開済み ${topInstructor.reactivatedCount}`
           : '担当割当が入ると比較できます。',
         tone: topInstructor && topInstructor.backlogCount > 0 ? 'warning' : 'success',
       },
@@ -440,7 +483,7 @@ const buildInstructorsDecision = (
     emptyState: snapshot.totalInstructors === 0
       ? {
         title: '講師がまだ登録されていません',
-        body: '講師アカウントと cohort を用意すると、負荷比較と通知後再開率を使えます。',
+        body: '講師アカウントとクラスを用意すると、負荷比較と通知後再開率を使えます。',
       }
       : null,
   };

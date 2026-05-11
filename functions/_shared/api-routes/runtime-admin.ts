@@ -171,7 +171,7 @@ export const runtimeAdminRoutes: ApiRouteDefinition[] = [
       let cohortId = cohorts[0]?.id;
       let createdCohort = false;
       if (!cohortId) {
-        const cohort = await handleUpsertOrganizationCohort(env, actor, undefined, '導入スタート cohort');
+        const cohort = await handleUpsertOrganizationCohort(env, actor, undefined, '導入スタートクラス');
         cohortId = cohort.id;
         createdCohort = true;
       }

@@ -120,6 +120,8 @@ export const handleGetStudentWorksheetSnapshot = async (
         studentUid: student.id,
         studentName: student.display_name,
         organizationName: student.organization_name || undefined,
+        source: 'catalog_fallback',
+        sourceLabel: '教材カタログ fallback（学習履歴なし）',
         words: fallbackWords,
       };
     }
@@ -128,6 +130,8 @@ export const handleGetStudentWorksheetSnapshot = async (
       studentUid: student.id,
       studentName: student.display_name,
       organizationName: student.organization_name || undefined,
+      source: 'starter_fallback',
+      sourceLabel: 'スターター fallback（学習履歴なし）',
       words: [
         {
           wordId: 'worksheet-1',
@@ -176,6 +180,8 @@ export const handleGetStudentWorksheetSnapshot = async (
     studentUid: student.id,
     studentName: student.display_name,
     organizationName: student.organization_name || undefined,
+    source: 'history',
+    sourceLabel: '学習履歴ベース',
     words: rows.map((row) => ({
       wordId: row.word_id,
       bookId: row.book_id,

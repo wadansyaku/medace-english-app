@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildOrganizationActivationRunbook } from '../functions/_shared/organization-activation-runbook';
 import { buildOrganizationDashboardSnapshot } from '../functions/_shared/organization-dashboard';
 import {
+  BusinessAdminWorkspaceView,
   InterventionOutcome,
   LearningTrack,
   MissionNextActionType,
@@ -12,6 +14,7 @@ import {
   type MissionAssignment,
   type AssignmentEvent,
   type OrganizationInstructorSummary,
+  type OrganizationActivationStep,
   type StudentSummary,
 } from '../types';
 
@@ -269,7 +272,7 @@ describe('buildOrganizationDashboardSnapshot', () => {
 
     expect(snapshot.activationState).toBe('CREATE_COHORT');
     expect(snapshot.nextRequiredAction).toBe('CREATE_COHORT');
-    expect(snapshot.nextRequiredActionLabel).toContain('cohort');
+    expect(snapshot.nextRequiredActionLabel).toContain('クラス');
     expect(snapshot.activationSteps.find((step) => step.id === 'CREATE_COHORT')).toMatchObject({
       done: false,
       target: {
@@ -401,6 +404,106 @@ describe('buildOrganizationDashboardSnapshot', () => {
     });
     expect(snapshot.activationSteps.find((step) => step.id === 'SEND_FIRST_NOTIFICATION')).toMatchObject({
       done: false,
+    });
+  });
+
+  it('converts the activation steps into a seven-stage runbook and calls out non-history worksheet fallback', () => {
+    const activationSteps: OrganizationActivationStep[] = [
+      {
+        id: 'CREATE_COHORT',
+        label: 'cohort を1つ作成する',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'ORGANIZATION_SETTINGS',
+          targetView: BusinessAdminWorkspaceView.SETTINGS,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'ASSIGN_STUDENTS',
+        label: '最初の生徒担当を決める',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'STUDENT_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'CREATE_FIRST_MISSION',
+        label: '初回ミッションを配布する',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'MISSION_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'SEND_FIRST_NOTIFICATION',
+        label: '最初のフォロー通知を送る',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'INSTRUCTOR_NOTIFICATION',
+          targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+        label: '初回作文を配布する',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'WRITING_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.WRITING,
+          organizationId: 'org_demo_academy',
+        },
+      },
+    ];
+
+    const runbook = buildOrganizationActivationRunbook({
+      organizationId: 'org_demo_academy',
+      totalStudents: 2,
+      activationSteps,
+      historyBasedWorksheetStudentCount: 0,
+      fallbackWorksheetStudentCount: 2,
+      issuedWritingAssignmentCount: 1,
+      submittedWritingAssignmentCount: 0,
+      reviewReadyWritingAssignmentCount: 0,
+      reviewedWritingAssignmentCount: 0,
+    });
+
+    expect(runbook.stages.map((stage) => stage.id)).toEqual([
+      'cohort',
+      'assignment',
+      'mission',
+      'notification',
+      'worksheet',
+      'writing',
+      'review',
+    ]);
+    expect(runbook.currentStage).toMatchObject({
+      id: 'worksheet',
+      status: 'stalled',
+      target: {
+        kind: 'WORKSHEET',
+        targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      },
+    });
+    expect(runbook.stalledStage?.stalledReason).toContain('代替候補');
+    expect(runbook.worksheet).toMatchObject({
+      historyBasedStudentCount: 0,
+      fallbackStudentCount: 2,
+      hasOnlyFallback: true,
+    });
+    expect(runbook.stages.find((stage) => stage.id === 'writing')).toMatchObject({
+      done: true,
+      status: 'complete',
     });
   });
 });

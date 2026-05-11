@@ -29,8 +29,8 @@ const MobileStepPager: React.FC<MobileStepPagerProps> = ({ steps, activeStep, on
                 : 'border-slate-200 bg-slate-100 text-slate-400'
           }`}
         >
-          <div className="text-[11px] font-black uppercase tracking-[0.16em]">
-            Step {index + 1}
+          <div className="text-[11px] font-black">
+            手順 {index + 1}
           </div>
           <div className="mt-2 text-sm font-bold">{step.label}</div>
           {step.description && (

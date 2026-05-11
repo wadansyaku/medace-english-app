@@ -10,8 +10,30 @@ import {
   type GrammarCurriculumScopeId,
   type JapaneseTranslationFeedback,
   type TranslationExamTarget,
-  WorksheetQuestionMode,
 } from '../../types';
+import {
+  AiActionValidationError,
+  type AnyAiActionRequest,
+  type AIQuizQuestion,
+  type DiagnosticQuestion,
+  type EvaluateAdvancedTestPayload,
+  type EvaluateJapaneseTranslationAnswerPayload,
+  type ExtractedResult,
+  type ExtractVocabularyFromMediaPayload,
+  type ExtractVocabularyFromTextPayload,
+  type GenerateAIQuizPayload,
+  type GenerateAdvancedDiagnosticTestPayload,
+  type GenerateDiagnosticTestPayload,
+  type GenerateGeminiSentencePayload,
+  type GenerateGrammarPracticeQuestionsPayload,
+  type GenerateInstructorFollowUpPayload,
+  type GenerateLearningPlanPayload,
+  type GenerateWordImagePayload,
+  type GeneratedContext,
+  type GrammarQuestionMode,
+  type InstructorFollowUpDraft,
+  validateAiActionRequest,
+} from '../../contracts/ai';
 import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
@@ -37,42 +59,6 @@ import {
 } from './ai-cache-cbt';
 import { HttpError } from './http';
 import { AppEnv, DbUserRow } from './types';
-
-interface AiRequestBody {
-  action: string;
-  payload?: any;
-}
-
-interface GeneratedContext {
-  english: string;
-  japanese: string;
-}
-
-interface InstructorFollowUpDraft {
-  message: string;
-}
-
-interface AIQuizQuestion {
-  wordId: string;
-  options: string[];
-  correctOption: string;
-}
-
-type GrammarQuestionMode = Extract<WorksheetQuestionMode, 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
-
-interface ExtractedResult {
-  words: { word: string; definition: string; }[];
-  contextSummary: string;
-}
-
-interface DiagnosticQuestion {
-  id: string;
-  type: 'MCQ' | 'FILL_IN' | 'WRITING';
-  question: string;
-  options?: string[];
-  answer?: string;
-  level: EnglishLevel;
-}
 
 const getAiClient = (env: AppEnv): GoogleGenAI => {
   if (!env.GEMINI_API_KEY) {
@@ -125,7 +111,7 @@ const runMeteredAiAction = async <T>(
   return result;
 };
 
-const generateGeminiSentence = async (env: AppEnv, payload: any): Promise<GeneratedContext> => {
+const generateGeminiSentence = async (env: AppEnv, payload: GenerateGeminiSentencePayload): Promise<GeneratedContext> => {
   const ai = getAiClient(env);
   const word = String(payload.word || '');
   const definition = String(payload.definition || '');
@@ -199,7 +185,7 @@ export const generateMeteredGeminiSentence = async (
   );
 };
 
-const generateWordImage = async (env: AppEnv, payload: any): Promise<string | null> => {
+const generateWordImage = async (env: AppEnv, payload: GenerateWordImagePayload): Promise<string | null> => {
   const ai = getAiClient(env);
 
   try {
@@ -242,7 +228,7 @@ export const generateMeteredWordImage = async (
   );
 };
 
-const generateAIQuiz = async (env: AppEnv, payload: any): Promise<AIQuizQuestion[]> => {
+const generateAIQuiz = async (env: AppEnv, payload: GenerateAIQuizPayload): Promise<AIQuizQuestion[]> => {
   const ai = getAiClient(env);
   const targetWords = (Array.isArray(payload.targetWords) ? payload.targetWords : []) as WordData[];
   if (targetWords.length === 0) return [];
@@ -371,7 +357,7 @@ ${JSON.stringify(inputWords)}
 
 const generateGrammarPracticeQuestions = async (
   env: AppEnv,
-  payload: any,
+  payload: GenerateGrammarPracticeQuestionsPayload,
   model = resolveGrammarPracticeModel(env),
   beforeAiGenerate?: (requestUnits: number) => Promise<void>,
   userId?: string,
@@ -569,7 +555,7 @@ const normalizeTranslationFeedback = (
 
 const evaluateJapaneseTranslationAnswer = async (
   env: AppEnv,
-  payload: any,
+  payload: EvaluateJapaneseTranslationAnswerPayload,
   model = resolveTranslationFeedbackModel(env),
 ): Promise<JapaneseTranslationFeedback> => {
   const ai = getAiClient(env);
@@ -670,7 +656,7 @@ JSONのみで返してください。
   }
 };
 
-const extractVocabularyFromText = async (env: AppEnv, payload: any): Promise<ExtractedResult> => {
+const extractVocabularyFromText = async (env: AppEnv, payload: ExtractVocabularyFromTextPayload): Promise<ExtractedResult> => {
   const ai = getAiClient(env);
   const rawText = String(payload.rawText || '');
 
@@ -715,7 +701,7 @@ const extractVocabularyFromText = async (env: AppEnv, payload: any): Promise<Ext
   }
 };
 
-const extractVocabularyFromMedia = async (env: AppEnv, payload: any): Promise<ExtractedResult> => {
+const extractVocabularyFromMedia = async (env: AppEnv, payload: ExtractVocabularyFromMediaPayload): Promise<ExtractedResult> => {
   const ai = getAiClient(env);
 
   try {
@@ -768,7 +754,7 @@ const extractVocabularyFromMedia = async (env: AppEnv, payload: any): Promise<Ex
   }
 };
 
-const generateLearningPlan = async (env: AppEnv, payload: any): Promise<LearningPlan | null> => {
+const generateLearningPlan = async (env: AppEnv, payload: GenerateLearningPlanPayload): Promise<LearningPlan | null> => {
   const ai = getAiClient(env);
   const grade = payload.grade as UserGrade;
   const level = payload.level as EnglishLevel;
@@ -833,7 +819,7 @@ const generateLearningPlan = async (env: AppEnv, payload: any): Promise<Learning
   }
 };
 
-const generateInstructorFollowUp = async (env: AppEnv, payload: any): Promise<InstructorFollowUpDraft> => {
+const generateInstructorFollowUp = async (env: AppEnv, payload: GenerateInstructorFollowUpPayload): Promise<InstructorFollowUpDraft> => {
   const ai = getAiClient(env);
 
   try {
@@ -878,7 +864,7 @@ const generateInstructorFollowUp = async (env: AppEnv, payload: any): Promise<In
   }
 };
 
-const generateDiagnosticTest = async (env: AppEnv, payload: any): Promise<DiagnosticQuestion[]> => {
+const generateDiagnosticTest = async (env: AppEnv, payload: GenerateDiagnosticTestPayload): Promise<DiagnosticQuestion[]> => {
   const ai = getAiClient(env);
 
   try {
@@ -921,7 +907,7 @@ const generateDiagnosticTest = async (env: AppEnv, payload: any): Promise<Diagno
   }
 };
 
-const generateAdvancedDiagnosticTest = async (env: AppEnv, payload: any): Promise<DiagnosticQuestion[]> => {
+const generateAdvancedDiagnosticTest = async (env: AppEnv, payload: GenerateAdvancedDiagnosticTestPayload): Promise<DiagnosticQuestion[]> => {
   const ai = getAiClient(env);
 
   try {
@@ -968,7 +954,7 @@ const generateAdvancedDiagnosticTest = async (env: AppEnv, payload: any): Promis
   }
 };
 
-const evaluateAdvancedTest = async (env: AppEnv, payload: any): Promise<EnglishLevel> => {
+const evaluateAdvancedTest = async (env: AppEnv, payload: EvaluateAdvancedTestPayload): Promise<EnglishLevel> => {
   const ai = getAiClient(env);
   const questions = Array.isArray(payload.questions) ? payload.questions : [];
   const userAnswers = payload.userAnswers || {};
@@ -1012,24 +998,34 @@ const evaluateAdvancedTest = async (env: AppEnv, payload: any): Promise<EnglishL
 export const handleAiAction = async (
   env: AppEnv,
   user: DbUserRow,
-  body: AiRequestBody,
+  body: unknown,
   logContext?: AiUsageLogContext,
 ): Promise<unknown> => {
-  switch (body.action) {
+  let request: AnyAiActionRequest;
+  try {
+    request = validateAiActionRequest(body);
+  } catch (error) {
+    if (error instanceof AiActionValidationError) {
+      throw new HttpError(error.status, error.message);
+    }
+    throw error;
+  }
+
+  switch (request.action) {
     case 'generateGeminiSentence':
-      return runMeteredAiAction(env, user, 'generateGeminiSentence', () => generateGeminiSentence(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateGeminiSentence', () => generateGeminiSentence(env, request.payload), logContext);
     case 'generateWordImage':
-      return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, request.payload), logContext);
     case 'generateAIQuiz':
-      return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, request.payload), logContext);
     case 'generateGrammarPracticeQuestions': {
       const model = resolveGrammarPracticeModel(env);
-      const requestUnits = Math.max(1, Math.min(10, Math.trunc(Number(body.payload?.questionCount || 1))));
+      const requestUnits = request.payload.questionCount;
       const unitEstimate = getAiActionEstimate('generateGrammarPracticeQuestions').estimatedCostMilliYen;
       assertAiActionAllowed(user, 'generateGrammarPracticeQuestions');
       const result = await generateGrammarPracticeQuestions(
         env,
-        body.payload,
+        request.payload,
         model,
         async (generatedUnits) => {
           await assertBudgetAvailable(
@@ -1062,7 +1058,7 @@ export const handleAiAction = async (
         env,
         user,
         'evaluateJapaneseTranslationAnswer',
-        () => evaluateJapaneseTranslationAnswer(env, body.payload, model),
+        () => evaluateJapaneseTranslationAnswer(env, request.payload, model),
         logContext,
         {
           model,
@@ -1075,29 +1071,29 @@ export const handleAiAction = async (
       );
     }
     case 'extractVocabularyFromText':
-      return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'extractVocabularyFromText', () => extractVocabularyFromText(env, request.payload), logContext);
     case 'extractVocabularyFromMedia':
-      return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, request.payload), logContext);
     case 'generateLearningPlan':
       if (!env.GEMINI_API_KEY) {
         assertAiActionAllowed(user, 'generateLearningPlan');
         return buildFallbackLearningPlan({
           uid: user.id,
-          grade: (body.payload?.grade || UserGrade.ADULT) as UserGrade,
-          level: (body.payload?.level || EnglishLevel.B1) as EnglishLevel,
-          availableBooks: Array.isArray(body.payload?.availableBooks) ? body.payload.availableBooks as BookMetadata[] : [],
-          learningPreference: (body.payload?.learningPreference || null) as LearningPreference | null,
+          grade: request.payload.grade,
+          level: request.payload.level,
+          availableBooks: request.payload.availableBooks as BookMetadata[],
+          learningPreference: request.payload.learningPreference as LearningPreference | null,
         });
       }
-      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, request.payload), logContext);
     case 'generateInstructorFollowUp':
-      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, request.payload), logContext);
     case 'generateDiagnosticTest':
-      return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, request.payload), logContext);
     case 'generateAdvancedDiagnosticTest':
-      return runMeteredAiAction(env, user, 'generateAdvancedDiagnosticTest', () => generateAdvancedDiagnosticTest(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'generateAdvancedDiagnosticTest', () => generateAdvancedDiagnosticTest(env, request.payload), logContext);
     case 'evaluateAdvancedTest':
-      return runMeteredAiAction(env, user, 'evaluateAdvancedTest', () => evaluateAdvancedTest(env, body.payload), logContext);
+      return runMeteredAiAction(env, user, 'evaluateAdvancedTest', () => evaluateAdvancedTest(env, request.payload), logContext);
     default:
       throw new HttpError(404, '未知のAI操作です。');
   }

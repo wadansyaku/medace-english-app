@@ -132,14 +132,14 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           <X className="h-5 w-5" />
         </button>
         <div className="pr-12">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Submit Writing</p>
+          <p className="text-xs font-bold text-slate-400">英作文提出</p>
           <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{submitTarget.promptTitle}</h3>
           <p className="mt-2 text-sm text-slate-500">
             提出条件を確認してからファイルを選び、最後に送信を確定します。
           </p>
           {isMobileViewport && (
             <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-medace-200 bg-medace-50 px-3 py-1.5 text-xs font-bold text-medace-800">
-              Step {mobileSubmitStep + 1} / {SUBMIT_FLOW_STEPS.length} {currentStep.label}
+              手順 {mobileSubmitStep + 1} / {SUBMIT_FLOW_STEPS.length} {currentStep.label}
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">1</div>
                 <div>
                   <div className="text-sm font-black text-slate-950">提出条件</div>
-                  <div className="mt-1 text-sm text-slate-500">形式と提出コード、attempt 回数を確認します。</div>
+                  <div className="mt-1 text-sm text-slate-500">形式と提出コード、提出回数を確認します。</div>
                 </div>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -174,7 +174,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                   <div className="mt-2 text-sm font-black text-slate-950">PDF 1枚 / 画像最大4枚</div>
                 </div>
                 <div className="rounded-2xl border border-white bg-white px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+                  <div className="text-xs font-bold text-slate-400">提出回数</div>
                   <div className="mt-2 text-sm font-black text-slate-950">{submitTarget.attemptCount + 1} 回目 / 最大 {submitTarget.maxAttempts} 回</div>
                 </div>
               </div>

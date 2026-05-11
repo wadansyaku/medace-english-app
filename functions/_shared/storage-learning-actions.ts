@@ -337,6 +337,10 @@ export const handleRecordQuizAttempt = async (
         expectedTranslation: translationFeedback.expectedTranslation || translationFeedback.improvedTranslation || '',
         userTranslation: translationFeedback.userTranslation || '',
         feedback: translationFeedback,
+        examTarget: translationFeedback.examTarget,
+        organizationId: user.organization_id,
+        model: translationFeedback.usedAi ? 'gemini' : 'deterministic',
+        promptVersion: translationFeedback.usedAi ? 'translation-feedback-v1' : 'deterministic-v1',
         now: nextHistory.lastStudiedAt,
       });
     } catch (error) {

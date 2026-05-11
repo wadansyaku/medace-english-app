@@ -8,6 +8,7 @@ import type {
   QuizSessionConfig,
   UserProfile,
   WordData,
+  WorksheetQuestionMode,
 } from '../types';
 import {
   type GeneratedWorksheetQuestion,
@@ -38,6 +39,55 @@ import { isSmartSessionBookId } from '../shared/studySession';
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
 
 type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER' | 'JA_TRANSLATION_ORDER' | 'JA_TRANSLATION_INPUT'>;
+
+export type QuizAdvanceTarget = 'NEXT_QUESTION' | 'RESULT';
+
+export interface PendingQuizAttempt {
+  correct: boolean;
+  responseTimeMs: number;
+  feedback?: JapaneseTranslationFeedback | null;
+  advanceAutomatically: boolean;
+}
+
+export const shouldAutoAdvanceQuizAttempt = (mode: WorksheetQuestionMode): boolean => (
+  mode !== 'JA_TRANSLATION_INPUT'
+);
+
+export const resolveQuizAdvanceTarget = (currentQIndex: number, questionsLength: number): QuizAdvanceTarget => (
+  currentQIndex < questionsLength - 1 ? 'NEXT_QUESTION' : 'RESULT'
+);
+
+export const createPendingQuizAttempt = ({
+  mode,
+  correct,
+  responseTimeMs,
+  feedback,
+  advanceAutomatically,
+}: {
+  mode: WorksheetQuestionMode;
+  correct: boolean;
+  responseTimeMs: number;
+  feedback?: JapaneseTranslationFeedback | null;
+  advanceAutomatically?: boolean;
+}): PendingQuizAttempt => ({
+  correct,
+  responseTimeMs,
+  feedback,
+  advanceAutomatically: advanceAutomatically ?? shouldAutoAdvanceQuizAttempt(mode),
+});
+
+export const upsertQuestionFeedbackById = (
+  previous: GeneratedWorksheetQuestion[],
+  question: GeneratedWorksheetQuestion,
+  feedback?: JapaneseTranslationFeedback | null,
+): GeneratedWorksheetQuestion[] => {
+  const questionWithFeedback = feedback
+    ? { ...question, translationFeedback: feedback }
+    : question;
+  return previous.some((item) => item.id === question.id)
+    ? previous.map((item) => (item.id === question.id ? { ...item, ...questionWithFeedback } : item))
+    : [...previous, questionWithFeedback];
+};
 
 const isAiGrammarQuestionMode = (mode: QuizSessionConfig['questionMode']): mode is AiGrammarQuestionMode => (
   mode === 'GRAMMAR_CLOZE'
@@ -97,13 +147,15 @@ export const useQuizModeController = ({
   const [spellingFeedbackMessage, setSpellingFeedbackMessage] = useState<string | null>(null);
   const [translationFeedback, setTranslationFeedback] = useState<JapaneseTranslationFeedback | null>(null);
   const [checkingTranslationFeedback, setCheckingTranslationFeedback] = useState(false);
+  const [translationAwaitingAdvance, setTranslationAwaitingAdvance] = useState(false);
+  const [translationFeedbackSummaries, setTranslationFeedbackSummaries] = useState<GeneratedWorksheetQuestion[]>([]);
   const [score, setScore] = useState(0);
   const [missedQuestions, setMissedQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState(buildQuizLoadingMessage('EN_TO_JA'));
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [pendingAttempt, setPendingAttempt] = useState<{ correct: boolean; responseTimeMs: number } | null>(null);
+  const [pendingAttempt, setPendingAttempt] = useState<PendingQuizAttempt | null>(null);
   const [persistingAttempt, setPersistingAttempt] = useState(false);
   const questionStartedAtRef = useRef(Date.now());
   const quizStartedEventRef = useRef(false);
@@ -181,6 +233,8 @@ export const useQuizModeController = ({
     setSpellingFeedbackMessage(null);
     setTranslationFeedback(null);
     setCheckingTranslationFeedback(false);
+    setTranslationAwaitingAdvance(false);
+    setTranslationFeedbackSummaries([]);
     setScore(0);
     setMissedQuestions([]);
     setSaveError(null);
@@ -475,17 +529,53 @@ export const useQuizModeController = ({
     return 'GENERAL';
   };
 
+  const resetCurrentQuestionFeedbackState = () => {
+    setSelectedOption(null);
+    setOrderedTokenIds([]);
+    setOrderFeedback(null);
+    setShowOptions(false);
+    setAnswerInput('');
+    setInputResult(null);
+    setShowSpellingHint(false);
+    setSpellingFeedbackTone(null);
+    setSpellingFeedbackMessage(null);
+    setTranslationFeedback(null);
+    setCheckingTranslationFeedback(false);
+    setTranslationAwaitingAdvance(false);
+    setSaveError(null);
+  };
+
+  const advanceAfterAttempt = () => {
+    if (resolveQuizAdvanceTarget(currentQIndex, questions.length) === 'NEXT_QUESTION') {
+      setCurrentQIndex((previous) => previous + 1);
+      resetCurrentQuestionFeedbackState();
+      return;
+    }
+
+    setTranslationAwaitingAdvance(false);
+    setScreen('RESULT');
+  };
+
   const persistAttempt = async (
     correct: boolean,
     responseTimeMs: number,
     feedback?: JapaneseTranslationFeedback | null,
+    options: { advanceAutomatically?: boolean } = {},
   ) => {
     const question = questions[currentQIndex];
     if (!question) return;
 
+    const pendingQuizAttempt = createPendingQuizAttempt({
+      mode: question.mode,
+      correct,
+      responseTimeMs,
+      feedback,
+      advanceAutomatically: options.advanceAutomatically,
+    });
+
     setPersistingAttempt(true);
     setSaveError(null);
-    setPendingAttempt({ correct, responseTimeMs });
+    setPendingAttempt(pendingQuizAttempt);
 
     try {
       await learningService.recordQuizAttempt(
@@ -511,35 +601,23 @@ export const useQuizModeController = ({
     if (correct) {
       setScore((previous) => previous + 1);
     } else {
-      setMissedQuestions((previous) => (
-        previous.some((item) => item.wordId === question.wordId)
-          ? previous
-          : [...previous, question]
-      ));
+      setMissedQuestions((previous) => upsertQuestionFeedbackById(previous, question, feedback));
+    }
+
+    if (feedback && question.mode === 'JA_TRANSLATION_INPUT') {
+      setTranslationFeedbackSummaries((previous) => upsertQuestionFeedbackById(previous, question, feedback));
     }
 
     setPendingAttempt(null);
     setPersistingAttempt(false);
 
-    window.setTimeout(() => {
-      if (currentQIndex < questions.length - 1) {
-        setCurrentQIndex((previous) => previous + 1);
-        setSelectedOption(null);
-        setOrderedTokenIds([]);
-        setOrderFeedback(null);
-        setShowOptions(false);
-        setAnswerInput('');
-        setInputResult(null);
-        setShowSpellingHint(false);
-        setSpellingFeedbackTone(null);
-        setSpellingFeedbackMessage(null);
-        setTranslationFeedback(null);
-        setCheckingTranslationFeedback(false);
-        setSaveError(null);
-        return;
-      }
+    if (!pendingQuizAttempt.advanceAutomatically) {
+      setTranslationAwaitingAdvance(true);
+      return;
+    }
 
-      setScreen('RESULT');
+    window.setTimeout(() => {
+      advanceAfterAttempt();
     }, 900);
   };
 
@@ -643,7 +721,7 @@ export const useQuizModeController = ({
           ? `${feedback.verdictLabel}: ${feedback.summaryJa}`
           : `${feedback.verdictLabel}: ${feedback.summaryJa}`,
       );
-      await persistAttempt(correct, responseTimeMs, feedback);
+      await persistAttempt(correct, responseTimeMs, feedback, { advanceAutomatically: false });
       return;
     }
 
@@ -691,7 +769,17 @@ export const useQuizModeController = ({
 
   const handleRetrySave = async () => {
     if (!pendingAttempt || persistingAttempt) return;
-    await persistAttempt(pendingAttempt.correct, pendingAttempt.responseTimeMs);
+    await persistAttempt(
+      pendingAttempt.correct,
+      pendingAttempt.responseTimeMs,
+      pendingAttempt.feedback,
+      { advanceAutomatically: pendingAttempt.advanceAutomatically },
+    );
+  };
+
+  const handleAdvanceAfterTranslationFeedback = () => {
+    if (!translationAwaitingAdvance || persistingAttempt || checkingTranslationFeedback || saveError) return;
+    advanceAfterAttempt();
   };
 
   const percentage = questions.length === 0 ? 0 : Math.round((score / questions.length) * 100);
@@ -721,6 +809,8 @@ export const useQuizModeController = ({
     persistingAttempt,
     translationFeedback,
     checkingTranslationFeedback,
+    translationAwaitingAdvance,
+    translationFeedbackSummaries,
     minWordNumber,
     maxWordNumber,
     normalizedSetupRange,
@@ -752,6 +842,7 @@ export const useQuizModeController = ({
     handleHintSubmit,
     revealSpellingHint,
     handleRetrySave,
+    handleAdvanceAfterTranslationFeedback,
     setShowOptions,
     setAnswerInput,
     setShowExitConfirm,

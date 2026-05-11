@@ -64,7 +64,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
     <div className="relative min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border border-white/10 bg-white/5 font-bold uppercase tracking-[0.18em] text-white/70 ${
+          <span className={`rounded-full border border-white/10 bg-white/5 font-bold text-white/70 ${
             isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1 text-xs'
           }`}>
             {BRAND.productLabel}
@@ -97,7 +97,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         isMobileCompact ? 'mt-4' : 'mt-5 lg:mt-6'
       }`}>
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-medace-200">Today Focus</p>
+          <p className="text-xs font-bold text-medace-200">今日の集中</p>
           <h2 className={`min-w-0 font-black leading-tight tracking-tight ${isMobileCompact ? 'mt-1.5 text-[1.35rem]' : 'mt-2 text-[1.7rem] sm:text-[1.9rem] md:text-4xl'}`}>
             今日やることは 1 つだけ
           </h2>
@@ -143,7 +143,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
 
           {isMobileCompact && primaryRecommendedBookTitle && onOpenRecommendedCourse ? (
             <div className="mt-3 rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">推奨コース 1つ</div>
+              <div className="text-[11px] font-bold text-white/60">推奨コース 1つ</div>
               <div className="mt-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="line-clamp-2 text-sm font-bold leading-snug text-white">
@@ -164,7 +164,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             </div>
           ) : (
             <div className={`min-w-0 rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-2.5' : 'mt-4 py-3'}`}>
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">学習の個別設定</div>
+              <div className="text-[11px] font-bold text-white/60">学習の個別設定</div>
               <div className={`min-w-0 leading-relaxed text-white/80 ${isMobileCompact ? 'mt-1.5 text-[13px] line-clamp-2' : 'mt-2 text-sm line-clamp-2 md:line-clamp-none'}`}>
                 {preferenceSummary}
               </div>
@@ -173,7 +173,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </div>
 
         <div className={`min-w-0 rounded-[28px] border border-white/10 bg-white/8 backdrop-blur-sm ${isMobileCompact ? 'p-3' : 'p-3.5 md:p-5'}`}>
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">今日の目安</div>
+          <div className="text-xs font-bold text-white/60">今日の目安</div>
           <div className={isMobileCompact ? 'mt-3' : 'mt-4'}>
             <ResponsiveMetricRail
               className={isMobileCompact ? 'md:gap-2' : ''}
@@ -186,7 +186,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
           </div>
 
           <div className={`rounded-2xl border border-white/10 bg-white/6 px-4 ${isMobileCompact ? 'mt-3 py-3' : 'mt-3 py-3.5 md:mt-4 md:py-4'}`}>
-            <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.16em] text-white/60">
+            <div className="flex items-center justify-between gap-3 text-xs font-bold text-white/60">
               <span>今日の進み具合</span>
               <span>{todayCount} / {todayWordGoal} 語</span>
             </div>

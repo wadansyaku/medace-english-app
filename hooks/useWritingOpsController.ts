@@ -18,6 +18,7 @@ import {
   uploadWritingAsset,
 } from '../services/writing';
 import {
+  WritingAssignmentStatus,
   WritingSubmissionSource,
   type StudentSummary,
   type WritingAssignment,
@@ -278,6 +279,13 @@ export const useWritingOpsController = () => {
 
   const handleComplete = useCallback(async () => {
     if (!detail) return;
+    if (detail.assignment.status !== WritingAssignmentStatus.RETURNED) {
+      setNotice({
+        tone: 'error',
+        message: '講師コメントを返却してから、課題を完了にできます。',
+      });
+      return;
+    }
 
     setBusyAction('review');
     try {

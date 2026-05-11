@@ -40,7 +40,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
           <Flag className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Weekly Mission</p>
+          <p className="text-xs font-bold text-slate-400">週次ミッション</p>
           <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今週のミッション</h3>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
             なぜこの課題か、あと何を進めれば完了か、次の1アクションを1枚で確認できます。
@@ -86,25 +86,25 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
       <div className="rounded-[28px] border border-slate-200 bg-white px-5 py-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Progress</p>
+            <p className="text-xs font-bold text-slate-400">進捗</p>
             <div className="mt-2 text-3xl font-black text-slate-950">{mission.completionRate}%</div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right">
-            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">残り</div>
+            <div className="text-[11px] font-bold text-slate-400">残り</div>
             <div className="mt-1 text-sm font-bold text-slate-700">{mission.blockers.length > 0 ? mission.blockers.join(' / ') : '完了'}</div>
           </div>
         </div>
 
         <div className="mt-4 grid gap-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
               <Target className="h-4 w-4" />
               次の1アクション
             </div>
             <div className="mt-2 font-bold text-slate-900">{mission.nextActionLabel}</div>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
               <CalendarClock className="h-4 w-4" />
               進め方
             </div>

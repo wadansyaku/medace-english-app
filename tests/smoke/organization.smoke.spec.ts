@@ -61,6 +61,15 @@ test('group admin can create a grammar worksheet from studied vocabulary', async
   await expect(page.locator('iframe[title="Worksheet print preview"]')).toBeVisible();
 });
 
+test('instructor direct english practice route returns to the instructor workspace', async ({ page }) => {
+  await loginInstructorDemo(page);
+  await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
+
+  await page.goto('/english-practice');
+  await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+});
+
 test('group admin bootstrap seeds the demo activation loop and leaves guided next steps', async ({ page }) => {
   await loginGroupAdminDemo(page);
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
