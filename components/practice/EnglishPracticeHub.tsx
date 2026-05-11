@@ -352,6 +352,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [translationFeedback, setTranslationFeedback] = useState<Record<string, JapaneseTranslationFeedback>>({});
   const [submittedTranslationInputs, setSubmittedTranslationInputs] = useState<Record<string, string>>({});
   const submittedTranslationInputRef = React.useRef<Record<string, string>>({});
+  const translationSubmissionVersionRef = React.useRef(0);
   const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
   const [practiceLevel, setPracticeLevel] = useState<EnglishLevel>(userLevel);
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
@@ -409,6 +410,18 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setGrammarOrders({});
     setCheckedGrammarItems({});
   }, [grammarMode, grammarScopes, practiceLevel]);
+
+  React.useEffect(() => {
+    setTranslationInputs({});
+    setTranslationOrders({});
+    setCheckedTranslationOrders({});
+    setTranslationFeedback({});
+    setSubmittedTranslationInputs({});
+    submittedTranslationInputRef.current = {};
+    translationSubmissionVersionRef.current += 1;
+    setCheckingTranslationId(null);
+    setReadingSummary(null);
+  }, [practiceLevel]);
 
   const samplePracticeActive = !wordsLoading && (wordLoadFailed || sessionWords.length === 0);
   const practiceWords = sessionWords.length > 0 ? sessionWords : samplePracticeActive ? FALLBACK_WORDS : [];
@@ -558,6 +571,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setTranslationFeedback({});
     setSubmittedTranslationInputs({});
     submittedTranslationInputRef.current = {};
+    translationSubmissionVersionRef.current += 1;
+    setCheckingTranslationId(null);
   };
 
   const resetPracticeProgress = () => {
@@ -655,6 +670,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       [item.id]: input,
     };
     setSubmittedTranslationInputs((current) => ({ ...current, [item.id]: input }));
+    const submissionVersion = translationSubmissionVersionRef.current;
 
     const grammarExplanation = buildGrammarScopeExplanation(item.grammarScope);
     let feedback: JapaneseTranslationFeedback = {
@@ -689,12 +705,16 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           summaryJa: `${feedback.summaryJa} AI採点に接続できないため、今回は正解例との差分で暫定フィードバックを表示しています。`,
           issues: feedback.issues.length > 0
             ? feedback.issues
-            : ['AI採点が利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
+          : ['AI採点が利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
         };
       } finally {
-        setCheckingTranslationId(null);
+        if (translationSubmissionVersionRef.current === submissionVersion) {
+          setCheckingTranslationId(null);
+        }
       }
     }
+
+    if (translationSubmissionVersionRef.current !== submissionVersion) return;
 
     setTranslationFeedback((current) => ({
       ...current,
