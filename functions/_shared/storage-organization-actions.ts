@@ -1,4 +1,5 @@
 export { handleGetOrganizationDashboardSnapshot } from './organization-dashboard-actions';
+export { handleRecordClassroomWorksheetLifecycleEvent } from './organization-activation-events';
 export {
   handleAssignStudentInstructor,
   handleSetInstructorCohorts,

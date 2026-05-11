@@ -122,7 +122,7 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
 
     <div className="space-y-5">
       <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Generation Preview</div>
+        <div className="text-xs font-bold text-slate-400">生成プレビュー</div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-white bg-white px-5 py-5">
             <div className="text-sm font-bold text-slate-950">対象生徒</div>
@@ -158,7 +158,7 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
       <section className="rounded-[28px] border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Template Bank</div>
+            <div className="text-xs font-bold text-slate-400">テンプレート集</div>
             <h4 className="mt-1 text-lg font-black text-slate-950">テンプレート一覧</h4>
           </div>
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-500">
@@ -168,7 +168,7 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           {templates.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm leading-relaxed text-slate-500 sm:col-span-2">
-              利用できる Writing テンプレートがまだありません。テンプレートが同期されると、ここから選択できます。
+              利用できる英作文テンプレートがまだありません。テンプレートが同期されると、ここから選択できます。
             </div>
           )}
           {templates.map((template) => (

@@ -125,6 +125,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           spellingFeedbackMessage={controller.spellingFeedbackMessage}
           translationFeedback={controller.translationFeedback}
           checkingTranslationFeedback={controller.checkingTranslationFeedback}
+          translationAwaitingAdvance={controller.translationAwaitingAdvance}
           persistingAttempt={controller.persistingAttempt}
           saveError={controller.saveError}
           hasPendingAttempt={Boolean(controller.pendingAttempt)}
@@ -139,6 +140,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           onOrderTokensClear={controller.handleOrderTokensClear}
           onOrderSubmit={controller.handleOrderSubmit}
           onRetrySave={controller.handleRetrySave}
+          onAdvanceAfterTranslationFeedback={controller.handleAdvanceAfterTranslationFeedback}
         />
       )}
 
@@ -150,6 +152,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           score={controller.score}
           questionsLength={controller.questions.length}
           reviewTargets={controller.reviewTargets}
+          translationFeedbackSummaries={controller.translationFeedbackSummaries}
           nextReviewCopy={controller.nextReviewCopy}
           onRetry={() => controller.startQuiz(controller.activeConfig!)}
           onReset={controller.resetToSetup}

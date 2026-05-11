@@ -16,6 +16,7 @@ import { buildBusinessActivationProgress } from '../utils/businessActivation';
 import {
   buildBusinessAdminDecisionModel,
   filterAssignmentStudents,
+  getBusinessAdminRunbookSummary,
   resolveSelectedAssignmentStudentUid,
 } from '../utils/businessAdminDashboard';
 import {
@@ -409,6 +410,89 @@ describe('b2b workspace helpers', () => {
       assignmentFilter: 'UNASSIGNED_AT_RISK',
     });
     expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['作文滞留', '1件']);
+  });
+
+  it('passes the activation runbook stop reason and worksheet source into the overview decision model', () => {
+    const snapshot = makeDashboardSnapshot({
+      activationRunbook: {
+        stages: [
+          {
+            id: 'worksheet',
+            label: 'PDF問題',
+            detail: 'sample',
+            done: false,
+            status: 'stalled',
+            stalledReason: 'PDF問題は fallback 候補のみです。学習履歴由来ではありません。',
+            actionLabel: '履歴ベースのPDF問題を作る',
+            target: {
+              kind: 'WORKSHEET',
+              targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+              organizationId: 'org-1',
+            },
+            evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+          },
+        ],
+        currentStage: {
+          id: 'worksheet',
+          label: 'PDF問題',
+          detail: 'sample',
+          done: false,
+          status: 'stalled',
+          stalledReason: 'PDF問題は fallback 候補のみです。学習履歴由来ではありません。',
+          actionLabel: '履歴ベースのPDF問題を作る',
+          target: {
+            kind: 'WORKSHEET',
+            targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+            organizationId: 'org-1',
+          },
+          evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+        },
+        stalledStage: {
+          id: 'worksheet',
+          label: 'PDF問題',
+          detail: 'sample',
+          done: false,
+          status: 'stalled',
+          stalledReason: 'PDF問題は fallback 候補のみです。学習履歴由来ではありません。',
+          actionLabel: '履歴ベースのPDF問題を作る',
+          target: {
+            kind: 'WORKSHEET',
+            targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+            organizationId: 'org-1',
+          },
+          evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+        },
+        completedStageCount: 4,
+        totalStageCount: 7,
+        progressPercent: 57,
+        worksheet: {
+          historyBasedStudentCount: 0,
+          fallbackStudentCount: 2,
+          sourceLabel: '履歴ベース 0名 / fallback候補 2名',
+          hasOnlyFallback: true,
+        },
+      },
+    });
+
+    const runbookSummary = getBusinessAdminRunbookSummary(snapshot);
+    const decision = buildBusinessAdminDecisionModel({
+      snapshot,
+      activeView: BusinessAdminWorkspaceView.OVERVIEW,
+      writingAssignments: [],
+      writingQueue: [],
+    });
+
+    expect(runbookSummary).toMatchObject({
+      title: 'PDF問題で停止',
+      targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      tone: 'warning',
+    });
+    expect(runbookSummary.detail).toContain('学習履歴由来ではありません');
+    expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['導入ランブック', '57%']);
+    expect(decision.focusItems.find((item) => item.label === '導入ランブック')).toMatchObject({
+      value: 'PDF問題で停止',
+      tone: 'warning',
+    });
   });
 
   it('points assignment triage at the highest priority student and filter', () => {

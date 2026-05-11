@@ -12,8 +12,9 @@ import {
 const cwd = process.cwd();
 
 const REQUIRED_GITHUB_VARIABLES = ['CLOUDFLARE_PAGES_PROJECT', 'CLOUDFLARE_D1_DATABASE', 'WRITING_AI_MODE'];
+const REQUIRED_GITHUB_SCHEDULED_SECRETS = ['INTERNAL_JOB_SECRET'];
 const GITHUB_DEPLOYMENT_ENVIRONMENTS = ['production', 'preview'];
-const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE'];
+const REQUIRED_PAGES_SECRETS = ['ADMIN_DEMO_PASSWORD', 'WRITING_AI_MODE', 'INTERNAL_JOB_SECRET'];
 const OPTIONAL_PAGES_SECRETS = ['GEMINI_API_KEY', 'OPENAI_API_KEY'];
 
 const run = (command, args, options = {}) => {
@@ -340,6 +341,7 @@ if (githubReady && repoSlug) {
   const secretSources = new Map([
     ['CLOUDFLARE_ACCOUNT_ID', process.env.CLOUDFLARE_ACCOUNT_ID || detectedAccountId],
     ['CLOUDFLARE_API_TOKEN', process.env.CLOUDFLARE_API_TOKEN || ''],
+    ...REQUIRED_GITHUB_SCHEDULED_SECRETS.map((name) => [name, process.env[name] || '']),
   ]);
 
   for (const [name, value] of secretSources) {

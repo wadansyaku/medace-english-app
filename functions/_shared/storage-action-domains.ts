@@ -2,6 +2,7 @@ import {
   STORAGE_ACTIONS,
   type StorageAction,
 } from '../../contracts/storage';
+import { aiReviewStorageActionDefinitions } from './storage-action-registry/ai-review';
 import { announcementStorageActionDefinitions } from './storage-action-registry/announcements';
 import { catalogStorageActionDefinitions } from './storage-action-registry/catalog';
 import { commercialStorageActionDefinitions } from './storage-action-registry/commercial';
@@ -19,7 +20,8 @@ export interface StorageActionDomainGroup {
     | 'organization'
     | 'missions'
     | 'commercial'
-    | 'announcements';
+    | 'announcements'
+    | 'aiReview';
   definitions: Partial<StorageActionDefinitionMap>;
 }
 
@@ -52,6 +54,10 @@ export const storageActionDomainGroups = [
     name: 'announcements',
     definitions: announcementStorageActionDefinitions,
   },
+  {
+    name: 'aiReview',
+    definitions: aiReviewStorageActionDefinitions,
+  },
 ] as const satisfies readonly StorageActionDomainGroup[];
 
 export const storageActionCompatibilityDefinitions = {
@@ -62,6 +68,7 @@ export const storageActionCompatibilityDefinitions = {
   ...missionStorageActionDefinitions,
   ...commercialStorageActionDefinitions,
   ...announcementStorageActionDefinitions,
+  ...aiReviewStorageActionDefinitions,
 } satisfies StorageActionDefinitionMap;
 
 export const storageActionAliases = Object.freeze(

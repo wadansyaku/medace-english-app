@@ -79,14 +79,14 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
     <section data-testid="writing-ops-panel" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Ops</p>
+          <p className="text-xs font-bold text-slate-400">英作文運用</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">自由英作文の紙提出運用</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
             問題生成、印刷、紙答案の提出、AI比較、講師確認、返却までを段階ごとに処理します。
           </p>
         </div>
         <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
-          {user.organizationName || 'Business Workspace'}
+          {user.organizationName || '組織ワークスペース'}
         </div>
       </div>
 

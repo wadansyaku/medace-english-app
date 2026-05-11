@@ -126,7 +126,7 @@ const WritingStudentAssignmentCard: React.FC<{
 
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-white bg-white px-4 py-3">
-            <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Attempt</div>
+            <div className="text-[11px] font-bold text-slate-400">提出回数</div>
             <div className="mt-2 text-sm font-black text-slate-950">{assignment.attemptCount} / {assignment.maxAttempts}</div>
           </div>
           <div className="rounded-2xl border border-white bg-white px-4 py-3">
@@ -245,7 +245,7 @@ const WritingStudentAssignmentCard: React.FC<{
                 <div className="mt-2 text-lg font-black text-slate-950">{assignment.submissionCode}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+                <div className="text-xs font-bold text-slate-400">提出回数</div>
                 <div className="mt-2 text-lg font-black text-slate-950">{assignment.attemptCount} / {assignment.maxAttempts}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">

@@ -113,7 +113,7 @@ const Layout: React.FC<LayoutProps> = ({
           className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/72 px-4"
         >
           <div className="max-w-lg rounded-[28px] border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">Online-only pilot</p>
+            <p className="text-xs font-black text-amber-300">オンライン専用テスト</p>
             <h2 className="mt-3 text-2xl font-black">オフラインでは操作を継続できません</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-200">
               この導入 pilot はオンライン接続前提です。ネットワーク接続を戻してから、学習・教材更新・履歴保存を再開してください。
@@ -136,12 +136,12 @@ const Layout: React.FC<LayoutProps> = ({
         >
           <div className="mx-auto flex max-w-7xl items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-sky-700">Public Preview Deployment</p>
+              <p className="text-[11px] font-black text-sky-700">公開プレビュー環境</p>
               <p className="mt-1 text-sm font-semibold leading-relaxed">
                 この URL は preview 環境です。検索対象にせず、動作確認と内部レビュー専用として扱ってください。
               </p>
             </div>
-            <div className="rounded-full border border-sky-400 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-sky-700">
+            <div className="rounded-full border border-sky-400 bg-white px-3 py-1 text-xs font-black text-sky-700">
               noindex
             </div>
           </div>
@@ -158,7 +158,7 @@ const Layout: React.FC<LayoutProps> = ({
               <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Limited Demo Access</p>
+                    <p className="text-[11px] font-black text-amber-700">体験版アクセス</p>
                     <p className="mt-1 text-sm font-semibold text-slate-800">
                       体験は <span className="font-black text-slate-950">{getDemoAccessWindowLabel()}</span> 限定です。
                     </p>
@@ -167,7 +167,7 @@ const Layout: React.FC<LayoutProps> = ({
                     type="button"
                     data-testid="demo-banner-toggle"
                     onClick={() => setShowDemoBannerDetails((previous) => !previous)}
-                    className="inline-flex min-h-0 shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-black text-amber-800 transition-colors hover:bg-amber-50"
+                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-800 transition-colors hover:bg-amber-50"
                   >
                     {showDemoBannerDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     {showDemoBannerDetails ? '閉じる' : '詳細'}
@@ -191,7 +191,7 @@ const Layout: React.FC<LayoutProps> = ({
             ) : (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-700">Limited Demo Access</p>
+                  <p className="text-xs font-black text-amber-700">体験版アクセス</p>
                   <p className="mt-1 text-[0.95rem] font-medium leading-relaxed text-slate-700">
                     体験用アカウントは <span className="font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</span> です。別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
                   </p>
@@ -221,7 +221,7 @@ const Layout: React.FC<LayoutProps> = ({
                 {compactStudentShell ? BRAND.productLabel : BRAND.officialName}
               </h1>
               <p className={`font-bold tracking-[0.14em] text-medace-700/70 ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
-                {compactStudentShell ? 'STUDENT MOBILE' : BRAND.productLabel}
+                {compactStudentShell ? '生徒モバイル' : BRAND.productLabel}
               </p>
             </div>
           </div>

@@ -102,11 +102,11 @@ describe('generateWorksheetQuestions', () => {
 
     expect(stabilizeQuestion).toMatchObject({
       interactionType: 'CHOICE',
-      promptText: 'Doctors ____ the patient before surgery.',
-      answer: 'stabilize',
+      promptText: 'Doctors stabilize the patient ____ surgery.',
+      answer: 'before',
       sourceSentence: 'Doctors stabilize the patient before surgery.',
     });
-    expect(stabilizeQuestion?.options).toContain('stabilize');
+    expect(stabilizeQuestion?.options).toContain('before');
   });
 
   it('generates English word-order chip questions', () => {
@@ -191,7 +191,7 @@ describe('generateWorksheetQuestions', () => {
 
     expect(stabilizeQuestion).toMatchObject({
       interactionType: 'TEXT_INPUT',
-      promptText: 'The term stabilize is useful today.',
+      promptText: 'The word stabilize is useful today.',
       answer: '安定させる という語は 今日 役に立つ',
       grammarScope: {
         scopeId: 'be-verb',

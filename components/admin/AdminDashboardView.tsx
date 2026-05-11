@@ -195,13 +195,13 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               <div className="flex items-center gap-3">
                 <Activity className="h-5 w-5 text-medace-600" />
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Product KPI</p>
+                  <p className="text-xs font-bold text-slate-400">プロダクトKPI</p>
                   <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">日次ベースライン</h3>
                 </div>
               </div>
               {analyticsStatus && (
                 <div className={`mt-5 rounded-2xl border px-4 py-4 text-sm ${analyticsStatus.tone}`}>
-                  <div className="text-xs font-bold uppercase tracking-[0.16em]">Analytics Status</div>
+                  <div className="text-xs font-bold">分析ステータス</div>
                   <div className="mt-1 text-base font-black">{analyticsStatus.label}</div>
                   <div className="mt-2 text-xs leading-relaxed opacity-90">{analyticsStatus.detail}</div>
                 </div>
@@ -235,20 +235,20 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-medace-600" />
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">B2B Activation</p>
+                  <p className="text-xs font-bold text-slate-400">B2B導入状況</p>
                   <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">導入ファネル</h3>
                 </div>
               </div>
               {analyticsStatus && (
                 <div className={`mt-5 rounded-2xl border px-4 py-4 text-sm ${analyticsStatus.tone}`}>
-                  <div className="text-xs font-bold uppercase tracking-[0.16em]">Count Interpretation</div>
+                  <div className="text-xs font-bold">数値の見方</div>
                   <div className="mt-2 text-xs leading-relaxed opacity-90">{analyticsStatus.detail}</div>
                 </div>
               )}
               <div className="mt-5 space-y-3">
                 {[
                   ['組織数', snapshot.activationFunnel.totalOrganizations],
-                  ['cohort 作成', snapshot.activationFunnel.organizationsWithCohortCount],
+                  ['クラス作成', snapshot.activationFunnel.organizationsWithCohortCount],
                   ['担当割当', snapshot.activationFunnel.organizationsWithAssignmentCount],
                   ['初回ミッション', snapshot.activationFunnel.organizationsWithMissionCount],
                   ['初回通知', snapshot.activationFunnel.organizationsWithNotificationCount],
@@ -271,7 +271,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               <div className="flex items-center gap-3">
                 <Bot className="h-5 w-5 text-medace-600" />
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">AI Economics</p>
+                  <p className="text-xs font-bold text-slate-400">AI費用効率</p>
                   <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">生成と再利用</h3>
                 </div>
               </div>

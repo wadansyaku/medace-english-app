@@ -10,7 +10,7 @@ interface BusinessAdminWorksheetsSectionProps {
 const BusinessAdminWorksheetsSection: React.FC<BusinessAdminWorksheetsSectionProps> = ({ user }) => (
   <div className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Worksheet Ops</p>
+      <p className="text-xs font-bold text-slate-400">プリント運用</p>
       <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">配布用PDF問題を独立して作る</h3>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">
         組織運用と同じ画面に混ぜず、配布物作成だけをここで処理します。今日の授業や面談で配る問題を短時間で用意できます。

@@ -21,7 +21,7 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
   >
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-medace-700">Feedback</div>
+        <div className="text-[11px] font-black text-medace-700">採点フィードバック</div>
         <div className="mt-1 text-xl font-black text-slate-950">
           {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
         </div>

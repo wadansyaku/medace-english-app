@@ -98,4 +98,64 @@ describe('storage action contract', () => {
       responseTimeMs: 1200,
     })).toThrow('questionMode が不正です。');
   });
+
+  it('declares AI generated problem review actions for teacher/admin operation', () => {
+    const listDefinition = resolveStorageActionDefinition('listAiGeneratedProblemReviewQueue');
+    const reviewDefinition = resolveStorageActionDefinition('reviewAiGeneratedProblem');
+
+    expect(listDefinition.roles).toEqual(['ADMIN', 'INSTRUCTOR']);
+    expect(reviewDefinition.roles).toEqual(['ADMIN', 'INSTRUCTOR']);
+    expect(listDefinition.parse({
+      status: 'PENDING',
+      questionMode: 'GRAMMAR_CLOZE',
+      limit: 10,
+    })).toMatchObject({
+      status: 'PENDING',
+      questionMode: 'GRAMMAR_CLOZE',
+      limit: 10,
+    });
+    expect(reviewDefinition.parse({
+      problemId: 'ai-problem-1',
+      decision: 'APPROVE',
+      reviewNote: '講師確認済み',
+    })).toEqual({
+      problemId: 'ai-problem-1',
+      decision: 'APPROVE',
+      reviewNote: '講師確認済み',
+    });
+    expect(() => reviewDefinition.parse({
+      problemId: 'ai-problem-1',
+      decision: 'PUBLISH',
+    })).toThrow('decision が不正です。');
+  });
+
+  it('declares classroom worksheet lifecycle recording for teacher/admin operation', () => {
+    const definition = resolveStorageActionDefinition('recordClassroomWorksheetLifecycleEvent');
+
+    expect(definition.roles).toEqual(['ADMIN', 'INSTRUCTOR']);
+    expect(definition.parse({
+      studentUid: 'student-1',
+      worksheetSource: 'catalog_fallback',
+      lifecycleStatus: 'printed',
+      payload: {
+        generatedQuestionCount: 20,
+      },
+      occurredAt: 123,
+    })).toMatchObject({
+      studentUid: 'student-1',
+      worksheetSource: 'catalog_fallback',
+      lifecycleStatus: 'printed',
+      occurredAt: 123,
+    });
+    expect(() => definition.parse({
+      studentUid: 'student-1',
+      worksheetSource: 'unknown',
+      lifecycleStatus: 'printed',
+    })).toThrow('worksheetSource が不正です。');
+    expect(() => definition.parse({
+      studentUid: 'student-1',
+      worksheetSource: 'history',
+      lifecycleStatus: 'archived',
+    })).toThrow('lifecycleStatus が不正です。');
+  });
 });

@@ -668,6 +668,8 @@ export const getStudentWorksheetSnapshot = async (
     studentUid: targetStudent.uid,
     studentName: targetStudent.name,
     organizationName: targetStudent.organizationName,
+    source: worksheetWords.length > 0 ? 'history' : 'catalog_fallback',
+    sourceLabel: worksheetWords.length > 0 ? '学習履歴ベース' : '教材カタログ fallback（学習履歴なし）',
     words: worksheetWords.length > 0 ? worksheetWords : await buildFallbackWorksheetWords(context),
   };
 };

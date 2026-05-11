@@ -26,7 +26,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
       <section data-testid="dashboard-weakness-section" className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Weakness Focus</div>
+            <div className="text-xs font-bold text-slate-400">苦手フォーカス</div>
             <h3 className="mt-3 text-xl font-black tracking-tight text-slate-950">まだ苦手分析は育成中です</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
               まずは{WEAKNESS_MIN_SAMPLE}問以上の学習ログを作ると、次に10語だけ確認する場所を絞れます。
@@ -54,7 +54,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Weakness Focus</div>
+            <div className="text-xs font-bold text-slate-400">苦手フォーカス</div>
             <h3 className="mt-3 text-xl font-black tracking-tight text-slate-950">今日はここを先に整える</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">{topWeakness.reason}</p>
           </div>

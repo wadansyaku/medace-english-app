@@ -23,7 +23,7 @@ describe('study session presets', () => {
     expect(getSmartSessionConfig(WEAKNESS_FOCUS_SESSION_ID)).toEqual({
       bookId: WEAKNESS_FOCUS_SESSION_ID,
       limit: WEAKNESS_FOCUS_SESSION_LIMIT,
-      badgeLabel: 'Weakness Focus',
+      badgeLabel: '苦手フォーカス',
       isWeaknessFocus: true,
     });
   });

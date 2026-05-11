@@ -23,6 +23,7 @@ import {
   type BusinessActivationChecklistItem,
 } from '../../../utils/businessActivation';
 import {
+  getBusinessAdminRunbookSummary,
   getBusinessAdminWritingCounts,
   sortInstructorBacklogByLoad,
 } from '../../../utils/businessAdminDashboard';
@@ -66,12 +67,19 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
 }) => {
   const instructorLoad = sortInstructorBacklogByLoad(snapshot.instructorBacklog);
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
+  const runbookSummary = getBusinessAdminRunbookSummary(snapshot);
+  const runbookStages = snapshot.activationRunbook?.stages || [];
   const activationProgress = buildBusinessActivationProgress({
     snapshot,
   });
   const latestTrendPoint = snapshot.trend[snapshot.trend.length - 1];
   const canSendActivationNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
+  const runbookStageClass = {
+    complete: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    stalled: 'border-amber-300 bg-amber-50 text-amber-900',
+    pending: 'border-slate-200 bg-slate-50 text-slate-500',
+  } as const;
   const renderChecklistItem = (item: BusinessActivationChecklistItem) => (
     <div key={item.id} className={`flex h-full flex-col justify-between rounded-3xl border px-4 py-4 ${item.done ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
       <div>
@@ -100,12 +108,12 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
       <section className="rounded-[32px] border border-medace-200 bg-medace-50 p-6 shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-medace-700/70">Next Required Action</p>
+            <p className="text-xs font-bold text-medace-700/70">次の一手</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{snapshot.nextRequiredActionLabel}</h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-700">{snapshot.nextRequiredActionDescription}</p>
             {canBootstrap && (
               <p className="mt-3 text-xs font-medium text-medace-800/80">
-                demo 組織では導入セットを自動投入して、cohort から初回通知までをまとめて確認できます。
+                体験用の組織では導入セットを自動投入して、クラス作成から初回通知までをまとめて確認できます。
               </p>
             )}
           </div>
@@ -146,11 +154,48 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
         </div>
       </section>
 
+      <section data-testid="business-admin-runbook-summary" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400">導入ランブック</p>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">{runbookSummary.title}</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">{runbookSummary.detail}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-black text-medace-900">
+              {runbookSummary.progressLabel}
+            </div>
+            <button
+              type="button"
+              onClick={() => onChangeView(runbookSummary.targetView)}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
+            >
+              停止箇所を開く <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-2 md:grid-cols-4 xl:grid-cols-[repeat(7,minmax(0,1fr))]">
+          {runbookStages.map((stage) => (
+            <div key={stage.id} className={`rounded-2xl border px-3 py-3 ${runbookStageClass[stage.status]}`}>
+              <div className="text-xs font-black">{stage.label}</div>
+              <div className="mt-1 text-[11px] font-bold opacity-80">{stage.evidenceLabel}</div>
+            </div>
+          ))}
+        </div>
+        <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+          snapshot.activationRunbook?.worksheet.hasOnlyFallback
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        }`}>
+          PDF問題: {runbookSummary.worksheetSourceLabel}
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <WorkspaceMetricCard label="週4日継続率" value={`${snapshot.weeklyContinuityRate}%`} detail="直近7日で4日以上学習した生徒" tone="accent" />
-        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="at-risk 生徒への48時間以内フォロー" tone={snapshot.followUpCoverageRate48h >= 80 ? 'success' : 'warning'} />
-        <WorkspaceMetricCard label="未処理 backlog" value={`${snapshot.interventionBacklogCount}名`} detail="いま介入順を決めるべき生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
-        <WorkspaceMetricCard label="未割当 at-risk" value={`${snapshot.unassignedAtRiskCount}名`} detail="担当再設定が必要な生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
+        <WorkspaceMetricCard label="48時間介入率" value={`${snapshot.followUpCoverageRate48h}%`} detail="要フォロー生徒への48時間以内フォロー" tone={snapshot.followUpCoverageRate48h >= 80 ? 'success' : 'warning'} />
+        <WorkspaceMetricCard label="未処理バックログ" value={`${snapshot.interventionBacklogCount}名`} detail="いま介入順を決めるべき生徒" tone={snapshot.interventionBacklogCount > 0 ? 'danger' : 'success'} />
+        <WorkspaceMetricCard label="未割当の要フォロー" value={`${snapshot.unassignedAtRiskCount}名`} detail="担当再設定が必要な生徒" tone={snapshot.unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
       </div>
 
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -158,7 +203,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">導入スタートチェック</p>
+              <p className="text-xs font-bold text-slate-400">導入スタートチェック</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最初の運用ループ {activationProgress.completedCount}/{activationProgress.totalCount}</h3>
               {activationProgress.currentItem && (
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">
@@ -168,8 +213,8 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             </div>
           </div>
           <div className="min-w-48 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="flex items-center justify-between gap-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
-              <span>Progress</span>
+            <div className="flex items-center justify-between gap-3 text-xs font-bold text-slate-400">
+              <span>進捗</span>
               <span>{activationProgress.progressPercent}%</span>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
@@ -198,7 +243,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <BarChart3 className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">KPI Trend</p>
+              <p className="text-xs font-bold text-slate-400">KPI推移</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">直近14日間の推移</h3>
             </div>
           </div>
@@ -218,7 +263,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
                 testId: 'organization-kpi-trend-followup',
                 label: '48時間介入率',
                 value: `${snapshot.followUpCoverageRate48h}%`,
-                detail: latestTrendPoint ? `${latestTrendPoint.followedUpAtRiskStudents}/${latestTrendPoint.atRiskStudents}名へ48時間以内に介入` : 'at-risk 生徒ベースで集計',
+                detail: latestTrendPoint ? `${latestTrendPoint.followedUpAtRiskStudents}/${latestTrendPoint.atRiskStudents}名へ48時間以内に介入` : '要フォロー生徒ベースで集計',
                 tone: 'bg-sky-500',
                 borderTone: 'border-sky-100 bg-sky-50/60',
                 textTone: 'text-sky-900',
@@ -238,7 +283,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
               <div key={card.testId} data-testid={card.testId} className={`rounded-3xl border px-5 py-5 ${card.borderTone}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{card.label}</div>
+                    <div className="text-xs font-bold text-slate-400">{card.label}</div>
                     <div className={`mt-2 text-3xl font-black ${card.textTone}`}>{card.value}</div>
                   </div>
                   <div className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-xs font-bold text-slate-500">14日</div>
@@ -268,7 +313,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">At-risk Students</p>
+              <p className="text-xs font-bold text-slate-400">要フォロー生徒</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今見ておきたい生徒</h3>
             </div>
             <button
@@ -284,8 +329,8 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
               <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-bold text-slate-950">{student.name}</div>
-                    <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                    <div className="content-safe text-sm font-bold text-slate-950">{student.name}</div>
+                    <div className="content-safe mt-1 text-xs text-slate-400">{student.email}</div>
                   </div>
                   <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>
                     {riskLabel(student.riskLevel)}
@@ -319,18 +364,18 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <Users className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Assignment Blockers</p>
+              <p className="text-xs font-bold text-slate-400">担当割当の詰まり</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">担当割当の詰まり</h3>
             </div>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">未割当 at-risk</div>
+              <div className="text-xs font-bold text-amber-700">未割当の要フォロー</div>
               <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.unassignedAtRiskCount}</div>
               <div className="mt-1 text-sm text-slate-600">優先度が高いのに担当が未設定の生徒</div>
             </div>
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-red-700">未処理 backlog</div>
+              <div className="text-xs font-bold text-red-700">未処理バックログ</div>
               <div className="mt-2 text-2xl font-black text-slate-950">{snapshot.interventionBacklogCount}</div>
               <div className="mt-1 text-sm text-slate-600">48時間以内に介入順を決めたい生徒</div>
             </div>
@@ -357,7 +402,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <ShieldCheck className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Load</p>
+              <p className="text-xs font-bold text-slate-400">講師負荷</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師ごとの負荷</h3>
             </div>
           </div>
@@ -366,8 +411,8 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
               <div key={instructor.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-bold text-slate-950">{instructor.displayName}</div>
-                    <div className="mt-1 text-xs text-slate-400">{instructor.email}</div>
+                    <div className="content-safe text-sm font-bold text-slate-950">{instructor.displayName}</div>
+                    <div className="content-safe mt-1 text-xs text-slate-400">{instructor.email}</div>
                   </div>
                   <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
                     instructor.organizationRole === OrganizationRole.GROUP_ADMIN
@@ -379,19 +424,19 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-4">
                   <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">担当生徒</div>
+                    <div className="text-xs font-bold text-slate-400">担当生徒</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{instructor.assignedStudentCount}</div>
                   </div>
                   <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">要即対応</div>
+                    <div className="text-xs font-bold text-slate-400">要即対応</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{instructor.immediateCount}</div>
                   </div>
                   <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開待ち</div>
+                    <div className="text-xs font-bold text-slate-400">再開待ち</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{instructor.waitingCount}</div>
                   </div>
                   <div className="rounded-2xl border border-white bg-white px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">再開済み</div>
+                    <div className="text-xs font-bold text-slate-400">再開済み</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{instructor.reactivatedCount}</div>
                   </div>
                 </div>
@@ -404,21 +449,21 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <BellRing className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Snapshot</p>
+              <p className="text-xs font-bold text-slate-400">英作文キュー</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">自由英作文の進行</h3>
             </div>
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">配布済み</div>
+              <div className="text-xs font-bold text-medace-700">配布済み</div>
               <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.issuedCount}</div>
             </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">添削待ち</div>
+              <div className="text-xs font-bold text-amber-700">添削待ち</div>
               <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.reviewReadyCount}</div>
             </div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">再提出待ち</div>
+              <div className="text-xs font-bold text-sky-700">再提出待ち</div>
               <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.revisionRequestedCount}</div>
             </div>
           </div>
@@ -435,7 +480,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-medace-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Track Completion</p>
+              <p className="text-xs font-bold text-slate-400">週次課題</p>
               <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">トラック別の週次課題</h3>
             </div>
           </div>
@@ -463,7 +508,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
         <div className="flex items-center gap-3">
           <ShieldCheck className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Plan Fit</p>
+            <p className="text-xs font-bold text-slate-400">プラン適合</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">この組織向けプランで担保すること</h3>
           </div>
         </div>

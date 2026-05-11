@@ -63,7 +63,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
           <div className="relative">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/75">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1 text-[11px] font-bold text-white/75">
                   {getDiagnosticSkillLabel(currentQuestion.skill)}
                 </div>
                 <h2 className="mt-3 text-2xl font-black tracking-tight text-white">第 {currentQuestionIndex + 1} 問</h2>
@@ -87,19 +87,19 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">進捗</div>
+                <div className="text-[11px] font-bold text-white/55">進捗</div>
                 <div className="mt-2 text-base font-black text-white">
                   {currentQuestionIndex + 1} / {DIAGNOSTIC_QUESTIONS.length}
                 </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">回答済み</div>
+                <div className="text-[11px] font-bold text-white/55">回答済み</div>
                 <div className="mt-2 text-base font-black text-white">{answeredCount} 問</div>
               </div>
             </div>
 
             <div className="mt-5">
-              <div className="mb-2 flex justify-between text-[11px] font-bold uppercase tracking-[0.16em] text-white/58">
+              <div className="mb-2 flex justify-between text-[11px] font-bold text-white/58">
                 <span>全体の進み具合</span>
                 <span>{progressPercent}%</span>
               </div>
@@ -109,7 +109,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
             </div>
 
             <div className="mt-5 rounded-[28px] border border-white/10 bg-white/8 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/58">現在見ている帯</div>
+              <div className="text-[11px] font-bold text-white/58">現在見ている帯</div>
               <div className="mt-2 text-base font-black text-white">
                 {DIAGNOSTIC_PHASE_LABELS[currentQuestion.phase]} · {currentQuestion.level}
               </div>
@@ -127,11 +127,11 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
           </div>
           <div className="mt-4 grid gap-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">学年・立場</div>
+              <div className="text-[11px] font-bold text-slate-400">学年・立場</div>
               <div className="mt-2 text-sm font-black text-slate-950">{GRADE_LABELS[selectedGrade]}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">スキル</div>
+              <div className="text-[11px] font-bold text-slate-400">スキル</div>
               <div className="mt-2 text-sm font-black text-slate-950">{getDiagnosticSkillLabel(currentQuestion.skill)}</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">

@@ -11,42 +11,33 @@ import {
   type TranslationExamTarget,
   WorksheetQuestionMode,
 } from '../types';
+import {
+  type AiAction,
+  type AiActionPayload,
+  type AiActionResponse,
+  type AIQuizQuestion,
+  type DiagnosticQuestion,
+  type ExtractedResult,
+  type GeneratedContext,
+  type InstructorFollowUpDraft,
+} from '../contracts/ai';
+export type {
+  AIQuizQuestion,
+  DiagnosticQuestion,
+  ExtractedResult,
+  GeneratedContext,
+  InstructorFollowUpDraft,
+} from '../contracts/ai';
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 import { ApiError, apiPost } from './apiClient';
 
-export interface GeneratedContext {
-  english: string;
-  japanese: string;
-}
-
-export interface AIQuizQuestion {
-  wordId: string;
-  options: string[];
-  correctOption: string;
-}
-
-export interface ExtractedResult {
-  words: { word: string; definition: string; }[];
-  contextSummary: string;
-}
-
-export interface InstructorFollowUpDraft {
-  message: string;
-}
-
-export interface DiagnosticQuestion {
-  id: string;
-  type: 'MCQ' | 'FILL_IN' | 'WRITING';
-  question: string;
-  options?: string[];
-  answer?: string;
-  level: EnglishLevel;
-}
-
-const callAi = async <TResponse, TPayload = unknown>(action: string, payload?: TPayload): Promise<TResponse> => {
-  return apiPost<TResponse>('/api/ai', { action, payload });
+const callAi = async <TAction extends AiAction>(
+  action: TAction,
+  payload: AiActionPayload<TAction>,
+): Promise<AiActionResponse<TAction>> => {
+  return apiPost<AiActionResponse<TAction>>('/api/ai', { action, payload });
 };
 
 const isRateLimitError = (error: unknown): boolean => error instanceof ApiError && error.status === 429;
@@ -158,7 +149,7 @@ export const generateGeminiSentence = async (
   sourceContext?: string
 ): Promise<GeneratedContext | null> => {
   try {
-    return await callAi<GeneratedContext, { word: string; definition: string; userLevel: EnglishLevel; sourceContext?: string }>('generateGeminiSentence', {
+    return await callAi('generateGeminiSentence', {
       word,
       definition,
       userLevel,
@@ -173,7 +164,7 @@ export const generateGeminiSentence = async (
 
 export const generateWordImage = async (word: string, definition: string): Promise<string | null> => {
   try {
-    return await callAi<string | null, { word: string; definition: string }>('generateWordImage', { word, definition });
+    return await callAi('generateWordImage', { word, definition });
   } catch (error) {
     if (isRateLimitError(error)) {
       return null;
@@ -187,7 +178,7 @@ export const generateAIQuiz = async (targetWords: WordData[]): Promise<AIQuizQue
   if (targetWords.length === 0) return [];
 
   try {
-    return await callAi<AIQuizQuestion[], { targetWords: WordData[] }>('generateAIQuiz', { targetWords });
+    return await callAi('generateAIQuiz', { targetWords });
   } catch (error) {
     if (!isRateLimitError(error)) {
       console.error('AI quiz generation failed:', error);
@@ -206,13 +197,7 @@ export const generateGrammarPracticeQuestions = async (
   if (targetWords.length === 0 || questionCount <= 0) return [];
 
   try {
-    return await callAi<GeneratedWorksheetQuestion[], {
-      targetWords: WordData[];
-      mode: WorksheetQuestionMode;
-      questionCount: number;
-      userLevel: EnglishLevel;
-      grammarScopeId?: GrammarCurriculumScopeId;
-    }>('generateGrammarPracticeQuestions', {
+    return await callAi('generateGrammarPracticeQuestions', {
       targetWords,
       mode,
       questionCount,
@@ -236,7 +221,7 @@ export const evaluateJapaneseTranslationAnswer = async (payload: {
   examTarget?: TranslationExamTarget;
 }): Promise<JapaneseTranslationFeedback | null> => {
   try {
-    return await callAi<JapaneseTranslationFeedback, typeof payload>('evaluateJapaneseTranslationAnswer', payload);
+    return await callAi('evaluateJapaneseTranslationAnswer', payload);
   } catch (error) {
     if (!isRateLimitError(error) && !isAiUnavailableError(error) && !isAccessDeniedError(error)) {
       console.error('Japanese translation feedback failed:', error);
@@ -247,7 +232,7 @@ export const evaluateJapaneseTranslationAnswer = async (payload: {
 
 export const extractVocabularyFromText = async (rawText: string): Promise<ExtractedResult> => {
   try {
-    return await callAi<ExtractedResult, { rawText: string }>('extractVocabularyFromText', { rawText });
+    return await callAi('extractVocabularyFromText', { rawText });
   } catch (error) {
     if (isRateLimitError(error)) {
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
@@ -261,7 +246,7 @@ export const extractVocabularyFromText = async (rawText: string): Promise<Extrac
 
 export const extractVocabularyFromMedia = async (base64Data: string, mimeType: string): Promise<ExtractedResult> => {
   try {
-    return await callAi<ExtractedResult, { base64Data: string; mimeType: string }>('extractVocabularyFromMedia', { base64Data, mimeType });
+    return await callAi('extractVocabularyFromMedia', { base64Data, mimeType });
   } catch (error) {
     if (isRateLimitError(error)) {
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
@@ -282,7 +267,7 @@ export const generateLearningPlan = async (
   if (availableBooks.length === 0) return null;
 
   try {
-    return await callAi<LearningPlan | null, { grade: UserGrade; level: EnglishLevel; availableBooks: BookMetadata[]; learningPreference?: LearningPreference | null }>('generateLearningPlan', {
+    return await callAi('generateLearningPlan', {
       grade,
       level,
       availableBooks,
@@ -313,7 +298,7 @@ export const generateInstructorFollowUp = async (input: {
   customInstruction?: string;
 }): Promise<InstructorFollowUpDraft | null> => {
   try {
-    return await callAi<InstructorFollowUpDraft, typeof input>('generateInstructorFollowUp', input);
+    return await callAi('generateInstructorFollowUp', input);
   } catch (error) {
     if (!isRateLimitError(error)) {
       console.error('Instructor follow-up generation failed:', error);
@@ -324,7 +309,7 @@ export const generateInstructorFollowUp = async (input: {
 
 export const generateDiagnosticTest = async (grade: UserGrade): Promise<DiagnosticQuestion[]> => {
   try {
-    return await callAi<DiagnosticQuestion[], { grade: UserGrade }>('generateDiagnosticTest', { grade });
+    return await callAi('generateDiagnosticTest', { grade });
   } catch (error) {
     if (!shouldUseStaticDiagnosticFallback(error)) {
       console.error('Diagnostic test generation failed:', error);
@@ -335,7 +320,7 @@ export const generateDiagnosticTest = async (grade: UserGrade): Promise<Diagnost
 
 export const generateAdvancedDiagnosticTest = async (grade: UserGrade, learningHistorySummary: string): Promise<DiagnosticQuestion[]> => {
   try {
-    return await callAi<DiagnosticQuestion[], { grade: UserGrade; learningHistorySummary: string }>('generateAdvancedDiagnosticTest', {
+    return await callAi('generateAdvancedDiagnosticTest', {
       grade,
       learningHistorySummary,
     });
@@ -353,7 +338,7 @@ export const evaluateAdvancedTest = async (
   userAnswers: Record<string, string>
 ): Promise<EnglishLevel> => {
   try {
-    return await callAi<EnglishLevel, { grade: UserGrade; questions: DiagnosticQuestion[]; userAnswers: Record<string, string> }>('evaluateAdvancedTest', {
+    return await callAi('evaluateAdvancedTest', {
       grade,
       questions,
       userAnswers,

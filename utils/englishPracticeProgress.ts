@@ -1,4 +1,9 @@
-import { EnglishLevel, type GrammarCurriculumScopeId } from '../types';
+import {
+  EnglishLevel,
+  type GrammarCurriculumScopeId,
+  type JapaneseTranslationFeedback,
+  type WorksheetQuestionMode,
+} from '../types';
 import { getReadingQuestionKindLabel, type ReadingQuestionKind } from './readingPractice';
 
 export type EnglishPracticeLaneId = 'grammar' | 'translation' | 'reading';
@@ -9,6 +14,7 @@ export type EnglishPracticeAttemptMode =
   | 'JA_TRANSLATION_INPUT'
   | 'JA_TRANSLATION_ORDER'
   | 'READING';
+type EnglishPracticeCloudQuizQuestionMode = Extract<EnglishPracticeAttemptMode, WorksheetQuestionMode>;
 
 export interface EnglishPracticeAttemptInput {
   lane: EnglishPracticeLaneId;
@@ -18,11 +24,13 @@ export interface EnglishPracticeAttemptInput {
   maxScore?: number;
   occurredAt?: number;
   wordId?: string;
+  bookId?: string;
   word?: string;
   scopeId?: GrammarCurriculumScopeId;
   scopeLabelJa?: string;
   level?: EnglishLevel;
   readingQuestionKind?: ReadingQuestionKind;
+  responseTimeMs?: number;
 }
 
 export interface EnglishPracticeAttemptRecord extends EnglishPracticeAttemptInput {
@@ -80,14 +88,35 @@ export interface EnglishPracticeStorage {
   removeItem: (key: string) => void;
 }
 
+export interface EnglishPracticeCloudQuizAttempt {
+  uid: string;
+  wordId: string;
+  bookId: string;
+  correct: boolean;
+  questionMode: WorksheetQuestionMode;
+  responseTimeMs: number;
+  grammarScopeId?: GrammarCurriculumScopeId;
+  translationFeedback?: JapaneseTranslationFeedback;
+}
+
 const VERSION = 1 as const;
 const MAX_ATTEMPTS = 160;
 const STORAGE_PREFIX = 'medace:english-practice-progress:';
+export const ENGLISH_PRACTICE_SAMPLE_BOOK_ID = 'english-practice';
 
 const LANE_LABELS: Record<EnglishPracticeLaneId, string> = {
   grammar: '文法',
   translation: '和訳',
   reading: '長文',
+};
+
+const isCloudQuizQuestionMode = (mode: EnglishPracticeAttemptMode): mode is EnglishPracticeCloudQuizQuestionMode => (
+  mode !== 'READING'
+);
+
+const normalizeResponseTimeMs = (value: number | undefined): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.round(value));
 };
 
 const createAttemptId = (attempt: EnglishPracticeAttemptInput, occurredAt: number, index: number): string => [
@@ -275,6 +304,32 @@ export const recordEnglishPracticeAttempt = (
     updatedAt: occurredAt,
     attempts: [...progress.attempts, record],
   });
+};
+
+export const toEnglishPracticeCloudQuizAttempt = (
+  uid: string,
+  attempt: EnglishPracticeAttemptInput,
+  translationFeedback?: JapaneseTranslationFeedback,
+): EnglishPracticeCloudQuizAttempt | null => {
+  if (
+    !isCloudQuizQuestionMode(attempt.mode)
+    || !attempt.wordId
+    || !attempt.bookId
+    || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID
+  ) {
+    return null;
+  }
+
+  return {
+    uid,
+    wordId: attempt.wordId,
+    bookId: attempt.bookId,
+    correct: attempt.correct,
+    questionMode: attempt.mode,
+    responseTimeMs: normalizeResponseTimeMs(attempt.responseTimeMs),
+    grammarScopeId: attempt.scopeId,
+    translationFeedback: attempt.mode === 'JA_TRANSLATION_INPUT' ? translationFeedback : undefined,
+  };
 };
 
 export const summarizeEnglishPracticeProgress = (

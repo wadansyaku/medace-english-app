@@ -94,6 +94,7 @@ export const buildPrintableWorksheetHtml = (
   const escapedOrganizationName = escapeWorksheetHtml(snapshot.organizationName || 'Steady Study');
   const escapedAuthorName = escapeWorksheetHtml(user.displayName);
   const escapedSelectedStudentName = escapeWorksheetHtml(student?.name || snapshot.studentName);
+  const escapedWorksheetSourceLabel = escapeWorksheetHtml(snapshot.sourceLabel || '学習履歴ベース');
   const promptColumnLabel = questions[0]?.mode === 'EN_TO_JA'
     ? '英単語'
     : questions[0]?.mode === 'JA_TO_EN'
@@ -449,7 +450,7 @@ export const buildPrintableWorksheetHtml = (
 
         <footer class="footer">
           <span>${footerNote}</span>
-          <span>${escapedOrganizationName}</span>
+          <span>${escapedOrganizationName} / ${escapedWorksheetSourceLabel}</span>
         </footer>
       </main>
     </body>
@@ -587,6 +588,24 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     if (!previewWindow || !printableHtml) {
       setError('印刷プレビューの準備ができていません。もう一度お試しください。');
       return;
+    }
+
+    if (snapshot) {
+      void workspaceService.recordClassroomWorksheetLifecycleEvent({
+        studentUid: snapshot.studentUid,
+        worksheetSource: snapshot.source || 'history',
+        lifecycleStatus: 'printed',
+        payload: {
+          variant: previewVariant,
+          questionMode,
+          selectedBookId,
+          generatedQuestionCount: generatedQuestions.length,
+          filteredWordCount: filteredWords.length,
+          sourceLabel: snapshot.sourceLabel || null,
+        },
+      }).catch((recordError) => {
+        console.error(recordError);
+      });
     }
 
     previewWindow.focus();
@@ -761,6 +780,15 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                     <p className="mt-2 text-sm leading-relaxed text-slate-500">
                       条件に合う学習済み単語から、紙配布しやすい問題形式で出力します。
                     </p>
+                    {snapshot.sourceLabel && (
+                      <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+                        snapshot.source === 'history'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}>
+                        {snapshot.sourceLabel}
+                      </div>
+                    )}
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">

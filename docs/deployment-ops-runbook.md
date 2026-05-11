@@ -40,6 +40,7 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 ## Secrets and Drift
 
 - `npm run cf:doctor` は repo-level fallback に加えて GitHub environment secrets / variables と preview DB binding を検査します。
+- release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred key や一時的な外部 inventory 警告として残せますが、`error` が 1 件でもある場合は preview / production deploy を止めます。
 - `INTERNAL_JOB_SECRET` は GitHub scheduled workflow の repository secret と、Pages production / preview の runtime secret の両方に必要です。前者が無いと `analytics-snapshots.yml` / `word-hint-audit.yml` が落ち、後者が無いと内部 endpoint が 503 を返します。
 - Pages の required secrets は `ADMIN_DEMO_PASSWORD`, `WRITING_AI_MODE`, `INTERNAL_JOB_SECRET` です。`GEMINI_API_KEY` と `OPENAI_API_KEY` は外部 AI を有効化するまで deferred warning として扱います。
 - `npm run cf:sync` は GitHub environment vars/secrets と preview DB の存在を揃えます。

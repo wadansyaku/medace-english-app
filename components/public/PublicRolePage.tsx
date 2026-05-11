@@ -125,7 +125,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
 
         <div className="space-y-8 p-6 md:p-8">
           <section>
-            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Representative Views</p>
+            <p className="text-sm font-bold text-slate-500">代表画面</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">この役割で見える代表画面</h2>
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               {role.highlights.map((highlight) => (
@@ -143,7 +143,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               data-testid={`public-role-preview-${role.key}`}
               className="rounded-[28px] border border-medace-100 bg-gradient-to-br from-white via-medace-50/60 to-slate-50 px-6 py-6 shadow-[0_18px_44px_rgba(255,130,22,0.10)]"
             >
-              <p className="text-sm font-bold tracking-[0.12em] text-medace-700">Role UI Preview</p>
+              <p className="text-sm font-bold text-medace-700">ロール別UIプレビュー</p>
               <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">実権限を開かずに画面構成だけ確認できます</h2>
               <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
                 本番公開環境では service admin の実データや更新操作には入れません。代わりに、導入相談、配信、お知らせ運用で見る代表 UI をこの場で確認できます。
@@ -151,7 +151,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               <div className="mt-6 grid gap-4 xl:grid-cols-3">
                 {role.previewPanels.map((panel) => (
                   <div key={panel.title} className="rounded-[24px] border border-slate-200 bg-white px-5 py-5 shadow-sm">
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{panel.eyebrow}</p>
+                    <p className="text-xs font-bold text-slate-400">{panel.eyebrow}</p>
                     <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{panel.title}</h3>
                     <p className="mt-3 text-sm leading-relaxed text-slate-600">{panel.body}</p>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -171,7 +171,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
           )}
 
           <section className="rounded-[28px] border border-slate-200 bg-slate-50 px-6 py-5">
-            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Demo Policy</p>
+            <p className="text-sm font-bold text-slate-500">体験ポリシー</p>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">体験開始は明示クリックで行います</h2>
             <p className="mt-3 text-base leading-relaxed text-slate-600">
               ページを開いた時点では自動ログインしません。案内を読んだうえで、必要なら体験開始、またはそのまま導入相談へ進めます。
@@ -184,7 +184,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {ROLE_PAGE_STEPS.map((step, index) => (
                 <div key={step} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step {index + 1}</div>
+                  <div className="text-xs font-bold text-slate-400">手順 {index + 1}</div>
                   <div className="mt-1 text-sm font-bold text-slate-900">{step}</div>
                 </div>
               ))}

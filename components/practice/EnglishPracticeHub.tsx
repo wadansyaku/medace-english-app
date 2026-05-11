@@ -42,11 +42,13 @@ import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
 import { learningService } from '../../services/learning';
 import {
   clearEnglishPracticeProgress,
+  ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
   getEnglishPracticeLaneLabel,
   loadEnglishPracticeProgress,
   recordEnglishPracticeAttempt,
   saveEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
+  toEnglishPracticeCloudQuizAttempt,
   type EnglishPracticeAttemptInput,
 } from '../../utils/englishPracticeProgress';
 import ReadingPracticeView from './ReadingPracticeView';
@@ -82,7 +84,7 @@ const LEVEL_LABELS: Record<EnglishLevel, string> = {
 const FALLBACK_WORDS: WordData[] = [
   {
     id: 'practice-stabilize',
-    bookId: 'english-practice',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
     number: 1,
     word: 'stabilize',
     definition: '安定させる',
@@ -91,7 +93,7 @@ const FALLBACK_WORDS: WordData[] = [
   },
   {
     id: 'practice-monitor',
-    bookId: 'english-practice',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
     number: 2,
     word: 'monitor',
     definition: '観察する',
@@ -100,7 +102,7 @@ const FALLBACK_WORDS: WordData[] = [
   },
   {
     id: 'practice-recall',
-    bookId: 'english-practice',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
     number: 3,
     word: 'recall',
     definition: '思い出す',
@@ -109,7 +111,7 @@ const FALLBACK_WORDS: WordData[] = [
   },
   {
     id: 'practice-compare',
-    bookId: 'english-practice',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
     number: 4,
     word: 'compare',
     definition: '比較する',
@@ -240,6 +242,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
   const [readingLevel, setReadingLevel] = useState<EnglishLevel>(userLevel);
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
+  const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
 
   const grammarScopes = useMemo(
@@ -294,7 +297,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setCheckedGrammarItems({});
   }, [grammarMode, grammarScopes, userLevel]);
 
-  const practiceWords = sessionWords.length > 0 ? sessionWords : FALLBACK_WORDS;
+  const samplePracticeActive = !wordsLoading && (wordLoadFailed || sessionWords.length === 0);
+  const practiceWords = sessionWords.length > 0 ? sessionWords : samplePracticeActive ? FALLBACK_WORDS : [];
   const selectedScopes = grammarScopes.filter((scope) => selectedScopeIds.includes(scope.id));
   const activeScopePool = selectedScopes.length > 0 ? selectedScopes : grammarScopes.slice(0, 4);
   const targetGrammarKind = toGrammarKind(grammarMode);
@@ -394,12 +398,41 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setReadingSummary(null);
   }, [readingPassages]);
 
-  const recordPracticeAttempt = React.useCallback((attempt: EnglishPracticeAttemptInput) => {
+  const recordPracticeAttempt = React.useCallback((
+    attempt: EnglishPracticeAttemptInput,
+    options?: { translationFeedback?: JapaneseTranslationFeedback },
+  ) => {
+    if (samplePracticeActive || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
+      setPracticeSyncError(null);
+      return;
+    }
+
     setPracticeProgress((current) => {
       const base = current.userUid === user.uid ? current : loadEnglishPracticeProgress(user.uid);
       return recordEnglishPracticeAttempt(base, attempt);
     });
-  }, [user.uid]);
+
+    const cloudAttempt = toEnglishPracticeCloudQuizAttempt(user.uid, attempt, options?.translationFeedback);
+    if (!cloudAttempt) return;
+
+    setPracticeSyncError(null);
+    void learningService.recordQuizAttempt(
+      cloudAttempt.uid,
+      cloudAttempt.wordId,
+      cloudAttempt.bookId,
+      cloudAttempt.correct,
+      cloudAttempt.questionMode,
+      cloudAttempt.responseTimeMs,
+      undefined,
+      undefined,
+      undefined,
+      cloudAttempt.grammarScopeId,
+      cloudAttempt.translationFeedback,
+    ).catch((error) => {
+      console.error('English practice attempt sync failed', error);
+      setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。画面内の復習履歴はこの端末に残っています。');
+    });
+  }, [samplePracticeActive, user.uid]);
 
   const resetGeneratedPractice = () => {
     setPracticeSeed((current) => current + 1);
@@ -431,6 +464,27 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setScopeCategoryFilter('all');
   };
 
+  const handleScopeViewFilterChange = (filter: ScopeViewFilter) => {
+    if (filter !== 'weak') {
+      setScopeViewFilter(filter);
+      return;
+    }
+
+    const availableIds = new Set(grammarScopes.map((scope) => scope.id));
+    const weakScopeIds = progressSummary.weakGrammarScopes
+      .map((scope) => scope.scopeId)
+      .filter((scopeId) => availableIds.has(scopeId));
+
+    if (weakScopeIds.length === 0) {
+      applyRecommendedScopes();
+      return;
+    }
+
+    setSelectedScopeIds(weakScopeIds);
+    setScopeViewFilter('weak');
+    setScopeCategoryFilter('all');
+  };
+
   const addOrderChip = (itemId: string, chipId: string, surface: 'grammar' | 'translation') => {
     const setter = surface === 'grammar' ? setGrammarOrders : setTranslationOrders;
     setter((current) => {
@@ -455,6 +509,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       mode: grammarMode,
       correct,
       wordId: item.wordId,
+      bookId: item.bookId,
       word: item.word,
       scopeId: item.grammarScope.scopeId,
       scopeLabelJa: item.grammarScope.labelJa,
@@ -469,6 +524,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       mode: 'JA_TRANSLATION_ORDER',
       correct,
       wordId: item.wordId,
+      bookId: item.bookId,
       word: item.word,
       scopeId: item.grammarScope.scopeId,
       scopeLabelJa: item.grammarScope.labelJa,
@@ -531,11 +587,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       score: feedback.score,
       maxScore: feedback.maxScore,
       wordId: item.wordId,
+      bookId: item.bookId,
       word: item.word,
       scopeId: item.grammarScope.scopeId,
       scopeLabelJa: item.grammarScope.labelJa,
       level: userLevel,
-    });
+    }, { translationFeedback: feedback });
   };
 
   const handleReadingAnswer = React.useCallback((result: ReadingPracticeAnswerResult) => {
@@ -557,8 +614,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <div className="grid gap-4 lg:grid-cols-[1.04fr_0.96fr]">
         <section className="overflow-hidden rounded-lg border border-medace-200 bg-medace-700 text-white shadow-sm">
           <div className="px-5 py-6 md:px-7 md:py-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/72">
-              Practice Hub
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black text-white/72">
+              今日の演習
             </div>
             <h1 className="mt-4 max-w-2xl text-3xl font-black leading-tight tracking-tight md:text-5xl">
               単語テストから独立した英語演習
@@ -608,7 +665,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             );
           })}
           <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Level Adaptive</div>
+            <div className="text-xs font-black text-medace-700">レベル調整</div>
             <div className="mt-2 text-lg font-black text-slate-950">{LEVEL_LABELS[userLevel]}</div>
             <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
               推奨範囲は現在レベルを中心にし、上位レベルは挑戦問題として明示します。
@@ -620,7 +677,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Adaptive Review</div>
+            <div className="text-xs font-black text-medace-700">復習ナビ</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">{progressSummary.recommendation.labelJa}</h2>
             <div className="mt-1 text-xs font-black text-medace-700">
               おすすめレーン: {getEnglishPracticeLaneLabel(progressSummary.recommendation.lane)}
@@ -800,7 +857,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderGrammar = () => (
     <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-      <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
         <div className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-medace-700" />
           <h2 className="text-xl font-black text-slate-950">文法範囲を選ぶ</h2>
@@ -811,7 +868,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Scope Coach</div>
+              <div className="text-xs font-black text-medace-700">範囲コーチ</div>
               <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">
                 {progressSummary.weakGrammarScopes.length > 0
                   ? `${progressSummary.weakGrammarScopes[0].labelJa} を優先して復習します。`
@@ -886,7 +943,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <button
               key={filter.id}
               type="button"
-              onClick={() => setScopeViewFilter(filter.id)}
+              onClick={() => handleScopeViewFilterChange(filter.id)}
               className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
                 scopeViewFilter === filter.id
                   ? 'border-medace-500 bg-medace-50 text-medace-800'
@@ -968,9 +1025,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="order-1 space-y-3 xl:order-2">
         <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Generated Practice</div>
+          <div className="text-xs font-black text-medace-700">生成された問題</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">選んだ範囲から {grammarItems.length} 問</h2>
           <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
             同じテンプレートの使い回しを避け、範囲・単語・レベルに合わせて例文を切り替えます。
@@ -983,7 +1040,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderTranslation = () => (
     <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
-      <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
         <div className="flex items-center gap-2">
           <Languages className="h-5 w-5 text-medace-700" />
           <h2 className="text-xl font-black text-slate-950">和訳トレーニング</h2>
@@ -1015,14 +1072,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           })}
         </div>
         <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">AI Feedback</div>
+          <div className="text-xs font-black text-medace-700">AIフィードバック</div>
           <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
             不一致答案はAI採点に回し、高校受験・大学受験の答案として、意味の抜けと構文の取り違えを返します。
           </p>
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="order-1 space-y-3 xl:order-2">
         {translationItems.map((item) => {
           const feedback = translationFeedback[item.id];
           const orderedChipIds = translationOrders[item.id] || [];
@@ -1032,7 +1089,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
           return (
             <article key={item.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
-              <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Translation</div>
+              <div className="text-xs font-black text-slate-400">和訳練習</div>
               <p className="mt-2 text-lg font-black leading-relaxed text-slate-950">{item.sourceSentence}</p>
 
               {translationMode === 'input' ? (
@@ -1044,17 +1101,40 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-bold leading-relaxed text-slate-800 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
                     placeholder="日本語訳を全文で入力"
                   />
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={!translationInputs[item.id]?.trim() || checkingTranslationId === item.id}
-                      onClick={() => void handleTranslationSubmit(item)}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-                    >
-                      {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      AIフィードバック
-                    </button>
-                  </div>
+                  {feedback ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={resetGeneratedPractice}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800"
+                      >
+                        次の和訳へ <ArrowRight className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTranslationFeedback((current) => {
+                          const next = { ...current };
+                          delete next[item.id];
+                          return next;
+                        })}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 transition-colors hover:border-medace-300 hover:text-medace-800"
+                      >
+                        訳を修正して再提出
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={!translationInputs[item.id]?.trim() || checkingTranslationId === item.id}
+                        onClick={() => void handleTranslationSubmit(item)}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        AIフィードバック
+                      </button>
+                    </div>
+                  )}
                   {feedback && (
                     <JapaneseTranslationFeedbackCard feedback={feedback} />
                   )}
@@ -1122,7 +1202,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Reading</div>
+            <div className="text-xs font-black text-medace-700">長文読解</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">長文読解演習</h2>
             <p className="mt-1 text-sm font-bold leading-relaxed text-slate-500">
               本文を読み、選択肢だけでなく根拠文と日本語解説まで確認します。上位レベルは挑戦として扱います。
@@ -1161,7 +1241,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       </section>
       {readingSummary && (
         <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black uppercase tracking-[0.16em] text-medace-700">Reading Review</div>
+          <div className="text-xs font-black text-medace-700">読解レビュー</div>
           <h3 className="mt-1 text-lg font-black text-slate-950">
             今回 {readingSummary.correct} / {readingSummary.total} 問正解
           </h3>
@@ -1211,7 +1291,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               {LEVEL_LABELS[userLevel]}
             </span>
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-black text-slate-500">
-              {wordsLoading ? '単語を準備中' : wordLoadFailed || sessionWords.length === 0 ? 'サンプル問題' : `${sessionWords.length}語から生成`}
+              {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語から生成`}
             </span>
             <span className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
               演習 {progressSummary.total}回 / {progressSummary.accuracy}%
@@ -1250,7 +1330,19 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       {wordsLoading && sessionWords.length === 0 && (
         <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
           <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-          学習中の単語を確認しています。読み込み中もサンプル問題で演習できます。
+          学習中の単語を確認しています。読み込み完了後に、履歴へ残る問題を開始できます。
+        </section>
+      )}
+
+      {samplePracticeActive && (
+        <section className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
+          学習中の単語がまだないため体験問題を表示しています。この結果は復習履歴やクラウド履歴には保存しません。
+        </section>
+      )}
+
+      {practiceSyncError && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          {practiceSyncError}
         </section>
       )}
 

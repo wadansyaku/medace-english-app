@@ -50,7 +50,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
     <section data-testid="writing-student-section" className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:p-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Track</p>
+          <p className="text-xs font-bold text-slate-400">英作文課題</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">自由英作文</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
             紙で書いた答案をスマホで提出し、講師確認後の添削結果をアプリ内で確認できます。
@@ -68,7 +68,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
             更新
           </button>
           <div data-testid="writing-last-refreshed" className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-500">
-            {user.organizationName || 'Business Workspace'} / {refreshedAtLabel}
+            {user.organizationName || '組織ワークスペース'} / {refreshedAtLabel}
           </div>
         </div>
       </div>

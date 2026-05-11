@@ -1,6 +1,8 @@
 import type {
   ActivityLog,
   AdminDashboardSnapshot,
+  AiGeneratedProblemReviewQueueItem,
+  AiGeneratedProblemReviewQueueResponse,
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
@@ -20,6 +22,7 @@ import type {
   OrganizationDashboardSnapshot,
   OrganizationRole,
   OrganizationSettingsSnapshot,
+  ClassroomWorksheetLifecycleEventResult,
   ProductAnnouncement,
   ProductAnnouncementFeed,
   RecommendedActionType,
@@ -35,6 +38,9 @@ import type {
 import type {
   CatalogImportRequest,
   CatalogImportResult,
+  AiGeneratedProblemReviewPayload,
+  AiGeneratedProblemReviewQueueRequest,
+  ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
   PrepareBookExamplesResult,
@@ -89,6 +95,8 @@ export interface LearningStorageService {
     grammarScopeId?: GrammarCurriculumScopeId,
     translationFeedback?: JapaneseTranslationFeedback,
   ): Promise<void>;
+  listAiGeneratedProblemReviewQueue(payload?: AiGeneratedProblemReviewQueueRequest): Promise<AiGeneratedProblemReviewQueueResponse>;
+  reviewAiGeneratedProblem(payload: AiGeneratedProblemReviewPayload): Promise<AiGeneratedProblemReviewQueueItem>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;
   getBookProgress(uid: string, bookId: string): Promise<BookProgress>;
   saveLearningPlan(plan: LearningPlan): Promise<void>;
@@ -108,6 +116,7 @@ export interface DashboardStorageService {
 export interface OrganizationOpsStorageService {
   getAllStudentsProgress(): Promise<StudentSummary[]>;
   getStudentWorksheetSnapshot(studentUid: string): Promise<StudentWorksheetSnapshot>;
+  recordClassroomWorksheetLifecycleEvent(payload: ClassroomWorksheetLifecycleEventPayload): Promise<ClassroomWorksheetLifecycleEventResult>;
   sendInstructorNotification(
     studentUid: string,
     message: string,

@@ -195,7 +195,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
   if (!currentExercise) {
     return (
       <section className={`ui-panel ${className}`} data-testid="grammar-review-empty">
-        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Grammar Review</div>
+        <div className="text-xs font-bold text-slate-400">文法復習</div>
         <h2 className="mt-2 text-xl font-black text-slate-950">文法復習の問題がありません</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
           登場済み単語と英文から問題を生成して、このコンポーネントに渡してください。
@@ -318,7 +318,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
       <section className="ui-panel">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Grammar Review</div>
+            <div className="text-xs font-bold text-slate-400">文法復習</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">登場した単語で文法を復習</h2>
           </div>
           <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
@@ -362,7 +362,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
           <div className="mt-5 grid gap-3 lg:grid-cols-2">
             {currentExercise.sourceSentence && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">English</div>
+                <div className="text-[11px] font-bold text-slate-400">英文</div>
                 <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">
                   <HighlightedText text={currentExercise.sourceSentence} terms={learnedTerms} />
                 </div>
@@ -370,7 +370,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
             )}
             {currentExercise.targetTranslation && (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">日本語</div>
+                <div className="text-[11px] font-bold text-slate-400">日本語</div>
                 <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">{currentExercise.targetTranslation}</div>
               </div>
             )}
@@ -381,7 +381,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
       <section className="ui-panel">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Answer</div>
+            <div className="text-xs font-bold text-slate-400">解答</div>
             <h3 className="mt-1 text-lg font-black text-slate-950">解答欄</h3>
           </div>
           <button
@@ -476,7 +476,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
       <section className="ui-panel">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Chips</div>
+            <div className="text-xs font-bold text-slate-400">語句チップ</div>
             <h3 className="mt-1 text-lg font-black text-slate-950">使う語句を選ぶ</h3>
           </div>
           {learnedTerms.length > 0 && (

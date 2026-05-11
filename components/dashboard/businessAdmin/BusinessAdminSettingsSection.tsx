@@ -29,7 +29,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
       <div className="flex items-center gap-3">
         <Building2 className="h-5 w-5 text-medace-600" />
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Organization Profile</p>
+          <p className="text-xs font-bold text-slate-400">組織プロフィール</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">組織表示名を更新する</h3>
         </div>
       </div>
@@ -75,7 +75,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Cohort Scope</p>
+            <p className="text-xs font-bold text-slate-400">クラス範囲</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">クラス/担当グループを管理する</h3>
           </div>
         </div>
@@ -151,7 +151,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
         <div className="flex items-center gap-3">
           <ShieldCheck className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Instructor Scope</p>
+            <p className="text-xs font-bold text-slate-400">講師範囲</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">講師ごとの可視クラスを設定する</h3>
           </div>
         </div>
@@ -212,7 +212,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Membership</p>
+            <p className="text-xs font-bold text-slate-400">メンバー</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">現メンバー一覧</h3>
           </div>
         </div>
@@ -247,7 +247,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
         <div className="flex items-center gap-3">
           <BellRing className="h-5 w-5 text-medace-600" />
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Audit Trail</p>
+            <p className="text-xs font-bold text-slate-400">変更履歴</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">最近の監査履歴</h3>
           </div>
         </div>

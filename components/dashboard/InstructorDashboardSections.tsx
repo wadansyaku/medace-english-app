@@ -166,14 +166,14 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
             <WorkspaceMetricCard label="要即対応" value={`${immediateCount}名`} detail="48時間以内に介入したい生徒" tone={immediateCount > 0 ? 'danger' : 'success'} />
             <WorkspaceMetricCard label="再開待ち" value={`${waitingCount}名`} detail="前回フォロー後の反応を確認中" tone={waitingCount > 0 ? 'warning' : 'default'} />
             <WorkspaceMetricCard label="再開済み" value={`${reactivatedCount}名`} detail="前回フォロー後に学習再開済み" tone="success" />
-            <WorkspaceMetricCard label="未割当 at-risk" value={`${unassignedAtRiskCount}名`} detail="担当講師の再確認が必要" tone={unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
+            <WorkspaceMetricCard label="未割当の要フォロー" value={`${unassignedAtRiskCount}名`} detail="担当講師の再確認が必要" tone={unassignedAtRiskCount > 0 ? 'warning' : 'default'} />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Priority Students</p>
+                  <p className="text-xs font-bold text-slate-400">優先対応</p>
                   <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今すぐ見ておきたい生徒</h3>
                 </div>
                 <button
@@ -189,8 +189,8 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                   <div key={student.uid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-bold text-slate-950">{student.name}</div>
-                        <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                        <div className="content-safe text-sm font-bold text-slate-950">{student.name}</div>
+                        <div className="content-safe mt-1 text-xs text-slate-400">{student.email}</div>
                         <div className="mt-2">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${getCohortStyle(student.cohortName)}`}>
                             クラス: {getCohortLabel(student.cohortName)}
@@ -240,18 +240,18 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 <div className="flex items-center gap-3">
                   <ScanText className="h-5 w-5 text-medace-600" />
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Writing Snapshot</p>
+                    <p className="text-xs font-bold text-slate-400">英作文キュー</p>
                     <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">自由英作文の滞留</h3>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-medace-100 bg-medace-50 px-4 py-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">添削キュー</div>
+                    <div className="text-xs font-bold text-medace-700">添削キュー</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.reviewReadyCount}</div>
                     <div className="mt-1 text-sm text-slate-600">講師確認待ちの提出</div>
                   </div>
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">再提出待ち</div>
+                    <div className="text-xs font-bold text-amber-700">再提出待ち</div>
                     <div className="mt-2 text-2xl font-black text-slate-950">{writingCounts.revisionRequestedCount}</div>
                     <div className="mt-1 text-sm text-slate-600">返却後の再提出待ち</div>
                   </div>
@@ -261,7 +261,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                     <div key={item.submissionId} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-bold text-slate-950">{item.studentName}</div>
-                        <div className="text-xs font-bold text-slate-400">Attempt {item.attemptNo}</div>
+                        <div className="text-xs font-bold text-slate-400">{item.attemptNo}回目</div>
                       </div>
                       <div className="mt-1 text-sm text-slate-600">{item.promptTitle}</div>
                     </div>
@@ -284,7 +284,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 <div className="flex items-center gap-3">
                   <Clock3 className="h-5 w-5 text-medace-600" />
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next Actions</p>
+                    <p className="text-xs font-bold text-slate-400">次の作業</p>
                     <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">このあと進める作業</h3>
                   </div>
                 </div>
@@ -322,7 +322,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Students Split View</p>
+              <p className="text-xs font-bold text-slate-400">生徒フォロー</p>
               <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">一覧で選び、右側で次アクションを決める</h3>
             </div>
             <div className="flex flex-col gap-3 md:flex-row">
@@ -357,7 +357,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
 
           <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
             <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              <div className="grid grid-cols-[0.72fr_1.2fr_0.88fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              <div className="grid grid-cols-[0.72fr_1.2fr_0.88fr_1.2fr] gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 text-[11px] font-bold text-slate-500">
                 <div>キュー</div>
                 <div>生徒</div>
                 <div>直近介入</div>
@@ -388,8 +388,8 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                         </div>
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-slate-950">{student.name}</div>
-                        <div className="mt-1 text-xs text-slate-400">{student.email}</div>
+                        <div className="content-safe text-sm font-bold text-slate-950">{student.name}</div>
+                        <div className="content-safe mt-1 text-xs text-slate-400">{student.email}</div>
                         <div className="mt-2">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${getCohortStyle(student.cohortName)}`}>
                             クラス: {getCohortLabel(student.cohortName)}
@@ -418,7 +418,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 <div className="space-y-5">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Student Detail</p>
+                      <p className="text-xs font-bold text-slate-400">生徒詳細</p>
                       <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{controller.focusedStudent.name}</h3>
                       <p className="mt-2 text-sm leading-relaxed text-slate-500">{controller.focusedStudent.email}</p>
                       <div className="mt-3">
@@ -609,7 +609,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
       {activeView === InstructorWorkspaceView.WORKSHEETS && (
         <div className="grid gap-6 xl:grid-cols-[0.94fr_1.06fr]">
           <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Worksheet Workflow</p>
+            <p className="text-xs font-bold text-slate-400">プリント作成</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">単語配布だけを素早く進める</h3>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
               今日の授業や面談で配る紙問題はここだけで作成します。生徒フォロー一覧や教材一覧から切り離して、印刷作業に集中できます。
@@ -645,7 +645,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Catalog Access</p>
+              <p className="text-xs font-bold text-slate-400">教材カタログ</p>
               <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">教材確認は必要なときだけ開く</h3>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
                 講師ワークスペースでは生徒フォローを主役にし、教材確認は独立ビューに分離しています。学習画面やテスト導線の確認が必要なときだけ使ってください。
@@ -671,7 +671,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
               <OfficialCatalogAccessPanel
                 user={user}
                 onSelectBook={onSelectBook}
-                eyebrow="Business Demo Catalog"
+                eyebrow="ビジネス版教材"
                 title="ビジネス版の既存単語帳をそのまま確認する"
                 description="先生体験アカウントでも、既存の公式単語帳をそのまま開けます。学習画面に入ることも、テストで英日・日英・スペルチェックを切り替えることもできます。"
               />

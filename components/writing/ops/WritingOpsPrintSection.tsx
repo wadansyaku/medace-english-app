@@ -147,7 +147,7 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
 
             <div className="mt-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Attempt</div>
+                <div className="text-xs font-bold text-slate-400">提出回数</div>
                 <div className="mt-2 text-xl font-black text-slate-950">{selectedAssignment.attemptCount} / {selectedAssignment.maxAttempts}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -161,7 +161,7 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
             </div>
 
             <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Prompt Snapshot</div>
+              <div className="text-xs font-bold text-slate-400">課題文</div>
               <div className="mt-3 text-sm leading-relaxed text-slate-700">{selectedAssignment.promptText}</div>
               <div className="mt-4 rounded-2xl border border-white bg-white px-4 py-3 text-xs leading-relaxed text-slate-500">
                 {selectedAssignment.guidance}
@@ -204,7 +204,7 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
       </section>
 
       <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-        <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Operation Notes</div>
+        <div className="text-xs font-bold text-slate-400">運用メモ</div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {[
             '問題作成後に印刷し、提出コード付きで紙配布する',

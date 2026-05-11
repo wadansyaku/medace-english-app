@@ -63,9 +63,9 @@ const resolveViewGate = (
 ): ActivationGateDefinition | null => {
   if (activeView === BusinessAdminWorkspaceView.ASSIGNMENTS && activationState === 'CREATE_COHORT') {
     return {
-      eyebrow: 'Step 1 / Cohort',
-      title: '先に cohort を作成する',
-      body: '生徒割当は cohort 作成後に整理します。最初に 1 つ作ると、担当・ミッション・通知の導線が崩れません。',
+      eyebrow: '手順 1 / クラス',
+      title: '先にクラスを作成する',
+      body: '生徒割当はクラス作成後に整理します。最初に 1 つ作ると、担当・ミッション・通知の導線が崩れません。',
       ctaLabel: '組織設定へ進む',
       targetView: BusinessAdminWorkspaceView.SETTINGS,
       allowBootstrap: true,
@@ -75,8 +75,8 @@ const resolveViewGate = (
   if (activeView === BusinessAdminWorkspaceView.INSTRUCTORS) {
     if (activationState === 'CREATE_COHORT') {
       return {
-        eyebrow: 'Step 1 / Cohort',
-        title: '講師負荷を見る前に cohort を用意する',
+        eyebrow: '手順 1 / クラス',
+        title: '講師負荷を見る前にクラスを用意する',
         body: '可視範囲と担当の単位がない状態では、講師負荷を比べても判断材料が揃いません。',
         ctaLabel: '組織設定へ進む',
         targetView: BusinessAdminWorkspaceView.SETTINGS,
@@ -85,7 +85,7 @@ const resolveViewGate = (
     }
     if (activationState === 'ASSIGN_STUDENTS') {
       return {
-        eyebrow: 'Step 2 / Assignment',
+        eyebrow: '手順 2 / 担当割当',
         title: '最初の生徒担当を決める',
         body: '講師負荷の偏りは、少なくとも 1 件の担当割当が入ってから見たほうが意味のある比較になります。',
         ctaLabel: '割当ビューへ進む',
@@ -95,9 +95,9 @@ const resolveViewGate = (
     }
     if (activationState === 'CREATE_FIRST_MISSION') {
       return {
-        eyebrow: 'Step 3 / Mission',
+        eyebrow: '手順 3 / ミッション',
         title: '初回ミッションを配布してから講師負荷を確認する',
-        body: '週次課題が入って初めて、講師の backlog と再開待ちの意味が揃います。',
+        body: '週次課題が入って初めて、講師の未対応キューと再開待ちの意味が揃います。',
         ctaLabel: '割当ビューへ進む',
         targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
         allowBootstrap: true,
@@ -108,8 +108,8 @@ const resolveViewGate = (
   if (activeView === BusinessAdminWorkspaceView.WRITING) {
     if (activationState === 'CREATE_COHORT') {
       return {
-        eyebrow: 'Step 1 / Cohort',
-        title: '作文運用の前に cohort を作成する',
+        eyebrow: '手順 1 / クラス',
+        title: '作文運用の前にクラスを作成する',
         body: '作文の配布・返却は、まずクラス単位が揃ってから始めると空振りしません。',
         ctaLabel: '組織設定へ進む',
         targetView: BusinessAdminWorkspaceView.SETTINGS,
@@ -118,7 +118,7 @@ const resolveViewGate = (
     }
     if (activationState === 'ASSIGN_STUDENTS') {
       return {
-        eyebrow: 'Step 2 / Assignment',
+        eyebrow: '手順 2 / 担当割当',
         title: '最初の担当割当を決める',
         body: '作文キューは、誰がどの生徒を追うかが決まってからでないと運用に使えません。',
         ctaLabel: '割当ビューへ進む',
@@ -128,7 +128,7 @@ const resolveViewGate = (
     }
     if (activationState === 'CREATE_FIRST_MISSION') {
       return {
-        eyebrow: 'Step 3 / Mission',
+        eyebrow: '手順 3 / ミッション',
         title: '初回ミッションを配布する',
         body: '作文は主課題とセットで配る前提です。先に今週ミッションを 1 本固定してください。',
         ctaLabel: '割当ビューへ進む',
@@ -138,9 +138,9 @@ const resolveViewGate = (
     }
     if (activationState === 'SEND_FIRST_NOTIFICATION') {
       return {
-        eyebrow: 'Step 4 / Notification',
+        eyebrow: '手順 4 / 通知',
         title: '最初のフォロー通知を送ってから作文運用へ進む',
-        body: '通知が 1 件入ると、作文の進行と再開導線を実データで見分けられます。demo では導入セットでここまで自動投入できます。',
+        body: '通知が 1 件入ると、作文の進行と再開導線を実データで見分けられます。体験環境では導入セットでここまで自動投入できます。',
         ctaLabel: '講師導線を確認する',
         targetView: BusinessAdminWorkspaceView.INSTRUCTORS,
         allowBootstrap: true,

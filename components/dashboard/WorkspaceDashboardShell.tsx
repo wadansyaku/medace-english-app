@@ -57,7 +57,7 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
         </div>
 
         <div className="mt-6 max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/60">{eyebrow}</p>
+          <p className="text-xs font-bold text-white/70">{eyebrow}</p>
           <h2 className="mt-3 text-3xl font-black tracking-tight">{title}</h2>
           <p className="mt-4 text-sm leading-relaxed text-white/78">{body}</p>
         </div>

@@ -186,7 +186,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
   if (!currentPassage || !currentQuestion) {
     return (
       <section className={`ui-panel ${className}`} data-testid="reading-practice-empty">
-        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Reading Practice</div>
+        <div className="text-xs font-bold text-slate-400">長文読解</div>
         <h2 className="mt-2 text-xl font-black text-slate-950">長文読解の問題がありません</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
           レベル別の読解パッセージを生成して、このコンポーネントに渡してください。
@@ -202,10 +202,13 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
 
   const handleCheck = () => {
     if (!selectedOptionId || answerResult || completed) return;
+    const alreadyAnswered = results.some((result) => result.questionId === currentQuestion.id);
     const result = scoreReadingAnswer(currentQuestion, selectedOptionId);
     setAnswerResult(result);
     setResults((current) => upsertResult(current, result));
-    onAnswer?.(result);
+    if (!alreadyAnswered) {
+      onAnswer?.(result);
+    }
   };
 
   const handleNext = () => {
@@ -233,7 +236,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
       <section className="ui-panel">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Reading Practice</div>
+            <div className="text-xs font-bold text-slate-400">長文読解</div>
             <h2 className="mt-1 text-xl font-black text-slate-950">短い英文を読んで根拠まで確認</h2>
           </div>
           <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
@@ -260,7 +263,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
       <section className="ui-panel-subtle">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">設問タイプ</div>
+            <div className="text-xs font-bold text-slate-400">設問タイプ</div>
             <p className="mt-1 text-sm font-bold text-slate-700">設問ごとに弱点を残して、次の本文選びにつなげます。</p>
           </div>
           {completed && (
@@ -322,7 +325,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
               <KindIcon className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Question</div>
+              <div className="text-xs font-bold text-slate-400">設問</div>
               <h3 className="mt-0.5 text-lg font-black text-slate-950">{currentKindLabel}</h3>
             </div>
           </div>
@@ -387,16 +390,16 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
             </div>
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
               <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">根拠文</div>
+                <div className="text-[11px] font-bold text-slate-400">根拠文</div>
                 <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.evidenceSentence}</p>
               </div>
               <div className="rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">解説</div>
+                <div className="text-[11px] font-bold text-slate-400">解説</div>
                 <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.explanationJa}</p>
               </div>
             </div>
             <div className="mt-3 rounded-2xl border border-white/70 bg-white/80 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">次の見方</div>
+              <div className="text-[11px] font-bold text-slate-400">次の見方</div>
               <p className="mt-2 text-sm font-bold leading-relaxed text-slate-800">
                 {getNextActionForQuestion(currentQuestion, answerResult.correct)}
               </p>
@@ -415,35 +418,48 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
       </section>
 
       <MobileStickyActionBar className="-mx-4 border-t border-slate-100 bg-white/95 px-4 py-4 backdrop-blur sm:mx-0 sm:rounded-3xl sm:border sm:border-slate-200 sm:shadow-sm">
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-          <button
-            type="button"
-            onClick={handleCheck}
-            disabled={!selectedOptionId || Boolean(answerResult)}
-            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            <CheckCircle className="h-5 w-5" />
-            判定する
-          </button>
-          <button
-            type="button"
-            onClick={resetCurrentQuestion}
-            disabled={!selectedOptionId || Boolean(answerResult)}
-            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 transition-colors hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[140px]"
-          >
-            <RotateCcw className="h-5 w-5" />
-            選び直す
-          </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!canMoveNext}
-            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 transition-colors hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[160px]"
-          >
-            {completed ? '完了済み' : isLastQuestionInPassage && isLastPassage ? '完了' : '次へ'}
-            <ArrowRight className="h-5 w-5" />
-          </button>
-        </div>
+        {answerResult ? (
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={!canMoveNext}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {isLastQuestionInPassage && isLastPassage ? '結果を確認する' : '次の設問へ'}
+              <ArrowRight className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={resetCurrentQuestion}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 transition-colors hover:border-medace-300 hover:text-medace-700 sm:min-w-[150px]"
+            >
+              <RotateCcw className="h-5 w-5" />
+              もう一度確認
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <button
+              type="button"
+              onClick={handleCheck}
+              disabled={!selectedOptionId}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <CheckCircle className="h-5 w-5" />
+              判定する
+            </button>
+            <button
+              type="button"
+              onClick={resetCurrentQuestion}
+              disabled={!selectedOptionId}
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 font-bold text-slate-700 transition-colors hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:opacity-40 sm:min-w-[140px]"
+            >
+              <RotateCcw className="h-5 w-5" />
+              選び直す
+            </button>
+          </div>
+        )}
       </MobileStickyActionBar>
     </div>
   );

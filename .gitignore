@@ -14,6 +14,7 @@ dist-ssr
 .wrangler
 .dev.vars
 .playwright-cli/
+.playwright-mcp/
 output/playwright/
 output/spreadsheet/
 output/simulator/
@@ -22,6 +23,7 @@ test-results-rerun/
 playwright-report/
 tmp
 _worker.bundle
+network-storage.md
 
 # Editor directories and files
 .vscode/*

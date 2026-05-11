@@ -80,12 +80,12 @@ const EnglishPracticeEntryPanel: React.FC<EnglishPracticeEntryPanelProps> = ({
   >
     <div className="grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
       <div className="bg-medace-600 px-5 py-5 text-white md:px-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white/72">
-          English Practice
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black text-white/72">
+          英語演習
         </div>
-        <h2 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">今日の英語演習</h2>
+        <h2 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">今日やることは1つだけ</h2>
         <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-white/78">
-          単語テストとは別に、文法演習・和訳トレーニング・長文読解を1つの画面から始めます。
+          単語テストとは別に、文法・和訳・長文から今必要な演習を選んで始めます。
         </p>
         <button
           type="button"
@@ -93,7 +93,7 @@ const EnglishPracticeEntryPanel: React.FC<EnglishPracticeEntryPanelProps> = ({
           onClick={onOpenEnglishPractice}
           className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-black text-medace-900 transition-colors hover:bg-orange-50"
         >
-          英語演習を開く <ArrowRight className="h-4 w-4" />
+          演習を始める <ArrowRight className="h-4 w-4" />
         </button>
       </div>
       <div className="grid gap-3 px-5 py-5 md:grid-cols-3 md:px-6">

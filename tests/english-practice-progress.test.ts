@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { EnglishLevel } from '../types';
+import { EnglishLevel, type JapaneseTranslationFeedback } from '../types';
 import {
   clearEnglishPracticeProgress,
   createEmptyEnglishPracticeProgress,
+  ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
   loadEnglishPracticeProgress,
   recordEnglishPracticeAttempt,
   saveEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
+  toEnglishPracticeCloudQuizAttempt,
   type EnglishPracticeStorage,
 } from '../utils/englishPracticeProgress';
 
@@ -109,5 +111,72 @@ describe('english practice progress', () => {
     clearEnglishPracticeProgress('student-storage', storage);
     expect(loadEnglishPracticeProgress('student-storage', storage).attempts).toHaveLength(0);
     expect(loadEnglishPracticeProgress('student-storage', null).attempts).toHaveLength(0);
+  });
+
+  it('converts word-backed grammar and translation attempts into canonical quiz attempts', () => {
+    const feedback: JapaneseTranslationFeedback = {
+      isCorrect: false,
+      score: 6,
+      maxScore: 10,
+      verdictLabel: '要復習',
+      examTarget: 'UNIVERSITY_ENTRANCE',
+      sourceSentence: 'Students monitor symptoms carefully.',
+      expectedTranslation: '生徒は症状を注意深く観察する。',
+      userTranslation: '生徒は症状を見る。',
+      summaryJa: '副詞の処理が不足しています。',
+      strengths: ['主語と動詞は対応しています。'],
+      issues: ['carefully の訳出が不足しています。'],
+      improvedTranslation: '生徒は症状を注意深く観察する。',
+      grammarAdviceJa: '副詞が動詞を修飾する形を確認します。',
+      nextDrillJa: '副詞を含む文をもう1問訳します。',
+      criteria: [],
+    };
+
+    const payload = toEnglishPracticeCloudQuizAttempt('student-cloud', {
+      lane: 'translation',
+      mode: 'JA_TRANSLATION_INPUT',
+      correct: false,
+      score: 6,
+      maxScore: 10,
+      wordId: 'word-monitor',
+      bookId: 'book-medical',
+      scopeId: 'basic-svo',
+      responseTimeMs: 1200.4,
+    }, feedback);
+
+    expect(payload).toMatchObject({
+      uid: 'student-cloud',
+      wordId: 'word-monitor',
+      bookId: 'book-medical',
+      correct: false,
+      questionMode: 'JA_TRANSLATION_INPUT',
+      responseTimeMs: 1200,
+      grammarScopeId: 'basic-svo',
+      translationFeedback: feedback,
+    });
+  });
+
+  it('keeps reading and fallback-only attempts out of the canonical quiz stream', () => {
+    expect(toEnglishPracticeCloudQuizAttempt('student-cloud', {
+      lane: 'reading',
+      mode: 'READING',
+      correct: true,
+      readingQuestionKind: 'REFERENCE_OR_MAIN_IDEA',
+    })).toBeNull();
+
+    expect(toEnglishPracticeCloudQuizAttempt('student-cloud', {
+      lane: 'grammar',
+      mode: 'GRAMMAR_CLOZE',
+      correct: true,
+      wordId: 'word-without-book',
+    })).toBeNull();
+
+    expect(toEnglishPracticeCloudQuizAttempt('student-cloud', {
+      lane: 'grammar',
+      mode: 'GRAMMAR_CLOZE',
+      correct: true,
+      wordId: 'sample-word',
+      bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
+    })).toBeNull();
   });
 });

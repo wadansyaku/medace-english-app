@@ -58,7 +58,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
           <X className="h-5 w-5" />
         </button>
         <div className="pr-12">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Feedback</p>
+          <p className="text-xs font-bold text-slate-400">添削フィードバック</p>
           <h3 className={`mt-2 font-black tracking-tight text-slate-950 ${isMobileViewport ? 'text-xl leading-tight' : 'text-2xl'}`}>
             {feedbackDetail.assignment.promptTitle}
           </h3>
@@ -84,7 +84,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
               </div>
             </div>
             <div className={`rounded-2xl border border-slate-200 bg-slate-50 ${isMobileViewport ? 'px-3.5 py-3.5' : 'px-4 py-4'}`}>
-              <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Attempt</div>
+              <div className="text-xs font-bold text-slate-400">提出回数</div>
               <div className="mt-2 text-sm font-black text-slate-950">{feedbackDetail.submission.attemptNo}</div>
             </div>
             <div className={`rounded-2xl border border-slate-200 bg-slate-50 ${isMobileViewport ? 'px-3.5 py-3.5' : 'px-4 py-4'}`}>
