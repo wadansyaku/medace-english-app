@@ -15,7 +15,7 @@ interface UseAuthExperienceControllerParams {
   onLogoutReset?: () => void;
 }
 
-const shouldPreserveCurrentRoute = (
+export const shouldPreserveCurrentRoute = (
   navigationState: AppNavigationState,
   nextHomeView: ReturnType<typeof getHomeAppRoute>,
 ): boolean => {
@@ -27,6 +27,8 @@ const shouldPreserveCurrentRoute = (
     case 'study':
     case 'quiz':
       return Boolean(navigationState.selectedTask);
+    case 'englishPractice':
+      return nextHomeView === 'dashboard';
     default:
       return false;
   }

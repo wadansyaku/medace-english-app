@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildNavigationPath, parseNavigationPath } from '../hooks/useAppNavigation';
+import { buildNavigationPath, canAccessAppView, parseNavigationPath } from '../hooks/useAppNavigation';
+import { shouldPreserveCurrentRoute } from '../hooks/useAuthExperienceController';
 import {
   buildTaskQueryString,
   createDefaultTaskIntentFromRoute,
@@ -8,6 +9,14 @@ import {
   getTaskRouteBookId,
 } from '../shared/learningTask';
 import { PUBLIC_BUSINESS_ROLE_KEYS, getPublicBusinessRolePath } from '../shared/publicBusinessRoles';
+import { UserRole, type UserProfile } from '../types';
+
+const createUser = (role: UserRole): UserProfile => ({
+  uid: `user-${role.toLowerCase()}`,
+  displayName: role,
+  role,
+  email: `${role.toLowerCase()}@example.test`,
+});
 
 describe('app navigation paths', () => {
   it('parses top-level and book detail routes', () => {
@@ -62,6 +71,28 @@ describe('app navigation paths', () => {
       selectedTask: null,
       publicRole: null,
     })).toBe('/english-practice');
+  });
+
+  it('keeps the english practice workspace student-only even for direct URLs', () => {
+    expect(canAccessAppView(createUser(UserRole.STUDENT), 'englishPractice')).toBe(true);
+    expect(canAccessAppView(createUser(UserRole.INSTRUCTOR), 'englishPractice')).toBe(false);
+    expect(canAccessAppView(createUser(UserRole.ADMIN), 'englishPractice')).toBe(false);
+  });
+
+  it('preserves a direct english practice URL only for student home sessions', () => {
+    expect(shouldPreserveCurrentRoute({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+    }, 'dashboard')).toBe(true);
+
+    expect(shouldPreserveCurrentRoute({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+    }, 'instructor')).toBe(false);
   });
 
   it('round-trips task query state for smart study routes', () => {

@@ -79,6 +79,9 @@ export const canAccessAppView = (user: UserProfile | null, view: AppRoute): bool
   if (view === 'instructor') {
     return user.role === UserRole.INSTRUCTOR;
   }
+  if (view === 'englishPractice') {
+    return user.role === UserRole.STUDENT;
+  }
   return true;
 };
 
