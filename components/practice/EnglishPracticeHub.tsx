@@ -350,6 +350,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [translationOrders, setTranslationOrders] = useState<Record<string, string[]>>({});
   const [checkedTranslationOrders, setCheckedTranslationOrders] = useState<Record<string, boolean>>({});
   const [translationFeedback, setTranslationFeedback] = useState<Record<string, JapaneseTranslationFeedback>>({});
+  const [submittedTranslationInputs, setSubmittedTranslationInputs] = useState<Record<string, string>>({});
+  const submittedTranslationInputRef = React.useRef<Record<string, string>>({});
   const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
   const [practiceLevel, setPracticeLevel] = useState<EnglishLevel>(userLevel);
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
@@ -554,6 +556,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setTranslationOrders({});
     setCheckedTranslationOrders({});
     setTranslationFeedback({});
+    setSubmittedTranslationInputs({});
+    submittedTranslationInputRef.current = {};
   };
 
   const resetPracticeProgress = () => {
@@ -645,7 +649,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const handleTranslationSubmit = async (item: JapaneseWordOrderPracticeItem) => {
     const input = translationInputs[item.id]?.trim() || '';
-    if (!input || checkingTranslationId) return;
+    if (!input || checkingTranslationId || submittedTranslationInputRef.current[item.id] === input) return;
+    submittedTranslationInputRef.current = {
+      ...submittedTranslationInputRef.current,
+      [item.id]: input,
+    };
+    setSubmittedTranslationInputs((current) => ({ ...current, [item.id]: input }));
 
     const grammarExplanation = buildGrammarScopeExplanation(item.grammarScope);
     let feedback: JapaneseTranslationFeedback = {
@@ -1442,6 +1451,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <section className="order-1 space-y-3 xl:order-2">
         {translationItems.map((item) => {
           const feedback = translationFeedback[item.id];
+          const translationInput = translationInputs[item.id] || '';
+          const trimmedTranslationInput = translationInput.trim();
+          const repeatedSubmittedTranslation = Boolean(trimmedTranslationInput)
+            && submittedTranslationInputs[item.id] === trimmedTranslationInput;
           const orderedChipIds = translationOrders[item.id] || [];
           const orderChecked = checkedTranslationOrders[item.id];
           const orderCorrect = isOrderCorrect(orderedChipIds, item.correctChipIds);
@@ -1455,7 +1468,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               {translationMode === 'input' ? (
                 <>
                   <textarea
-                    value={translationInputs[item.id] || ''}
+                    value={translationInput}
                     onChange={(event) => setTranslationInputs((current) => ({ ...current, [item.id]: event.target.value }))}
                     rows={3}
                     className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-bold leading-relaxed text-slate-800 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
@@ -1486,7 +1499,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        disabled={!translationInputs[item.id]?.trim() || checkingTranslationId === item.id}
+                        disabled={!trimmedTranslationInput || checkingTranslationId === item.id || repeatedSubmittedTranslation}
                         onClick={() => void handleTranslationSubmit(item)}
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
