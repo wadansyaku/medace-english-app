@@ -18,6 +18,7 @@ import {
   LibraryBig,
   ListChecks,
   Loader2,
+  NotebookPen,
   PencilLine,
   RefreshCw,
   Settings,
@@ -72,8 +73,17 @@ import {
   type ReadingPracticeAnswerResult,
   type ReadingPracticeSessionSummary,
 } from '../../utils/readingPractice';
+import {
+  countEssayWords,
+  getDefaultEikenWritingTask,
+  getEikenWritingLevelLabel,
+  getEikenWritingTaskTypeLabel,
+  getEikenWritingTasks,
+  type EikenWritingLevel,
+  type EikenWritingTaskType,
+} from '../../utils/eikenWritingPractice';
 
-export type PracticeLane = 'overview' | 'grammar' | 'translation' | 'reading';
+export type PracticeLane = 'overview' | 'grammar' | 'translation' | 'reading' | 'writing';
 type GrammarMode = 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER';
 type TranslationMode = 'input' | 'order';
 type ScopeViewFilter = 'recommended' | 'weak' | 'all';
@@ -185,6 +195,13 @@ const laneConfig: Array<{
     description: '内容一致・要旨・語彙推測・文構造を確認',
     icon: LibraryBig,
   },
+  {
+    id: 'writing',
+    label: '英作文',
+    title: '英検ライティング練習',
+    description: 'Eメール・意見論述・要約を級別テーマで練習',
+    icon: NotebookPen,
+  },
 ];
 
 const practiceNavGroups: Array<{
@@ -205,6 +222,7 @@ const practiceNavGroups: Array<{
       { id: 'grammar', label: '文法演習', icon: BookOpen, lane: 'grammar' },
       { id: 'translation', label: '和訳トレーニング', icon: PencilLine, lane: 'translation' },
       { id: 'reading', label: '長文読解', icon: BookMarked, lane: 'reading' },
+      { id: 'writing', label: '英作文', icon: NotebookPen, lane: 'writing' },
       { id: 'random', label: 'ランダム演習', icon: Shuffle, lane: 'grammar' },
     ],
   },
@@ -236,6 +254,8 @@ const examLevels: EnglishLevel[] = [
   EnglishLevel.C2,
 ];
 const questionCountOptions = [5, 10, 15, 20] as const;
+const eikenWritingLevelOptions: EikenWritingLevel[] = ['grade-3', 'pre-2', 'grade-2', 'pre-1'];
+const eikenWritingTaskTypeOptions: EikenWritingTaskType[] = ['email', 'opinion', 'summary'];
 
 const formatPercent = (value: number): number => {
   if (Number.isFinite(value) && value > 0) return Math.max(0, Math.min(100, Math.round(value)));
@@ -373,13 +393,22 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
   const [practiceLevel, setPracticeLevel] = useState<EnglishLevel>(userLevel);
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
+  const [writingLevel, setWritingLevel] = useState<EikenWritingLevel>('grade-2');
+  const [writingTaskType, setWritingTaskType] = useState<EikenWritingTaskType>('opinion');
+  const [selectedWritingTaskId, setSelectedWritingTaskId] = useState<string | null>(() => (
+    getDefaultEikenWritingTask({ level: 'grade-2', taskType: 'opinion' })?.id ?? null
+  ));
+  const [writingDraft, setWritingDraft] = useState('');
   const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
 
   const activateLane = React.useCallback((lane: PracticeLane) => {
     setActiveLane(lane);
     onActiveLaneChange?.(lane);
-  }, [onActiveLaneChange]);
+    if (!isEmbedded && typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isEmbedded, onActiveLaneChange]);
 
   React.useEffect(() => {
     if (initialLane) {
@@ -500,6 +529,27 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       maxPassages: 1,
     })
   ), [practiceLevel, practiceSeed]);
+
+  const availableWritingTaskTypes = useMemo(() => (
+    eikenWritingTaskTypeOptions.filter((taskType) => getEikenWritingTasks({ level: writingLevel, taskType }).length > 0)
+  ), [writingLevel]);
+
+  const writingTasks = useMemo(() => (
+    getEikenWritingTasks({ level: writingLevel, taskType: writingTaskType })
+  ), [writingLevel, writingTaskType]);
+
+  React.useEffect(() => {
+    if (availableWritingTaskTypes.length > 0 && !availableWritingTaskTypes.includes(writingTaskType)) {
+      setWritingTaskType(availableWritingTaskTypes[0]);
+    }
+  }, [availableWritingTaskTypes, writingTaskType]);
+
+  React.useEffect(() => {
+    const currentStillAvailable = writingTasks.some((task) => task.id === selectedWritingTaskId);
+    if (!currentStillAvailable) {
+      setSelectedWritingTaskId(writingTasks[0]?.id ?? null);
+    }
+  }, [selectedWritingTaskId, writingTasks]);
 
   const progressSummary = useMemo(
     () => summarizeEnglishPracticeProgress(practiceProgress),
@@ -793,6 +843,16 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const grammarProgress = formatPercent(grammarLaneSummary.accuracy);
   const translationProgress = formatPercent(translationLaneSummary.accuracy);
   const readingProgress = formatPercent(readingLaneSummary.accuracy);
+  const selectedWritingTask = writingTasks.find((task) => task.id === selectedWritingTaskId)
+    ?? writingTasks[0]
+    ?? getDefaultEikenWritingTask({ level: writingLevel, taskType: writingTaskType });
+  const writingWordCount = countEssayWords(writingDraft);
+  const writingWordRange = selectedWritingTask?.wordRange;
+  const writingWithinRange = Boolean(
+    writingWordRange
+    && writingWordCount >= writingWordRange.min
+    && writingWordCount <= writingWordRange.max,
+  );
   const overallAccuracy = formatPercent(progressSummary.accuracy);
   const selectedScopeCount = selectedScopeIds.length;
   const previewPassage = readingPassages[0];
@@ -863,6 +923,20 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       actionLabel: '3分で1セット',
       action: () => activateLane('reading'),
     },
+    {
+      id: 'writing',
+      title: '英作文',
+      description: '英検のEメール・意見論述・要約',
+      icon: NotebookPen,
+      progress: 0,
+      progressLabel: '新規',
+      metrics: [
+        { label: 'テーマ', value: `${getEikenWritingTasks().length}件` },
+        { label: '形式', value: '3種類' },
+      ],
+      actionLabel: '12分で1テーマ',
+      action: () => activateLane('writing'),
+    },
   ];
 
   const renderOverview = () => (
@@ -885,7 +959,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </button>
       </div>
 
-      <section className="grid gap-4 xl:grid-cols-4">
+      <section className="grid gap-4 xl:grid-cols-5">
         {recommendedCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -1685,6 +1759,189 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     </div>
   );
 
+  const renderWriting = () => (
+    <div data-testid="english-practice-lane-writing-panel" className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
+      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
+        <div className="flex items-center gap-2">
+          <NotebookPen className="h-5 w-5 text-medace-700" />
+          <h2 className="text-xl font-black text-slate-950">英検ライティング</h2>
+        </div>
+        <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
+          級と形式を選び、採点観点を見ながら短時間で1答案を書きます。
+        </p>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <div className="mb-2 text-xs font-black text-slate-500">級</div>
+            <div className="grid grid-cols-2 gap-2">
+              {eikenWritingLevelOptions.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setWritingLevel(level)}
+                  className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
+                    writingLevel === level
+                      ? 'border-medace-600 bg-medace-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
+                  }`}
+                >
+                  {getEikenWritingLevelLabel(level)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-black text-slate-500">形式</div>
+            <div className="grid gap-2">
+              {eikenWritingTaskTypeOptions.map((taskType) => {
+                const enabled = availableWritingTaskTypes.includes(taskType);
+                return (
+                  <button
+                    key={taskType}
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => setWritingTaskType(taskType)}
+                    className={`min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-black transition-colors ${
+                      writingTaskType === taskType && enabled
+                        ? 'border-medace-600 bg-medace-600 text-white'
+                        : enabled
+                          ? 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
+                          : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
+                    }`}
+                  >
+                    {getEikenWritingTaskTypeLabel(taskType)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-black text-slate-500">テーマ</div>
+            <div className="max-h-[390px] overflow-y-auto pr-1">
+              <div className="grid gap-2">
+                {writingTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedWritingTaskId(task.id);
+                      setWritingDraft('');
+                    }}
+                    className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                      selectedWritingTask?.id === task.id
+                        ? 'border-medace-400 bg-medace-50 text-medace-950'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-medace-200'
+                    }`}
+                  >
+                    <div className="text-sm font-black">{task.titleJa}</div>
+                    <div className="mt-1 text-xs font-bold text-slate-500">
+                      {task.wordRange.min}-{task.wordRange.max} words / {getEikenWritingTaskTypeLabel(task.taskType)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="order-1 space-y-3 xl:order-2">
+        {selectedWritingTask ? (
+          <>
+            <article className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black text-medace-700">
+                    {getEikenWritingLevelLabel(selectedWritingTask.level)} / {getEikenWritingTaskTypeLabel(selectedWritingTask.taskType)}
+                  </div>
+                  <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedWritingTask.titleJa}</h2>
+                </div>
+                <span className="rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
+                  {selectedWritingTask.wordRange.min}-{selectedWritingTask.wordRange.max} words
+                </span>
+              </div>
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-base font-black leading-8 text-slate-900">
+                {selectedWritingTask.promptEn}
+              </p>
+              <p className="mt-3 text-sm font-bold leading-relaxed text-slate-600">{selectedWritingTask.promptJa}</p>
+            </article>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+                <div className="text-xs font-black text-medace-700">見る観点</div>
+                <ul className="mt-3 space-y-2 text-sm font-bold leading-relaxed text-slate-700">
+                  {selectedWritingTask.focusPoints.map((point) => (
+                    <li key={point} className="flex gap-2">
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-medace-600" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+                <div className="text-xs font-black text-slate-500">提出前チェック</div>
+                <ul className="mt-3 space-y-2 text-sm font-bold leading-relaxed text-slate-700">
+                  {selectedWritingTask.checklist.map((item) => (
+                    <li key={item} className="flex gap-2">
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-medace-500" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
+
+            <article className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black text-slate-400">答案</div>
+                  <h3 className="mt-1 text-lg font-black text-slate-950">自分の英作文を書く</h3>
+                </div>
+                <span
+                  data-testid="eiken-writing-word-count"
+                  className={`rounded-full border px-3 py-1 text-xs font-black ${
+                    writingWithinRange
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-orange-200 bg-orange-50 text-medace-700'
+                  }`}
+                >
+                  {writingWordCount} words
+                </span>
+              </div>
+              <textarea
+                data-testid="eiken-writing-draft"
+                value={writingDraft}
+                onChange={(event) => setWritingDraft(event.target.value)}
+                rows={10}
+                className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-4 py-4 text-base font-medium leading-8 text-slate-900 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
+                placeholder="Write your answer here."
+              />
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100">
+                <div
+                  className={`h-full rounded-full transition-all ${writingWithinRange ? 'bg-emerald-500' : 'bg-medace-500'}`}
+                  style={{
+                    width: `${Math.min(100, writingWordRange ? (writingWordCount / writingWordRange.max) * 100 : 0)}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-3 text-sm font-bold leading-relaxed text-slate-600">
+                {writingWithinRange
+                  ? '語数は範囲内です。次は理由・具体例・結論の対応を確認します。'
+                  : `目安は ${selectedWritingTask.wordRange.min}-${selectedWritingTask.wordRange.max} words です。`}
+              </p>
+            </article>
+          </>
+        ) : (
+          <section className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-4 py-6 text-sm font-bold text-medace-800">
+            この条件の英作文テーマはまだありません。別の級または形式を選んでください。
+          </section>
+        )}
+      </section>
+    </div>
+  );
+
   const renderActiveLane = () => {
     switch (activeLane) {
       case 'grammar':
@@ -1693,6 +1950,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         return renderTranslation();
       case 'reading':
         return renderReading();
+      case 'writing':
+        return renderWriting();
       case 'overview':
       default:
         return renderOverview();
@@ -1703,8 +1962,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     const visibleLanes = options?.includeOverview === false
       ? laneConfig.filter((lane) => lane.id !== 'overview')
       : laneConfig;
+    const mobileGridClass = visibleLanes.length === 4 ? 'grid-cols-4' : 'grid-cols-5';
     return (
-    <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+    <div className={`mb-4 grid ${mobileGridClass} gap-2 sm:flex sm:overflow-x-auto sm:pb-1`}>
       {visibleLanes.map((lane) => {
         const Icon = lane.icon;
         return (
@@ -1713,14 +1973,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             type="button"
             data-testid={`english-practice-lane-${lane.id}`}
             onClick={() => activateLane(lane.id)}
-            className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-black transition-colors ${
+            className={`inline-flex min-h-14 shrink-0 flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2 text-[11px] font-black leading-tight transition-colors sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
               activeLane === lane.id
                 ? 'border-medace-600 bg-medace-600 text-white'
                 : 'border-orange-100 bg-white text-slate-700 hover:border-medace-200 hover:bg-orange-50'
             }`}
           >
-            <Icon className="h-4 w-4" />
-            {lane.label}
+            <Icon className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 text-center">{lane.label}</span>
           </button>
         );
       })}
@@ -1829,13 +2089,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-black text-medace-700">
-                ホーム統合
+                英語演習
               </div>
               <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 md:text-2xl">
                 英語演習
               </h2>
               <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
-                単語・文法・和訳・長文をこのホーム内で切り替えます。別ページへ移動せず、今日の学習状況と同じ文脈で演習できます。
+                単語・文法・和訳・長文・英作文を同じ設計で切り替えます。学習状況と同じ文脈で演習できます。
               </p>
             </div>
             <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">
@@ -1926,7 +2186,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <div className="space-y-1">
                   {group.items.map((item) => {
                     const Icon = item.icon;
-                    const isStableLane = item.id === 'overview' || item.id === 'grammar' || item.id === 'translation' || item.id === 'reading';
+                    const isStableLane = item.id === 'overview' || item.id === 'grammar' || item.id === 'translation' || item.id === 'reading' || item.id === 'writing';
                     const active = item.id === activeLane;
                     const enabled = item.enabled !== false;
                     return (

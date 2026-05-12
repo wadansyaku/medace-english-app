@@ -21,6 +21,7 @@ interface LayoutProps {
   workspaceSections?: WorkspaceSectionDefinition[];
   activeWorkspaceSection?: string;
   onSelectWorkspaceSection?: (section: string) => void;
+  immersiveContent?: boolean;
 }
 
 export const getManagedRobotsContent = ({
@@ -46,6 +47,7 @@ const Layout: React.FC<LayoutProps> = ({
   workspaceSections = [],
   activeWorkspaceSection,
   onSelectWorkspaceSection,
+  immersiveContent = false,
 }) => {
   // Calculate progress to next level (Level * 100 XP)
   const stats = user?.stats || { xp: 0, level: 1, currentStreak: 0 };
@@ -149,6 +151,7 @@ const Layout: React.FC<LayoutProps> = ({
       )}
 
       {/* Header */}
+      {!immersiveContent && (
       <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
@@ -322,13 +325,18 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
       </header>
+      )}
 
       {/* Main Content */}
-      <main className={`flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`}>
+      <main className={immersiveContent
+        ? 'flex-grow'
+        : `flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`
+      }>
         {children}
       </main>
 
       {/* Footer */}
+      {!immersiveContent && (
       <footer className={`bg-white/85 backdrop-blur border-t border-medace-100 mt-auto ${
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
@@ -342,6 +350,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
       </footer>
+      )}
     </div>
   );
 };

@@ -222,106 +222,133 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
     template(EnglishLevel.A1, (term) => `Students learn the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 学ぶ`),
     template(EnglishLevel.A1, (term) => `Teachers review the word ${term} after lunch.`, (meaning) => `先生は 昼食後に ${meaning} という語を 復習する`),
     template(EnglishLevel.A2, (term) => `Learners use the word ${term} in class.`, (meaning) => `生徒は 授業で ${meaning} という語を 使う`),
+    template(EnglishLevel.A2, (term) => `Visitors learn the word ${term} at museums.`, (meaning) => `来館者は 博物館で ${meaning} という語を 学ぶ`),
+    template(EnglishLevel.B1, (term) => `A nurse uses the word ${term} in reports.`, (meaning) => `看護師は 報告書で ${meaning} という語を 使う`),
   ],
   'be-verb': [
     template(EnglishLevel.A1, (term) => `The word ${term} is useful today.`, (meaning) => `${meaning} という語は 今日 役に立つ`),
     template(EnglishLevel.A1, (term) => `The English word ${term} is useful today.`, (meaning) => `${meaning} は 今日 役に立つ 英単語だ`),
+    template(EnglishLevel.A2, (term) => `A note about ${term} is clear.`, (meaning) => `${meaning} についての メモは 明確だ`),
   ],
   'basic-tense': [
     template(EnglishLevel.A1, (term) => `Students reviewed the word ${term} yesterday.`, (meaning) => `生徒は 昨日 ${meaning} という語を 復習した`),
     template(EnglishLevel.A2, (term) => `Students will review the word ${term} tomorrow.`, (meaning) => `生徒は 明日 ${meaning} という語を 復習する`),
+    template(EnglishLevel.B1, (term) => `A reporter reviewed the word ${term} last night.`, (meaning) => `記者は 昨夜 ${meaning} という語を 確認した`),
   ],
   'progressive-aspect': [
     template(EnglishLevel.A2, (term) => `Students are reviewing the word ${term} now.`, (meaning) => `生徒は 今 ${meaning} という語を 復習している`),
     template(EnglishLevel.A2, (term) => `Teachers are explaining the word ${term} today.`, (meaning) => `先生は 今日 ${meaning} という語を 説明している`),
+    template(EnglishLevel.B1, (term) => `Volunteers are reviewing the word ${term} before events.`, (meaning) => `ボランティアは 行事前に ${meaning} という語を 確認している`),
   ],
   'modal-base-verb': [
     template(EnglishLevel.A1, (term) => `Learners can use the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 使える`),
     template(EnglishLevel.A2, (term) => `Students should review the word ${term} again.`, (meaning) => `生徒は もう一度 ${meaning} という語を 復習すべきだ`),
+    template(EnglishLevel.B1, (term) => `A guide can use the word ${term} abroad.`, (meaning) => `ガイドは 海外で ${meaning} という語を 使える`),
   ],
   'time-preposition-phrase': [
     template(EnglishLevel.A1, (term) => `Learners study the word ${term} before class.`, (meaning) => `生徒は 授業前に ${meaning} という語を 復習する`),
     template(EnglishLevel.A2, (term) => `Students review the word ${term} during lunch.`, (meaning) => `生徒は 昼食中に ${meaning} という語を 復習する`),
+    template(EnglishLevel.B1, (term) => `Doctors check the word ${term} before surgery.`, (meaning) => `医師は 手術前に ${meaning} という語を 確認する`),
   ],
   'to-infinitive': [
     template(EnglishLevel.A2, (term) => `Learners hope to master the word ${term}.`, (meaning) => `生徒は ${meaning} という語を 身につけたい`),
     template(EnglishLevel.A2, (term) => `Students need to review the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 復習する 必要がある`),
+    template(EnglishLevel.B1, (term) => `A team meets to review the word ${term}.`, (meaning) => `チームは ${meaning} という語を 確認するために 集まる`),
   ],
   gerund: [
     template(EnglishLevel.A2, (term) => `Learners enjoy studying the word ${term}.`, (meaning) => `生徒は ${meaning} という語を 学ぶことを 楽しむ`),
     template(EnglishLevel.B1, (term) => `Students avoid forgetting the word ${term}.`, (meaning) => `生徒は ${meaning} という語を 忘れることを 避ける`),
+    template(EnglishLevel.B1, (term) => `A blogger keeps studying the word ${term}.`, (meaning) => `ブロガーは ${meaning} という語を 学び続ける`),
   ],
   'participle-modifier': [
     template(EnglishLevel.B1, (term) => `The word ${term} used in class is useful.`, (meaning) => `授業で使われた ${meaning} という語は 役に立つ`),
     template(EnglishLevel.B1, (term) => `Learners reading the word ${term} speak carefully.`, (meaning) => `${meaning} という語を 読んでいる 生徒は 慎重に話す`),
+    template(EnglishLevel.B2, (term) => `The word ${term} used online sounds natural.`, (meaning) => `オンラインで使われた ${meaning} という語は 自然に聞こえる`),
   ],
   comparative: [
     template(EnglishLevel.A2, (term) => `The word ${term} is more useful than before.`, (meaning) => `${meaning} という語は 以前より 役に立つ`),
     template(EnglishLevel.B1, (term) => `Students remember the word ${term} better today.`, (meaning) => `生徒は 今日 ${meaning} という語を よりよく 覚えている`),
+    template(EnglishLevel.B1, (term) => `This word ${term} is more useful than others.`, (meaning) => `この ${meaning} という語は 他より 役に立つ`),
   ],
   'pronoun-reference': [
     template(EnglishLevel.A1, (term) => `Students learn the word ${term} and use it.`, (meaning) => `生徒は ${meaning} という語を 学び それを使う`),
     template(EnglishLevel.A2, (term) => `Teachers write the word ${term} because it matters.`, (meaning) => `先生は 大切なので ${meaning} という語を 書く`),
+    template(EnglishLevel.B1, (term) => `A child finds the word ${term} and remembers it.`, (meaning) => `子どもは ${meaning} という語を 見つけ それを覚える`),
   ],
   'when-while-clause': [
     template(EnglishLevel.A2, (term) => `Learners say the word ${term} when they practice.`, (meaning) => `生徒は 練習するとき ${meaning} という語を 言う`),
     template(EnglishLevel.A2, (term) => `Students review the word ${term} while they listen.`, (meaning) => `生徒は 聞きながら ${meaning} という語を 復習する`),
+    template(EnglishLevel.B1, (term) => `Travelers use the word ${term} when asking directions.`, (meaning) => `旅行者は 道を尋ねるとき ${meaning} という語を 使う`),
   ],
   'passive-voice': [
     template(EnglishLevel.A2, (term) => `The word ${term} is introduced by teachers today.`, (meaning) => `${meaning} という語は 今日 先生に 紹介される`),
     template(EnglishLevel.B1, (term) => `The word ${term} was chosen by students yesterday.`, (meaning) => `${meaning} という語は 昨日 生徒に 選ばれた`),
+    template(EnglishLevel.B1, (term) => `The word ${term} is introduced by local guides.`, (meaning) => `${meaning} という語は 地元の案内人に 紹介される`),
   ],
   'present-perfect': [
     template(EnglishLevel.A2, (term) => `Learners have practiced the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 復習した`),
     template(EnglishLevel.B1, (term) => `Teachers have used the word ${term} for weeks.`, (meaning) => `先生は 何週間も ${meaning} という語を 使っている`),
+    template(EnglishLevel.B1, (term) => `Nurses have used the word ${term} in reports.`, (meaning) => `看護師は 報告書で ${meaning} という語を 使ってきた`),
   ],
   'relative-clause': [
     template(EnglishLevel.B1, (term) => `The word ${term} that teachers choose is useful.`, (meaning) => `先生が選んだ ${meaning} という語は 役に立つ`),
     template(EnglishLevel.B1, (term) => `Students like the word ${term} which appears often.`, (meaning) => `生徒は よく出る ${meaning} という語を 好む`),
+    template(EnglishLevel.B2, (term) => `The word ${term} that appears in articles matters.`, (meaning) => `記事に出る ${meaning} という語は 重要だ`),
   ],
   'first-conditional': [
     template(EnglishLevel.A2, (term) => `If learners study the word ${term} they will remember it.`, (meaning) => `生徒が ${meaning} という語を 学べば それを覚える`),
     template(EnglishLevel.B1, (term) => `If students review the word ${term} they can answer.`, (meaning) => `生徒が ${meaning} という語を 復習すれば 答えられる`),
+    template(EnglishLevel.B1, (term) => `If readers use the word ${term} they will remember it.`, (meaning) => `読者が ${meaning} という語を 使えば それを覚える`),
   ],
   'subjunctive-mood': [
     template(EnglishLevel.B1, (term) => `If learners knew the word ${term} they would answer quickly.`, (meaning) => `生徒が ${meaning} という語を 知っていれば すぐ答えるだろう`),
     template(EnglishLevel.B2, (term) => `If students had reviewed the word ${term} they would remember.`, (meaning) => `生徒が ${meaning} という語を 復習していたら 覚えていただろう`),
+    template(EnglishLevel.B2, (term) => `If readers knew the word ${term} they would answer clearly.`, (meaning) => `読者が ${meaning} という語を 知っていれば 明確に答えるだろう`),
   ],
   'subject-verb-agreement': [
     template(EnglishLevel.A2, (term) => `The list of terms includes ${term} today.`, (meaning) => `語の一覧には 今日 ${meaning} が 含まれる`),
     template(EnglishLevel.B1, (term) => `Each student reviews the word ${term}.`, (meaning) => `それぞれの 生徒が ${meaning} という語を 復習する`),
+    template(EnglishLevel.B1, (term) => `A list of examples includes ${term} today.`, (meaning) => `例の一覧には 今日 ${meaning} が 含まれる`),
   ],
   'interrogative-word-order': [
     template(EnglishLevel.A1, (term) => `How do learners use the word ${term}?`, (meaning) => `生徒は どのように ${meaning} という語を 使うか`),
     template(EnglishLevel.A2, (term) => `Why should students review the word ${term}?`, (meaning) => `なぜ 生徒は ${meaning} という語を 復習すべきか`),
+    template(EnglishLevel.B1, (term) => `How do travelers use the word ${term}?`, (meaning) => `旅行者は どのように ${meaning} という語を 使うか`),
   ],
   'negation-emphasis': [
     template(EnglishLevel.A2, (term) => `Learners do not ignore the word ${term}.`, (meaning) => `生徒は ${meaning} という語を 無視しない`),
     template(EnglishLevel.B1, (term) => `Students do remember the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 本当に 覚えている`),
+    template(EnglishLevel.B1, (term) => `Careful writers do not ignore the word ${term}.`, (meaning) => `慎重な書き手は ${meaning} という語を 無視しない`),
   ],
   'reported-speech': [
     template(EnglishLevel.B1, (term) => `Teachers said that learners used the word ${term}.`, (meaning) => `先生は 生徒が ${meaning} という語を 使ったと 言った`),
     template(EnglishLevel.B1, (term) => `Students reported that the word ${term} was clear.`, (meaning) => `生徒は ${meaning} という語が 明確だったと 報告した`),
+    template(EnglishLevel.B2, (term) => `A coach said that players used the word ${term}.`, (meaning) => `コーチは 選手が ${meaning} という語を 使ったと 言った`),
   ],
   'verb-patterns': [
     template(EnglishLevel.A2, (term) => `Teachers ask learners to use the word ${term}.`, (meaning) => `先生は 生徒に ${meaning} という語を 使うよう 求める`),
     template(EnglishLevel.B1, (term) => `Students spend time reviewing the word ${term}.`, (meaning) => `生徒は ${meaning} という語を 復習するのに 時間を使う`),
+    template(EnglishLevel.B1, (term) => `A mentor asks interns to use the word ${term}.`, (meaning) => `指導者は 研修生に ${meaning} という語を 使うよう 求める`),
   ],
   'adjective-adverb-usage': [
     template(EnglishLevel.A2, (term) => `Learners use the word ${term} carefully.`, (meaning) => `生徒は ${meaning} という語を 慎重に 使う`),
     template(EnglishLevel.B1, (term) => `The word ${term} is clear enough today.`, (meaning) => `${meaning} という語は 今日 十分に 明確だ`),
+    template(EnglishLevel.B1, (term) => `A writer uses the word ${term} carefully.`, (meaning) => `書き手は ${meaning} という語を 慎重に 使う`),
   ],
   'noun-usage': [
     template(EnglishLevel.A2, (term) => `The word ${term} has a clear meaning.`, (meaning) => `${meaning} という語には 明確な 意味がある`),
     template(EnglishLevel.B1, (term) => `A learner records the word ${term} as information.`, (meaning) => `生徒は ${meaning} という語を 情報として 記録する`),
+    template(EnglishLevel.B1, (term) => `The word ${term} shows a clear meaning.`, (meaning) => `${meaning} という語は 明確な 意味を 示す`),
   ],
   'idiomatic-expression': [
     template(EnglishLevel.B1, (term) => `Learners look up the word ${term} after class.`, (meaning) => `生徒は 授業後に ${meaning} という語を 調べる`),
     template(EnglishLevel.B1, (term) => `Students take note of the word ${term}.`, (meaning) => `生徒は ${meaning} という語に 注意を払う`),
+    template(EnglishLevel.B1, (term) => `Readers look up the word ${term} online.`, (meaning) => `読者は オンラインで ${meaning} という語を 調べる`),
   ],
   'conversation-expression': [
     template(EnglishLevel.A1, (term) => `Could you explain the word ${term} today?`, (meaning) => `今日 ${meaning} という語を 説明してくれますか`),
     template(EnglishLevel.A2, (term) => `Would you like to review the word ${term}?`, (meaning) => `${meaning} という語を 復習したいですか`),
+    template(EnglishLevel.A2, (term) => `Could you use the word ${term} now?`, (meaning) => `今 ${meaning} という語を 使ってくれますか`),
   ],
 };
 
