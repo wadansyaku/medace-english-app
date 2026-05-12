@@ -30,6 +30,7 @@ describe('EnglishPracticeHub', () => {
       '文法演習',
       '和訳トレーニング',
       '長文読解',
+      '英作文',
       '範囲を選ぶ',
       '長文読解のプレビュー',
       'この長文に挑戦',
@@ -69,6 +70,7 @@ describe('EnglishPracticeHub', () => {
       'english-practice-lane-grammar',
       'english-practice-lane-translation',
       'english-practice-lane-reading',
+      'english-practice-lane-writing',
     ].forEach((testId) => {
       expect(rendered).toContain(`data-testid="${testId}"`);
     });
@@ -92,8 +94,9 @@ describe('EnglishPracticeHub', () => {
       />,
     );
 
-    expect(rendered).toContain('ホーム統合');
-    expect(rendered).toContain('別ページへ移動せず');
+    expect(rendered).toContain('英語演習');
+    expect(rendered).toContain('英作文');
+    expect(rendered).not.toContain('別ページへ移動せず');
     expect(rendered).toContain('english-practice-hub');
     expect(rendered).not.toContain('Steady Study');
     expect(rendered).not.toContain('今日の英語演習');
@@ -119,5 +122,22 @@ describe('EnglishPracticeHub', () => {
     expect(rendered).not.toContain('ホーム統合');
     expect(rendered).not.toContain('英語演習のおすすめ');
     expect(rendered).not.toContain('english-practice-lane-overview');
+  });
+
+  it('renders the writing lane with Eiken task controls and a draft area', () => {
+    const rendered = renderToStaticMarkup(
+      <EnglishPracticeHub
+        user={createUser()}
+        initialLane="writing"
+        onBack={() => undefined}
+        onStartVocabulary={() => undefined}
+      />,
+    );
+
+    expect(rendered).toContain('english-practice-lane-writing-panel');
+    expect(rendered).toContain('英検ライティング');
+    expect(rendered).toContain('意見論述');
+    expect(rendered).toContain('eiken-writing-draft');
+    expect(rendered).toContain('eiken-writing-word-count');
   });
 });

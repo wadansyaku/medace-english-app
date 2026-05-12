@@ -25,6 +25,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: null,
     });
 
     expect(parseNavigationPath('/study/book-1')).toEqual({
@@ -32,6 +33,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: createDefaultTaskIntentFromRoute('book-1', 'study'),
       publicRole: null,
+      englishPracticeLane: null,
     });
 
     expect(parseNavigationPath('/quiz/book-2')).toEqual({
@@ -39,6 +41,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: createDefaultTaskIntentFromRoute('book-2', 'quiz'),
       publicRole: null,
+      englishPracticeLane: null,
     });
 
     expect(parseNavigationPath('/english-practice')).toEqual({
@@ -46,6 +49,15 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: 'overview',
+    });
+
+    expect(parseNavigationPath('/english-practice/writing')).toEqual({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: 'writing',
     });
   });
 
@@ -55,6 +67,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: null,
     })).toBe('/dashboard');
 
     const task = createDefaultTaskIntentFromRoute('starter 120', 'study');
@@ -63,6 +76,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: task,
       publicRole: null,
+      englishPracticeLane: null,
     })).toBe(`/study/${encodeURIComponent(getTaskRouteBookId(task))}${buildTaskQueryString(task)}`);
 
     expect(buildNavigationPath({
@@ -70,6 +84,15 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: 'grammar',
+    })).toBe('/english-practice/grammar');
+
+    expect(buildNavigationPath({
+      currentView: 'englishPractice',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: 'overview',
     })).toBe('/english-practice');
   });
 
@@ -85,6 +108,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: null,
     }, 'dashboard')).toBe(true);
 
     expect(shouldPreserveCurrentRoute({
@@ -92,6 +116,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: null,
     }, 'instructor')).toBe(false);
   });
 
@@ -102,6 +127,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: task,
       publicRole: null,
+      englishPracticeLane: null,
     });
     const url = new URL(path, 'https://example.test');
 
@@ -110,6 +136,7 @@ describe('app navigation paths', () => {
       returnView: 'dashboard',
       selectedTask: task,
       publicRole: null,
+      englishPracticeLane: null,
     });
   });
 
@@ -121,12 +148,14 @@ describe('app navigation paths', () => {
         returnView: 'dashboard',
         selectedTask: null,
         publicRole: roleKey,
+        englishPracticeLane: null,
       });
       expect(buildNavigationPath({
         currentView: 'publicRole',
         returnView: 'dashboard',
         selectedTask: null,
         publicRole: roleKey,
+        englishPracticeLane: null,
       })).toBe(path);
     }
   });

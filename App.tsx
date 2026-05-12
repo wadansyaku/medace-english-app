@@ -9,11 +9,16 @@ import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
-import { canAccessAppView, isHomeAppRoute, useAppNavigation } from './hooks/useAppNavigation';
+import {
+  canAccessAppView,
+  isHomeAppRoute,
+  useAppNavigation,
+  type EnglishPracticeRouteLane,
+} from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordClientProductEvent } from './services/productEvents';
-import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
+import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudyMode = lazy(() => import('./components/StudyMode'));
@@ -22,12 +27,13 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const InstructorDashboard = lazy(() => import('./components/InstructorDashboard'));
 const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDashboard'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
+const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
 
 const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
   const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
   const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
-  const { currentView, publicRole, selectedTask } = navigationState;
+  const { currentView, publicRole, selectedTask, englishPracticeLane } = navigationState;
   const {
     user,
     setCurrentUser,
@@ -108,7 +114,7 @@ const App: React.FC = () => {
       return;
     }
     if (view === 'englishPractice') {
-      dispatchNavigation({ type: 'open-english-practice' });
+      dispatchNavigation({ type: 'open-english-practice', lane: 'overview' });
       return;
     }
     if (!isHomeAppRoute(view)) return;
@@ -138,7 +144,6 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-      case 'englishPractice':
         return (
           <Dashboard
             user={user}
@@ -146,8 +151,23 @@ const App: React.FC = () => {
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
-            initialEnglishPracticeFocus={currentView === 'englishPractice'}
-            onExitEnglishPracticeFocus={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
+            onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
+          />
+        );
+      case 'englishPractice':
+        return (
+          <EnglishPracticeHub
+            user={user}
+            initialLane={englishPracticeLane ?? 'overview'}
+            onBack={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
+            onStartVocabulary={() => handleTaskSelect(createTodayFocusTaskIntent())}
+            onActiveLaneChange={(lane) => {
+              dispatchNavigation({
+                type: 'open-english-practice',
+                lane: lane as EnglishPracticeRouteLane,
+                historyMode: 'replace',
+              });
+            }}
           />
         );
       case 'study':
@@ -196,6 +216,7 @@ const App: React.FC = () => {
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
+            onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
           />
         );
     }
@@ -239,6 +260,7 @@ const App: React.FC = () => {
         activeWorkspaceSection={activeWorkspaceSection}
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
         forceNoIndex={currentView === 'publicRole'}
+        immersiveContent={Boolean(user && currentView === 'englishPractice')}
       >
         <Suspense
           fallback={

@@ -14,40 +14,75 @@ import {
 describe('reading practice helpers', () => {
   it('builds level-specific deterministic seed passages with all required question kinds', () => {
     const passages = buildReadingPracticePassages({ level: EnglishLevel.B2, seed: 'unit' });
+    const evidencePassage = passages.find((passage) => passage.id === 'seed-b2-evidence-reading');
 
-    expect(passages).toHaveLength(1);
-    expect(passages[0]).toMatchObject({
+    expect(passages).toHaveLength(3);
+    expect(evidencePassage).toMatchObject({
       id: 'seed-b2-evidence-reading',
       level: EnglishLevel.B2,
       source: 'DETERMINISTIC_SEED',
       titleJa: '根拠を結ぶ読解',
+      genre: 'EXPOSITORY',
     });
-    expect(passages[0].generator).toMatchObject({
+    expect(evidencePassage?.generator).toMatchObject({
       source: 'DETERMINISTIC_SEED',
-      version: 'reading-seed-2026-05-11-v1',
+      version: 'reading-seed-2026-05-12-v2',
       seed: 'unit',
     });
-    expect(passages[0].estimatedWords).toBeGreaterThan(30);
-    expect(passages[0].questions.map((question) => question.kind)).toEqual([
+    expect(evidencePassage?.estimatedWords).toBeGreaterThan(30);
+    expect(evidencePassage?.questions.map((question) => question.kind)).toEqual([
       'CONTENT_MATCH',
       'REFERENCE_OR_MAIN_IDEA',
       'VOCAB_INFERENCE',
       'GRAMMAR_STRUCTURE',
     ]);
-    expect(passages[0].questions.every((question) => question.evidenceSentence && question.explanationJa)).toBe(true);
+    expect(evidencePassage?.questions.every((question) => question.evidenceSentence && question.explanationJa)).toBe(true);
   });
 
   it('keeps generated passages stable for the same seed and shuffles option order by seed', () => {
     const first = buildReadingPracticePassages({ level: EnglishLevel.A2, seed: 'same' });
     const second = buildReadingPracticePassages({ level: EnglishLevel.A2, seed: 'same' });
     const third = buildReadingPracticePassages({ level: EnglishLevel.A2, seed: 'different' });
+    const firstClinic = first.find((passage) => passage.id === 'seed-a2-clinic-volunteer');
+    const thirdClinic = third.find((passage) => passage.id === 'seed-a2-clinic-volunteer');
 
     expect(first).toEqual(second);
-    expect(first[0].questions[0].options).not.toEqual(third[0].questions[0].options);
-    expect(new Set(first[0].questions[0].options.map((option) => option.id))).toEqual(new Set(['a', 'b', 'c', 'd']));
-    expect(first[0].questions[0].options.map((option) => option.id)).toEqual(['a', 'b', 'c', 'd']);
-    expect(first[0].questions[0].options.find((option) => option.id === first[0].questions[0].correctOptionId)?.textJa)
+    expect(firstClinic?.questions[0].options).not.toEqual(thirdClinic?.questions[0].options);
+    expect(new Set(firstClinic?.questions[0].options.map((option) => option.id))).toEqual(new Set(['a', 'b', 'c', 'd']));
+    expect(firstClinic?.questions[0].options.map((option) => option.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(firstClinic?.questions[0].options.find((option) => option.id === firstClinic.questions[0].correctOptionId)?.textJa)
       .toBe('番号を渡し、窓の近くに座るよう頼む');
+  });
+
+  it('returns multiple seed passages for strengthened CEFR levels and EIKEN-style genres', () => {
+    expect(buildReadingPracticePassages({ level: EnglishLevel.A2, seed: 'levels' }).length).toBeGreaterThan(1);
+    expect(buildReadingPracticePassages({ level: EnglishLevel.B1, seed: 'levels' }).length).toBeGreaterThan(1);
+    expect(buildReadingPracticePassages({ level: EnglishLevel.B2, seed: 'levels' }).length).toBeGreaterThan(1);
+    expect(buildReadingPracticePassages({ level: EnglishLevel.C1, seed: 'levels' }).length).toBeGreaterThan(1);
+
+    const genres = new Set(buildReadingPracticePassages({ seed: 'genres' }).map((passage) => passage.genre));
+
+    ([
+      'EMAIL',
+      'NOTICE',
+      'REPORT',
+      'EXPOSITORY',
+      'SOCIAL_ISSUE',
+      'SUMMARY_ORIENTED',
+    ] as const).forEach((genre) => {
+      expect(genres.has(genre)).toBe(true);
+    });
+  });
+
+  it('keeps every question tied to an evidence sentence in its passage and one visible answer', () => {
+    const passages = buildReadingPracticePassages({ seed: 'evidence-contract' });
+
+    passages.forEach((passage) => {
+      passage.questions.forEach((question) => {
+        expect(passage.passageEn).toContain(question.evidenceSentence);
+        expect(question.options.filter((option) => option.id === question.correctOptionId)).toHaveLength(1);
+      });
+    });
   });
 
   it('scores answers with evidence and Japanese explanation for reveal-after-answer UI', () => {
@@ -70,7 +105,7 @@ describe('reading practice helpers', () => {
   });
 
   it('summarizes accuracy and weak question kinds across a reading session', () => {
-    const passages = buildReadingPracticePassages({ level: EnglishLevel.B1, seed: 'summary' });
+    const passages = buildReadingPracticePassages({ level: EnglishLevel.B1, seed: 'summary', maxPassages: 1 });
     const [passage] = passages;
     const wrongMainIdeaOptionId = passage.questions[1].options.find(
       (option) => option.id !== passage.questions[1].correctOptionId,

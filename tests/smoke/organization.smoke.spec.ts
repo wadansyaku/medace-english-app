@@ -65,7 +65,7 @@ test('instructor direct english practice route returns to the instructor workspa
   await loginInstructorDemo(page);
   await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
 
-  await page.goto('/english-practice');
+  await page.goto('/english-practice/grammar');
   await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
 });

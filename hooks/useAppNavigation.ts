@@ -17,18 +17,20 @@ import {
 export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
+export type EnglishPracticeRouteLane = 'overview' | 'grammar' | 'translation' | 'reading' | 'writing';
 
 export interface AppNavigationState {
   currentView: AppRoute;
   returnView: HomeAppRoute;
   selectedTask: LearningTaskIntent | null;
   publicRole: PublicBusinessRoleKey | null;
+  englishPracticeLane: EnglishPracticeRouteLane | null;
 }
 
 export type AppNavigationAction =
   | { type: 'reset'; historyMode?: NavigationHistoryMode }
   | { type: 'go-home'; view: HomeAppRoute; historyMode?: NavigationHistoryMode }
-  | { type: 'open-english-practice'; historyMode?: NavigationHistoryMode }
+  | { type: 'open-english-practice'; lane?: EnglishPracticeRouteLane; historyMode?: NavigationHistoryMode }
   | { type: 'open-task'; task: LearningTaskIntent; historyMode?: NavigationHistoryMode }
   | { type: 'finish-book-view'; historyMode?: NavigationHistoryMode }
   | { type: 'open-public-info'; historyMode?: NavigationHistoryMode }
@@ -42,6 +44,7 @@ const initialNavigationState: AppNavigationState = {
   returnView: 'dashboard',
   selectedTask: null,
   publicRole: null,
+  englishPracticeLane: null,
 };
 
 const normalizePathname = (pathname: string): string => {
@@ -55,7 +58,22 @@ const buildHomeState = (view: HomeAppRoute): AppNavigationState => ({
   returnView: view,
   selectedTask: null,
   publicRole: null,
+  englishPracticeLane: null,
 });
+
+const parseEnglishPracticeRouteLane = (value?: string): EnglishPracticeRouteLane | null => {
+  if (!value) return 'overview';
+  if (
+    value === 'overview'
+    || value === 'grammar'
+    || value === 'translation'
+    || value === 'reading'
+    || value === 'writing'
+  ) {
+    return value;
+  }
+  return null;
+};
 
 export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
   view === 'dashboard' || view === 'instructor' || view === 'admin'
@@ -114,12 +132,15 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   }
 
   if (normalizedPath === '/dashboard') return buildHomeState('dashboard');
-  if (normalizedPath === '/english-practice') {
+  if (root === 'english-practice') {
+    const lane = parseEnglishPracticeRouteLane(bookId);
+    if (!lane) return initialNavigationState;
     return {
       currentView: 'englishPractice',
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
+      englishPracticeLane: lane,
     };
   }
   if (normalizedPath === '/instructor') return buildHomeState('instructor');
@@ -132,6 +153,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
       returnView: 'dashboard',
       selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'study'),
       publicRole: null,
+      englishPracticeLane: null,
     };
   }
 
@@ -142,6 +164,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
       returnView: 'dashboard',
       selectedTask: taskFromSearch || createDefaultTaskIntentFromRoute(decodedBookId, 'quiz'),
       publicRole: null,
+      englishPracticeLane: null,
     };
   }
 
@@ -157,7 +180,9 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
     case 'dashboard':
       return '/dashboard';
     case 'englishPractice':
-      return '/english-practice';
+      return state.englishPracticeLane && state.englishPracticeLane !== 'overview'
+        ? `/english-practice/${state.englishPracticeLane}`
+        : '/english-practice';
     case 'instructor':
       return '/instructor';
     case 'admin':
@@ -203,6 +228,7 @@ const navigationReducer = (
         returnView: action.view,
         selectedTask: null,
         publicRole: null,
+        englishPracticeLane: null,
       };
     case 'open-english-practice':
       return {
@@ -210,6 +236,7 @@ const navigationReducer = (
         returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
         selectedTask: null,
         publicRole: null,
+        englishPracticeLane: action.lane ?? 'overview',
       };
     case 'open-task':
       return {
@@ -217,6 +244,7 @@ const navigationReducer = (
         returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
         selectedTask: action.task,
         publicRole: null,
+        englishPracticeLane: null,
       };
     case 'finish-book-view':
       return {
@@ -224,18 +252,21 @@ const navigationReducer = (
         currentView: state.returnView,
         selectedTask: null,
         publicRole: null,
+        englishPracticeLane: null,
       };
     case 'open-public-info':
       return {
         ...state,
         currentView: 'publicInfo',
         publicRole: null,
+        englishPracticeLane: null,
       };
     case 'open-public-role':
       return {
         ...state,
         currentView: 'publicRole',
         publicRole: action.role,
+        englishPracticeLane: null,
       };
     case 'close-public-info':
       return {
@@ -246,6 +277,7 @@ const navigationReducer = (
         ...state,
         currentView: 'publicInfo',
         publicRole: null,
+        englishPracticeLane: null,
       };
     case 'sync-from-location':
       return action.state;

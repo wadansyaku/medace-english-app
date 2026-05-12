@@ -43,7 +43,6 @@ import {
 } from '../shared/learningTask';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
-import EnglishPracticeHub, { type PracticeLane } from './practice/EnglishPracticeHub';
 
 interface DashboardProps {
   user: UserProfile;
@@ -51,8 +50,7 @@ interface DashboardProps {
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
-  initialEnglishPracticeFocus?: boolean;
-  onExitEnglishPracticeFocus?: () => void;
+  onOpenPracticeLane: (lane: FocusedPracticeLane) => void;
 }
 
 const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> = {
@@ -155,11 +153,9 @@ const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
   );
 };
 
-type FocusedPracticeLane = Exclude<PracticeLane, 'overview'>;
+type FocusedPracticeLane = 'grammar' | 'translation' | 'reading' | 'writing';
 
 interface DashboardPracticeDockProps {
-  activeLane: FocusedPracticeLane | null;
-  isFocusedRoute: boolean;
   onSelectLane: (lane: FocusedPracticeLane) => void;
 }
 
@@ -195,11 +191,17 @@ const PRACTICE_DOCK_OPTIONS: Array<{
     time: '8分',
     icon: LibraryBig,
   },
+  {
+    id: 'writing',
+    label: '英作文',
+    title: '英検テーマで書く',
+    body: 'Eメール・意見論述・要約を級別テーマで練習します。',
+    time: '12分',
+    icon: NotebookPen,
+  },
 ];
 
 const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
-  activeLane,
-  isFocusedRoute,
   onSelectLane,
 }) => (
   <section
@@ -211,38 +213,25 @@ const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
         <p className="text-xs font-black text-medace-600">練習</p>
         <h2 className="text-xl font-black text-slate-950">今日の練習</h2>
         <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
-          単語は「今日の学習」で進め、文法・和訳・長文は必要なものだけここに展開します。
+          ホームでは選ぶだけ。文法・和訳・長文・英作文は専用画面で進めます。
         </p>
       </div>
-      {isFocusedRoute && (
-        <span className="inline-flex w-fit rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
-          直接リンクから練習を表示中
-        </span>
-      )}
     </div>
 
-    <div className="mt-4 grid gap-2 lg:grid-cols-3">
+    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {PRACTICE_DOCK_OPTIONS.map((item) => {
         const Icon = item.icon;
-        const selected = activeLane === item.id;
         return (
           <button
             key={item.id}
             type="button"
             data-testid={`dashboard-practice-lane-${item.id}`}
-            aria-pressed={selected}
             onClick={() => onSelectLane(item.id)}
-            className={`min-h-[104px] rounded-lg border p-3 text-left transition-colors ${
-              selected
-                ? 'border-medace-600 bg-medace-50 text-medace-950 shadow-sm'
-                : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-medace-200 hover:bg-white'
-            }`}
+            className="min-h-[112px] rounded-lg border border-slate-200 bg-slate-50 p-3 text-left text-slate-800 transition-colors hover:border-medace-200 hover:bg-white"
           >
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
-                  selected ? 'border-medace-200 bg-white text-medace-700' : 'border-slate-200 bg-white text-slate-500'
-                }`}>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="text-sm font-black">{item.label}</span>
@@ -266,8 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSelectBook,
   onStartTask,
   onUserUpdate,
-  initialEnglishPracticeFocus = false,
-  onExitEnglishPracticeFocus,
+  onOpenPracticeLane,
 }) => {
   const {
     snapshot,
@@ -279,10 +267,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = useDashboardData(user.uid);
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
-  const [activePracticeLane, setActivePracticeLane] = React.useState<FocusedPracticeLane | null>(
-    () => (initialEnglishPracticeFocus ? 'grammar' : null),
-  );
-  const wasFocusedPracticeRouteRef = React.useRef(initialEnglishPracticeFocus);
   const viewModel = useStudentDashboardViewModel({ user, snapshot });
   const controller = useStudentDashboardController({
     user,
@@ -304,22 +288,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     canShowWritingSection: viewModel.canShowWritingSection,
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
-
-  React.useEffect(() => {
-    if (initialEnglishPracticeFocus) {
-      setActivePracticeLane((current) => current ?? 'grammar');
-    } else if (wasFocusedPracticeRouteRef.current) {
-      setActivePracticeLane(null);
-    }
-    wasFocusedPracticeRouteRef.current = initialEnglishPracticeFocus;
-  }, [initialEnglishPracticeFocus]);
-
-  const handlePracticeClose = React.useCallback(() => {
-    setActivePracticeLane(null);
-    if (initialEnglishPracticeFocus) {
-      onExitEnglishPracticeFocus?.();
-    }
-  }, [initialEnglishPracticeFocus, onExitEnglishPracticeFocus]);
 
   const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
   const weaknessTaskIntent = React.useMemo(
@@ -480,30 +448,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div
         ref={navigation.englishPracticeSectionRef}
         data-testid="dashboard-english-practice-entry"
-        className={`min-w-0 ${initialEnglishPracticeFocus ? 'order-1' : 'order-3'}`}
+        className="order-3 min-w-0"
         style={navigation.mobileAnchorStyle}
       >
         <DashboardPracticeDock
-          activeLane={activePracticeLane}
-          isFocusedRoute={initialEnglishPracticeFocus}
-          onSelectLane={setActivePracticeLane}
+          onSelectLane={onOpenPracticeLane}
         />
-        {activePracticeLane && (
-          <div className="mt-3">
-            <EnglishPracticeHub
-              user={user}
-              variant="embedded"
-              embeddedMode="drill"
-              initialLane={activePracticeLane}
-              onActiveLaneChange={(lane) => {
-                if (lane !== 'overview') setActivePracticeLane(lane);
-              }}
-              onClose={handlePracticeClose}
-              closeLabel={initialEnglishPracticeFocus ? 'ホームに戻る' : '閉じる'}
-              onStartVocabulary={() => onStartTask(todayTaskIntent)}
-            />
-          </div>
-        )}
       </div>
 
       <StudentDashboardSections
