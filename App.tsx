@@ -147,6 +147,7 @@ const App: React.FC = () => {
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
             initialEnglishPracticeFocus={currentView === 'englishPractice'}
+            onExitEnglishPracticeFocus={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
           />
         );
       case 'study':

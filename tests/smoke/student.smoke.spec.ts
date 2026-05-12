@@ -24,8 +24,16 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await expect(page.getByText('今日やることは 1 つだけ')).toBeVisible();
-  await expect(page.getByTestId('dashboard-english-practice-summary')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+
+  await page.getByTestId('dashboard-practice-lane-translation').click();
+  await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await expect(page.getByText('受験答案としての和訳')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-translation')).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '閉じる' }).click();
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/dashboard$/);
 });
 
 test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {
@@ -54,7 +62,7 @@ test('study routes survive reload and finish back on the dashboard path', async 
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 });
 
-test('student can open the english practice workspace from a direct route', async ({ page }) => {
+test('student can open the integrated practice section from a direct route', async ({ page }) => {
   await page.goto('/');
 
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
@@ -64,6 +72,27 @@ test('student can open the english practice workspace from a direct route', asyn
   await page.goto('/english-practice');
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
-  await expect(page.getByTestId('english-practice-lane-overview')).toBeVisible();
+  await expect(page.getByTestId('english-practice-lane-grammar')).toBeVisible();
+  await expect(page.getByTestId('english-practice-lane-overview')).toHaveCount(0);
+  await expect(page.getByText('参考書型の文法演習')).toBeVisible();
+
+  await page.getByTestId('dashboard-practice-lane-translation').click();
+  await expect(page.getByText('受験答案としての和訳')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-translation')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByTestId('english-practice-lane-reading').click();
+  await expect(page.getByText('根拠を探す長文読解')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-reading')).toHaveAttribute('aria-pressed', 'true');
+
+  await page.getByRole('button', { name: 'ホームに戻る' }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+
+  await page.goto('/english-practice');
+  await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await page.getByRole('button', { name: 'ホーム', exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
 });

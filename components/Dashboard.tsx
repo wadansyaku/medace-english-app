@@ -1,7 +1,9 @@
 import React from 'react';
 import {
   ArrowRight,
+  Brain,
   Flag,
+  LibraryBig,
   Languages,
   Loader2,
   NotebookPen,
@@ -41,7 +43,7 @@ import {
 } from '../shared/learningTask';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
-import EnglishPracticeHub from './practice/EnglishPracticeHub';
+import EnglishPracticeHub, { type PracticeLane } from './practice/EnglishPracticeHub';
 
 interface DashboardProps {
   user: UserProfile;
@@ -50,6 +52,7 @@ interface DashboardProps {
   onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
   initialEnglishPracticeFocus?: boolean;
+  onExitEnglishPracticeFocus?: () => void;
 }
 
 const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> = {
@@ -152,54 +155,107 @@ const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
   );
 };
 
-interface EnglishPracticeInlineSummaryProps {
-  onOpenPractice: () => void;
+type FocusedPracticeLane = Exclude<PracticeLane, 'overview'>;
+
+interface DashboardPracticeDockProps {
+  activeLane: FocusedPracticeLane | null;
+  isFocusedRoute: boolean;
+  onSelectLane: (lane: FocusedPracticeLane) => void;
 }
 
-const ENGLISH_PRACTICE_SUMMARY_ITEMS = [
-  { label: '単語', body: '今日の単語帳' },
-  { label: '文法', body: '入試頻出項目' },
-  { label: '和訳', body: '文構造の確認' },
-  { label: '長文', body: '読解演習' },
+const PRACTICE_DOCK_OPTIONS: Array<{
+  id: FocusedPracticeLane;
+  label: string;
+  title: string;
+  body: string;
+  time: string;
+  icon: LucideIcon;
+}> = [
+  {
+    id: 'grammar',
+    label: '文法',
+    title: '文法を5問',
+    body: '範囲を絞って、文構造の弱点だけを確認します。',
+    time: '3分',
+    icon: Brain,
+  },
+  {
+    id: 'translation',
+    label: '和訳',
+    title: '和訳を1セット',
+    body: '英文全体を日本語に直し、答案としての精度を見ます。',
+    time: '5分',
+    icon: Languages,
+  },
+  {
+    id: 'reading',
+    label: '長文',
+    title: '短い長文を読む',
+    body: '根拠文を探しながら、内容一致と要旨を確認します。',
+    time: '8分',
+    icon: LibraryBig,
+  },
 ];
 
-const EnglishPracticeInlineSummary: React.FC<EnglishPracticeInlineSummaryProps> = ({ onOpenPractice }) => (
+const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
+  activeLane,
+  isFocusedRoute,
+  onSelectLane,
+}) => (
   <section
-    data-testid="dashboard-english-practice-summary"
-    className="rounded-2xl border border-medace-100 bg-white p-4 shadow-sm sm:p-5"
+    data-testid="dashboard-practice-dock"
+    className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
   >
-    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex min-w-0 gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-medace-100 bg-medace-50 text-medace-700">
-          <Languages className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs font-black text-medace-600">ホーム統合</p>
-          <h2 className="text-xl font-black text-slate-950">英語演習</h2>
-          <p className="mt-1 max-w-2xl text-sm font-medium leading-relaxed text-slate-600">
-            単語・文法・和訳・長文を、今日の学習状況と同じ画面で始められます。
-          </p>
-        </div>
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <p className="text-xs font-black text-medace-600">練習</p>
+        <h2 className="text-xl font-black text-slate-950">今日の練習</h2>
+        <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
+          単語は「今日の学習」で進め、文法・和訳・長文は必要なものだけここに展開します。
+        </p>
       </div>
-
-      <button
-        type="button"
-        data-testid="dashboard-open-english-practice"
-        onClick={onOpenPractice}
-        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition-colors hover:bg-medace-700 lg:w-auto"
-      >
-        <span>演習を開く</span>
-        <ArrowRight className="h-4 w-4" />
-      </button>
+      {isFocusedRoute && (
+        <span className="inline-flex w-fit rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
+          直接リンクから練習を表示中
+        </span>
+      )}
     </div>
 
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-      {ENGLISH_PRACTICE_SUMMARY_ITEMS.map((item) => (
-        <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <div className="text-sm font-black text-slate-950">{item.label}</div>
-          <div className="mt-1 text-xs font-bold text-slate-500">{item.body}</div>
-        </div>
-      ))}
+    <div className="mt-4 grid gap-2 lg:grid-cols-3">
+      {PRACTICE_DOCK_OPTIONS.map((item) => {
+        const Icon = item.icon;
+        const selected = activeLane === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            data-testid={`dashboard-practice-lane-${item.id}`}
+            aria-pressed={selected}
+            onClick={() => onSelectLane(item.id)}
+            className={`min-h-[104px] rounded-lg border p-3 text-left transition-colors ${
+              selected
+                ? 'border-medace-600 bg-medace-50 text-medace-950 shadow-sm'
+                : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-medace-200 hover:bg-white'
+            }`}
+          >
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${
+                  selected ? 'border-medace-200 bg-white text-medace-700' : 'border-slate-200 bg-white text-slate-500'
+                }`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="text-sm font-black">{item.label}</span>
+              </div>
+              <span className="shrink-0 rounded-full border border-white bg-white px-2 py-1 text-[11px] font-black text-slate-500">
+                {item.time}
+              </span>
+            </div>
+            <div className="mt-2 text-base font-black">{item.title}</div>
+            <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">{item.body}</p>
+          </button>
+        );
+      })}
     </div>
   </section>
 );
@@ -211,6 +267,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onStartTask,
   onUserUpdate,
   initialEnglishPracticeFocus = false,
+  onExitEnglishPracticeFocus,
 }) => {
   const {
     snapshot,
@@ -222,7 +279,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = useDashboardData(user.uid);
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
-  const [englishPracticeExpanded, setEnglishPracticeExpanded] = React.useState(initialEnglishPracticeFocus);
+  const [activePracticeLane, setActivePracticeLane] = React.useState<FocusedPracticeLane | null>(
+    () => (initialEnglishPracticeFocus ? 'grammar' : null),
+  );
+  const wasFocusedPracticeRouteRef = React.useRef(initialEnglishPracticeFocus);
   const viewModel = useStudentDashboardViewModel({ user, snapshot });
   const controller = useStudentDashboardController({
     user,
@@ -246,8 +306,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   });
 
   React.useEffect(() => {
-    setEnglishPracticeExpanded(initialEnglishPracticeFocus);
+    if (initialEnglishPracticeFocus) {
+      setActivePracticeLane((current) => current ?? 'grammar');
+    } else if (wasFocusedPracticeRouteRef.current) {
+      setActivePracticeLane(null);
+    }
+    wasFocusedPracticeRouteRef.current = initialEnglishPracticeFocus;
   }, [initialEnglishPracticeFocus]);
+
+  const handlePracticeClose = React.useCallback(() => {
+    setActivePracticeLane(null);
+    if (initialEnglishPracticeFocus) {
+      onExitEnglishPracticeFocus?.();
+    }
+  }, [initialEnglishPracticeFocus, onExitEnglishPracticeFocus]);
 
   const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
   const weaknessTaskIntent = React.useMemo(
@@ -411,14 +483,26 @@ const Dashboard: React.FC<DashboardProps> = ({
         className={`min-w-0 ${initialEnglishPracticeFocus ? 'order-1' : 'order-3'}`}
         style={navigation.mobileAnchorStyle}
       >
-        {englishPracticeExpanded ? (
-          <EnglishPracticeHub
-            user={user}
-            variant="embedded"
-            onStartVocabulary={() => onStartTask(todayTaskIntent)}
-          />
-        ) : (
-          <EnglishPracticeInlineSummary onOpenPractice={() => setEnglishPracticeExpanded(true)} />
+        <DashboardPracticeDock
+          activeLane={activePracticeLane}
+          isFocusedRoute={initialEnglishPracticeFocus}
+          onSelectLane={setActivePracticeLane}
+        />
+        {activePracticeLane && (
+          <div className="mt-3">
+            <EnglishPracticeHub
+              user={user}
+              variant="embedded"
+              embeddedMode="drill"
+              initialLane={activePracticeLane}
+              onActiveLaneChange={(lane) => {
+                if (lane !== 'overview') setActivePracticeLane(lane);
+              }}
+              onClose={handlePracticeClose}
+              closeLabel={initialEnglishPracticeFocus ? 'ホームに戻る' : '閉じる'}
+              onStartVocabulary={() => onStartTask(todayTaskIntent)}
+            />
+          </div>
         )}
       </div>
 
