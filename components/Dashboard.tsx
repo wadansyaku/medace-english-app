@@ -2,6 +2,7 @@ import React from 'react';
 import {
   ArrowRight,
   Flag,
+  Languages,
   Loader2,
   NotebookPen,
   Play,
@@ -151,6 +152,58 @@ const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
   );
 };
 
+interface EnglishPracticeInlineSummaryProps {
+  onOpenPractice: () => void;
+}
+
+const ENGLISH_PRACTICE_SUMMARY_ITEMS = [
+  { label: '単語', body: '今日の単語帳' },
+  { label: '文法', body: '入試頻出項目' },
+  { label: '和訳', body: '文構造の確認' },
+  { label: '長文', body: '読解演習' },
+];
+
+const EnglishPracticeInlineSummary: React.FC<EnglishPracticeInlineSummaryProps> = ({ onOpenPractice }) => (
+  <section
+    data-testid="dashboard-english-practice-summary"
+    className="rounded-2xl border border-medace-100 bg-white p-4 shadow-sm sm:p-5"
+  >
+    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex min-w-0 gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-medace-100 bg-medace-50 text-medace-700">
+          <Languages className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-black text-medace-600">ホーム統合</p>
+          <h2 className="text-xl font-black text-slate-950">英語演習</h2>
+          <p className="mt-1 max-w-2xl text-sm font-medium leading-relaxed text-slate-600">
+            単語・文法・和訳・長文を、今日の学習状況と同じ画面で始められます。
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        data-testid="dashboard-open-english-practice"
+        onClick={onOpenPractice}
+        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition-colors hover:bg-medace-700 lg:w-auto"
+      >
+        <span>演習を開く</span>
+        <ArrowRight className="h-4 w-4" />
+      </button>
+    </div>
+
+    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {ENGLISH_PRACTICE_SUMMARY_ITEMS.map((item) => (
+        <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div className="text-sm font-black text-slate-950">{item.label}</div>
+          <div className="mt-1 text-xs font-bold text-slate-500">{item.body}</div>
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({
   user,
   announcementFeed,
@@ -169,6 +222,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = useDashboardData(user.uid);
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
+  const [englishPracticeExpanded, setEnglishPracticeExpanded] = React.useState(initialEnglishPracticeFocus);
   const viewModel = useStudentDashboardViewModel({ user, snapshot });
   const controller = useStudentDashboardController({
     user,
@@ -190,6 +244,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     canShowWritingSection: viewModel.canShowWritingSection,
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
+
+  React.useEffect(() => {
+    setEnglishPracticeExpanded(initialEnglishPracticeFocus);
+  }, [initialEnglishPracticeFocus]);
 
   const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
   const weaknessTaskIntent = React.useMemo(
@@ -353,11 +411,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         className={`min-w-0 ${initialEnglishPracticeFocus ? 'order-1' : 'order-3'}`}
         style={navigation.mobileAnchorStyle}
       >
-        <EnglishPracticeHub
-          user={user}
-          variant="embedded"
-          onStartVocabulary={() => onStartTask(todayTaskIntent)}
-        />
+        {englishPracticeExpanded ? (
+          <EnglishPracticeHub
+            user={user}
+            variant="embedded"
+            onStartVocabulary={() => onStartTask(todayTaskIntent)}
+          />
+        ) : (
+          <EnglishPracticeInlineSummary onOpenPractice={() => setEnglishPracticeExpanded(true)} />
+        )}
       </div>
 
       <StudentDashboardSections

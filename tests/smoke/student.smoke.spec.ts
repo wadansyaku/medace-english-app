@@ -24,6 +24,8 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await expect(page.getByText('今日やることは 1 つだけ')).toBeVisible();
+  await expect(page.getByTestId('dashboard-english-practice-summary')).toBeVisible();
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
 });
 
 test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {
