@@ -98,4 +98,26 @@ describe('EnglishPracticeHub', () => {
     expect(rendered).not.toContain('Steady Study');
     expect(rendered).not.toContain('今日の英語演習');
   });
+
+  it('can render as a focused dashboard drill without another practice home', () => {
+    const rendered = renderToStaticMarkup(
+      <EnglishPracticeHub
+        user={createUser()}
+        variant="embedded"
+        embeddedMode="drill"
+        initialLane="grammar"
+        closeLabel="ホームに戻る"
+        onClose={() => undefined}
+        onStartVocabulary={() => undefined}
+      />,
+    );
+
+    expect(rendered).toContain('今日の練習');
+    expect(rendered).toContain('参考書型の文法演習');
+    expect(rendered).toContain('ホームに戻る');
+    expect(rendered).toContain('english-practice-lane-grammar');
+    expect(rendered).not.toContain('ホーム統合');
+    expect(rendered).not.toContain('英語演習のおすすめ');
+    expect(rendered).not.toContain('english-practice-lane-overview');
+  });
 });

@@ -73,7 +73,7 @@ import {
   type ReadingPracticeSessionSummary,
 } from '../../utils/readingPractice';
 
-type PracticeLane = 'overview' | 'grammar' | 'translation' | 'reading';
+export type PracticeLane = 'overview' | 'grammar' | 'translation' | 'reading';
 type GrammarMode = 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER';
 type TranslationMode = 'input' | 'order';
 type ScopeViewFilter = 'recommended' | 'weak' | 'all';
@@ -95,6 +95,11 @@ interface EnglishPracticeHubProps {
   onBack?: () => void;
   onStartVocabulary: () => void;
   variant?: 'standalone' | 'embedded';
+  embeddedMode?: 'full' | 'drill';
+  initialLane?: PracticeLane;
+  onActiveLaneChange?: (lane: PracticeLane) => void;
+  onClose?: () => void;
+  closeLabel?: string;
 }
 
 const LEVEL_LABELS: Record<EnglishLevel, string> = {
@@ -330,12 +335,20 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   onBack,
   onStartVocabulary,
   variant = 'standalone',
+  embeddedMode = 'full',
+  initialLane,
+  onActiveLaneChange,
+  onClose,
+  closeLabel = '閉じる',
 }) => {
   const userLevel = user.englishLevel ?? EnglishLevel.A2;
   const isCompactPracticeViewport = useIsMobileViewport('(max-width: 1023px)');
   const isEmbedded = variant === 'embedded';
+  const isEmbeddedDrill = isEmbedded && embeddedMode === 'drill';
   const handleBack = onBack ?? (() => undefined);
-  const [activeLane, setActiveLane] = useState<PracticeLane>('overview');
+  const [activeLane, setActiveLane] = useState<PracticeLane>(
+    () => initialLane ?? (isEmbeddedDrill ? 'grammar' : 'overview'),
+  );
   const [sessionWords, setSessionWords] = useState<WordData[]>([]);
   const [wordsLoading, setWordsLoading] = useState(true);
   const [wordLoadFailed, setWordLoadFailed] = useState(false);
@@ -362,6 +375,21 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
   const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
+
+  const activateLane = React.useCallback((lane: PracticeLane) => {
+    setActiveLane(lane);
+    onActiveLaneChange?.(lane);
+  }, [onActiveLaneChange]);
+
+  React.useEffect(() => {
+    if (initialLane) {
+      setActiveLane(initialLane);
+      return;
+    }
+    if (isEmbeddedDrill) {
+      setActiveLane('grammar');
+    }
+  }, [initialLane, isEmbeddedDrill]);
 
   const grammarScopes = useMemo(
     () => getGrammarScopesForPracticeSelection({ mode: grammarMode }),
@@ -805,7 +833,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         { label: '演習数', value: formatCountValue(grammarLaneSummary.total, 'セット') },
       ],
       actionLabel: '3分で1セット',
-      action: () => setActiveLane('grammar'),
+      action: () => activateLane('grammar'),
     },
     {
       id: 'translation',
@@ -819,7 +847,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         { label: '記述精度', value: translationLaneSummary.total > 0 ? translationProgress >= 70 ? 'A' : translationProgress >= 55 ? 'B' : 'C' : '未採点' },
       ],
       actionLabel: '3分で1セット',
-      action: () => setActiveLane('translation'),
+      action: () => activateLane('translation'),
     },
     {
       id: 'reading',
@@ -833,7 +861,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         { label: '演習数', value: formatCountValue(readingLaneSummary.total, 'セット') },
       ],
       actionLabel: '3分で1セット',
-      action: () => setActiveLane('reading'),
+      action: () => activateLane('reading'),
     },
   ];
 
@@ -1038,7 +1066,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
             <button
               type="button"
-              onClick={() => setActiveLane('grammar')}
+              onClick={() => activateLane('grammar')}
               className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-medace-600 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-medace-700"
             >
               この条件で始める
@@ -1077,7 +1105,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
           <button
             type="button"
-            onClick={() => setActiveLane('reading')}
+            onClick={() => activateLane('reading')}
             className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-medace-500 bg-white px-4 py-2.5 text-sm font-black text-medace-700 transition-colors hover:bg-orange-50"
           >
             この長文に挑戦
@@ -1671,16 +1699,20 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     }
   };
 
-  const renderLaneTabs = () => (
+  const renderLaneTabs = (options?: { includeOverview?: boolean }) => {
+    const visibleLanes = options?.includeOverview === false
+      ? laneConfig.filter((lane) => lane.id !== 'overview')
+      : laneConfig;
+    return (
     <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-      {laneConfig.map((lane) => {
+      {visibleLanes.map((lane) => {
         const Icon = lane.icon;
         return (
           <button
             key={lane.id}
             type="button"
             data-testid={`english-practice-lane-${lane.id}`}
-            onClick={() => setActiveLane(lane.id)}
+            onClick={() => activateLane(lane.id)}
             className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-black transition-colors ${
               activeLane === lane.id
                 ? 'border-medace-600 bg-medace-600 text-white'
@@ -1693,9 +1725,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         );
       })}
     </div>
-  );
+    );
+  };
 
-  const renderPracticeMeta = () => (
+  const renderPracticeMeta = (options?: { showOverviewBack?: boolean }) => (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         {LEVEL_LABELS[userLevel]}
@@ -1706,10 +1739,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
       </span>
-      {activeLane !== 'overview' && (
+      {options?.showOverviewBack !== false && activeLane !== 'overview' && (
         <button
           type="button"
-          onClick={() => setActiveLane('overview')}
+          onClick={() => activateLane('overview')}
           className="ml-auto inline-flex min-h-9 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition-colors hover:bg-orange-50 hover:text-medace-700"
         >
           <Home className="h-4 w-4" />
@@ -1741,6 +1774,50 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       )}
     </>
   );
+
+  if (isEmbeddedDrill) {
+    const activeLaneConfig = laneConfig.find((lane) => lane.id === activeLane) ?? laneConfig[1];
+    const ActiveIcon = activeLaneConfig.icon;
+    return (
+      <div
+        data-testid="english-practice-hub"
+        className="overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-900 shadow-sm"
+      >
+        <div className="border-b border-slate-200 bg-white px-4 py-4 md:px-5">
+          <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
+                <ActiveIcon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-medace-600">今日の練習</p>
+                <h2 className="text-lg font-black text-slate-950 md:text-xl">{activeLaneConfig.title}</h2>
+                <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
+                  ホームの流れを保ったまま、必要な練習だけをここで進めます。
+                </p>
+              </div>
+            </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                {closeLabel}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-4 md:px-5">
+          {renderLaneTabs({ includeOverview: false })}
+          {renderPracticeMeta({ showOverviewBack: false })}
+          {renderPracticeNotices()}
+          {renderActiveLane()}
+        </div>
+      </div>
+    );
+  }
 
   if (isEmbedded) {
     return (
@@ -1815,7 +1892,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <div className="flex shrink-0 items-center gap-2 md:gap-4">
             <button
               type="button"
-              onClick={() => setActiveLane('overview')}
+              onClick={() => activateLane('overview')}
               className="hidden min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-black text-white transition-colors hover:bg-white/10 md:inline-flex"
             >
               <BarChart3 className="h-5 w-5" />
@@ -1867,7 +1944,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                           if (item.id === 'random') {
                             setRandomScopeMode(true);
                           }
-                          if (item.lane) setActiveLane(item.lane);
+                          if (item.lane) activateLane(item.lane);
                         }}
                         className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-base font-black transition-colors ${
                           active

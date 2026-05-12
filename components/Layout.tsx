@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BookOpen, ChevronDown, ChevronUp, Languages, LogOut, Zap } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, LogOut, Zap } from 'lucide-react';
 import { UserRole, UserProfile, UserStudyMode, type WorkspaceSectionDefinition } from '../types';
 import { BRAND } from '../config/brand';
 import getClientRuntimeFlags from '../config/runtime';
@@ -267,24 +267,14 @@ const Layout: React.FC<LayoutProps> = ({
               <nav className="hidden md:flex gap-1">
                 <button 
                   onClick={() => onChangeView(homeView)}
-                  className={`px-4 py-3 rounded-full text-[0.95rem] font-bold transition-colors ${currentView === homeView ? 'bg-medace-700 text-white' : 'text-medace-900/75 hover:text-medace-600 hover:bg-medace-50'}`}
+                  className={`px-4 py-3 rounded-full text-[0.95rem] font-bold transition-colors ${
+                    currentView === homeView || (user.role === UserRole.STUDENT && currentView === 'englishPractice')
+                      ? 'bg-medace-700 text-white'
+                      : 'text-medace-900/75 hover:text-medace-600 hover:bg-medace-50'
+                  }`}
                 >
                   {navLabel}
                 </button>
-                {user.role === UserRole.STUDENT && (
-                  <button
-                    type="button"
-                    onClick={() => onChangeView('englishPractice')}
-                    className={`inline-flex items-center gap-2 px-4 py-3 rounded-full text-[0.95rem] font-bold transition-colors ${
-                      currentView === 'englishPractice'
-                        ? 'bg-medace-700 text-white'
-                        : 'text-medace-900/75 hover:text-medace-600 hover:bg-medace-50'
-                    }`}
-                  >
-                    <Languages className="h-4 w-4" />
-                    英語演習
-                  </button>
-                )}
               </nav>
 
               <div className="flex items-center gap-2">
