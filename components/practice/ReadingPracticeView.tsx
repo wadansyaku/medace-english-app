@@ -27,6 +27,7 @@ interface ReadingPracticeViewProps {
   initialPassageId?: string;
   initialQuestionIndex?: number;
   className?: string;
+  showHeader?: boolean;
   onAnswer?: (result: ReadingPracticeAnswerResult) => void;
   onComplete?: (summary: ReadingPracticeSessionSummary) => void;
 }
@@ -108,6 +109,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
   initialPassageId,
   initialQuestionIndex = 0,
   className = '',
+  showHeader = true,
   onAnswer,
   onComplete,
 }) => {
@@ -234,15 +236,23 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
   return (
     <div data-testid="reading-practice-view" className={`space-y-4 pb-24 sm:pb-0 ${className}`}>
       <section className="ui-panel">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-xs font-bold text-slate-400">長文読解</div>
-            <h2 className="mt-1 text-xl font-black text-slate-950">短い英文を読んで根拠まで確認</h2>
+        {showHeader ? (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-slate-400">長文読解</div>
+              <h2 className="mt-1 text-xl font-black text-slate-950">短い英文を読んで根拠まで確認</h2>
+            </div>
+            <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
+              {currentQuestionNumber} / {totalQuestions}
+            </div>
           </div>
-          <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
-            {currentQuestionNumber} / {totalQuestions}
+        ) : (
+          <div className="flex justify-end">
+            <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
+              {currentQuestionNumber} / {totalQuestions}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <div>

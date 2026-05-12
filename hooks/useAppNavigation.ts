@@ -13,11 +13,15 @@ import {
   getTaskRouteBookId,
   parseTaskIntentFromSearch,
 } from '../shared/learningTask';
+import {
+  ENGLISH_PRACTICE_LANE_IDS,
+  type EnglishPracticeRouteLaneId,
+} from '../utils/englishPracticeProgress';
 
 export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
-export type EnglishPracticeRouteLane = 'overview' | 'grammar' | 'translation' | 'reading' | 'writing';
+export type EnglishPracticeRouteLane = EnglishPracticeRouteLaneId;
 
 export interface AppNavigationState {
   currentView: AppRoute;
@@ -61,18 +65,15 @@ const buildHomeState = (view: HomeAppRoute): AppNavigationState => ({
   englishPracticeLane: null,
 });
 
+const ENGLISH_PRACTICE_ROUTE_LANE_IDS = ['overview', ...ENGLISH_PRACTICE_LANE_IDS] as const;
+
+export const isEnglishPracticeRouteLane = (value: string): value is EnglishPracticeRouteLane => (
+  (ENGLISH_PRACTICE_ROUTE_LANE_IDS as readonly string[]).includes(value)
+);
+
 const parseEnglishPracticeRouteLane = (value?: string): EnglishPracticeRouteLane | null => {
   if (!value) return 'overview';
-  if (
-    value === 'overview'
-    || value === 'grammar'
-    || value === 'translation'
-    || value === 'reading'
-    || value === 'writing'
-  ) {
-    return value;
-  }
-  return null;
+  return isEnglishPracticeRouteLane(value) ? value : null;
 };
 
 export const isHomeAppRoute = (view: string): view is HomeAppRoute => (
@@ -135,6 +136,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   if (root === 'english-practice') {
     const lane = parseEnglishPracticeRouteLane(bookId);
     if (!lane) return initialNavigationState;
+    if (lane === 'overview') return buildHomeState('dashboard');
     return {
       currentView: 'englishPractice',
       returnView: 'dashboard',
@@ -182,7 +184,7 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
     case 'englishPractice':
       return state.englishPracticeLane && state.englishPracticeLane !== 'overview'
         ? `/english-practice/${state.englishPracticeLane}`
-        : '/english-practice';
+        : '/dashboard';
     case 'instructor':
       return '/instructor';
     case 'admin':
@@ -231,6 +233,9 @@ const navigationReducer = (
         englishPracticeLane: null,
       };
     case 'open-english-practice':
+      if (!action.lane || action.lane === 'overview') {
+        return buildHomeState('dashboard');
+      }
       return {
         currentView: 'englishPractice',
         returnView: isHomeAppRoute(state.currentView) ? state.currentView : state.returnView,
