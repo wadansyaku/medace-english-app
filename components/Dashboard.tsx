@@ -2,9 +2,6 @@ import React from 'react';
 import {
   ArrowRight,
   Flag,
-  GraduationCap,
-  Languages,
-  LibraryBig,
   Loader2,
   NotebookPen,
   Play,
@@ -43,14 +40,15 @@ import {
 } from '../shared/learningTask';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
+import EnglishPracticeHub from './practice/EnglishPracticeHub';
 
 interface DashboardProps {
   user: UserProfile;
   announcementFeed: AnnouncementFeedController;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onStartTask: (task: LearningTaskIntent) => void;
-  onOpenEnglishPractice: () => void;
   onUserUpdate: (user: UserProfile) => void;
+  initialEnglishPracticeFocus?: boolean;
 }
 
 const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> = {
@@ -66,57 +64,6 @@ const LEARNING_ROUTE_TONE: Record<StudentDashboardLearningRouteCard['tone'], str
   weakness: 'border-emerald-200 bg-emerald-50 text-emerald-900',
   writing: 'border-violet-200 bg-violet-50 text-violet-900',
 };
-
-interface EnglishPracticeEntryPanelProps {
-  onOpenEnglishPractice: () => void;
-}
-
-const EnglishPracticeEntryPanel: React.FC<EnglishPracticeEntryPanelProps> = ({
-  onOpenEnglishPractice,
-}) => (
-  <section
-    data-testid="dashboard-english-practice-entry"
-    className="order-3 overflow-hidden rounded-lg border border-orange-200 bg-white shadow-sm"
-  >
-    <div className="grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
-      <div className="bg-medace-600 px-5 py-5 text-white md:px-6">
-        <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-black text-white/72">
-          英語演習
-        </div>
-        <h2 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">今日やることは1つだけ</h2>
-        <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-white/78">
-          単語テストとは別に、文法・和訳・長文から今必要な演習を選んで始めます。
-        </p>
-        <button
-          type="button"
-          data-testid="dashboard-open-english-practice"
-          onClick={onOpenEnglishPractice}
-          className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-black text-medace-900 transition-colors hover:bg-orange-50"
-        >
-          演習を始める <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="grid gap-3 px-5 py-5 md:grid-cols-3 md:px-6">
-        {[
-          { icon: GraduationCap, title: '文法演習', body: '参考書型の範囲を複数選択し、ランダムにも固定にもできます。' },
-          { icon: Languages, title: '和訳', body: '文法範囲を選ばず、英文全体を読む力を受験答案として鍛えます。' },
-          { icon: LibraryBig, title: '長文読解', body: '短い英文から、内容一致・要旨・根拠探しまで進めます。' },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <div key={item.title} className="rounded-lg border border-orange-100 bg-orange-50/55 px-4 py-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-medace-700 shadow-sm">
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="mt-3 text-sm font-black text-slate-950">{item.title}</div>
-              <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.body}</p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  </section>
-);
 
 interface StudentLearningLaunchPanelProps {
   cards: StudentDashboardLearningRouteCard[];
@@ -209,8 +156,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   announcementFeed,
   onSelectBook,
   onStartTask,
-  onOpenEnglishPractice,
   onUserUpdate,
+  initialEnglishPracticeFocus = false,
 }) => {
   const {
     snapshot,
@@ -400,7 +347,18 @@ const Dashboard: React.FC<DashboardProps> = ({
         }}
       />
 
-      <EnglishPracticeEntryPanel onOpenEnglishPractice={onOpenEnglishPractice} />
+      <div
+        ref={navigation.englishPracticeSectionRef}
+        data-testid="dashboard-english-practice-entry"
+        className={`min-w-0 ${initialEnglishPracticeFocus ? 'order-1' : 'order-3'}`}
+        style={navigation.mobileAnchorStyle}
+      >
+        <EnglishPracticeHub
+          user={user}
+          variant="embedded"
+          onStartVocabulary={() => onStartTask(todayTaskIntent)}
+        />
+      </div>
 
       <StudentDashboardSections
         user={user}

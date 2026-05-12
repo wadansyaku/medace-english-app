@@ -63,7 +63,6 @@ const Layout: React.FC<LayoutProps> = ({
   const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
   const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
   const isPreviewDeployment = runtimeFlags.deployment.isPagesPreviewHost;
-  const usePracticeWorkspaceShell = Boolean(user?.role === UserRole.STUDENT && currentView === 'englishPractice');
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -150,7 +149,6 @@ const Layout: React.FC<LayoutProps> = ({
       )}
 
       {/* Header */}
-      {!usePracticeWorkspaceShell && (
       <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
@@ -334,18 +332,13 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
       </header>
-      )}
 
       {/* Main Content */}
-      <main className={usePracticeWorkspaceShell
-        ? 'flex-grow'
-        : `flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`
-      }>
+      <main className={`flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`}>
         {children}
       </main>
 
       {/* Footer */}
-      {!usePracticeWorkspaceShell && (
       <footer className={`bg-white/85 backdrop-blur border-t border-medace-100 mt-auto ${
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
@@ -359,7 +352,6 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
       </footer>
-      )}
     </div>
   );
 };

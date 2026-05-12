@@ -60,6 +60,8 @@ test('student can open the english practice workspace from a direct route', asyn
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 
   await page.goto('/english-practice');
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+  await expect(page.getByTestId('dashboard-english-practice-entry')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByTestId('english-practice-lane-overview')).toBeVisible();
 });

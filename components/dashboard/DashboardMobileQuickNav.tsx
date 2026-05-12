@@ -2,13 +2,14 @@ import React from 'react';
 import {
   BookOpenText,
   Flag,
+  Languages,
   MessageSquareText,
   NotebookPen,
   Target,
   type LucideIcon,
 } from 'lucide-react';
 
-type DashboardMobileQuickNavKind = 'today' | 'weakness' | 'mission' | 'writing' | 'coach' | 'plan' | 'library';
+type DashboardMobileQuickNavKind = 'today' | 'englishPractice' | 'weakness' | 'mission' | 'writing' | 'coach' | 'plan' | 'library';
 
 export interface DashboardMobileQuickNavItem {
   id: string;
@@ -20,6 +21,7 @@ export interface DashboardMobileQuickNavItem {
 
 const ICON_BY_KIND: Record<DashboardMobileQuickNavKind, LucideIcon> = {
   today: Target,
+  englishPractice: Languages,
   weakness: Target,
   mission: Flag,
   writing: NotebookPen,
