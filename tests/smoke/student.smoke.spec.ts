@@ -36,6 +36,14 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByRole('heading', { name: '和訳トレーニング' })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
+
+  await page.getByTestId('dashboard-practice-lane-translation').click();
+  await expect(page).toHaveURL(/\/english-practice\/translation$/);
+  await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await page.getByTestId('english-practice-close').click();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page).toHaveURL(/\/dashboard$/);

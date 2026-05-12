@@ -149,6 +149,7 @@ const App: React.FC = () => {
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
+            activePracticeLane={null}
             onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
           />
         );
