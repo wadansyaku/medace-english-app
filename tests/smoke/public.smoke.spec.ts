@@ -73,6 +73,8 @@ test('public role pages always emit a noindex robots tag and service admin actio
 
   await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
+  const previewSection = page.getByTestId('public-role-preview-service-admin');
+  const previewTopBeforeClick = await previewSection.evaluate((element) => element.getBoundingClientRect().top);
   await page.getByTestId('demo-login-admin').click();
 
   const passwordGate = page.getByTestId('admin-demo-password');
@@ -81,7 +83,11 @@ test('public role pages always emit a noindex robots tag and service admin actio
     return;
   }
 
-  await expect(page.getByRole('heading', { name: '実権限を開かずに画面構成だけ確認できます' })).toBeVisible();
+  expect(previewTopBeforeClick).toBeGreaterThan(160);
+  await expect.poll(
+    async () => previewSection.evaluate((element) => Math.round(element.getBoundingClientRect().top)),
+    { timeout: 3000 },
+  ).toBeLessThan(160);
 });
 
 test('preview deployment surfaces a visible preview banner and noindex marker', async ({ page }) => {
