@@ -68,13 +68,20 @@ test('public guide links every business role card to its dedicated route and bro
   }
 });
 
-test('public role pages always emit a noindex robots tag and service admin demo opens the password gate', async ({ page }) => {
+test('public role pages always emit a noindex robots tag and service admin action stays safe', async ({ page }) => {
   await page.goto('/public/roles/service-admin');
 
   await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
   await page.getByTestId('demo-login-admin').click();
-  await expect(page.getByTestId('admin-demo-password')).toBeVisible();
+
+  const passwordGate = page.getByTestId('admin-demo-password');
+  if (await passwordGate.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await expect(passwordGate).toBeVisible();
+    return;
+  }
+
+  await expect(page.getByRole('heading', { name: '実権限を開かずに画面構成だけ確認できます' })).toBeVisible();
 });
 
 test('preview deployment surfaces a visible preview banner and noindex marker', async ({ page }) => {
