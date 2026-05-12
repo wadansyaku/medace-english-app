@@ -45,11 +45,27 @@ describe('app navigation paths', () => {
     });
 
     expect(parseNavigationPath('/english-practice')).toEqual({
+      currentView: 'dashboard',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: null,
+    });
+
+    expect(parseNavigationPath('/english-practice/overview')).toEqual({
+      currentView: 'dashboard',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: null,
+    });
+
+    expect(parseNavigationPath('/english-practice/grammar')).toEqual({
       currentView: 'englishPractice',
       returnView: 'dashboard',
       selectedTask: null,
       publicRole: null,
-      englishPracticeLane: 'overview',
+      englishPracticeLane: 'grammar',
     });
 
     expect(parseNavigationPath('/english-practice/writing')).toEqual({
@@ -93,7 +109,7 @@ describe('app navigation paths', () => {
       selectedTask: null,
       publicRole: null,
       englishPracticeLane: 'overview',
-    })).toBe('/english-practice');
+    })).toBe('/dashboard');
   });
 
   it('keeps the english practice workspace student-only even for direct URLs', () => {

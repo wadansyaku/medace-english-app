@@ -2,31 +2,19 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
-  BarChart3,
   Brain,
-  Bell,
-  BookMarked,
-  BookOpen,
-  Bookmark,
-  Clock3,
   CheckCircle,
   Eye,
   EyeOff,
-  Flame,
-  Home,
   Languages,
   LibraryBig,
-  ListChecks,
   Loader2,
   NotebookPen,
   PencilLine,
   RefreshCw,
-  Settings,
   Shuffle,
-  SlidersHorizontal,
   Sparkles,
   Target,
-  Trophy,
   XCircle,
 } from 'lucide-react';
 
@@ -53,11 +41,9 @@ import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import { buildDeterministicTranslationFeedback } from '../../utils/worksheet';
 import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
 import { learningService } from '../../services/learning';
-import useIsMobileViewport from '../../hooks/useIsMobileViewport';
 import {
   clearEnglishPracticeProgress,
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-  getEnglishPracticeLaneLabel,
   loadEnglishPracticeProgress,
   recordEnglishPracticeAttempt,
   saveEnglishPracticeProgress,
@@ -88,17 +74,6 @@ type GrammarMode = 'GRAMMAR_CLOZE' | 'EN_WORD_ORDER';
 type TranslationMode = 'input' | 'order';
 type ScopeViewFilter = 'recommended' | 'weak' | 'all';
 type ScopeCategoryFilter = GrammarCurriculumCategoryId | 'all';
-type PracticeNavItemId =
-  | PracticeLane
-  | 'vocabulary'
-  | 'random'
-  | 'records'
-  | 'weakness'
-  | 'review'
-  | 'bookmark'
-  | 'level'
-  | 'notifications'
-  | 'guide';
 
 interface EnglishPracticeHubProps {
   user: UserProfile;
@@ -170,8 +145,8 @@ const laneConfig: Array<{
   {
     id: 'overview',
     label: '全体',
-    title: '英語演習ホーム',
-    description: '単語・文法・和訳・長文を分けて選ぶ',
+    title: '英語演習',
+    description: 'ホームから選んだ演習を集中して進める',
     icon: Sparkles,
   },
   {
@@ -197,51 +172,10 @@ const laneConfig: Array<{
   },
   {
     id: 'writing',
-    label: '英作文',
+    label: '英検英作文',
     title: '英検ライティング練習',
     description: 'Eメール・意見論述・要約を級別テーマで練習',
     icon: NotebookPen,
-  },
-];
-
-const practiceNavGroups: Array<{
-  label: string;
-  items: Array<{
-    id: PracticeNavItemId;
-    label: string;
-    icon: React.ElementType;
-    lane?: PracticeLane;
-    enabled?: boolean;
-  }>;
-}> = [
-  {
-    label: '英語演習',
-    items: [
-      { id: 'overview', label: 'ホーム', icon: Home, lane: 'overview' },
-      { id: 'vocabulary', label: '単語', icon: Sparkles },
-      { id: 'grammar', label: '文法演習', icon: BookOpen, lane: 'grammar' },
-      { id: 'translation', label: '和訳トレーニング', icon: PencilLine, lane: 'translation' },
-      { id: 'reading', label: '長文読解', icon: BookMarked, lane: 'reading' },
-      { id: 'writing', label: '英作文', icon: NotebookPen, lane: 'writing' },
-      { id: 'random', label: 'ランダム演習', icon: Shuffle, lane: 'grammar' },
-    ],
-  },
-  {
-    label: 'マイデータ',
-    items: [
-      { id: 'records', label: '学習記録', icon: BarChart3, enabled: false },
-      { id: 'weakness', label: '苦手分析', icon: Target, enabled: false },
-      { id: 'review', label: '復習リスト', icon: ListChecks, enabled: false },
-      { id: 'bookmark', label: 'ブックマーク', icon: Bookmark, enabled: false },
-    ],
-  },
-  {
-    label: '設定・その他',
-    items: [
-      { id: 'level', label: 'レベル設定', icon: Settings, enabled: false },
-      { id: 'notifications', label: '通知設定', icon: Bell, enabled: false },
-      { id: 'guide', label: '使い方ガイド', icon: Sparkles, enabled: false },
-    ],
   },
 ];
 
@@ -261,36 +195,6 @@ const formatPercent = (value: number): number => {
   if (Number.isFinite(value) && value > 0) return Math.max(0, Math.min(100, Math.round(value)));
   return 0;
 };
-
-const getScoreLabel = (accuracy: number): string => {
-  if (accuracy >= 90) return 'A+';
-  if (accuracy >= 80) return 'A';
-  if (accuracy >= 70) return 'B+';
-  if (accuracy >= 60) return 'B';
-  if (accuracy >= 45) return 'C+';
-  return 'C';
-};
-
-const formatProgressValue = (summary: { total: number; accuracy: number }): string => (
-  summary.total > 0 ? `${formatPercent(summary.accuracy)}%` : '未演習'
-);
-
-const formatCountValue = (count: number, unit: string): string => (
-  count > 0 ? `${count}${unit}` : '未演習'
-);
-
-const getEstimatedPracticeMinutes = (attempts: Array<{ occurredAt: number; responseTimeMs?: number }>): number => (
-  attempts.reduce((total, attempt) => {
-    if (typeof attempt.responseTimeMs === 'number' && attempt.responseTimeMs > 0) {
-      return total + Math.max(1, Math.round(attempt.responseTimeMs / 60000));
-    }
-    return total + 3;
-  }, 0)
-);
-
-const getReadingPreviewText = (passage: string): string => (
-  passage.length > 340 ? `${passage.slice(0, 340)}...` : passage
-);
 
 const normalizeWordList = (words: WordData[]): WordData[] => (
   [...words]
@@ -350,10 +254,13 @@ const getOrderedText = (
     .join(item.kind === 'ENGLISH_WORD_ORDER' ? ' ' : '');
 };
 
+const normalizePracticeLane = (lane: PracticeLane | undefined, fallback: PracticeLane = 'grammar'): PracticeLane => (
+  lane && lane !== 'overview' ? lane : fallback
+);
+
 const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   user,
   onBack,
-  onStartVocabulary,
   variant = 'standalone',
   embeddedMode = 'full',
   initialLane,
@@ -362,12 +269,11 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   closeLabel = '閉じる',
 }) => {
   const userLevel = user.englishLevel ?? EnglishLevel.A2;
-  const isCompactPracticeViewport = useIsMobileViewport('(max-width: 1023px)');
   const isEmbedded = variant === 'embedded';
   const isEmbeddedDrill = isEmbedded && embeddedMode === 'drill';
   const handleBack = onBack ?? (() => undefined);
   const [activeLane, setActiveLane] = useState<PracticeLane>(
-    () => initialLane ?? (isEmbeddedDrill ? 'grammar' : 'overview'),
+    () => normalizePracticeLane(initialLane, isEmbeddedDrill ? 'grammar' : 'grammar'),
   );
   const [sessionWords, setSessionWords] = useState<WordData[]>([]);
   const [wordsLoading, setWordsLoading] = useState(true);
@@ -377,6 +283,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [grammarQuestionCount, setGrammarQuestionCount] = useState<(typeof questionCountOptions)[number]>(5);
   const [scopeViewFilter, setScopeViewFilter] = useState<ScopeViewFilter>('recommended');
   const [scopeCategoryFilter, setScopeCategoryFilter] = useState<ScopeCategoryFilter>('all');
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
   const [randomScopeMode, setRandomScopeMode] = useState(true);
   const [showScopeHint, setShowScopeHint] = useState(true);
   const [grammarSelections, setGrammarSelections] = useState<Record<string, string>>({});
@@ -412,7 +319,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   React.useEffect(() => {
     if (initialLane) {
-      setActiveLane(initialLane);
+      setActiveLane(normalizePracticeLane(initialLane));
       return;
     }
     if (isEmbeddedDrill) {
@@ -611,7 +518,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     attempt: EnglishPracticeAttemptInput,
     options?: { translationFeedback?: JapaneseTranslationFeedback },
   ) => {
-    if (samplePracticeActive || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
+    const isFallbackWordAttempt = samplePracticeActive && attempt.lane !== 'writing';
+    if (isFallbackWordAttempt || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
       setPracticeSyncError(null);
       return;
     }
@@ -832,18 +740,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setReadingSummary(summary);
   }, []);
 
-  const availableWordCount = wordsLoading
-    ? 0
-    : sessionWords.length > 0
-      ? sessionWords.length
-      : FALLBACK_WORDS.length;
-  const grammarLaneSummary = progressSummary.laneSummaries.grammar;
-  const translationLaneSummary = progressSummary.laneSummaries.translation;
-  const readingLaneSummary = progressSummary.laneSummaries.reading;
-  const vocabularyProgress = formatPercent(progressSummary.accuracy);
-  const grammarProgress = formatPercent(grammarLaneSummary.accuracy);
-  const translationProgress = formatPercent(translationLaneSummary.accuracy);
-  const readingProgress = formatPercent(readingLaneSummary.accuracy);
   const selectedWritingTask = writingTasks.find((task) => task.id === selectedWritingTaskId)
     ?? writingTasks[0]
     ?? getDefaultEikenWritingTask({ level: writingLevel, taskType: writingTaskType });
@@ -854,374 +750,20 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     && writingWordCount >= writingWordRange.min
     && writingWordCount <= writingWordRange.max,
   );
+  const handleWritingRecord = React.useCallback(() => {
+    if (!selectedWritingTask || !writingDraft.trim()) return;
+    recordPracticeAttempt({
+      lane: 'writing',
+      mode: 'WRITING',
+      correct: writingWithinRange,
+      score: writingWithinRange ? 1 : 0,
+      maxScore: 1,
+      level: practiceLevel,
+    });
+  }, [practiceLevel, recordPracticeAttempt, selectedWritingTask, writingDraft, writingWithinRange]);
   const overallAccuracy = formatPercent(progressSummary.accuracy);
-  const selectedScopeCount = selectedScopeIds.length;
-  const previewPassage = readingPassages[0];
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(todayStart.getDate() - 6);
-  const todayMinutes = getEstimatedPracticeMinutes(progressSummary.recentAttempts.filter((attempt) => attempt.occurredAt >= todayStart.getTime()));
-  const weeklyMinutes = getEstimatedPracticeMinutes(practiceProgress.attempts.filter((attempt) => attempt.occurredAt >= weekStart.getTime()));
   const currentStreak = user.stats?.currentStreak ?? 0;
-  const scoreLabel = progressSummary.total > 0 ? getScoreLabel(overallAccuracy) : '未採点';
   const levelIndex = Math.max(0, examLevels.indexOf(practiceLevel));
-
-  const recommendedCards = [
-    {
-      id: 'vocabulary',
-      title: '単語',
-      description: '覚えて使える語彙を増やす',
-      icon: Sparkles,
-      progress: vocabularyProgress,
-      progressLabel: progressSummary.total > 0 ? `${vocabularyProgress}%` : '未演習',
-      metrics: [
-        { label: samplePracticeActive ? '例題' : '新出', value: `${availableWordCount}語` },
-        { label: '復習', value: formatCountValue(progressSummary.total, '語') },
-      ],
-      actionLabel: '3分で1セット',
-      action: onStartVocabulary,
-    },
-    {
-      id: 'grammar',
-      title: '文法演習',
-      description: '基礎から入試レベルまで',
-      icon: BookOpen,
-      progress: grammarProgress,
-      progressLabel: formatProgressValue(grammarLaneSummary),
-      metrics: [
-        { label: '正答率', value: formatProgressValue(grammarLaneSummary) },
-        { label: '演習数', value: formatCountValue(grammarLaneSummary.total, 'セット') },
-      ],
-      actionLabel: '3分で1セット',
-      action: () => activateLane('grammar'),
-    },
-    {
-      id: 'translation',
-      title: '和訳トレーニング',
-      description: '日本語に訳す力を鍛える',
-      icon: PencilLine,
-      progress: translationProgress,
-      progressLabel: formatProgressValue(translationLaneSummary),
-      metrics: [
-        { label: '演習数', value: formatCountValue(translationLaneSummary.total, 'セット') },
-        { label: '記述精度', value: translationLaneSummary.total > 0 ? translationProgress >= 70 ? 'A' : translationProgress >= 55 ? 'B' : 'C' : '未採点' },
-      ],
-      actionLabel: '3分で1セット',
-      action: () => activateLane('translation'),
-    },
-    {
-      id: 'reading',
-      title: '長文読解',
-      description: '読解力と速読力を伸ばす',
-      icon: LibraryBig,
-      progress: readingProgress,
-      progressLabel: formatProgressValue(readingLaneSummary),
-      metrics: [
-        { label: '正答率', value: formatProgressValue(readingLaneSummary) },
-        { label: '演習数', value: formatCountValue(readingLaneSummary.total, 'セット') },
-      ],
-      actionLabel: '3分で1セット',
-      action: () => activateLane('reading'),
-    },
-    {
-      id: 'writing',
-      title: '英作文',
-      description: '英検のEメール・意見論述・要約',
-      icon: NotebookPen,
-      progress: 0,
-      progressLabel: '新規',
-      metrics: [
-        { label: 'テーマ', value: `${getEikenWritingTasks().length}件` },
-        { label: '形式', value: '3種類' },
-      ],
-      actionLabel: '12分で1テーマ',
-      action: () => activateLane('writing'),
-    },
-  ];
-
-  const renderOverview = () => (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Flame className="h-5 w-5 fill-medace-500 text-medace-500" />
-          <h1 className="text-xl font-black tracking-tight text-slate-950 md:text-2xl">英語演習のおすすめ</h1>
-          <span className="hidden text-sm font-bold text-slate-500 sm:inline">
-            {progressSummary.recommendation.labelJa}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="inline-flex min-h-10 items-center gap-2 rounded-md border border-medace-300 bg-white px-3 py-2 text-sm font-black text-medace-700 transition-colors hover:bg-medace-50"
-          onClick={applyRecommendedScopes}
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          カスタマイズ
-        </button>
-      </div>
-
-      <section className="grid gap-4 xl:grid-cols-5">
-        {recommendedCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <article
-              key={card.id}
-              data-testid={`english-practice-recommended-card-${card.id}`}
-              className="flex min-h-[230px] flex-col rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5"
-            >
-              <div className="flex items-start gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-medace-300 to-medace-600 text-white shadow-md shadow-orange-200">
-                  <Icon className="h-7 w-7" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-xl font-black tracking-tight text-slate-950">{card.title}</h2>
-                  <p className="mt-1 text-sm font-bold leading-relaxed text-slate-500">{card.description}</p>
-                </div>
-              </div>
-
-              <div className="mt-5 flex items-center gap-4">
-                <div
-                  className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-full"
-                  style={{
-                    background: `conic-gradient(rgb(var(--color-medace-600)) ${card.progress * 3.6}deg, rgb(var(--color-line)) 0deg)`,
-                  }}
-                  aria-label={`${card.title} ${card.progressLabel}`}
-                >
-                  <div className="flex h-[54px] w-[54px] items-center justify-center rounded-full bg-white text-sm font-black text-slate-800">
-                    {card.progressLabel}
-                  </div>
-                </div>
-                <div className="min-w-0 text-sm font-bold text-slate-500">今週の進捗</div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-orange-100 pt-3">
-                {card.metrics.map((metric) => (
-                  <div key={metric.label} className="min-w-0 text-sm text-slate-500">
-                    <span>{metric.label}</span>
-                    <span className="ml-2 font-black text-slate-900">{metric.value}</span>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={card.action}
-                className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-md bg-medace-600 px-4 py-2.5 text-base font-black text-white shadow-sm shadow-orange-200 transition-colors hover:bg-medace-700"
-              >
-                {card.actionLabel}
-              </button>
-            </article>
-          );
-        })}
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-        <div className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-orange-100 pb-3">
-            <div>
-              <h2 className="text-lg font-black text-slate-950">範囲を選ぶ <span className="text-sm font-bold text-slate-500">（文法演習の例）</span></h2>
-              <p className="mt-1 text-sm font-bold text-slate-500">
-                {selectedScopeCount}範囲を選択中。目標は {LEVEL_LABELS[practiceLevel]}。解く前に範囲を見せるかも選べます。
-              </p>
-            </div>
-            <div className="rounded-md bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">
-              {getEnglishPracticeLaneLabel(progressSummary.recommendation.lane)} 推奨
-            </div>
-          </div>
-
-          <div className="mt-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-sm font-black text-slate-700">学習スタイル</span>
-              {[
-                { id: 'recommended' as ScopeViewFilter, label: '分野を選ぶ' },
-                { id: 'weak' as ScopeViewFilter, label: '苦手単元から選ぶ' },
-                { id: 'all' as ScopeViewFilter, label: 'ランダム演習' },
-              ].map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => handleScopeViewFilterChange(filter.id)}
-                  className={`min-h-9 rounded-md border px-3 py-1.5 text-xs font-black transition-colors ${
-                    scopeViewFilter === filter.id
-                      ? 'border-medace-600 bg-medace-600 text-white'
-                      : 'border-orange-200 bg-white text-slate-700 hover:bg-orange-50'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {visibleGrammarScopes.slice(0, 16).map((scope) => {
-                const selected = selectedScopeIds.includes(scope.id);
-                return (
-                  <button
-                    key={scope.id}
-                    type="button"
-                    onClick={() => toggleScope(scope.id)}
-                    className={`flex min-h-9 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs font-bold transition-colors ${
-                      selected
-                        ? 'border-orange-200 bg-orange-50 text-slate-900'
-                        : 'border-orange-100 bg-white text-slate-600 hover:border-medace-200'
-                    }`}
-                  >
-                    <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border ${
-                      selected ? 'border-medace-600 bg-medace-600 text-white' : 'border-orange-200 bg-white'
-                    }`}>
-                      {selected && <CheckCircle className="h-3 w-3" />}
-                    </span>
-                    <span className="min-w-0 truncate">{scope.labelJa}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center">
-              <span className="text-sm font-black text-slate-700">レベル</span>
-              <div className="grid gap-2 sm:grid-cols-5">
-                {examLevelLabels.map((label, index) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => setPracticeLevel(examLevels[index])}
-                    className={`min-h-9 rounded-md border px-3 py-1.5 text-xs font-black transition-colors ${
-                      index === levelIndex
-                        ? 'border-medace-600 bg-medace-600 text-white'
-                        : 'border-orange-200 bg-white text-slate-600 hover:bg-orange-50'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center">
-              <span className="text-sm font-black text-slate-700">出題の条件</span>
-              <div className="flex flex-wrap gap-3">
-                <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={showScopeHint}
-                    onChange={() => setShowScopeHint((current) => !current)}
-                    className="h-4 w-4 accent-medace-600"
-                  />
-                  範囲を明示する
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={!showScopeHint}
-                    onChange={() => setShowScopeHint((current) => !current)}
-                    className="h-4 w-4 accent-medace-600"
-                  />
-                  範囲を明示しない
-                </label>
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-center">
-              <span className="text-sm font-black text-slate-700">出題数</span>
-              <div className="grid max-w-xl grid-cols-4 overflow-hidden rounded-md border border-orange-200 bg-white">
-                {questionCountOptions.map((count) => (
-                  <button
-                    key={count}
-                    type="button"
-                    onClick={() => setGrammarQuestionCount(count)}
-                    className={`min-h-9 border-r border-orange-100 px-3 py-1.5 text-xs font-black last:border-r-0 ${
-                      grammarQuestionCount === count ? 'bg-medace-600 text-white' : 'text-slate-600 hover:bg-orange-50'
-                    }`}
-                  >
-                    {count}問
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => activateLane('grammar')}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-medace-600 px-4 py-2.5 text-sm font-black text-white transition-colors hover:bg-medace-700"
-            >
-              この条件で始める
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-100 pb-3">
-            <h2 className="text-lg font-black text-slate-950">長文読解のプレビュー</h2>
-            <button
-              type="button"
-              onClick={resetGeneratedPractice}
-              className="min-h-9 rounded-md border border-medace-300 bg-white px-3 py-1.5 text-xs font-black text-medace-700 transition-colors hover:bg-orange-50"
-            >
-              テーマを変更
-            </button>
-          </div>
-
-          {previewPassage && (
-            <div className="mt-4">
-              <p className="text-sm font-black text-slate-600">
-                テーマ：{previewPassage.topicJa}（{previewPassage.levelLabelJa}）
-              </p>
-              <p className="mt-4 whitespace-pre-line text-[0.95rem] font-medium leading-8 text-slate-700">
-                {getReadingPreviewText(previewPassage.passageEn)}
-              </p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                <span className="rounded-md bg-orange-50 px-3 py-2 text-xs font-bold text-slate-600">語数：約{previewPassage.estimatedWords}語</span>
-                <span className="rounded-md bg-orange-50 px-3 py-2 text-xs font-bold text-slate-600">設問数：{previewPassage.questions.length}問</span>
-                <span className="rounded-md bg-orange-50 px-3 py-2 text-xs font-bold text-slate-600">目安時間：8分</span>
-                <span className="rounded-md bg-orange-50 px-3 py-2 text-xs font-bold text-slate-600">出題形式：内容一致 / 要旨 / 語彙推測 / 文法構造</span>
-              </div>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => activateLane('reading')}
-            className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-md border border-medace-500 bg-white px-4 py-2.5 text-sm font-black text-medace-700 transition-colors hover:bg-orange-50"
-          >
-            この長文に挑戦
-          </button>
-        </div>
-      </section>
-
-      <section className="grid gap-3 xl:grid-cols-[1.02fr_0.74fr_0.84fr_0.86fr_0.9fr]">
-        <div className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5">
-          <h2 className="text-lg font-black text-slate-950">受験レベルに合わせる</h2>
-          <div className="mt-4 grid grid-cols-5 items-center gap-2">
-            {examLevelLabels.map((label, index) => (
-              <div key={label} className="text-center text-xs font-black text-slate-600">
-                <div className="mb-2 h-2 rounded-full bg-orange-100">
-                  <div className={`h-2 rounded-full ${index <= levelIndex ? 'bg-medace-500' : 'bg-orange-100'}`} />
-                </div>
-                {label}
-              </div>
-            ))}
-          </div>
-        </div>
-        {[
-          { label: '今日の学習時間', value: `${todayMinutes}分`, icon: Clock3 },
-          { label: '連続学習日数', value: `${currentStreak}日`, icon: Flame },
-          { label: '今週の学習時間', value: `${Math.floor(weeklyMinutes / 60)}時間 ${weeklyMinutes % 60}分`, icon: BarChart3 },
-          { label: '総合スコア（目安）', value: scoreLabel, icon: Trophy },
-        ].map((metric) => {
-          const Icon = metric.icon;
-          return (
-            <div key={metric.label} className="rounded-lg border border-orange-100 bg-white px-4 py-4 text-center shadow-sm shadow-orange-950/5">
-              <div className="text-sm font-bold text-slate-600">{metric.label}</div>
-              <div className="mt-3 flex items-center justify-center gap-2 text-2xl font-black text-slate-900">
-                <Icon className="h-6 w-6 text-medace-600" />
-                {metric.value}
-              </div>
-            </div>
-          );
-        })}
-      </section>
-    </div>
-  );
 
   const renderGrammarItem = (item: GrammarPracticeItem) => {
     const isChecked = Boolean(checkedGrammarItems[item.id]);
@@ -1430,95 +972,120 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           </button>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {[
-            { id: 'recommended' as ScopeViewFilter, label: '推奨' },
-            { id: 'weak' as ScopeViewFilter, label: '弱点' },
-            { id: 'all' as ScopeViewFilter, label: '全範囲' },
-          ].map((filter) => (
+        <div className="mt-4 rounded-lg border border-orange-100 bg-white px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-black text-slate-500">選択中の範囲</div>
+              <p className="mt-1 text-sm font-black text-slate-900">
+                {selectedScopes.length > 0
+                  ? selectedScopes.slice(0, 2).map((scope) => scope.labelJa).join(' / ')
+                  : '推奨範囲'}
+                {selectedScopes.length > 2 ? ` ほか${selectedScopes.length - 2}件` : ''}
+              </p>
+            </div>
             <button
-              key={filter.id}
               type="button"
-              onClick={() => handleScopeViewFilterChange(filter.id)}
-              className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
-                scopeViewFilter === filter.id
-                  ? 'border-medace-500 bg-medace-50 text-medace-800'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
-              }`}
+              onClick={() => setScopePickerOpen((current) => !current)}
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-medace-200 bg-medace-50 px-3 py-2 text-sm font-black text-medace-800 transition-colors hover:bg-orange-50"
             >
-              {filter.label}
+              {scopePickerOpen ? '範囲選択を閉じる' : '範囲を変更'}
             </button>
-          ))}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setScopeCategoryFilter('all')}
-            className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
-              scopeCategoryFilter === 'all'
-                ? 'border-medace-500 bg-medace-50 text-medace-800'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
-            }`}
-          >
-            章すべて
-          </button>
-          {grammarCategoryOptions.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              onClick={() => setScopeCategoryFilter(category.id)}
-              className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
-                scopeCategoryFilter === category.id
-                  ? 'border-medace-500 bg-medace-50 text-medace-800'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
-              }`}
-            >
-              {category.label} {category.count}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-4 max-h-[520px] overflow-y-auto pr-1">
-          <div className="grid gap-2">
-            {visibleGrammarScopes.length === 0 && (
-              <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-3 py-4 text-sm font-bold text-medace-800">
-                この条件の範囲はまだありません。全範囲か別の章に切り替えてください。
-              </div>
-            )}
-            {visibleGrammarScopes.map((scope) => {
-              const selected = selectedScopeIds.includes(scope.id);
-              const weakScope = weakScopeById.get(scope.id);
-              return (
-                <button
-                  key={scope.id}
-                  type="button"
-                  onClick={() => toggleScope(scope.id)}
-                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
-                    selected
-                      ? 'border-medace-400 bg-medace-50 text-medace-950'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-medace-200'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-black">{scope.labelJa}</div>
-                      <div className="mt-1 text-xs font-bold text-slate-500">{scope.curriculumCategoryLabelJa} / {scope.groupLabelJa}</div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-medace-700">{scope.levelMin}-{scope.levelMax}</span>
-                      {weakScope && (
-                        <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-black text-orange-800">
-                          弱点 {weakScope.accuracy}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
           </div>
         </div>
+
+        {scopePickerOpen && (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[
+                { id: 'recommended' as ScopeViewFilter, label: '推奨' },
+                { id: 'weak' as ScopeViewFilter, label: '弱点' },
+                { id: 'all' as ScopeViewFilter, label: '全範囲' },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => handleScopeViewFilterChange(filter.id)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+                    scopeViewFilter === filter.id
+                      ? 'border-medace-500 bg-medace-50 text-medace-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setScopeCategoryFilter('all')}
+                className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+                  scopeCategoryFilter === 'all'
+                    ? 'border-medace-500 bg-medace-50 text-medace-800'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+                }`}
+              >
+                章すべて
+              </button>
+              {grammarCategoryOptions.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setScopeCategoryFilter(category.id)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
+                    scopeCategoryFilter === category.id
+                      ? 'border-medace-500 bg-medace-50 text-medace-800'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200'
+                  }`}
+                >
+                  {category.label} {category.count}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 max-h-[360px] overflow-y-auto pr-1">
+              <div className="grid gap-2">
+                {visibleGrammarScopes.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-3 py-4 text-sm font-bold text-medace-800">
+                    この条件の範囲はまだありません。全範囲か別の章に切り替えてください。
+                  </div>
+                )}
+                {visibleGrammarScopes.map((scope) => {
+                  const selected = selectedScopeIds.includes(scope.id);
+                  const weakScope = weakScopeById.get(scope.id);
+                  return (
+                    <button
+                      key={scope.id}
+                      type="button"
+                      onClick={() => toggleScope(scope.id)}
+                      className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                        selected
+                          ? 'border-medace-400 bg-medace-50 text-medace-950'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-medace-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-black">{scope.labelJa}</div>
+                          <div className="mt-1 text-xs font-bold text-slate-500">{scope.curriculumCategoryLabelJa} / {scope.groupLabelJa}</div>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-medace-700">{scope.levelMin}-{scope.levelMax}</span>
+                          {weakScope && (
+                            <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-black text-orange-800">
+                              弱点 {weakScope.accuracy}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="order-1 space-y-3 xl:order-2">
@@ -1699,14 +1266,28 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderReading = () => (
     <div className="space-y-4">
-      <section className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+      <section className="rounded-lg border border-orange-100 bg-white px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-black text-medace-700">長文読解</div>
-            <h2 className="mt-1 text-xl font-black text-slate-950">長文読解演習</h2>
-            <p className="mt-1 text-sm font-bold leading-relaxed text-slate-500">
-              本文を読み、選択肢だけでなく根拠文と日本語解説まで確認します。上位レベルは挑戦として扱います。
-            </p>
+          <div className="flex flex-wrap gap-2">
+            {Object.values(EnglishLevel).map((level) => {
+              const isChallengeLevel = compareEnglishLevels(level, userLevel) > 0;
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setPracticeLevel(level)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
+                    practiceLevel === level
+                      ? 'border-medace-600 bg-medace-600 text-white'
+                      : isChallengeLevel
+                        ? 'border-orange-200 bg-orange-50 text-orange-800 hover:border-medace-300'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
+                  }`}
+                >
+                  {LEVEL_LABELS[level]}{isChallengeLevel ? '・挑戦' : ''}
+                </button>
+              );
+            })}
           </div>
           <button
             type="button"
@@ -1716,27 +1297,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <RefreshCw className="h-4 w-4" />
             本文を更新
           </button>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {Object.values(EnglishLevel).map((level) => {
-            const isChallengeLevel = compareEnglishLevels(level, userLevel) > 0;
-            return (
-              <button
-                key={level}
-                type="button"
-                onClick={() => setPracticeLevel(level)}
-                className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
-                  practiceLevel === level
-                    ? 'border-medace-600 bg-medace-600 text-white'
-                    : isChallengeLevel
-                      ? 'border-orange-200 bg-orange-50 text-orange-800 hover:border-medace-300'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
-                }`}
-              >
-                {LEVEL_LABELS[level]}{isChallengeLevel ? '・挑戦' : ''}
-              </button>
-            );
-          })}
         </div>
       </section>
       {readingSummary && (
@@ -1754,6 +1314,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       )}
       <ReadingPracticeView
         passages={readingPassages}
+        showHeader={false}
         onAnswer={handleReadingAnswer}
         onComplete={handleReadingComplete}
       />
@@ -1945,6 +1506,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   ? '語数は範囲内です。次は理由・具体例・結論の対応を確認します。'
                   : `目安は ${selectedWritingTask.wordRange.min}-${selectedWritingTask.wordRange.max} words です。`}
               </p>
+              <button
+                type="button"
+                disabled={!writingDraft.trim()}
+                onClick={handleWritingRecord}
+                className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                英検英作文の練習として記録
+              </button>
             </article>
           </>
         ) : (
@@ -1968,17 +1537,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         return renderWriting();
       case 'overview':
       default:
-        return renderOverview();
+        return renderGrammar();
     }
   };
 
-  const renderLaneTabs = (options?: { includeOverview?: boolean }) => {
-    const visibleLanes = options?.includeOverview === false
-      ? laneConfig.filter((lane) => lane.id !== 'overview')
-      : laneConfig;
-    const mobileGridClass = visibleLanes.length === 4 ? 'grid-cols-4' : 'grid-cols-5';
+  const renderLaneTabs = () => {
+    const visibleLanes = laneConfig.filter((lane) => lane.id !== 'overview');
     return (
-    <div className={`mb-4 grid ${mobileGridClass} gap-2 sm:flex sm:overflow-x-auto sm:pb-1`}>
+    <div className="mb-4 grid grid-cols-4 gap-2 sm:flex sm:overflow-x-auto sm:pb-1">
       {visibleLanes.map((lane) => {
         const Icon = lane.icon;
         return (
@@ -2002,7 +1568,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     );
   };
 
-  const renderPracticeMeta = (options?: { showOverviewBack?: boolean }) => (
+  const renderPracticeMeta = () => (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         {LEVEL_LABELS[userLevel]}
@@ -2013,16 +1579,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
       </span>
-      {options?.showOverviewBack !== false && activeLane !== 'overview' && (
-        <button
-          type="button"
-          onClick={() => activateLane('overview')}
-          className="ml-auto inline-flex min-h-9 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition-colors hover:bg-orange-50 hover:text-medace-700"
-        >
-          <Home className="h-4 w-4" />
-          演習トップへ
-        </button>
-      )}
     </div>
   );
 
@@ -2064,7 +1620,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <ActiveIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-black text-medace-600">今日の練習</p>
+                <p className="text-xs font-black text-medace-600">英語演習</p>
                 <h2 className="text-lg font-black text-slate-950 md:text-xl">{activeLaneConfig.title}</h2>
                 <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
                   ホームの流れを保ったまま、必要な練習だけをここで進めます。
@@ -2074,6 +1630,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             {onClose && (
               <button
                 type="button"
+                data-testid="english-practice-close"
                 onClick={onClose}
                 className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600 transition-colors hover:bg-slate-50"
               >
@@ -2084,8 +1641,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </div>
 
         <div className="px-4 py-4 md:px-5">
-          {renderLaneTabs({ includeOverview: false })}
-          {renderPracticeMeta({ showOverviewBack: false })}
+          {renderLaneTabs()}
+          {renderPracticeMeta()}
           {renderPracticeNotices()}
           {renderActiveLane()}
         </div>
@@ -2109,7 +1666,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 英語演習
               </h2>
               <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
-                単語・文法・和訳・長文・英作文を同じ設計で切り替えます。学習状況と同じ文脈で演習できます。
+                文法・和訳・長文・英検英作文を同じ設計で切り替えます。学習状況と同じ文脈で演習できます。
               </p>
             </div>
             <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">
@@ -2128,131 +1685,42 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     );
   }
 
+  const activeLaneConfig = laneConfig.find((lane) => lane.id === activeLane) ?? laneConfig[1];
+  const ActiveIcon = activeLaneConfig.icon;
+
   return (
     <div data-testid="english-practice-hub" className="min-h-screen bg-[#fffaf5] text-slate-900">
-      <header className="sticky top-0 z-30 bg-gradient-to-r from-medace-600 via-[#ff6a00] to-[#ff4f00] text-white shadow-[0_12px_32px_rgba(239,111,0,0.22)]">
-        <div className="flex min-h-[72px] items-center justify-between gap-3 px-4 md:px-6">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="hidden min-h-11 items-center gap-3 rounded-md px-2 text-left transition-colors hover:bg-white/10 lg:inline-flex"
-          >
-            <BookOpen className="h-8 w-8" />
-            <span className="text-2xl font-black tracking-tight">Steady Study</span>
-          </button>
-
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={handleBack}
-              className="inline-flex min-h-10 items-center justify-center rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm font-black text-white transition-colors hover:bg-white/15 lg:hidden"
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              戻る
-            </button>
-            <div className="hidden h-8 w-px bg-white/20 lg:block" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="truncate text-lg font-black md:text-xl">今日の英語演習</h1>
-                <span className="hidden items-center gap-1 text-sm font-bold text-white/86 sm:inline-flex">
-                  <Flame className="h-4 w-4 fill-white text-white" />
-                  {currentStreak > 0 ? `${currentStreak}日連続中！` : '今日から開始'}
-                </span>
+      <main className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
+        <section className="mb-4 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition-colors hover:bg-orange-50 hover:text-medace-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                戻る
+              </button>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
+                <ActiveIcon className="h-5 w-5" />
               </div>
-              <p className="truncate text-xs font-bold text-white/72 sm:hidden">{LEVEL_LABELS[userLevel]}</p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 md:gap-4">
-            <button
-              type="button"
-              onClick={() => activateLane('overview')}
-              className="hidden min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-black text-white transition-colors hover:bg-white/10 md:inline-flex"
-            >
-              <BarChart3 className="h-5 w-5" />
-              学習データ
-            </button>
-            <button
-              type="button"
-              disabled
-              className="relative inline-flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-black text-white/70"
-            >
-              <Bell className="h-5 w-5" />
-              <span className="hidden sm:inline">お知らせ</span>
-            </button>
-            <div className="hidden items-center gap-2 md:flex">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-sm font-black text-medace-600">
-                学
+              <div className="min-w-0">
+                <div className="text-xs font-black text-medace-700">英語演習</div>
+                <h1 className="truncate text-xl font-black text-slate-950 md:text-2xl">{activeLaneConfig.title}</h1>
               </div>
-              <div className="text-sm font-black">{user.displayName || '学習者さん'}</div>
             </div>
+            <p className="max-w-2xl text-sm font-bold leading-relaxed text-slate-500">
+              {activeLaneConfig.description}
+            </p>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <div className={`grid min-h-[calc(100vh-72px)] ${isCompactPracticeViewport ? '' : 'lg:grid-cols-[302px_minmax(0,1fr)]'}`}>
-        {!isCompactPracticeViewport && (
-        <aside className="border-r border-orange-100 bg-white/86 px-5 py-5 shadow-[12px_0_28px_rgba(95,43,0,0.04)]">
-          <nav className="sticky top-[92px] space-y-6">
-            {practiceNavGroups.map((group) => (
-              <section key={group.label} className="space-y-2">
-                <h2 className="border-b border-orange-100 px-2 pb-2 text-sm font-black text-medace-600">{group.label}</h2>
-                <div className="space-y-1">
-                  {group.items.map((item) => {
-                    const Icon = item.icon;
-                    const isStableLane = item.id === 'overview' || item.id === 'grammar' || item.id === 'translation' || item.id === 'reading' || item.id === 'writing';
-                    const active = item.id === activeLane;
-                    const enabled = item.enabled !== false;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        data-testid={isStableLane ? `english-practice-lane-${item.id}` : undefined}
-                        disabled={!enabled}
-                        onClick={() => {
-                          if (!enabled) return;
-                          if (item.id === 'vocabulary') {
-                            onStartVocabulary();
-                            return;
-                          }
-                          if (item.id === 'random') {
-                            setRandomScopeMode(true);
-                          }
-                          if (item.lane) activateLane(item.lane);
-                        }}
-                        className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-base font-black transition-colors ${
-                          active
-                            ? 'bg-medace-600 text-white shadow-sm shadow-orange-200'
-                            : !enabled
-                              ? 'cursor-not-allowed text-slate-400'
-                            : 'text-slate-700 hover:bg-orange-50 hover:text-medace-700'
-                        }`}
-                      >
-                        <Icon className="h-5 w-5 shrink-0" />
-                        <span className="min-w-0 truncate">{item.label}</span>
-                        {!enabled && (
-                          <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">
-                            準備中
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </nav>
-        </aside>
-        )}
-
-        <main className="min-w-0 px-4 py-4 md:px-6">
-          {isCompactPracticeViewport && renderLaneTabs()}
-          {renderPracticeMeta()}
-          {renderPracticeNotices()}
-
-          {renderActiveLane()}
-        </main>
-      </div>
+        {renderLaneTabs()}
+        {renderPracticeMeta()}
+        {renderPracticeNotices()}
+        {renderActiveLane()}
+      </main>
     </div>
   );
 };

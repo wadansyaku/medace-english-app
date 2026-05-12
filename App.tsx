@@ -13,12 +13,11 @@ import {
   canAccessAppView,
   isHomeAppRoute,
   useAppNavigation,
-  type EnglishPracticeRouteLane,
 } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordClientProductEvent } from './services/productEvents';
-import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
+import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudyMode = lazy(() => import('./components/StudyMode'));
@@ -27,7 +26,6 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const InstructorDashboard = lazy(() => import('./components/InstructorDashboard'));
 const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDashboard'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
-const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
 
 const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
@@ -151,23 +149,21 @@ const App: React.FC = () => {
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
             onUserUpdate={setCurrentUser}
+            activePracticeLane={null}
             onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
           />
         );
       case 'englishPractice':
         return (
-          <EnglishPracticeHub
+          <Dashboard
             user={user}
-            initialLane={englishPracticeLane ?? 'overview'}
-            onBack={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
-            onStartVocabulary={() => handleTaskSelect(createTodayFocusTaskIntent())}
-            onActiveLaneChange={(lane) => {
-              dispatchNavigation({
-                type: 'open-english-practice',
-                lane: lane as EnglishPracticeRouteLane,
-                historyMode: 'replace',
-              });
-            }}
+            announcementFeed={announcementFeed}
+            onSelectBook={handleBookSelect}
+            onStartTask={handleTaskSelect}
+            onUserUpdate={setCurrentUser}
+            activePracticeLane={englishPracticeLane && englishPracticeLane !== 'overview' ? englishPracticeLane : null}
+            onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane, historyMode: 'replace' })}
+            onClosePracticeLane={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
           />
         );
       case 'study':
@@ -260,7 +256,7 @@ const App: React.FC = () => {
         activeWorkspaceSection={activeWorkspaceSection}
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
         forceNoIndex={currentView === 'publicRole'}
-        immersiveContent={Boolean(user && currentView === 'englishPractice')}
+        immersiveContent={false}
       >
         <Suspense
           fallback={

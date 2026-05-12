@@ -6,14 +6,17 @@ import {
 } from '../types';
 import { getReadingQuestionKindLabel, type ReadingQuestionKind } from './readingPractice';
 
-export type EnglishPracticeLaneId = 'grammar' | 'translation' | 'reading';
+export const ENGLISH_PRACTICE_LANE_IDS = ['grammar', 'translation', 'reading', 'writing'] as const;
+export type EnglishPracticeLaneId = typeof ENGLISH_PRACTICE_LANE_IDS[number];
+export type EnglishPracticeRouteLaneId = 'overview' | EnglishPracticeLaneId;
 
 export type EnglishPracticeAttemptMode =
   | 'GRAMMAR_CLOZE'
   | 'EN_WORD_ORDER'
   | 'JA_TRANSLATION_INPUT'
   | 'JA_TRANSLATION_ORDER'
-  | 'READING';
+  | 'READING'
+  | 'WRITING';
 type EnglishPracticeCloudQuizQuestionMode = Extract<EnglishPracticeAttemptMode, WorksheetQuestionMode>;
 
 export interface EnglishPracticeAttemptInput {
@@ -108,10 +111,18 @@ const LANE_LABELS: Record<EnglishPracticeLaneId, string> = {
   grammar: '文法',
   translation: '和訳',
   reading: '長文',
+  writing: '英検英作文',
 };
 
+const CLOUD_QUIZ_QUESTION_MODES = [
+  'GRAMMAR_CLOZE',
+  'EN_WORD_ORDER',
+  'JA_TRANSLATION_INPUT',
+  'JA_TRANSLATION_ORDER',
+] as const satisfies readonly EnglishPracticeCloudQuizQuestionMode[];
+
 const isCloudQuizQuestionMode = (mode: EnglishPracticeAttemptMode): mode is EnglishPracticeCloudQuizQuestionMode => (
-  mode !== 'READING'
+  (CLOUD_QUIZ_QUESTION_MODES as readonly string[]).includes(mode)
 );
 
 const normalizeResponseTimeMs = (value: number | undefined): number => {
@@ -180,7 +191,7 @@ const isAttemptRecord = (value: unknown): value is EnglishPracticeAttemptRecord 
   const record = value as Partial<EnglishPracticeAttemptRecord>;
   return typeof record.id === 'string'
     && typeof record.occurredAt === 'number'
-    && ['grammar', 'translation', 'reading'].includes(record.lane || '')
+    && (ENGLISH_PRACTICE_LANE_IDS as readonly string[]).includes(record.lane || '')
     && typeof record.mode === 'string'
     && typeof record.correct === 'boolean';
 };
@@ -243,6 +254,16 @@ const buildRecommendation = (
       readingQuestionKinds: weakReadingKinds.slice(0, 2).map((kind) => kind.kind),
     };
   }
+  if (laneSummaries.writing.total < 1) {
+    return {
+      lane: 'writing',
+      labelJa: '英検英作文を1テーマ',
+      reasonJa: '文法・和訳・読解の練習を、自分で書く答案へつなげる履歴がまだありません。',
+      actionJa: '英検英作文を1テーマ書く',
+      scopeIds: [],
+      readingQuestionKinds: [],
+    };
+  }
 
   const weakestLane = (Object.entries(laneSummaries) as Array<[EnglishPracticeLaneId, EnglishPracticeMetricSummary]>)
     .sort((left, right) => left[1].accuracy - right[1].accuracy || right[1].total - left[1].total)[0]?.[0] ?? 'grammar';
@@ -265,6 +286,16 @@ const buildRecommendation = (
       actionJa: '弱い設問種別を1本文解く',
       scopeIds: [],
       readingQuestionKinds: weakReadingKinds.slice(0, 2).map((kind) => kind.kind),
+    };
+  }
+  if (weakestLane === 'writing') {
+    return {
+      lane: 'writing',
+      labelJa: '英検英作文の型を確認',
+      reasonJa: '英検英作文の達成率が相対的に低いため、短いテーマで構成を確認します。',
+      actionJa: '英検英作文を1テーマ書き直す',
+      scopeIds: [],
+      readingQuestionKinds: [],
     };
   }
 
@@ -339,6 +370,7 @@ export const summarizeEnglishPracticeProgress = (
     grammar: emptyMetric(),
     translation: emptyMetric(),
     reading: emptyMetric(),
+    writing: emptyMetric(),
   };
   const grammarScopeAttempts = new Map<GrammarCurriculumScopeId, EnglishPracticeAttemptRecord[]>();
   const grammarScopeLabels = new Map<GrammarCurriculumScopeId, string>();

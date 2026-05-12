@@ -44,13 +44,17 @@ import {
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
 
+const EnglishPracticeHub = React.lazy(() => import('./practice/EnglishPracticeHub'));
+
 interface DashboardProps {
   user: UserProfile;
   announcementFeed: AnnouncementFeedController;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onStartTask: (task: LearningTaskIntent) => void;
   onUserUpdate: (user: UserProfile) => void;
+  activePracticeLane?: FocusedPracticeLane | null;
   onOpenPracticeLane: (lane: FocusedPracticeLane) => void;
+  onClosePracticeLane?: () => void;
 }
 
 const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> = {
@@ -153,9 +157,10 @@ const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
   );
 };
 
-type FocusedPracticeLane = 'grammar' | 'translation' | 'reading' | 'writing';
+export type FocusedPracticeLane = 'grammar' | 'translation' | 'reading' | 'writing';
 
 interface DashboardPracticeDockProps {
+  activeLane?: FocusedPracticeLane | null;
   onSelectLane: (lane: FocusedPracticeLane) => void;
 }
 
@@ -193,15 +198,16 @@ const PRACTICE_DOCK_OPTIONS: Array<{
   },
   {
     id: 'writing',
-    label: '英作文',
-    title: '英検テーマで書く',
-    body: 'Eメール・意見論述・要約を級別テーマで練習します。',
+    label: '英検英作文',
+    title: '英検ライティング',
+    body: '講師から届く自由英作文課題とは別に、級別テーマで自主練習します。',
     time: '12分',
     icon: NotebookPen,
   },
 ];
 
 const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
+  activeLane,
   onSelectLane,
 }) => (
   <section
@@ -210,10 +216,10 @@ const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
   >
     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <p className="text-xs font-black text-medace-600">練習</p>
-        <h2 className="text-xl font-black text-slate-950">今日の練習</h2>
+        <p className="text-xs font-black text-medace-600">英語演習</p>
+        <h2 className="text-xl font-black text-slate-950">英語演習を始める</h2>
         <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
-          ホームでは選ぶだけ。文法・和訳・長文・英作文は専用画面で進めます。
+          文法・和訳・長文・英検英作文を同じ入口から選びます。講師課題の提出とは分けて扱います。
         </p>
       </div>
     </div>
@@ -221,23 +227,33 @@ const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {PRACTICE_DOCK_OPTIONS.map((item) => {
         const Icon = item.icon;
+        const isActive = activeLane === item.id;
         return (
           <button
             key={item.id}
             type="button"
             data-testid={`dashboard-practice-lane-${item.id}`}
+            aria-pressed={isActive}
             onClick={() => onSelectLane(item.id)}
-            className="min-h-[112px] rounded-lg border border-slate-200 bg-slate-50 p-3 text-left text-slate-800 transition-colors hover:border-medace-200 hover:bg-white"
+            className={`min-h-[112px] rounded-lg border p-3 text-left transition-colors ${
+              isActive
+                ? 'border-medace-300 bg-medace-50 text-medace-950 shadow-[0_10px_22px_rgba(255,130,22,0.12)]'
+                : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-medace-200 hover:bg-white'
+            }`}
           >
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-white ${
+                  isActive ? 'border-medace-200 text-medace-700' : 'border-slate-200 text-slate-500'
+                }`}>
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="text-sm font-black">{item.label}</span>
               </div>
-              <span className="shrink-0 rounded-full border border-white bg-white px-2 py-1 text-[11px] font-black text-slate-500">
-                {item.time}
+              <span className={`shrink-0 rounded-full border bg-white px-2 py-1 text-[11px] font-black ${
+                isActive ? 'border-medace-100 text-medace-700' : 'border-white text-slate-500'
+              }`}>
+                {isActive ? '選択中' : item.time}
               </span>
             </div>
             <div className="mt-2 text-base font-black">{item.title}</div>
@@ -249,13 +265,64 @@ const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
   </section>
 );
 
+interface DashboardPracticeFocusProps {
+  user: UserProfile;
+  lane: FocusedPracticeLane;
+  onSelectLane: (lane: FocusedPracticeLane) => void;
+  onClose: () => void;
+  onStartVocabulary: () => void;
+}
+
+const isFocusedPracticeLane = (lane: string): lane is FocusedPracticeLane => (
+  lane === 'grammar' || lane === 'translation' || lane === 'reading' || lane === 'writing'
+);
+
+const DashboardPracticeFocus: React.FC<DashboardPracticeFocusProps> = ({
+  user,
+  lane,
+  onSelectLane,
+  onClose,
+  onStartVocabulary,
+}) => (
+  <section
+    data-testid="dashboard-practice-focus"
+    className="rounded-lg border border-medace-100 bg-white p-2 shadow-sm sm:p-3"
+  >
+    <React.Suspense
+      fallback={
+        <div className="flex min-h-[320px] flex-col items-center justify-center text-medace-500">
+          <Loader2 className="mb-2 h-8 w-8 animate-spin" />
+          <p className="text-sm font-bold">英語演習を準備中...</p>
+        </div>
+      }
+    >
+      <EnglishPracticeHub
+        user={user}
+        variant="embedded"
+        embeddedMode="drill"
+        initialLane={lane}
+        closeLabel="ホームへ戻る"
+        onClose={onClose}
+        onStartVocabulary={onStartVocabulary}
+        onActiveLaneChange={(nextLane) => {
+          if (isFocusedPracticeLane(nextLane)) {
+            onSelectLane(nextLane);
+          }
+        }}
+      />
+    </React.Suspense>
+  </section>
+);
+
 const Dashboard: React.FC<DashboardProps> = ({
   user,
   announcementFeed,
   onSelectBook,
   onStartTask,
   onUserUpdate,
+  activePracticeLane,
   onOpenPracticeLane,
+  onClosePracticeLane,
 }) => {
   const {
     snapshot,
@@ -301,6 +368,26 @@ const Dashboard: React.FC<DashboardProps> = ({
     ),
     [viewModel.primaryMission],
   );
+  const [localPracticeLane, setLocalPracticeLane] = React.useState<FocusedPracticeLane | null>(null);
+  const selectedPracticeLane = activePracticeLane !== undefined ? activePracticeLane : localPracticeLane;
+
+  const handlePracticeLaneSelect = React.useCallback((lane: FocusedPracticeLane) => {
+    setLocalPracticeLane(lane);
+    onOpenPracticeLane(lane);
+  }, [onOpenPracticeLane]);
+
+  const handlePracticeLaneClose = React.useCallback(() => {
+    setLocalPracticeLane(null);
+    onClosePracticeLane?.();
+  }, [onClosePracticeLane]);
+
+  const handlePracticeVocabularyStart = React.useCallback(() => {
+    if (viewModel.hasStudyBooks) {
+      onStartTask(todayTaskIntent);
+      return;
+    }
+    controller.setShowCreateModal(true);
+  }, [controller, onStartTask, todayTaskIntent, viewModel.hasStudyBooks]);
 
   const handleSubmitCommercialRequest = React.useCallback(async (payload: CommercialRequestPayload) => {
     await submitCommercialRequest(payload);
@@ -437,36 +524,51 @@ const Dashboard: React.FC<DashboardProps> = ({
         onSubmitCommercialRequest={handleSubmitCommercialRequest}
       />
 
-      <StudentLearningLaunchPanel
-        cards={viewModel.learningRouteCards}
-        isMobileCompact={isStudentMobileShell}
-        onSelectRoute={(routeId) => {
-          void handleLearningRouteSelect(routeId);
-        }}
-      />
+      {!selectedPracticeLane && (
+        <StudentLearningLaunchPanel
+          cards={viewModel.learningRouteCards}
+          isMobileCompact={isStudentMobileShell}
+          onSelectRoute={(routeId) => {
+            void handleLearningRouteSelect(routeId);
+          }}
+        />
+      )}
 
       <div
         ref={navigation.englishPracticeSectionRef}
         data-testid="dashboard-english-practice-entry"
-        className="order-3 min-w-0"
+        className={selectedPracticeLane ? 'order-2 min-w-0' : 'order-3 min-w-0'}
         style={navigation.mobileAnchorStyle}
       >
-        <DashboardPracticeDock
-          onSelectLane={onOpenPracticeLane}
-        />
+        {selectedPracticeLane ? (
+          <DashboardPracticeFocus
+            user={user}
+            lane={selectedPracticeLane}
+            onSelectLane={handlePracticeLaneSelect}
+            onClose={handlePracticeLaneClose}
+            onStartVocabulary={handlePracticeVocabularyStart}
+          />
+        ) : (
+          <DashboardPracticeDock
+            activeLane={selectedPracticeLane}
+            onSelectLane={handlePracticeLaneSelect}
+          />
+        )}
       </div>
 
-      <StudentDashboardSections
-        user={user}
-        announcementFeed={announcementFeed}
-        controller={controller}
-        viewModel={viewModel}
-        isStudentMobileShell={isStudentMobileShell}
-        navigation={navigation}
-        onSelectBook={onSelectBook}
-        onStartTask={onStartTask}
-        onSubmitCommercialRequest={handleSubmitCommercialRequest}
-      />
+      {!selectedPracticeLane && (
+        <StudentDashboardSections
+          user={user}
+          announcementFeed={announcementFeed}
+          controller={controller}
+          viewModel={viewModel}
+          isStudentMobileShell={isStudentMobileShell}
+          navigation={navigation}
+          onSelectBook={onSelectBook}
+          onStartTask={onStartTask}
+          onSubmitCommercialRequest={handleSubmitCommercialRequest}
+        />
+      )}
     </div>
   );
 };

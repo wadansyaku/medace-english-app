@@ -11,6 +11,7 @@ import {
   summarizeEnglishPracticeProgress,
   toEnglishPracticeCloudQuizAttempt,
   type EnglishPracticeStorage,
+  getEnglishPracticeLaneLabel,
 } from '../utils/englishPracticeProgress';
 
 const createMemoryStorage = (): EnglishPracticeStorage => {
@@ -27,7 +28,7 @@ const createMemoryStorage = (): EnglishPracticeStorage => {
 };
 
 describe('english practice progress', () => {
-  it('summarizes grammar, translation, and reading attempts into weak points', () => {
+  it('summarizes grammar, translation, reading, and writing attempts into weak points', () => {
     const base = createEmptyEnglishPracticeProgress('student-progress');
     const withGrammar = recordEnglishPracticeAttempt(base, {
       lane: 'grammar',
@@ -74,12 +75,27 @@ describe('english practice progress', () => {
       level: EnglishLevel.B1,
       occurredAt: 300,
     });
+    const withWriting = recordEnglishPracticeAttempt(withReading, {
+      lane: 'writing',
+      mode: 'WRITING',
+      correct: true,
+      score: 14,
+      maxScore: 16,
+      level: EnglishLevel.B1,
+      occurredAt: 400,
+    });
 
-    const summary = summarizeEnglishPracticeProgress(withReading);
+    const summary = summarizeEnglishPracticeProgress(withWriting);
 
-    expect(summary.total).toBe(5);
-    expect(summary.accuracy).toBe(40);
+    expect(summary.total).toBe(6);
+    expect(summary.accuracy).toBe(50);
     expect(summary.laneSummaries.translation.scoreRate).toBe(50);
+    expect(summary.laneSummaries.writing).toMatchObject({
+      total: 1,
+      correct: 1,
+      scoreRate: 88,
+    });
+    expect(getEnglishPracticeLaneLabel('writing')).toBe('英検英作文');
     expect(summary.weakGrammarScopes[0]).toMatchObject({
       scopeId: 'present-perfect',
       labelJa: '現在完了',
@@ -162,6 +178,14 @@ describe('english practice progress', () => {
       mode: 'READING',
       correct: true,
       readingQuestionKind: 'REFERENCE_OR_MAIN_IDEA',
+    })).toBeNull();
+
+    expect(toEnglishPracticeCloudQuizAttempt('student-cloud', {
+      lane: 'writing',
+      mode: 'WRITING',
+      correct: true,
+      score: 13,
+      maxScore: 16,
     })).toBeNull();
 
     expect(toEnglishPracticeCloudQuizAttempt('student-cloud', {

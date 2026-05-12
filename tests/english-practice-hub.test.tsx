@@ -15,7 +15,7 @@ const createUser = (): UserProfile => ({
 });
 
 describe('EnglishPracticeHub', () => {
-  it('renders the generated-image style overview contract for the Japanese orange practice home', () => {
+  it('renders the canonical integrated practice shell without a separate practice home', () => {
     const rendered = renderToStaticMarkup(
       <EnglishPracticeHub
         user={createUser()}
@@ -25,19 +25,15 @@ describe('EnglishPracticeHub', () => {
     );
 
     [
-      '英語演習のおすすめ',
-      '単語',
+      '英語演習',
+      '参考書型の文法演習',
       '文法演習',
-      '和訳トレーニング',
-      '長文読解',
-      '英作文',
-      '範囲を選ぶ',
-      '長文読解のプレビュー',
-      'この長文に挑戦',
-      '受験レベルに合わせる',
+      '和訳',
+      '長文',
+      '英検英作文',
+      '文法範囲を選ぶ',
       'B1 標準',
-      '未演習',
-      '準備中',
+      '単語を準備中',
     ].forEach((copy) => {
       expect(rendered).toContain(copy);
     });
@@ -54,9 +50,12 @@ describe('EnglishPracticeHub', () => {
     ].forEach((fakeMetric) => {
       expect(rendered).not.toContain(fakeMetric);
     });
+
+    expect(rendered).not.toContain('今日の英語演習');
+    expect(rendered).not.toContain('英語演習のおすすめ');
   });
 
-  it('keeps the stable lane test ids and orange brand classes on the overview', () => {
+  it('keeps the stable lane test ids and orange brand classes on the route shell', () => {
     const rendered = renderToStaticMarkup(
       <EnglishPracticeHub
         user={createUser()}
@@ -66,7 +65,6 @@ describe('EnglishPracticeHub', () => {
     );
 
     [
-      'english-practice-lane-overview',
       'english-practice-lane-grammar',
       'english-practice-lane-translation',
       'english-practice-lane-reading',
@@ -74,6 +72,8 @@ describe('EnglishPracticeHub', () => {
     ].forEach((testId) => {
       expect(rendered).toContain(`data-testid="${testId}"`);
     });
+
+    expect(rendered).not.toContain('data-testid="english-practice-lane-overview"');
 
     [
       'border-orange-100',
@@ -95,7 +95,7 @@ describe('EnglishPracticeHub', () => {
     );
 
     expect(rendered).toContain('英語演習');
-    expect(rendered).toContain('英作文');
+    expect(rendered).toContain('英検英作文');
     expect(rendered).not.toContain('別ページへ移動せず');
     expect(rendered).toContain('english-practice-hub');
     expect(rendered).not.toContain('Steady Study');
@@ -115,7 +115,7 @@ describe('EnglishPracticeHub', () => {
       />,
     );
 
-    expect(rendered).toContain('今日の練習');
+    expect(rendered).toContain('英語演習');
     expect(rendered).toContain('参考書型の文法演習');
     expect(rendered).toContain('ホームに戻る');
     expect(rendered).toContain('english-practice-lane-grammar');
