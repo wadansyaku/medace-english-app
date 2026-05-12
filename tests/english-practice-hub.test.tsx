@@ -25,7 +25,7 @@ describe('EnglishPracticeHub', () => {
     );
 
     [
-      '今日のおすすめ',
+      '英語演習のおすすめ',
       '単語',
       '文法演習',
       '和訳トレーニング',
@@ -81,5 +81,21 @@ describe('EnglishPracticeHub', () => {
     ].forEach((className) => {
       expect(rendered).toContain(className);
     });
+  });
+
+  it('can render as an embedded dashboard section without the standalone shell copy', () => {
+    const rendered = renderToStaticMarkup(
+      <EnglishPracticeHub
+        user={createUser()}
+        variant="embedded"
+        onStartVocabulary={() => undefined}
+      />,
+    );
+
+    expect(rendered).toContain('ホーム統合');
+    expect(rendered).toContain('別ページへ移動せず');
+    expect(rendered).toContain('english-practice-hub');
+    expect(rendered).not.toContain('Steady Study');
+    expect(rendered).not.toContain('今日の英語演習');
   });
 });

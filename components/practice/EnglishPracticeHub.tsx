@@ -92,8 +92,9 @@ type PracticeNavItemId =
 
 interface EnglishPracticeHubProps {
   user: UserProfile;
-  onBack: () => void;
+  onBack?: () => void;
   onStartVocabulary: () => void;
+  variant?: 'standalone' | 'embedded';
 }
 
 const LEVEL_LABELS: Record<EnglishLevel, string> = {
@@ -328,9 +329,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   user,
   onBack,
   onStartVocabulary,
+  variant = 'standalone',
 }) => {
   const userLevel = user.englishLevel ?? EnglishLevel.A2;
   const isCompactPracticeViewport = useIsMobileViewport('(max-width: 1023px)');
+  const isEmbedded = variant === 'embedded';
+  const handleBack = onBack ?? (() => undefined);
   const [activeLane, setActiveLane] = useState<PracticeLane>('overview');
   const [sessionWords, setSessionWords] = useState<WordData[]>([]);
   const [wordsLoading, setWordsLoading] = useState(true);
@@ -838,7 +842,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Flame className="h-5 w-5 fill-medace-500 text-medace-500" />
-          <h1 className="text-xl font-black tracking-tight text-slate-950 md:text-2xl">今日のおすすめ</h1>
+          <h1 className="text-xl font-black tracking-tight text-slate-950 md:text-2xl">英語演習のおすすめ</h1>
           <span className="hidden text-sm font-bold text-slate-500 sm:inline">
             {progressSummary.recommendation.labelJa}
           </span>
@@ -1667,13 +1671,119 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     }
   };
 
+  const renderLaneTabs = () => (
+    <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+      {laneConfig.map((lane) => {
+        const Icon = lane.icon;
+        return (
+          <button
+            key={lane.id}
+            type="button"
+            data-testid={`english-practice-lane-${lane.id}`}
+            onClick={() => setActiveLane(lane.id)}
+            className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-black transition-colors ${
+              activeLane === lane.id
+                ? 'border-medace-600 bg-medace-600 text-white'
+                : 'border-orange-100 bg-white text-slate-700 hover:border-medace-200 hover:bg-orange-50'
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {lane.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderPracticeMeta = () => (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
+        {LEVEL_LABELS[userLevel]}
+      </span>
+      <span className="rounded-md border border-orange-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
+        {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語から生成`}
+      </span>
+      <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
+        演習 {progressSummary.total}回 / {overallAccuracy}%
+      </span>
+      {activeLane !== 'overview' && (
+        <button
+          type="button"
+          onClick={() => setActiveLane('overview')}
+          className="ml-auto inline-flex min-h-9 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition-colors hover:bg-orange-50 hover:text-medace-700"
+        >
+          <Home className="h-4 w-4" />
+          演習トップへ
+        </button>
+      )}
+    </div>
+  );
+
+  const renderPracticeNotices = () => (
+    <>
+      {wordsLoading && sessionWords.length === 0 && (
+        <section className="mb-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
+          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+          学習中の単語を確認しています。読み込み完了後に、履歴へ残る問題を開始できます。
+        </section>
+      )}
+
+      {samplePracticeActive && (
+        <section className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
+          学習中の単語がまだないため体験問題を表示しています。この結果は復習履歴やクラウド履歴には保存しません。
+        </section>
+      )}
+
+      {practiceSyncError && (
+        <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          {practiceSyncError}
+        </section>
+      )}
+    </>
+  );
+
+  if (isEmbedded) {
+    return (
+      <div
+        data-testid="english-practice-hub"
+        className="overflow-hidden rounded-lg border border-orange-100 bg-[#fffaf5] text-slate-900 shadow-sm shadow-orange-950/5"
+      >
+        <div className="border-b border-orange-100 bg-white px-4 py-4 md:px-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-black text-medace-700">
+                ホーム統合
+              </div>
+              <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 md:text-2xl">
+                英語演習
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
+                単語・文法・和訳・長文をこのホーム内で切り替えます。別ページへ移動せず、今日の学習状況と同じ文脈で演習できます。
+              </p>
+            </div>
+            <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">
+              {currentStreak > 0 ? `${currentStreak}日連続中` : '今日から開始'}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 md:px-5">
+          {renderLaneTabs()}
+          {renderPracticeMeta()}
+          {renderPracticeNotices()}
+          {renderActiveLane()}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div data-testid="english-practice-hub" className="min-h-screen bg-[#fffaf5] text-slate-900">
       <header className="sticky top-0 z-30 bg-gradient-to-r from-medace-600 via-[#ff6a00] to-[#ff4f00] text-white shadow-[0_12px_32px_rgba(239,111,0,0.22)]">
         <div className="flex min-h-[72px] items-center justify-between gap-3 px-4 md:px-6">
           <button
             type="button"
-            onClick={onBack}
+            onClick={handleBack}
             className="hidden min-h-11 items-center gap-3 rounded-md px-2 text-left transition-colors hover:bg-white/10 lg:inline-flex"
           >
             <BookOpen className="h-8 w-8" />
@@ -1683,7 +1793,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
-              onClick={onBack}
+              onClick={handleBack}
               className="inline-flex min-h-10 items-center justify-center rounded-md border border-white/30 bg-white/10 px-3 py-2 text-sm font-black text-white transition-colors hover:bg-white/15 lg:hidden"
             >
               <ArrowLeft className="mr-1 h-4 w-4" />
@@ -1785,70 +1895,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         )}
 
         <main className="min-w-0 px-4 py-4 md:px-6">
-          {isCompactPracticeViewport && (
-          <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-            {laneConfig.map((lane) => {
-              const Icon = lane.icon;
-              return (
-                <button
-                  key={lane.id}
-                  type="button"
-                  data-testid={`english-practice-lane-${lane.id}`}
-                  onClick={() => setActiveLane(lane.id)}
-                  className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-sm font-black transition-colors ${
-                    activeLane === lane.id
-                      ? 'border-medace-600 bg-medace-600 text-white'
-                      : 'border-orange-100 bg-white text-slate-700'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {lane.label}
-                </button>
-              );
-            })}
-          </div>
-          )}
-
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
-              {LEVEL_LABELS[userLevel]}
-            </span>
-            <span className="rounded-md border border-orange-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
-              {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語から生成`}
-            </span>
-            <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
-              演習 {progressSummary.total}回 / {overallAccuracy}%
-            </span>
-            {activeLane !== 'overview' && (
-              <button
-                type="button"
-                onClick={() => setActiveLane('overview')}
-                className="ml-auto inline-flex min-h-9 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 transition-colors hover:bg-orange-50 hover:text-medace-700"
-              >
-                <Home className="h-4 w-4" />
-                演習ホームへ
-              </button>
-            )}
-          </div>
-
-          {wordsLoading && sessionWords.length === 0 && (
-            <section className="mb-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
-              <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-              学習中の単語を確認しています。読み込み完了後に、履歴へ残る問題を開始できます。
-            </section>
-          )}
-
-          {samplePracticeActive && (
-            <section className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
-              学習中の単語がまだないため体験問題を表示しています。この結果は復習履歴やクラウド履歴には保存しません。
-            </section>
-          )}
-
-          {practiceSyncError && (
-            <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-              {practiceSyncError}
-            </section>
-          )}
+          {isCompactPracticeViewport && renderLaneTabs()}
+          {renderPracticeMeta()}
+          {renderPracticeNotices()}
 
           {renderActiveLane()}
         </main>

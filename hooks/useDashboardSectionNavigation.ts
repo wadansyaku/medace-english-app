@@ -1,6 +1,6 @@
 import React from 'react';
 
-type DashboardQuickNavKind = 'today' | 'weakness' | 'mission' | 'writing' | 'coach' | 'plan' | 'library';
+type DashboardQuickNavKind = 'today' | 'englishPractice' | 'weakness' | 'mission' | 'writing' | 'coach' | 'plan' | 'library';
 
 interface DashboardQuickNavItem {
   id: string;
@@ -25,6 +25,7 @@ export const useDashboardSectionNavigation = ({
   hasCoachNotification,
 }: UseDashboardSectionNavigationParams) => {
   const heroSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const englishPracticeSectionRef = React.useRef<HTMLDivElement | null>(null);
   const weaknessSectionRef = React.useRef<HTMLDivElement | null>(null);
   const missionSectionRef = React.useRef<HTMLDivElement | null>(null);
   const writingSectionRef = React.useRef<HTMLDivElement | null>(null);
@@ -60,6 +61,7 @@ export const useDashboardSectionNavigation = ({
 
   const mobileQuickNavItems = React.useMemo<DashboardQuickNavItem[]>(() => ([
     { id: 'today', label: '今日', kind: 'today', ref: heroSectionRef },
+    { id: 'english-practice', label: '演習', kind: 'englishPractice', ref: englishPracticeSectionRef },
     ...(missionQuickNavTarget ? [missionQuickNavTarget] : []),
     { id: 'weakness', label: '弱点', kind: 'weakness', ref: weaknessSectionRef },
     ...(writingQuickNavTarget ? [writingQuickNavTarget] : []),
@@ -99,6 +101,7 @@ export const useDashboardSectionNavigation = ({
 
   return {
     heroSectionRef,
+    englishPracticeSectionRef,
     weaknessSectionRef,
     missionSectionRef,
     writingSectionRef,

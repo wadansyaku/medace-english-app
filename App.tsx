@@ -13,12 +13,11 @@ import { canAccessAppView, isHomeAppRoute, useAppNavigation } from './hooks/useA
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordClientProductEvent } from './services/productEvents';
-import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
+import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const StudyMode = lazy(() => import('./components/StudyMode'));
 const QuizMode = lazy(() => import('./components/QuizMode'));
-const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const InstructorDashboard = lazy(() => import('./components/InstructorDashboard'));
 const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDashboard'));
@@ -139,14 +138,15 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
+      case 'englishPractice':
         return (
           <Dashboard
             user={user}
             announcementFeed={announcementFeed}
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
-            onOpenEnglishPractice={() => dispatchNavigation({ type: 'open-english-practice' })}
             onUserUpdate={setCurrentUser}
+            initialEnglishPracticeFocus={currentView === 'englishPractice'}
           />
         );
       case 'study':
@@ -169,14 +169,6 @@ const App: React.FC = () => {
             onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
           />
         ) : null;
-      case 'englishPractice':
-        return (
-          <EnglishPracticeHub
-            user={user}
-            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
-            onStartVocabulary={() => handleTaskSelect(createTodayFocusTaskIntent())}
-          />
-        );
       case 'admin':
         return <AdminPanel />;
       case 'instructor':
@@ -202,7 +194,6 @@ const App: React.FC = () => {
             announcementFeed={announcementFeed}
             onSelectBook={handleBookSelect}
             onStartTask={handleTaskSelect}
-            onOpenEnglishPractice={() => dispatchNavigation({ type: 'open-english-practice' })}
             onUserUpdate={setCurrentUser}
           />
         );
