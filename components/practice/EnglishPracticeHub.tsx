@@ -548,6 +548,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     const currentStillAvailable = writingTasks.some((task) => task.id === selectedWritingTaskId);
     if (!currentStillAvailable) {
       setSelectedWritingTaskId(writingTasks[0]?.id ?? null);
+      setWritingDraft('');
     }
   }, [selectedWritingTaskId, writingTasks]);
 
@@ -1826,8 +1827,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     key={task.id}
                     type="button"
                     onClick={() => {
-                      setSelectedWritingTaskId(task.id);
-                      setWritingDraft('');
+                      if (selectedWritingTask?.id !== task.id) {
+                        setSelectedWritingTaskId(task.id);
+                        setWritingDraft('');
+                      }
                     }}
                     className={`rounded-lg border px-3 py-3 text-left transition-colors ${
                       selectedWritingTask?.id === task.id
@@ -1865,6 +1868,17 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               <p className="mt-4 whitespace-pre-line rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-base font-black leading-8 text-slate-900">
                 {selectedWritingTask.promptEn}
               </p>
+              {selectedWritingTask.sourcePassageEn && (
+                <section
+                  data-testid="eiken-writing-source-passage"
+                  className="mt-4 rounded-lg border border-orange-100 bg-white px-4 py-4"
+                >
+                  <div className="text-xs font-black text-medace-700">要約用英文</div>
+                  <p className="mt-2 whitespace-pre-line text-[0.95rem] font-medium leading-8 text-slate-800">
+                    {selectedWritingTask.sourcePassageEn}
+                  </p>
+                </section>
+              )}
               <p className="mt-3 text-sm font-bold leading-relaxed text-slate-600">{selectedWritingTask.promptJa}</p>
             </article>
 

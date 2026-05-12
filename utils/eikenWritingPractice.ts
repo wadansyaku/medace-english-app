@@ -14,6 +14,7 @@ export interface EikenWritingTask {
   titleJa: string;
   promptEn: string;
   promptJa: string;
+  sourcePassageEn?: string;
   wordRange: EikenWritingWordRange;
   focusPoints: string[];
   checklist: string[];
@@ -191,6 +192,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '地域の菜園',
     promptEn: 'Read a short passage about a community garden project. Summarize why local students joined it and what changed in the neighborhood.',
     promptJa: '地域の菜園プロジェクトについての短い英文を読み、学生が参加した理由と地域の変化を要約しましょう。',
+    sourcePassageEn: 'A small neighborhood in the city had an empty lot that was often covered with trash. Local students joined a community garden project because they wanted to make the place safer and learn how vegetables are grown. At first, only a few residents helped them, but more people came after seeing the first harvest. The garden also became a place where older residents taught students about seasonal food. Now the street is cleaner, and neighbors talk to each other more often.',
     wordRange: { min: 45, max: 55 },
     focusPoints: ['理由の抽出', '変化の整理', '自分の意見を混ぜない'],
     checklist: ['参加理由を入れた', '地域の変化を入れた', '本文にない意見を足していない'],
@@ -203,6 +205,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '図書館カフェ',
     promptEn: 'Read a short passage about a library cafe for teenagers. Summarize the problem the library had and how the new space helped.',
     promptJa: '中高生向けの図書館カフェについて読み、図書館の課題と新しい場所が役立った点を要約しましょう。',
+    sourcePassageEn: 'The town library noticed that fewer teenagers were visiting after school. Many students said the library felt too quiet for group study, while others wanted a place to read casually before club activities. In response, the library opened a small cafe area where students could talk softly, borrow books, and use study tables. Volunteers also recommended books related to school projects. Since the cafe opened, more teenagers have come to the library, and some of them now borrow books regularly.',
     wordRange: { min: 45, max: 55 },
     focusPoints: ['課題と解決', '因果関係', '簡潔な言い換え'],
     checklist: ['最初の課題を書いた', '解決策を書いた', '同じ表現を長く写していない'],
@@ -215,6 +218,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '自転車マップ',
     promptEn: 'Read a short passage about students making a safe cycling map. Summarize what information they collected and how people used the map.',
     promptJa: '安全な自転車マップ作りについて読み、集めた情報と地図の使われ方を要約しましょう。',
+    sourcePassageEn: 'Students at a local junior high school made a map to help people ride bicycles safely. They checked busy crossings, narrow roads, and places where drivers could not easily see cyclists. They also asked residents which streets felt dangerous in the morning. After collecting the information, the students marked safer routes to the station, park, and shopping area. The city shared the map on its website, and many families began using it when choosing routes for school or weekend trips.',
     wordRange: { min: 45, max: 55 },
     focusPoints: ['情報の取捨選択', '結果の説明', '過去形'],
     checklist: ['集めた情報を書いた', '利用された結果を書いた', '細部を入れすぎていない'],
@@ -275,6 +279,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '放課後の食事支援',
     promptEn: 'Read a passage about an after-school meal program. Summarize the problem it addresses, how volunteers support it, and one result of the program.',
     promptJa: '放課後の食事支援について読み、解決する課題、ボランティアの支援、結果を要約しましょう。',
+    sourcePassageEn: 'In one city, teachers noticed that some children stayed at school late without eating enough after classes. To address this problem, a community center started an after-school meal program twice a week. Local restaurants donate ingredients, and volunteers cook simple meals while helping children with homework. The program does not only provide food; it also gives students a calm place to talk with adults. Since it began, teachers have reported that several students are more focused during evening study sessions.',
     wordRange: { min: 55, max: 65 },
     focusPoints: ['問題・方法・結果', '要点の圧縮', '客観的な文体'],
     checklist: ['課題を書いた', '支援方法を書いた', '結果を1つ入れた'],
@@ -287,6 +292,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '修理カフェ',
     promptEn: 'Read a passage about a repair cafe. Summarize why it was started, what visitors learn, and how it may affect waste.',
     promptJa: '修理カフェについて読み、始まった理由、来場者が学ぶこと、廃棄物への影響を要約しましょう。',
+    sourcePassageEn: 'A repair cafe was started by engineers who were worried that many usable products were being thrown away. At the cafe, visitors bring broken lamps, bags, or small appliances and learn how to check simple problems with help from volunteers. Some items cannot be fixed, but visitors still learn why they broke and how to choose products that last longer. The organizers believe that the cafe can reduce waste because people become more willing to repair things instead of replacing them immediately.',
     wordRange: { min: 55, max: 65 },
     focusPoints: ['目的の整理', '学びの内容', '環境への影響'],
     checklist: ['開始理由を書いた', '来場者の学びを書いた', '廃棄物への影響に触れた'],
@@ -299,6 +305,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: 'デジタルチケット',
     promptEn: 'Read a passage about digital tickets for public events. Summarize the benefits, a concern for some users, and how organizers responded.',
     promptJa: 'イベントのデジタルチケットについて読み、利点、一部利用者の不安、主催者の対応を要約しましょう。',
+    sourcePassageEn: 'Many public event organizers have introduced digital tickets to reduce waiting time and printing costs. Visitors can enter by showing a code on their phones, and organizers can quickly see how many seats are still available. However, some older visitors worry that they may lose the code or have trouble using the app at the entrance. To solve this problem, several events now provide support desks and allow people to print their codes at home. This has made the system easier for a wider range of visitors.',
     wordRange: { min: 55, max: 65 },
     focusPoints: ['利点と懸念', '対応策', '対比の表現'],
     checklist: ['利点を書いた', '懸念点を書いた', '対応策を書いた'],
@@ -311,6 +318,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '学校の太陽光発電',
     promptEn: 'Read a passage about a school installing solar panels. Summarize the reason for the project, the challenge during installation, and the educational benefit.',
     promptJa: '学校の太陽光発電導入について読み、導入理由、設置時の課題、教育上の利点を要約しましょう。',
+    sourcePassageEn: 'A high school decided to install solar panels because its electricity costs had been rising and students wanted the school to use cleaner energy. The main challenge was that construction had to be done without interrupting classes or sports activities. Workers therefore completed the loudest tasks during holidays and weekends. After the panels were installed, science teachers began using the power data in lessons about energy and climate. Students can now compare daily weather with the amount of electricity the panels produce.',
     wordRange: { min: 55, max: 65 },
     focusPoints: ['理由・課題・利点', '情報の優先順位', '過不足のない要約'],
     checklist: ['導入理由を書いた', '課題を書いた', '教育上の利点を書いた'],
@@ -371,6 +379,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '水資源の共有',
     promptEn: 'Read a passage about cities sharing water resources during droughts. Summarize the reason for cooperation, the main difficulty, and the long-term policy lesson.',
     promptJa: '干ばつ時の水資源共有について読み、協力の理由、主な困難、長期的な政策上の教訓を要約しましょう。',
+    sourcePassageEn: 'During a severe drought, several nearby cities agreed to share water from reservoirs and emergency wells. They cooperated because one city had a large hospital district, while another had facilities that supported food production. The main difficulty was deciding how much water each city should receive without making residents feel that their own needs were being ignored. Officials held public meetings and released daily data to explain the decisions. The experience taught the cities that water policy cannot be planned separately; they need shared rules before the next crisis.',
     wordRange: { min: 70, max: 90 },
     focusPoints: ['政策課題', '困難の抽出', '長期的示唆'],
     checklist: ['協力の理由を書いた', '困難を具体的に書いた', '政策上の教訓を入れた'],
@@ -383,6 +392,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: 'バッテリーのリサイクル',
     promptEn: 'Read a passage about battery recycling. Summarize why demand is increasing, what technical obstacle remains, and how companies are responding.',
     promptJa: 'バッテリーリサイクルについて読み、需要増加の理由、残る技術的課題、企業の対応を要約しましょう。',
+    sourcePassageEn: 'Demand for battery recycling is increasing as more electric vehicles and storage systems are produced. Reusing metals from old batteries can reduce mining pressure and make supply chains more stable. However, recycling remains technically difficult because batteries are built in different ways and may contain materials that are dangerous if handled poorly. Companies are responding by designing automated systems that identify battery types and separate useful metals more safely. Some manufacturers are also changing battery designs so that future products will be easier to take apart.',
     wordRange: { min: 70, max: 90 },
     focusPoints: ['需要と課題', '企業対応', '専門語の言い換え'],
     checklist: ['需要増加の理由を書いた', '技術的課題を書いた', '企業の対応を書いた'],
@@ -395,6 +405,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '地方の遠隔医療',
     promptEn: 'Read a passage about telemedicine in rural areas. Summarize the access problem, the benefits for patients, and the concern doctors still have.',
     promptJa: '地方の遠隔医療について読み、医療アクセスの課題、患者への利点、医師側に残る懸念を要約しましょう。',
+    sourcePassageEn: 'In rural areas, many patients must travel for hours to see a specialist, and bad weather can make appointments even harder to keep. Telemedicine helps these patients speak with doctors from local clinics or their homes, which reduces travel time and allows more frequent follow-up care. It is especially useful for people who need regular advice about chronic conditions. Nevertheless, some doctors remain concerned that video calls cannot fully replace physical examinations. They argue that telemedicine works best when it is combined with clear rules for deciding when in-person care is necessary.',
     wordRange: { min: 70, max: 90 },
     focusPoints: ['課題と利点の対比', '医療語彙', '客観要約'],
     checklist: ['アクセスの課題を書いた', '患者への利点を書いた', '医師側の懸念を書いた'],
@@ -407,6 +418,7 @@ export const EIKEN_WRITING_TASKS: EikenWritingTask[] = [
     titleJa: '沿岸部の再生',
     promptEn: 'Read a passage about restoring coastal wetlands. Summarize the environmental goal, the conflict with local development, and the compromise plan.',
     promptJa: '沿岸湿地の再生について読み、環境面の目的、地域開発との対立、妥協案を要約しましょう。',
+    sourcePassageEn: 'A coastal town planned to restore wetlands that had been damaged by past construction. Environmental groups supported the project because wetlands can protect wildlife, store carbon, and reduce damage from storm waves. However, some local businesses opposed the plan, saying that the same area was needed for a new road and tourist facilities. After months of discussion, the town proposed a compromise: part of the land would become a protected wetland, while a smaller development zone would be moved farther from the water. The plan aims to balance ecological recovery with local economic needs.',
     wordRange: { min: 70, max: 90 },
     focusPoints: ['目的・対立・妥協', '因果関係', '中立的表現'],
     checklist: ['環境面の目的を書いた', '地域開発との対立を書いた', '妥協案を書いた'],

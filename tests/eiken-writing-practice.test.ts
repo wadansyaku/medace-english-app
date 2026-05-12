@@ -61,6 +61,17 @@ describe('eiken writing practice seed data', () => {
       expect(task.sourceInspiration).toMatch(/^[a-z0-9._:-]+$/);
       expect(task.promptEn).not.toContain('http');
       expect(task.promptJa).not.toContain('http');
+      expect(task.sourcePassageEn ?? '').not.toContain('http');
+    }
+  });
+
+  it('provides source passages for every summary task', () => {
+    const summaryTasks = getEikenWritingTasks({ taskType: 'summary' });
+
+    expect(summaryTasks.length).toBeGreaterThan(0);
+    for (const task of summaryTasks) {
+      expect(task.sourcePassageEn).toBeTruthy();
+      expect(countEssayWords(task.sourcePassageEn ?? '')).toBeGreaterThanOrEqual(55);
     }
   });
 
