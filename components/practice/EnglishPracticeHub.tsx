@@ -360,8 +360,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       ).then(() => {
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
         setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, attempt.clientAttemptId));
-      }).catch(() => {
+      }).catch((error) => {
+        console.error('English practice attempt sync failed', error);
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+        setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。この端末に未同期の履歴として残しています。');
       });
     });
   }, [practiceProgress, user.uid]);
@@ -547,29 +549,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       return;
     }
 
-    const base = practiceProgress.userUid === user.uid ? practiceProgress : loadEnglishPracticeProgress(user.uid);
     const attemptWithFeedback = options?.translationFeedback
       ? { ...attempt, translationFeedback: options.translationFeedback }
       : attempt;
-    const nextProgress = recordEnglishPracticeAttempt(base, attemptWithFeedback);
-    const recordedAttempt = nextProgress.attempts.at(-1);
-    setPracticeProgress(nextProgress);
-    if (!recordedAttempt) return;
-
     setPracticeSyncError(null);
-    pendingPracticeSyncRef.current.add(recordedAttempt.clientAttemptId);
-    void learningService.recordEnglishPracticeAttempt(
-      user.uid,
-      toEnglishPracticeStoragePayload(recordedAttempt, options?.translationFeedback),
-    ).then(() => {
-      pendingPracticeSyncRef.current.delete(recordedAttempt.clientAttemptId);
-      setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, recordedAttempt.clientAttemptId));
-    }).catch((error) => {
-      console.error('English practice attempt sync failed', error);
-      pendingPracticeSyncRef.current.delete(recordedAttempt.clientAttemptId);
-      setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。この端末に未同期の履歴として残しています。');
+    setPracticeProgress((current) => {
+      const base = current.userUid === user.uid ? current : loadEnglishPracticeProgress(user.uid);
+      return recordEnglishPracticeAttempt(base, attemptWithFeedback);
     });
-  }, [practiceProgress, samplePracticeActive, user.uid]);
+  }, [samplePracticeActive, user.uid]);
 
   const resetGeneratedPractice = () => {
     setPracticeSeed((current) => current + 1);

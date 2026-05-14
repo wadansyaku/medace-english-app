@@ -682,6 +682,7 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM weekly_missions'),
     env.DB.prepare('DELETE FROM student_weakness_signals'),
     env.DB.prepare('DELETE FROM learning_interaction_events'),
+    env.DB.prepare('DELETE FROM english_practice_attempts'),
     env.DB.prepare('DELETE FROM word_reports'),
     env.DB.prepare('DELETE FROM learning_histories'),
     env.DB.prepare('DELETE FROM student_instructor_assignments'),
