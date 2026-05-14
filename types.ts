@@ -771,6 +771,20 @@ export interface MissionTrackWritingReturnSummary {
   returnRate: number;
 }
 
+export type EnglishPracticeInsightSource = 'practice_attempts' | 'weakness_profile';
+
+export interface EnglishPracticeInsight {
+  lane: 'grammar' | 'translation' | 'reading' | 'writing';
+  laneLabel: string;
+  weaknessLabel: string;
+  nextActionLabel: string;
+  reason: string;
+  source: EnglishPracticeInsightSource;
+  attemptCount?: number;
+  accuracy?: number;
+  lastPracticedAt?: number;
+}
+
 export interface StudentSummary {
   uid: string;
   name: string;
@@ -809,6 +823,7 @@ export interface StudentSummary {
   missionLastActivityAt?: number;
   topWeaknesses?: WeaknessSignalSummary[];
   weaknessProfileUpdatedAt?: number;
+  englishPracticeInsight?: EnglishPracticeInsight;
   riskReasons?: string[];
   recommendedAction?: string;
 }

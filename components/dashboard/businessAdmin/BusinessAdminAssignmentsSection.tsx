@@ -315,6 +315,25 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                   </div>
                 )}
 
+                {controller.selectedAssignmentStudent.englishPracticeInsight && (
+                  <div className="rounded-3xl border border-sky-200 bg-sky-50 px-5 py-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">英語演習フォーカス</div>
+                        <div className="mt-2 text-lg font-black text-slate-950">
+                          {controller.selectedAssignmentStudent.englishPracticeInsight.nextActionLabel}
+                        </div>
+                        <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+                          {controller.selectedAssignmentStudent.englishPracticeInsight.reason}
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-black text-sky-700">
+                        {controller.selectedAssignmentStudent.englishPracticeInsight.weaknessLabel}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {controller.selectedAssignmentStudent.recommendedAction && (
                   <div className="rounded-3xl border border-medace-100 bg-medace-50/70 px-5 py-5 text-sm leading-relaxed text-medace-900">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-medace-700">推奨アクション</div>

@@ -327,10 +327,8 @@ export const handleGetCommercialRequestStatus = async (
     `SELECT *
        FROM commercial_requests
       WHERE requested_by_user_id = ?
-         OR normalized_contact_email = ?
       ORDER BY updated_at DESC`,
     user.id,
-    normalizeCommercialEmail(user.email),
   );
   return rows.map(createCommercialRequestFromRow);
 };

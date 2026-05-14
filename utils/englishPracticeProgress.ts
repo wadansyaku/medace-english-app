@@ -4,20 +4,21 @@ import {
   type JapaneseTranslationFeedback,
   type WorksheetQuestionMode,
 } from '../types';
+import type { EnglishPracticeAttemptPayload } from '../contracts/storage';
+import {
+  type EnglishPracticeAttemptMode,
+  ENGLISH_PRACTICE_ATTEMPT_MODES,
+  ENGLISH_PRACTICE_LANE_IDS,
+  type EnglishPracticeLaneId,
+  getEnglishPracticeLaneLabel,
+} from '../shared/englishPractice';
 import { getReadingQuestionKindLabel, type ReadingQuestionKind } from './readingPractice';
 
-export const ENGLISH_PRACTICE_LANE_IDS = ['grammar', 'translation', 'reading', 'writing'] as const;
-export type EnglishPracticeLaneId = typeof ENGLISH_PRACTICE_LANE_IDS[number];
+export { ENGLISH_PRACTICE_LANE_IDS, getEnglishPracticeLaneLabel };
+export type { EnglishPracticeAttemptMode, EnglishPracticeLaneId };
 export type EnglishPracticeRouteLaneId = 'overview' | EnglishPracticeLaneId;
-
-export type EnglishPracticeAttemptMode =
-  | 'GRAMMAR_CLOZE'
-  | 'EN_WORD_ORDER'
-  | 'JA_TRANSLATION_INPUT'
-  | 'JA_TRANSLATION_ORDER'
-  | 'READING'
-  | 'WRITING';
 type EnglishPracticeCloudQuizQuestionMode = Extract<EnglishPracticeAttemptMode, WorksheetQuestionMode>;
+export type EnglishPracticeAttemptSyncStatus = 'pending' | 'synced';
 
 export interface EnglishPracticeAttemptInput {
   lane: EnglishPracticeLaneId;
@@ -34,11 +35,17 @@ export interface EnglishPracticeAttemptInput {
   level?: EnglishLevel;
   readingQuestionKind?: ReadingQuestionKind;
   responseTimeMs?: number;
+  translationFeedback?: JapaneseTranslationFeedback;
+  clientAttemptId?: string;
+  syncStatus?: EnglishPracticeAttemptSyncStatus;
 }
 
 export interface EnglishPracticeAttemptRecord extends EnglishPracticeAttemptInput {
   id: string;
+  clientAttemptId: string;
   occurredAt: number;
+  syncStatus: EnglishPracticeAttemptSyncStatus;
+  syncedAt?: number;
 }
 
 export interface EnglishPracticeProgress {
@@ -106,13 +113,6 @@ const VERSION = 1 as const;
 const MAX_ATTEMPTS = 160;
 const STORAGE_PREFIX = 'medace:english-practice-progress:';
 export const ENGLISH_PRACTICE_SAMPLE_BOOK_ID = 'english-practice';
-
-const LANE_LABELS: Record<EnglishPracticeLaneId, string> = {
-  grammar: '文法',
-  translation: '和訳',
-  reading: '長文',
-  writing: '英検英作文',
-};
 
 const CLOUD_QUIZ_QUESTION_MODES = [
   'GRAMMAR_CLOZE',
@@ -192,9 +192,15 @@ const isAttemptRecord = (value: unknown): value is EnglishPracticeAttemptRecord 
   return typeof record.id === 'string'
     && typeof record.occurredAt === 'number'
     && (ENGLISH_PRACTICE_LANE_IDS as readonly string[]).includes(record.lane || '')
-    && typeof record.mode === 'string'
+    && (ENGLISH_PRACTICE_ATTEMPT_MODES as readonly string[]).includes(record.mode || '')
     && typeof record.correct === 'boolean';
 };
+
+const normalizeAttemptRecord = (attempt: EnglishPracticeAttemptRecord): EnglishPracticeAttemptRecord => ({
+  ...attempt,
+  clientAttemptId: attempt.clientAttemptId || attempt.id,
+  syncStatus: attempt.syncStatus === 'pending' ? 'pending' : 'synced',
+});
 
 const normalizeProgress = (
   userUid: string,
@@ -202,6 +208,7 @@ const normalizeProgress = (
 ): EnglishPracticeProgress => {
   const attempts = Array.isArray(value?.attempts)
     ? value.attempts.filter(isAttemptRecord).slice(-MAX_ATTEMPTS)
+      .map(normalizeAttemptRecord)
     : [];
   const updatedAt = typeof value?.updatedAt === 'number'
     ? value.updatedAt
@@ -325,8 +332,10 @@ export const recordEnglishPracticeAttempt = (
   const occurredAt = attempt.occurredAt ?? Date.now();
   const record: EnglishPracticeAttemptRecord = {
     ...attempt,
-    id: createAttemptId(attempt, occurredAt, progress.attempts.length),
+    id: attempt.clientAttemptId || createAttemptId(attempt, occurredAt, progress.attempts.length),
+    clientAttemptId: attempt.clientAttemptId || createAttemptId(attempt, occurredAt, progress.attempts.length),
     occurredAt,
+    syncStatus: attempt.syncStatus ?? 'pending',
   };
 
   return normalizeProgress(progress.userUid, {
@@ -336,6 +345,24 @@ export const recordEnglishPracticeAttempt = (
     attempts: [...progress.attempts, record],
   });
 };
+
+export const markEnglishPracticeAttemptSynced = (
+  progress: EnglishPracticeProgress,
+  clientAttemptId: string,
+  syncedAt = Date.now(),
+): EnglishPracticeProgress => normalizeProgress(progress.userUid, {
+  ...progress,
+  updatedAt: syncedAt,
+  attempts: progress.attempts.map((attempt) => (
+    attempt.clientAttemptId === clientAttemptId
+      ? { ...attempt, syncStatus: 'synced' as const, syncedAt }
+      : attempt
+  )),
+});
+
+export const getPendingEnglishPracticeAttempts = (
+  progress: EnglishPracticeProgress,
+): EnglishPracticeAttemptRecord[] => progress.attempts.filter((attempt) => attempt.syncStatus === 'pending');
 
 export const toEnglishPracticeCloudQuizAttempt = (
   uid: string,
@@ -362,6 +389,30 @@ export const toEnglishPracticeCloudQuizAttempt = (
     translationFeedback: attempt.mode === 'JA_TRANSLATION_INPUT' ? translationFeedback : undefined,
   };
 };
+
+export const toEnglishPracticeStoragePayload = (
+  attempt: EnglishPracticeAttemptRecord,
+  translationFeedback?: JapaneseTranslationFeedback,
+): EnglishPracticeAttemptPayload => ({
+  clientAttemptId: attempt.clientAttemptId,
+  lane: attempt.lane,
+  mode: attempt.mode,
+  correct: attempt.correct,
+  score: attempt.score,
+  maxScore: attempt.maxScore,
+  occurredAt: attempt.occurredAt,
+  responseTimeMs: normalizeResponseTimeMs(attempt.responseTimeMs),
+  wordId: attempt.wordId,
+  bookId: attempt.bookId,
+  word: attempt.word,
+  grammarScopeId: attempt.scopeId,
+  scopeLabelJa: attempt.scopeLabelJa,
+  level: attempt.level,
+  readingQuestionKind: attempt.readingQuestionKind,
+  translationFeedback: attempt.mode === 'JA_TRANSLATION_INPUT'
+    ? translationFeedback ?? attempt.translationFeedback
+    : undefined,
+});
 
 export const summarizeEnglishPracticeProgress = (
   progress: EnglishPracticeProgress,
@@ -470,5 +521,3 @@ export const clearEnglishPracticeProgress = (
   }
   return createEmptyEnglishPracticeProgress(userUid);
 };
-
-export const getEnglishPracticeLaneLabel = (lane: EnglishPracticeLaneId): string => LANE_LABELS[lane];

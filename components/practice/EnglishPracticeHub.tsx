@@ -44,11 +44,13 @@ import { learningService } from '../../services/learning';
 import {
   clearEnglishPracticeProgress,
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
+  getPendingEnglishPracticeAttempts,
   loadEnglishPracticeProgress,
+  markEnglishPracticeAttemptSynced,
   recordEnglishPracticeAttempt,
   saveEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
-  toEnglishPracticeCloudQuizAttempt,
+  toEnglishPracticeStoragePayload,
   type EnglishPracticeAttemptInput,
 } from '../../utils/englishPracticeProgress';
 import ReadingPracticeView from './ReadingPracticeView';
@@ -308,6 +310,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [writingDraft, setWritingDraft] = useState('');
   const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
+  const pendingPracticeSyncRef = React.useRef<Set<string>>(new Set());
 
   const activateLane = React.useCallback((lane: PracticeLane) => {
     setActiveLane(lane);
@@ -342,6 +345,26 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   React.useEffect(() => {
     saveEnglishPracticeProgress(practiceProgress);
   }, [practiceProgress]);
+
+  React.useEffect(() => {
+    const pendingAttempts = getPendingEnglishPracticeAttempts(practiceProgress)
+      .filter((attempt) => !pendingPracticeSyncRef.current.has(attempt.clientAttemptId))
+      .slice(0, 8);
+    if (pendingAttempts.length === 0) return;
+
+    pendingAttempts.forEach((attempt) => {
+      pendingPracticeSyncRef.current.add(attempt.clientAttemptId);
+      void learningService.recordEnglishPracticeAttempt(
+        user.uid,
+        toEnglishPracticeStoragePayload(attempt),
+      ).then(() => {
+        pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+        setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, attempt.clientAttemptId));
+      }).catch(() => {
+        pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+      });
+    });
+  }, [practiceProgress, user.uid]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -518,38 +541,35 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     attempt: EnglishPracticeAttemptInput,
     options?: { translationFeedback?: JapaneseTranslationFeedback },
   ) => {
-    const isFallbackWordAttempt = samplePracticeActive && attempt.lane !== 'writing';
+    const isFallbackWordAttempt = samplePracticeActive && (attempt.lane === 'grammar' || attempt.lane === 'translation');
     if (isFallbackWordAttempt || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
       setPracticeSyncError(null);
       return;
     }
 
-    setPracticeProgress((current) => {
-      const base = current.userUid === user.uid ? current : loadEnglishPracticeProgress(user.uid);
-      return recordEnglishPracticeAttempt(base, attempt);
-    });
-
-    const cloudAttempt = toEnglishPracticeCloudQuizAttempt(user.uid, attempt, options?.translationFeedback);
-    if (!cloudAttempt) return;
+    const base = practiceProgress.userUid === user.uid ? practiceProgress : loadEnglishPracticeProgress(user.uid);
+    const attemptWithFeedback = options?.translationFeedback
+      ? { ...attempt, translationFeedback: options.translationFeedback }
+      : attempt;
+    const nextProgress = recordEnglishPracticeAttempt(base, attemptWithFeedback);
+    const recordedAttempt = nextProgress.attempts.at(-1);
+    setPracticeProgress(nextProgress);
+    if (!recordedAttempt) return;
 
     setPracticeSyncError(null);
-    void learningService.recordQuizAttempt(
-      cloudAttempt.uid,
-      cloudAttempt.wordId,
-      cloudAttempt.bookId,
-      cloudAttempt.correct,
-      cloudAttempt.questionMode,
-      cloudAttempt.responseTimeMs,
-      undefined,
-      undefined,
-      undefined,
-      cloudAttempt.grammarScopeId,
-      cloudAttempt.translationFeedback,
-    ).catch((error) => {
+    pendingPracticeSyncRef.current.add(recordedAttempt.clientAttemptId);
+    void learningService.recordEnglishPracticeAttempt(
+      user.uid,
+      toEnglishPracticeStoragePayload(recordedAttempt, options?.translationFeedback),
+    ).then(() => {
+      pendingPracticeSyncRef.current.delete(recordedAttempt.clientAttemptId);
+      setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, recordedAttempt.clientAttemptId));
+    }).catch((error) => {
       console.error('English practice attempt sync failed', error);
-      setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。画面内の復習履歴はこの端末に残っています。');
+      pendingPracticeSyncRef.current.delete(recordedAttempt.clientAttemptId);
+      setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。この端末に未同期の履歴として残しています。');
     });
-  }, [samplePracticeActive, user.uid]);
+  }, [practiceProgress, samplePracticeActive, user.uid]);
 
   const resetGeneratedPractice = () => {
     setPracticeSeed((current) => current + 1);

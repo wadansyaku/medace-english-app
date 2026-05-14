@@ -333,15 +333,29 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                     {translationFeedback.score} / {translationFeedback.maxScore}・{translationFeedback.verdictLabel}
                   </div>
                 </div>
-                <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
-                  {translationFeedback.examTarget === 'HIGH_SCHOOL_ENTRANCE'
-                    ? '高校受験'
-                    : translationFeedback.examTarget === 'UNIVERSITY_ENTRANCE'
-                      ? '大学受験'
-                      : '総合'}
-                </span>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+                    {translationFeedback.examTarget === 'HIGH_SCHOOL_ENTRANCE'
+                      ? '高校受験'
+                      : translationFeedback.examTarget === 'UNIVERSITY_ENTRANCE'
+                        ? '大学受験'
+                        : '総合'}
+                  </span>
+                  <span className={`rounded-full border px-3 py-1 text-xs font-black ${
+                    translationFeedback.usedAi === false
+                      ? 'border-slate-200 bg-white text-slate-600'
+                      : 'border-medace-200 bg-medace-50 text-medace-700'
+                  }`}>
+                    {translationFeedback.usedAi === false ? '簡易判定' : 'AI採点'}
+                  </span>
+                </div>
               </div>
               <p className="mt-3 text-sm font-bold leading-relaxed text-slate-800">{translationFeedback.summaryJa}</p>
+              {translationFeedback.usedAi === false && (
+                <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
+                  通信状況または設定により、正解例との一致を中心に簡易判定しています。
+                </p>
+              )}
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 {translationFeedback.criteria.map((criterion) => {
                   const width = `${Math.min(100, Math.max(0, (criterion.score / Math.max(criterion.maxScore, 1)) * 100))}%`;

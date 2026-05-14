@@ -53,6 +53,7 @@ import {
   type AiUsageLogContext,
 } from './ai-metering';
 import {
+  readCbtLearnerScopeSnapshot,
   readCbtLearnerSnapshot,
   readReusableAiGrammarQuestions,
   recordAiGeneratedProblem,
@@ -383,7 +384,11 @@ const generateGrammarPracticeQuestions = async (
   try {
     if (grammarScopeId) getGrammarCurriculumScope(grammarScopeId);
     const cbtSnapshot = env.DB
-      ? await readCbtLearnerSnapshot(env, userId).catch(() => null)
+      ? await (
+        grammarScopeId
+          ? readCbtLearnerScopeSnapshot(env, userId, grammarScopeId, mode)
+          : readCbtLearnerSnapshot(env, userId)
+      ).catch(() => null)
       : null;
     let cachedQuestions: GeneratedWorksheetQuestion[] = [];
     if (env.DB) {

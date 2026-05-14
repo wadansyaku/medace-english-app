@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
+import { getTodayDateKey } from '../utils/date';
 import {
   BookCatalogSource,
   EnglishLevel,
@@ -170,7 +171,7 @@ describe('useStudentDashboardViewModel', () => {
 
     expect(viewModel.hasActionableWriting).toBe(true);
     expect(viewModel.primaryLearningRouteId).toBe('writing');
-    expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'mission', 'weakness', 'writing']);
+    expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'writing']);
     expect(viewModel.learningRouteCards.find((card) => card.id === 'writing')).toMatchObject({
       ctaLabel: '作文を提出する',
       isPrimary: true,
@@ -215,5 +216,120 @@ describe('useStudentDashboardViewModel', () => {
       stateLabel: '進行中',
     });
     expect(viewModel.learningRouteCards.find((card) => card.id === 'weakness')?.ctaLabel).toBe('スペルを5問だけ確認');
+  });
+
+  it('promotes English practice into the single next action when grammar weakness is strongest', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 8,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      weaknessProfile: {
+        hasSufficientData: true,
+        updatedAt: Date.now(),
+        signals: [],
+        topWeaknesses: [{
+          dimension: WeaknessDimension.GRAMMAR_APPLICATION,
+          level: WeaknessSignalLevel.HIGH,
+          score: 88,
+          sampleSize: 24,
+          reason: '文法の中で単語を使う問題が弱いです。',
+          nextActionLabel: '文法演習を5問だけ確認',
+          recommendedActionType: RecommendedActionType.START_REVIEW,
+          targetQuestionModes: ['GRAMMAR_CLOZE'],
+          updatedAt: Date.now(),
+        }],
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.practiceRecommendation).toMatchObject({
+      lane: 'grammar',
+      ctaLabel: '文法を5問解く',
+      metricLabel: '5問',
+      stateLabel: '文法',
+    });
+    expect(viewModel.learningRouteCards.find((card) => card.id === 'englishPractice')).toMatchObject({
+      isPrimary: true,
+      title: '英語演習',
+      ctaLabel: '文法を5問解く',
+    });
+  });
+
+  it('uses English practice as the follow-up when daily work is done and no stronger signal exists', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 0,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      activityLogs: [{
+        date: getTodayDateKey(),
+        count: 18,
+        intensity: 3,
+      }],
+      learningPlan: {
+        uid: 'student-1',
+        createdAt: Date.now(),
+        targetDate: '2026-04-30',
+        goalDescription: 'goal',
+        dailyWordGoal: 12,
+        selectedBookIds: ['book-1'],
+        status: 'ACTIVE',
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.practiceRecommendation.lane).toBe('grammar');
+    expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'weakness', 'englishPractice']);
+  });
+
+  it('uses the English practice progress recommendation when it is available', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 0,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      activityLogs: [{
+        date: getTodayDateKey(),
+        count: 20,
+        intensity: 3,
+      }],
+      learningPlan: {
+        uid: 'student-1',
+        createdAt: Date.now(),
+        targetDate: '2026-04-30',
+        goalDescription: 'goal',
+        dailyWordGoal: 12,
+        selectedBookIds: ['book-1'],
+        status: 'ACTIVE',
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+      englishPracticeRecommendation: {
+        lane: 'translation',
+        labelJa: '和訳を1セット',
+        reasonJa: '文法の型を受験答案へ戻す練習が少なめです。',
+        actionJa: '全文和訳を2問書く',
+        scopeIds: [],
+        readingQuestionKinds: [],
+      },
+    });
+
+    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.practiceRecommendation).toMatchObject({
+      lane: 'translation',
+      title: '和訳を1セット',
+      ctaLabel: '全文和訳を2問書く',
+      body: '文法の型を受験答案へ戻す練習が少なめです。',
+    });
+    expect(viewModel.heroTitle).toBe('英語演習: 1セット');
+    expect(viewModel.questButtonLabel).toBe('全文和訳を2問書く');
   });
 });

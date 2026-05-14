@@ -5,6 +5,7 @@ type LearningSurface = Pick<LearningClient,
   | 'getDailySessionWords'
   | 'getStudiedWordIdsByBook'
   | 'listAiGeneratedProblemReviewQueue'
+  | 'recordEnglishPracticeAttempt'
   | 'recordQuizAttempt'
   | 'reviewAiGeneratedProblem'
   | 'saveSRSHistory'
@@ -62,6 +63,7 @@ export const learningService: LearningService = {
     grammarScopeId,
     translationFeedback,
   ),
+  recordEnglishPracticeAttempt: (uid, payload) => learningClient.recordEnglishPracticeAttempt(uid, payload),
   reviewAiGeneratedProblem: (payload) => learningClient.reviewAiGeneratedProblem(payload),
   reportWord: (wordId, reason) => catalogClient.reportWord(wordId, reason),
   saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType) => (

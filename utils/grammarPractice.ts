@@ -220,6 +220,7 @@ const template = (
 const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePracticeSentenceTemplate[]> = {
   'basic-svo': [
     template(EnglishLevel.A1, (term) => `Students learn the word ${term} today.`, (meaning) => `生徒は 今日 ${meaning} という語を 学ぶ`),
+    template(EnglishLevel.A2, (term) => `Students use ${term} in a short answer.`, (meaning) => `生徒は 短い答案で ${meaning} を 使う`),
     template(EnglishLevel.A1, (term) => `Teachers review the word ${term} after lunch.`, (meaning) => `先生は 昼食後に ${meaning} という語を 復習する`),
     template(EnglishLevel.A2, (term) => `Learners use the word ${term} in class.`, (meaning) => `生徒は 授業で ${meaning} という語を 使う`),
     template(EnglishLevel.A2, (term) => `Visitors learn the word ${term} at museums.`, (meaning) => `来館者は 博物館で ${meaning} という語を 学ぶ`),
@@ -227,11 +228,13 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   ],
   'be-verb': [
     template(EnglishLevel.A1, (term) => `The word ${term} is useful today.`, (meaning) => `${meaning} という語は 今日 役に立つ`),
+    template(EnglishLevel.A2, (term) => `${term} is important in this passage.`, (meaning) => `${meaning} は この文章で 重要だ`),
     template(EnglishLevel.A1, (term) => `The English word ${term} is useful today.`, (meaning) => `${meaning} は 今日 役に立つ 英単語だ`),
     template(EnglishLevel.A2, (term) => `A note about ${term} is clear.`, (meaning) => `${meaning} についての メモは 明確だ`),
   ],
   'basic-tense': [
     template(EnglishLevel.A1, (term) => `Students reviewed the word ${term} yesterday.`, (meaning) => `生徒は 昨日 ${meaning} という語を 復習した`),
+    template(EnglishLevel.A2, (term) => `A student used ${term} in yesterday's answer.`, (meaning) => `生徒は 昨日の答案で ${meaning} を 使った`),
     template(EnglishLevel.A2, (term) => `Students will review the word ${term} tomorrow.`, (meaning) => `生徒は 明日 ${meaning} という語を 復習する`),
     template(EnglishLevel.B1, (term) => `A reporter reviewed the word ${term} last night.`, (meaning) => `記者は 昨夜 ${meaning} という語を 確認した`),
   ],
@@ -267,6 +270,7 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   ],
   comparative: [
     template(EnglishLevel.A2, (term) => `The word ${term} is more useful than before.`, (meaning) => `${meaning} という語は 以前より 役に立つ`),
+    template(EnglishLevel.B1, (term) => `Using ${term} is clearer than using a vague phrase.`, (meaning) => `${meaning} を 使うことは 曖昧な表現を使うより 明確だ`),
     template(EnglishLevel.B1, (term) => `Students remember the word ${term} better today.`, (meaning) => `生徒は 今日 ${meaning} という語を よりよく 覚えている`),
     template(EnglishLevel.B1, (term) => `This word ${term} is more useful than others.`, (meaning) => `この ${meaning} という語は 他より 役に立つ`),
   ],
@@ -282,6 +286,7 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   ],
   'passive-voice': [
     template(EnglishLevel.A2, (term) => `The word ${term} is introduced by teachers today.`, (meaning) => `${meaning} という語は 今日 先生に 紹介される`),
+    template(EnglishLevel.B1, (term) => `${term} is used by many writers in exam answers.`, (meaning) => `${meaning} は 入試答案で 多くの書き手に 使われる`),
     template(EnglishLevel.B1, (term) => `The word ${term} was chosen by students yesterday.`, (meaning) => `${meaning} という語は 昨日 生徒に 選ばれた`),
     template(EnglishLevel.B1, (term) => `The word ${term} is introduced by local guides.`, (meaning) => `${meaning} という語は 地元の案内人に 紹介される`),
   ],
@@ -292,6 +297,7 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   ],
   'relative-clause': [
     template(EnglishLevel.B1, (term) => `The word ${term} that teachers choose is useful.`, (meaning) => `先生が選んだ ${meaning} という語は 役に立つ`),
+    template(EnglishLevel.B1, (term) => `An answer that uses ${term} sounds more precise.`, (meaning) => `${meaning} を 使う答案は より正確に聞こえる`),
     template(EnglishLevel.B1, (term) => `Students like the word ${term} which appears often.`, (meaning) => `生徒は よく出る ${meaning} という語を 好む`),
     template(EnglishLevel.B2, (term) => `The word ${term} that appears in articles matters.`, (meaning) => `記事に出る ${meaning} という語は 重要だ`),
   ],

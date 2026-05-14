@@ -1,17 +1,28 @@
 import {
   ActivityLog,
+  EnglishLevel,
   type GrammarCurriculumScopeId,
   type JapaneseTranslationFeedback,
   LearningPlan,
   LearningPreference,
   LearningPreferenceIntensity,
-  type LearningTaskIntentType,
+  LearningTaskIntentType,
   UserProfile,
   type WorksheetQuestionMode,
 } from '../../types';
+import type {
+  EnglishPracticeAttemptPayload,
+  EnglishPracticeAttemptResult,
+} from '../../contracts/storage';
+import {
+  type EnglishPracticeAttemptMode,
+  type EnglishPracticeLaneId,
+} from '../../shared/englishPractice';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
+import { isWorksheetQuestionMode } from '../../shared/worksheetQuestionMode';
 import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
+import { getGrammarCurriculumScope } from '../../utils/grammarScope';
 import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
 import { readLearningPlanBookIds, syncLearningPlanBooks } from './learning-plan-books';
@@ -47,6 +58,116 @@ const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKe
   const organization = await readActiveOrganizationContextForUser(env, userId);
   if (!organization) return;
   await rebuildOrganizationKpiSnapshots(env, organization.organizationId, { dateKeys });
+};
+
+const ENGLISH_PRACTICE_QUIZ_MODES = [
+  'GRAMMAR_CLOZE',
+  'EN_WORD_ORDER',
+  'JA_TRANSLATION_INPUT',
+  'JA_TRANSLATION_ORDER',
+] as const satisfies readonly WorksheetQuestionMode[];
+
+const isEnglishPracticeQuizMode = (
+  mode: EnglishPracticeAttemptMode,
+): mode is typeof ENGLISH_PRACTICE_QUIZ_MODES[number] => (
+  (ENGLISH_PRACTICE_QUIZ_MODES as readonly string[]).includes(mode)
+);
+
+const hashString = (value: string): string => {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+};
+
+const createEnglishPracticeAttemptId = (userId: string, clientAttemptId: string): string => (
+  `english-practice-${hashString(`${userId}:${clientAttemptId}`)}`
+);
+
+const assertWordBelongsToBook = async (
+  env: AppEnv,
+  wordId: string,
+  bookId: string,
+): Promise<void> => {
+  const row = await readFirst<{ book_id: string }>(
+    env,
+    'SELECT book_id FROM words WHERE id = ?',
+    wordId,
+  );
+  if (!row) throw new HttpError(404, '単語が見つかりません。');
+  if (row.book_id !== bookId) {
+    throw new HttpError(400, '単語と単語帳の組み合わせが一致しません。');
+  }
+};
+
+const validateQuizAttemptConsistency = async (
+  env: AppEnv,
+  wordId: string,
+  bookId: string,
+  correct: boolean,
+  questionMode: WorksheetQuestionMode,
+  responseTimeMs: number,
+  generatedProblemId?: string,
+  grammarScopeId?: GrammarCurriculumScopeId,
+  translationFeedback?: JapaneseTranslationFeedback,
+): Promise<void> => {
+  if (!Number.isFinite(responseTimeMs) || responseTimeMs < 0 || responseTimeMs > 3_600_000) {
+    throw new HttpError(400, 'responseTimeMs が不正です。');
+  }
+  await assertWordBelongsToBook(env, wordId, bookId);
+
+  if (grammarScopeId) {
+    try {
+      getGrammarCurriculumScope(grammarScopeId);
+    } catch {
+      throw new HttpError(400, 'grammarScopeId が不正です。');
+    }
+    if (!(ENGLISH_PRACTICE_QUIZ_MODES as readonly string[]).includes(questionMode)) {
+      throw new HttpError(400, 'grammarScopeId は文法・和訳系の問題でのみ指定できます。');
+    }
+  }
+
+  if (generatedProblemId) {
+    const row = await readFirst<{
+      word_id: string;
+      book_id: string;
+      question_mode: string;
+      grammar_scope_id: string | null;
+    }>(
+      env,
+      `SELECT word_id, book_id, question_mode, grammar_scope_id
+       FROM ai_generated_problems
+       WHERE id = ?`,
+      generatedProblemId,
+    );
+    if (
+      !row
+      || row.word_id !== wordId
+      || row.book_id !== bookId
+      || row.question_mode !== questionMode
+      || (grammarScopeId && row.grammar_scope_id !== grammarScopeId)
+    ) {
+      throw new HttpError(400, 'AI生成問題と解答記録の組み合わせが一致しません。');
+    }
+  }
+
+  if (translationFeedback) {
+    if (questionMode !== 'JA_TRANSLATION_INPUT') {
+      throw new HttpError(400, 'translationFeedback は全文和訳入力でのみ保存できます。');
+    }
+    if (
+      typeof translationFeedback.score !== 'number'
+      || typeof translationFeedback.maxScore !== 'number'
+      || translationFeedback.score < 0
+      || translationFeedback.maxScore <= 0
+      || translationFeedback.score > translationFeedback.maxScore
+      || translationFeedback.isCorrect !== correct
+    ) {
+      throw new HttpError(400, 'translationFeedback の採点値が不正です。');
+    }
+  }
 };
 
 export const handleAddXP = async (
@@ -211,6 +332,17 @@ export const handleRecordQuizAttempt = async (
   translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
   await assertBookReadAccess(env, user, bookId);
+  await validateQuizAttemptConsistency(
+    env,
+    wordId,
+    bookId,
+    correct,
+    questionMode,
+    responseTimeMs,
+    generatedProblemId,
+    grammarScopeId,
+    translationFeedback,
+  );
   const now = Date.now();
   const existing = await readFirst<DbHistoryRow>(
     env,
@@ -355,6 +487,131 @@ export const handleRecordQuizAttempt = async (
     dateKey: formatDateKey(nextHistory.lastStudiedAt),
     attemptedAt: nextHistory.lastStudiedAt,
   });
+};
+
+const validateEnglishPracticeAttemptPayload = (payload: EnglishPracticeAttemptPayload): void => {
+  const laneModeAllowed: Record<EnglishPracticeLaneId, readonly EnglishPracticeAttemptMode[]> = {
+    grammar: ['GRAMMAR_CLOZE', 'EN_WORD_ORDER'],
+    translation: ['JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'],
+    reading: ['READING'],
+    writing: ['WRITING'],
+  };
+  if (!laneModeAllowed[payload.lane]?.includes(payload.mode)) {
+    throw new HttpError(400, '英語演習のレーンと問題種別の組み合わせが不正です。');
+  }
+  if (payload.score != null && (!Number.isFinite(payload.score) || payload.score < 0)) {
+    throw new HttpError(400, 'score が不正です。');
+  }
+  if (payload.maxScore != null && (!Number.isFinite(payload.maxScore) || payload.maxScore <= 0)) {
+    throw new HttpError(400, 'maxScore が不正です。');
+  }
+  if (payload.score != null && payload.maxScore != null && payload.score > payload.maxScore) {
+    throw new HttpError(400, 'score は maxScore 以下である必要があります。');
+  }
+  if (payload.responseTimeMs != null && (!Number.isFinite(payload.responseTimeMs) || payload.responseTimeMs < 0 || payload.responseTimeMs > 3_600_000)) {
+    throw new HttpError(400, 'responseTimeMs が不正です。');
+  }
+  if ((payload.wordId && !payload.bookId) || (!payload.wordId && payload.bookId)) {
+    throw new HttpError(400, 'wordId と bookId は同時に指定してください。');
+  }
+  if (payload.level && !Object.values(EnglishLevel).includes(payload.level)) {
+    throw new HttpError(400, 'level が不正です。');
+  }
+};
+
+export const handleRecordEnglishPracticeAttempt = async (
+  env: AppEnv,
+  user: DbUserRow,
+  payload: EnglishPracticeAttemptPayload,
+): Promise<EnglishPracticeAttemptResult> => {
+  validateEnglishPracticeAttemptPayload(payload);
+  const now = Date.now();
+  const occurredAt = payload.occurredAt && Number.isFinite(payload.occurredAt)
+    ? Math.max(0, Math.round(payload.occurredAt))
+    : now;
+  const responseTimeMs = Math.max(0, Math.round(payload.responseTimeMs || 0));
+  const id = createEnglishPracticeAttemptId(user.id, payload.clientAttemptId);
+  const shouldDelegateQuizAttempt = Boolean(
+    payload.wordId
+    && payload.bookId
+    && isEnglishPracticeQuizMode(payload.mode)
+    && isWorksheetQuestionMode(payload.mode),
+  );
+
+  const existing = await readFirst<{ id: string; delegated_quiz_attempt: number }>(
+    env,
+    `SELECT id, delegated_quiz_attempt
+     FROM english_practice_attempts
+     WHERE user_id = ? AND client_attempt_id = ?`,
+    user.id,
+    payload.clientAttemptId,
+  );
+
+  if (payload.wordId && payload.bookId) {
+    await assertBookReadAccess(env, user, payload.bookId);
+    await assertWordBelongsToBook(env, payload.wordId, payload.bookId);
+  }
+
+  if (!existing) {
+    await env.DB.prepare(`
+      INSERT INTO english_practice_attempts (
+        id, user_id, client_attempt_id, lane, mode, correct, score, max_score,
+        response_time_ms, word_id, book_id, grammar_scope_id, scope_label_ja,
+        reading_question_kind, level, payload_json, delegated_quiz_attempt, created_at, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      ON CONFLICT(user_id, client_attempt_id) DO NOTHING
+    `).bind(
+      id,
+      user.id,
+      payload.clientAttemptId,
+      payload.lane,
+      payload.mode,
+      payload.correct ? 1 : 0,
+      payload.score ?? null,
+      payload.maxScore ?? null,
+      responseTimeMs,
+      payload.wordId || null,
+      payload.bookId || null,
+      payload.grammarScopeId || null,
+      payload.scopeLabelJa || null,
+      payload.readingQuestionKind || null,
+      payload.level || null,
+      JSON.stringify({
+        word: payload.word || null,
+        translationFeedback: payload.translationFeedback || null,
+      }),
+      occurredAt,
+      now,
+    ).run();
+  }
+
+  if (shouldDelegateQuizAttempt && (!existing || !existing.delegated_quiz_attempt)) {
+    await handleRecordQuizAttempt(
+      env,
+      user,
+      payload.wordId!,
+      payload.bookId!,
+      payload.correct,
+      payload.mode as WorksheetQuestionMode,
+      responseTimeMs,
+      undefined,
+      undefined,
+      payload.generatedProblemId,
+      payload.grammarScopeId,
+      payload.translationFeedback,
+    );
+    await env.DB.prepare(`
+      UPDATE english_practice_attempts
+      SET delegated_quiz_attempt = 1, synced_at = ?
+      WHERE user_id = ? AND client_attempt_id = ?
+    `).bind(now, user.id, payload.clientAttemptId).run();
+  }
+
+  return {
+    id: existing?.id || id,
+    deduplicated: Boolean(existing),
+    delegatedQuizAttempt: shouldDelegateQuizAttempt,
+  };
 };
 
 export const handleGetStudiedWordIdsByBook = async (

@@ -20,6 +20,7 @@ import {
   ClassroomWorksheetLifecycleStatus,
   ClassroomWorksheetSource,
   DashboardSnapshot,
+  EnglishLevel,
   GrammarCurriculumScopeId,
   InterventionKind,
   JapaneseTranslationFeedback,
@@ -50,6 +51,10 @@ import {
   WordHintAssetType,
   WordData,
 } from '../types';
+import type {
+  EnglishPracticeAttemptMode,
+  EnglishPracticeLaneId,
+} from '../shared/englishPractice';
 
 export interface CatalogImportRow {
   bookName?: string;
@@ -162,6 +167,32 @@ export interface PrepareBookExamplesResult {
   bookId: string;
   preparedCount: number;
   remainingCount: number;
+}
+
+export interface EnglishPracticeAttemptPayload {
+  clientAttemptId: string;
+  lane: EnglishPracticeLaneId;
+  mode: EnglishPracticeAttemptMode;
+  correct: boolean;
+  score?: number;
+  maxScore?: number;
+  occurredAt?: number;
+  responseTimeMs?: number;
+  wordId?: string;
+  bookId?: string;
+  word?: string;
+  grammarScopeId?: GrammarCurriculumScopeId;
+  scopeLabelJa?: string;
+  level?: EnglishLevel;
+  readingQuestionKind?: string;
+  generatedProblemId?: string;
+  translationFeedback?: JapaneseTranslationFeedback;
+}
+
+export interface EnglishPracticeAttemptResult {
+  id: string;
+  deduplicated: boolean;
+  delegatedQuizAttempt: boolean;
 }
 
 export interface GenerateWordHintAssetPayload {
@@ -308,6 +339,10 @@ export interface StorageActionMap {
       translationFeedback?: JapaneseTranslationFeedback;
     };
     response: null;
+  };
+  recordEnglishPracticeAttempt: {
+    payload: EnglishPracticeAttemptPayload;
+    response: EnglishPracticeAttemptResult;
   };
   listAiGeneratedProblemReviewQueue: {
     payload: AiGeneratedProblemReviewQueueRequest;
@@ -490,6 +525,7 @@ export const STORAGE_ACTIONS = [
   'getDueCount',
   'saveSRSHistory',
   'recordQuizAttempt',
+  'recordEnglishPracticeAttempt',
   'listAiGeneratedProblemReviewQueue',
   'reviewAiGeneratedProblem',
   'getStudiedWordIdsByBook',

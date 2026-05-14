@@ -1,11 +1,19 @@
 import {
+  type EnglishPracticeInsight,
   InterventionOutcome,
   OrganizationRole,
   type StudentSummary,
   SubscriptionPlan,
   UserRole,
+  WEAKNESS_DIMENSION_LABELS,
   WeeklyMissionStatus,
 } from '../../types';
+import {
+  getEnglishPracticeLaneForWeakness,
+  getEnglishPracticeLaneLabel,
+  getEnglishPracticeNextActionLabel,
+  type EnglishPracticeLaneId,
+} from '../../shared/englishPractice';
 import {
   getContinuityBand,
   resolveInterventionOutcome,
@@ -20,6 +28,7 @@ import { buildVisibleStudentFilter, readVisibleStudentIds } from './student-visi
 import type { AppEnv, DbUserRow } from './types';
 import {
   DAY_MS,
+  buildInClause,
   canBypassInstructorAssignment,
   getMasteryProgressSql,
   getMasterySourceSql,
@@ -32,6 +41,94 @@ import {
   buildStudentRiskReasons,
   resolveStudentRiskLevel,
 } from './organization-risk';
+
+interface EnglishPracticeLaneStats {
+  lane: EnglishPracticeLaneId;
+  total: number;
+  correct: number;
+  accuracy: number;
+  lastPracticedAt: number;
+}
+
+const readEnglishPracticeLaneStatsByUserIds = async (
+  env: AppEnv,
+  userIds: string[],
+  since: number,
+): Promise<Map<string, EnglishPracticeLaneStats[]>> => {
+  if (userIds.length === 0) return new Map();
+  const rows = await readAll<{
+    user_id: string;
+    lane: EnglishPracticeLaneId;
+    total: number;
+    correct_count: number;
+    last_practiced_at: number;
+  }>(
+    env,
+    `SELECT
+       user_id,
+       lane,
+       COUNT(*) AS total,
+       COALESCE(SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END), 0) AS correct_count,
+       MAX(created_at) AS last_practiced_at
+     FROM english_practice_attempts
+     WHERE user_id IN (${buildInClause(userIds.length)})
+       AND created_at >= ?
+     GROUP BY user_id, lane`,
+    ...userIds,
+    since,
+  );
+
+  const statsByUser = new Map<string, EnglishPracticeLaneStats[]>();
+  rows.forEach((row) => {
+    const total = Number(row.total || 0);
+    const correct = Number(row.correct_count || 0);
+    const laneStats: EnglishPracticeLaneStats = {
+      lane: row.lane,
+      total,
+      correct,
+      accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+      lastPracticedAt: Number(row.last_practiced_at || 0),
+    };
+    statsByUser.set(row.user_id, [...(statsByUser.get(row.user_id) || []), laneStats]);
+  });
+  return statsByUser;
+};
+
+const buildEnglishPracticeInsight = (
+  topWeakness: NonNullable<StudentSummary['topWeaknesses']>[number] | undefined,
+  laneStats: EnglishPracticeLaneStats[] | undefined,
+): EnglishPracticeInsight | undefined => {
+  const weakestPracticeLane = laneStats
+    ?.filter((stats) => stats.total > 0)
+    .sort((left, right) => left.accuracy - right.accuracy || right.total - left.total)[0];
+  if (weakestPracticeLane) {
+    const laneLabel = getEnglishPracticeLaneLabel(weakestPracticeLane.lane);
+    return {
+      lane: weakestPracticeLane.lane,
+      laneLabel,
+      weaknessLabel: `${laneLabel} ${weakestPracticeLane.accuracy}%`,
+      nextActionLabel: getEnglishPracticeNextActionLabel(weakestPracticeLane.lane),
+      reason: `${laneLabel}の直近正答率が${weakestPracticeLane.accuracy}%です。次の短い演習として指定できます。`,
+      source: 'practice_attempts',
+      attemptCount: weakestPracticeLane.total,
+      accuracy: weakestPracticeLane.accuracy,
+      lastPracticedAt: weakestPracticeLane.lastPracticedAt || undefined,
+    };
+  }
+
+  const lane = getEnglishPracticeLaneForWeakness(topWeakness);
+  if (!lane || !topWeakness) return undefined;
+  const laneLabel = getEnglishPracticeLaneLabel(lane);
+  const weaknessLabel = WEAKNESS_DIMENSION_LABELS[topWeakness.dimension] || laneLabel;
+  return {
+    lane,
+    laneLabel,
+    weaknessLabel,
+    nextActionLabel: getEnglishPracticeNextActionLabel(lane),
+    reason: `${weaknessLabel}の弱点から、${laneLabel}演習へつなげると次の声かけが具体化します。`,
+    source: 'weakness_profile',
+  };
+};
 
 export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbUserRow): Promise<StudentSummary[]> => {
   const now = Date.now();
@@ -172,10 +269,19 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
   );
   const missionAssignmentsByStudent = await readMissionAssignmentsByStudent(env, rows.map((row) => row.uid));
   const weaknessProfilesByStudent = await readWeaknessProfilesByUserIds(env, rows.map((row) => row.uid));
+  const englishPracticeStatsByStudent = await readEnglishPracticeLaneStatsByUserIds(
+    env,
+    rows.map((row) => row.uid),
+    now - 30 * DAY_MS,
+  );
 
   return rows.map((row) => {
     const missionAssignment = missionAssignmentsByStudent.get(row.uid);
     const weaknessProfile = weaknessProfilesByStudent.get(row.uid);
+    const englishPracticeInsight = buildEnglishPracticeInsight(
+      weaknessProfile?.topWeaknesses[0],
+      englishPracticeStatsByStudent.get(row.uid),
+    );
     const missionProgress = missionAssignment?.progress;
     const missionOverdue = Boolean(
       missionProgress?.overdue
@@ -263,6 +369,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
       missionLastActivityAt: missionProgress?.lastActivityAt,
       topWeaknesses: weaknessProfile?.topWeaknesses,
       weaknessProfileUpdatedAt: weaknessProfile?.updatedAt,
+      englishPracticeInsight,
       riskReasons,
       recommendedAction: buildRecommendedAction({
         riskLevel,

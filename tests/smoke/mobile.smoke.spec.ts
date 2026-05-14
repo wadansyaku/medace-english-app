@@ -155,6 +155,13 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
 
     await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByTestId('dashboard-quicknav-english-practice').click();
+
+    await expect.poll(async () => {
+      const box = await page.getByTestId('dashboard-english-practice-entry').boundingBox();
+      return box?.y ?? 9999;
+    }).toBeLessThanOrEqual(220);
+
     await page.getByTestId('dashboard-quicknav-library').click();
 
     await expect.poll(async () => {

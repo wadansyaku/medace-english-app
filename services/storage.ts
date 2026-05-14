@@ -49,6 +49,8 @@ import {
   ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  EnglishPracticeAttemptPayload,
+  EnglishPracticeAttemptResult,
   GenerateWordHintAssetPayload,
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
@@ -148,6 +150,7 @@ import {
 } from './storage/missions';
 import { getCoachNotifications } from './storage/writing-read-model';
 import { resolveStorageMode } from '../shared/storageMode';
+import { isWorksheetQuestionMode } from '../shared/worksheetQuestionMode';
 import { createImportedBookId, normalizeCatalogImportRows } from './storage/catalog-import';
 
 interface IndexedDBStorageServiceOptions {
@@ -611,6 +614,38 @@ export class IndexedDBStorageService implements IStorageService {
       grammarScopeId,
       translationFeedback,
     );
+  }
+
+  async recordEnglishPracticeAttempt(
+    uid: string,
+    payload: EnglishPracticeAttemptPayload,
+  ): Promise<EnglishPracticeAttemptResult> {
+    const delegatedQuizAttempt = Boolean(
+      payload.wordId
+      && payload.bookId
+      && isWorksheetQuestionMode(payload.mode)
+      && ['GRAMMAR_CLOZE', 'EN_WORD_ORDER', 'JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'].includes(payload.mode),
+    );
+    if (delegatedQuizAttempt) {
+      await this.recordQuizAttempt(
+        uid,
+        payload.wordId!,
+        payload.bookId!,
+        payload.correct,
+        payload.mode as WorksheetQuestionMode,
+        payload.responseTimeMs || 0,
+        undefined,
+        undefined,
+        payload.generatedProblemId,
+        payload.grammarScopeId,
+        payload.translationFeedback,
+      );
+    }
+    return {
+      id: payload.clientAttemptId,
+      deduplicated: false,
+      delegatedQuizAttempt,
+    };
   }
 
   async listAiGeneratedProblemReviewQueue(

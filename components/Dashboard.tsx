@@ -32,10 +32,15 @@ import {
   useStudentDashboardViewModel,
   type StudentDashboardLearningRouteCard,
   type StudentDashboardLearningRouteId,
+  type StudentDashboardPracticeRecommendation,
 } from '../hooks/useStudentDashboardViewModel';
 import { submitCommercialRequest } from '../services/commercial';
 import { workspaceService } from '../services/workspace';
 import type { CommercialRequestPayload } from '../contracts/storage';
+import {
+  loadEnglishPracticeProgress,
+  summarizeEnglishPracticeProgress,
+} from '../utils/englishPracticeProgress';
 import {
   createMissionTaskIntent,
   createTodayFocusTaskIntent,
@@ -61,6 +66,7 @@ const LEARNING_ROUTE_ICON: Record<StudentDashboardLearningRouteId, LucideIcon> =
   today: Play,
   mission: Flag,
   weakness: Target,
+  englishPractice: Brain,
   writing: NotebookPen,
 };
 
@@ -68,6 +74,7 @@ const LEARNING_ROUTE_TONE: Record<StudentDashboardLearningRouteCard['tone'], str
   primary: 'border-medace-200 bg-medace-50 text-medace-900',
   mission: 'border-sky-200 bg-sky-50 text-sky-900',
   weakness: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  practice: 'border-orange-200 bg-orange-50 text-orange-900',
   writing: 'border-violet-200 bg-violet-50 text-violet-900',
 };
 
@@ -160,7 +167,7 @@ const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
 export type FocusedPracticeLane = 'grammar' | 'translation' | 'reading' | 'writing';
 
 interface DashboardPracticeDockProps {
-  activeLane?: FocusedPracticeLane | null;
+  recommendation: StudentDashboardPracticeRecommendation;
   onSelectLane: (lane: FocusedPracticeLane) => void;
 }
 
@@ -207,63 +214,43 @@ const PRACTICE_DOCK_OPTIONS: Array<{
 ];
 
 const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
-  activeLane,
+  recommendation,
   onSelectLane,
-}) => (
-  <section
-    data-testid="dashboard-practice-dock"
-    className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
-  >
-    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <p className="text-xs font-black text-medace-600">英語演習</p>
-        <h2 className="text-xl font-black text-slate-950">英語演習を始める</h2>
-        <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
-          文法・和訳・長文・英検英作文を同じ入口から選びます。講師課題の提出とは分けて扱います。
-        </p>
-      </div>
-    </div>
+}) => {
+  const item = PRACTICE_DOCK_OPTIONS.find((option) => option.id === recommendation.lane) ?? PRACTICE_DOCK_OPTIONS[0];
+  const Icon = item.icon;
 
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      {PRACTICE_DOCK_OPTIONS.map((item) => {
-        const Icon = item.icon;
-        const isActive = activeLane === item.id;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            data-testid={`dashboard-practice-lane-${item.id}`}
-            aria-pressed={isActive}
-            onClick={() => onSelectLane(item.id)}
-            className={`min-h-[112px] rounded-lg border p-3 text-left transition-colors ${
-              isActive
-                ? 'border-medace-300 bg-medace-50 text-medace-950 shadow-[0_10px_22px_rgba(255,130,22,0.12)]'
-                : 'border-slate-200 bg-slate-50 text-slate-800 hover:border-medace-200 hover:bg-white'
-            }`}
-          >
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-white ${
-                  isActive ? 'border-medace-200 text-medace-700' : 'border-slate-200 text-slate-500'
-                }`}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                <span className="text-sm font-black">{item.label}</span>
-              </div>
-              <span className={`shrink-0 rounded-full border bg-white px-2 py-1 text-[11px] font-black ${
-                isActive ? 'border-medace-100 text-medace-700' : 'border-white text-slate-500'
-              }`}>
-                {isActive ? '選択中' : item.time}
-              </span>
-            </div>
-            <div className="mt-2 text-base font-black">{item.title}</div>
-            <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">{item.body}</p>
-          </button>
-        );
-      })}
-    </div>
-  </section>
-);
+  return (
+    <section
+      data-testid="dashboard-practice-dock"
+      className="rounded-lg border border-orange-100 bg-white p-4 shadow-sm sm:p-5"
+    >
+      <div className="grid min-w-0 gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div className="min-w-0">
+          <p className="text-xs font-black text-medace-600">英語演習</p>
+          <h2 className="text-xl font-black text-slate-950">{recommendation.title}</h2>
+          <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
+            {recommendation.body}
+          </p>
+        </div>
+        <button
+          type="button"
+          data-testid={`dashboard-practice-lane-${recommendation.lane}`}
+          onClick={() => onSelectLane(recommendation.lane)}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-black text-white transition-colors hover:bg-slate-800 lg:w-auto"
+        >
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 whitespace-normal leading-snug">{recommendation.ctaLabel}</span>
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </button>
+      </div>
+      <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-black text-slate-500">
+        <span className="rounded-full border border-orange-100 bg-orange-50 px-2.5 py-1 text-orange-700">{recommendation.metricLabel}</span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{item.time}</span>
+      </div>
+    </section>
+  );
+};
 
 interface DashboardPracticeFocusProps {
   user: UserProfile;
@@ -334,7 +321,20 @@ const Dashboard: React.FC<DashboardProps> = ({
   } = useDashboardData(user.uid);
   const isMobileViewport = useIsMobileViewport();
   const isStudentMobileShell = useIsStudentMobileShell(user);
-  const viewModel = useStudentDashboardViewModel({ user, snapshot });
+  const [englishPracticeSummary, setEnglishPracticeSummary] = React.useState(() => (
+    summarizeEnglishPracticeProgress(loadEnglishPracticeProgress(user.uid))
+  ));
+  const refreshEnglishPracticeSummary = React.useCallback(() => {
+    setEnglishPracticeSummary(summarizeEnglishPracticeProgress(loadEnglishPracticeProgress(user.uid)));
+  }, [user.uid]);
+  React.useEffect(() => {
+    refreshEnglishPracticeSummary();
+  }, [refreshEnglishPracticeSummary]);
+  const viewModel = useStudentDashboardViewModel({
+    user,
+    snapshot,
+    englishPracticeRecommendation: englishPracticeSummary.recommendation,
+  });
   const controller = useStudentDashboardController({
     user,
     learningPlan: viewModel.learningPlan,
@@ -378,8 +378,9 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handlePracticeLaneClose = React.useCallback(() => {
     setLocalPracticeLane(null);
+    refreshEnglishPracticeSummary();
     onClosePracticeLane?.();
-  }, [onClosePracticeLane]);
+  }, [onClosePracticeLane, refreshEnglishPracticeSummary]);
 
   const handlePracticeVocabularyStart = React.useCallback(() => {
     if (viewModel.hasStudyBooks) {
@@ -451,11 +452,17 @@ const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
+    if (routeId === 'englishPractice') {
+      handlePracticeLaneSelect(viewModel.practiceRecommendation.lane);
+      return;
+    }
+
     if (routeId === 'writing') {
       navigation.scrollToSection(navigation.writingSectionRef);
     }
   }, [
     controller,
+    handlePracticeLaneSelect,
     missionTaskIntent,
     navigation,
     onStartTask,
@@ -463,6 +470,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     viewModel.hasStudyBooks,
     viewModel.canShowWritingSection,
     viewModel.primaryMission,
+    viewModel.practiceRecommendation.lane,
     viewModel.topWeakness,
     weaknessTaskIntent,
   ]);
@@ -550,7 +558,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           />
         ) : (
           <DashboardPracticeDock
-            activeLane={selectedPracticeLane}
+            recommendation={viewModel.practiceRecommendation}
             onSelectLane={handlePracticeLaneSelect}
           />
         )}
@@ -565,6 +573,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           isStudentMobileShell={isStudentMobileShell}
           navigation={navigation}
           onSelectBook={onSelectBook}
+          onSelectLearningRoute={(routeId) => {
+            void handleLearningRouteSelect(routeId);
+          }}
           onStartTask={onStartTask}
           onSubmitCommercialRequest={handleSubmitCommercialRequest}
         />
