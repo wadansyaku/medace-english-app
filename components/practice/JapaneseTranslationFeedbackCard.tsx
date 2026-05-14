@@ -34,7 +34,7 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
           ? 'border-slate-200 bg-white text-slate-600'
           : 'border-medace-200 bg-medace-50 text-medace-700'
       }`}>
-        {feedback.usedAi === false ? '簡易判定' : 'AI採点'}
+        {feedback.usedAi === false ? '簡易判定' : '答案チェック'}
       </span>
     </div>
 

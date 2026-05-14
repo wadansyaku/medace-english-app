@@ -291,7 +291,7 @@ export const useQuizModeController = ({
 
       let nextQuestions: GeneratedWorksheetQuestion[] = [];
       if (isAiGrammarQuestionMode(config.questionMode)) {
-        setLoadingMessage('AIで文法問題を生成中...');
+        setLoadingMessage('文法の練習文を準備しています...');
         const selectedWords = shuffleWords(eligibleCandidateWords).slice(0, actualQuestionCount);
         const aiQuestions = await generateGrammarPracticeQuestions(
           selectedWords,
@@ -697,7 +697,7 @@ export const useQuizModeController = ({
       if (translationAttempt !== 'correct') {
         setCheckingTranslationFeedback(true);
         setSpellingFeedbackTone('info');
-        setSpellingFeedbackMessage('AIが受験答案として採点しています...');
+        setSpellingFeedbackMessage('受験答案として採点中です...');
         const aiFeedback = await evaluateJapaneseTranslationAnswer({
           sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
           expectedTranslation: currentQuestion.answer,
@@ -785,7 +785,7 @@ export const useQuizModeController = ({
   const percentage = questions.length === 0 ? 0 : Math.round((score / questions.length) * 100);
   const nextReviewCopy = reviewTargets.length > 0
     ? '10分後に間違えた単語だけもう一度。そのあと明日の最初に1回確認すると定着しやすいです。'
-    : '間違いはありません。明日に1回だけ軽く確認すれば十分です。';
+    : '間違いはありません。明日の最初に軽く1回確認しましょう。';
 
   return {
     screen,

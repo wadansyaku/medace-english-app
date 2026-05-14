@@ -147,7 +147,7 @@ export const useInstructorDashboardController = ({
       }
     } catch (draftError) {
       console.error(draftError);
-      setNotice((draftError as Error).message || 'AI下書きの生成に失敗しました。');
+      setNotice((draftError as Error).message || '下書きの作成に失敗しました。');
     } finally {
       setDrafting(false);
     }

@@ -45,7 +45,7 @@ const DashboardAccountSection: React.FC<DashboardAccountSectionProps> = ({
     >
       <div>
         <div className="text-sm font-bold text-slate-900">プラン・学習環境の詳細</div>
-        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>課金情報やAI利用枠は必要なときだけ開けます。</div>
+        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>契約内容や教材化の利用状況は必要なときだけ開けます。</div>
       </div>
       {open ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
     </button>
@@ -68,7 +68,7 @@ const DashboardAccountSection: React.FC<DashboardAccountSectionProps> = ({
             </div>
             <div className="mt-5">
               <div className="flex items-center justify-between text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                <span>AIサポート利用状況</span>
+                <span>教材化の利用状況</span>
                 <span>{aiBudgetPercent}%</span>
               </div>
               <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">

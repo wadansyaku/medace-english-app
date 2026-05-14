@@ -69,7 +69,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
             <Sparkles className="w-6 h-6" />
           </div>
           <h3 className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
-          <p className="text-sm text-slate-500">AIが文脈を解析し、あなただけの教材を生成します。</p>
+          <p className="text-sm text-slate-500">英文や資料から、練習に使える単語帳を作成します。</p>
         </div>
       </div>
 
@@ -142,8 +142,8 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
         {!canUseSelectedCreateMode && (
           <div data-testid="phrasebook-create-plan-warning" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
             {createMode === 'TEXT'
-              ? `${currentPlanLabel} ではテキストからのAI教材化は使えません。`
-              : `${currentPlanLabel} では画像/PDFからのAI教材化は使えません。`}
+              ? `${currentPlanLabel} ではテキストからの教材化は使えません。`
+              : `${currentPlanLabel} では画像/PDFからの教材化は使えません。`}
           </div>
         )}
         {createDisabledReason && canUseSelectedCreateMode && !creating && (
@@ -171,7 +171,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {creating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-            {creating ? 'AIが文脈を分析中...' : '作成する'}
+            {creating ? '教材化しています...' : '作成する'}
           </button>
         </div>
       </MobileStickyActionBar>

@@ -248,14 +248,14 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
     expect(viewModel.practiceRecommendation).toMatchObject({
       lane: 'grammar',
-      ctaLabel: '文法を5問解く',
+      ctaLabel: '文法を5問',
       metricLabel: '5問',
       stateLabel: '文法',
     });
     expect(viewModel.learningRouteCards.find((card) => card.id === 'englishPractice')).toMatchObject({
       isPrimary: true,
       title: '英語演習',
-      ctaLabel: '文法を5問解く',
+      ctaLabel: '文法を5問',
     });
   });
 
@@ -329,7 +329,7 @@ describe('useStudentDashboardViewModel', () => {
       ctaLabel: '全文和訳を2問書く',
       body: '文法の型を受験答案へ戻す練習が少なめです。',
     });
-    expect(viewModel.heroTitle).toBe('英語演習: 1セット');
+    expect(viewModel.heroTitle).toBe('和訳を1セット');
     expect(viewModel.questButtonLabel).toBe('全文和訳を2問書く');
   });
 });

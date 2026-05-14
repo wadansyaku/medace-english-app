@@ -48,7 +48,7 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div className="text-sm font-bold text-slate-900">{latestNotification.instructorName}</div>
             <div className="text-[11px] font-bold text-slate-400">
-              {latestNotification.usedAi ? 'AI下書き' : '手動'}
+              {latestNotification.usedAi ? '自動下書き' : '手動'}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -85,7 +85,7 @@ const DashboardCoachSection: React.FC<DashboardCoachSectionProps> = ({
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm font-bold text-slate-900">{notification.instructorName}</div>
                   <div className="text-[11px] font-bold text-slate-400">
-                    {notification.usedAi ? 'AI下書き' : '手動'}
+                    {notification.usedAi ? '自動下書き' : '手動'}
                   </div>
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">{notification.message}</p>

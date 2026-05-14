@@ -363,7 +363,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       }).catch((error) => {
         console.error('English practice attempt sync failed', error);
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
-        setPracticeSyncError('演習履歴をクラウドへ保存できませんでした。この端末に未同期の履歴として残しています。');
+        setPracticeSyncError('演習履歴を保存できませんでした。この端末に未同期の履歴として残しています。');
       });
     });
   }, [practiceProgress, user.uid]);
@@ -701,10 +701,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       } catch {
         feedback = {
           ...feedback,
-          summaryJa: `${feedback.summaryJa} AI採点に接続できないため、今回は正解例との差分で暫定フィードバックを表示しています。`,
+          summaryJa: `${feedback.summaryJa} 答案チェックに接続できないため、今回は正解例との差分で暫定フィードバックを表示しています。`,
           issues: feedback.issues.length > 0
             ? feedback.issues
-          : ['AI採点が利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
+          : ['答案チェックが利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
         };
       } finally {
         if (translationSubmissionVersionRef.current === submissionVersion) {
@@ -1098,10 +1098,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
       <section className="order-1 space-y-3 xl:order-2">
         <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black text-medace-700">生成された問題</div>
+          <div className="text-xs font-black text-medace-700">今回の問題</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">選んだ範囲から {grammarItems.length} 問</h2>
           <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
-            同じテンプレートの使い回しを避け、範囲・単語・レベルに合わせて例文を切り替えます。
+            選んだ範囲と単語に合わせた例文で練習します。
           </p>
         </div>
         {grammarItems.map(renderGrammarItem)}
@@ -1117,7 +1117,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <h2 className="text-xl font-black text-slate-950">和訳トレーニング</h2>
         </div>
         <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
-          文法範囲を先に選ばず、英文全体の意味・構造・受験答案らしさを見ます。
+          英文全体を訳して、意味の抜けと構文の取り違えを見直します。
         </p>
         <div className="mt-4 grid gap-2">
           {[
@@ -1143,9 +1143,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           })}
         </div>
         <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
-          <div className="text-xs font-black text-medace-700">AIフィードバック</div>
+          <div className="text-xs font-black text-medace-700">答案チェック</div>
           <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
-            不一致答案はAI採点に回し、高校受験・大学受験の答案として、意味の抜けと構文の取り違えを返します。
+            正解例と違う訳は、意味の抜けと構文の取り違えを確認します。
           </p>
         </div>
       </section>
@@ -1206,7 +1206,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
                         {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        AIフィードバック
+                        答案チェック
                       </button>
                     </div>
                   )}
@@ -1582,7 +1582,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         {LEVEL_LABELS[userLevel]}
       </span>
       <span className="rounded-md border border-orange-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
-        {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語から生成`}
+        {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語で練習`}
       </span>
       <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
@@ -1631,7 +1631,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <p className="text-xs font-black text-medace-600">英語演習</p>
                 <h2 className="text-lg font-black text-slate-950 md:text-xl">{activeLaneConfig.title}</h2>
                 <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
-                  ホームの流れを保ったまま、必要な練習だけをここで進めます。
+                  このまま1セット解いて、終わったら今日の画面に戻れます。
                 </p>
               </div>
             </div>
@@ -1674,7 +1674,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 英語演習
               </h2>
               <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
-                文法・和訳・長文・英検英作文を同じ設計で切り替えます。学習状況と同じ文脈で演習できます。
+                文法、和訳、長文、英作文をここから切り替えます。迷ったら左から1つだけ進めましょう。
               </p>
             </div>
             <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">

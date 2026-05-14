@@ -602,7 +602,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                           <div className="mt-1 text-xs text-slate-500">{notification.instructorName} / {notification.triggerReason}</div>
                         </div>
                         <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600">
-                          {notification.usedAi ? 'AI下書き' : '手動'}
+                          {notification.usedAi ? '自動下書き' : '手動'}
                         </span>
                       </div>
                       <p className="mt-3 text-sm leading-relaxed text-slate-700">{notification.message}</p>
