@@ -59,7 +59,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/78 md:text-base">
             文法・語彙・読解を 12 問で確認し、Steady Study を始めるための推定レベルを出します。
-            公式資格の判定ではなく、最初の学習導線を揃えるための目安です。
+            公式資格の判定ではなく、最初に取り組む内容を揃えるための目安です。
           </p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">

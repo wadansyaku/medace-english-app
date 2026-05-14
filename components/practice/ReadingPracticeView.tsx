@@ -191,7 +191,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
         <div className="text-xs font-bold text-slate-400">長文読解</div>
         <h2 className="mt-2 text-xl font-black text-slate-950">長文読解の問題がありません</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          レベル別の読解パッセージを生成して、このコンポーネントに渡してください。
+          今は長文問題を準備できませんでした。文法か和訳から始めてください。
         </p>
       </section>
     );

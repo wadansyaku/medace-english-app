@@ -206,7 +206,7 @@ export const useStudentDashboardViewModel = ({
 
   const preferenceSummary = preferenceSummaryParts.length > 0
     ? preferenceSummaryParts.join(' / ')
-    : '目標試験・学習時間・苦手分野を設定すると、プラン提案の精度が上がります。';
+    : '目標と使える時間を入れると、今日やる量を決めやすくなります。';
 
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
   const latestCoachNotification = coachNotifications[0] || null;

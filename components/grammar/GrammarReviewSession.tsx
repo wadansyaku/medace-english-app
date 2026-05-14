@@ -198,7 +198,7 @@ const GrammarReviewSession: React.FC<GrammarReviewSessionProps> = ({
         <div className="text-xs font-bold text-slate-400">文法復習</div>
         <h2 className="mt-2 text-xl font-black text-slate-950">文法復習の問題がありません</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-500">
-          登場済み単語と英文から問題を生成して、このコンポーネントに渡してください。
+          今は文法問題を準備できませんでした。単語学習か和訳から始めてください。
         </p>
       </section>
     );

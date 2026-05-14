@@ -166,7 +166,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                   </span>
                 </div>
                 <p className="mt-3 text-[0.98rem] leading-relaxed text-white/88">
-                  生徒の学習導線だけでなく、学校・教室向けのビジネス版デモもこの画面からそのまま確認できます。体験用アカウントは期間限定で、別端末では別の体験セッションが作られます。
+                  生徒向けの画面に加えて、学校・教室向けのビジネス版デモもこの画面からそのまま確認できます。体験用アカウントは期間限定で、別端末では別の体験セッションが作られます。
                 </p>
                 <p className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-white/78">
                   初回診断やテストを最初から試せるよう、体験ログインごとに新しいデモ環境を作成します。前回の demo 状態は別ブラウザや別端末へ共有されません。
