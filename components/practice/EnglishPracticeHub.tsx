@@ -363,7 +363,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       }).catch((error) => {
         console.error('English practice attempt sync failed', error);
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
-        setPracticeSyncError('演習履歴を保存できませんでした。この端末に未同期の履歴として残しています。');
+        setPracticeSyncError('結果を保存できませんでした。次に開いたとき、もう一度保存を試します。');
       });
     });
   }, [practiceProgress, user.uid]);
@@ -701,10 +701,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       } catch {
         feedback = {
           ...feedback,
-          summaryJa: `${feedback.summaryJa} 答案チェックに接続できないため、今回は正解例との差分で暫定フィードバックを表示しています。`,
+          summaryJa: `${feedback.summaryJa} 今回は正解例と比べて、直す場所を確認しています。`,
           issues: feedback.issues.length > 0
             ? feedback.issues
-          : ['答案チェックが利用できないため、主語・動詞・修飾語の対応を正解例と照合してください。'],
+          : ['正解例を見ながら、主語・動詞・修飾語の対応をもう一度確認してください。'],
         };
       } finally {
         if (translationSubmissionVersionRef.current === submissionVersion) {
@@ -918,7 +918,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">
                 {progressSummary.weakGrammarScopes.length > 0
                   ? `${progressSummary.weakGrammarScopes[0].labelJa} を優先して復習します。`
-                  : 'まずは現在レベルの推奨範囲から始めます。'}
+                  : 'まずは今のレベルで解きやすい範囲から始めます。'}
               </p>
             </div>
             <button
@@ -926,7 +926,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               onClick={applyRecommendedScopes}
               className="rounded-lg bg-white px-3 py-2 text-xs font-black text-medace-800 shadow-sm"
             >
-              推奨範囲を選択
+              今日の範囲を選ぶ
             </button>
           </div>
         </div>
@@ -987,7 +987,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               <p className="mt-1 text-sm font-black text-slate-900">
                 {selectedScopes.length > 0
                   ? selectedScopes.slice(0, 2).map((scope) => scope.labelJa).join(' / ')
-                  : '推奨範囲'}
+                  : '今日向けの範囲'}
                 {selectedScopes.length > 2 ? ` ほか${selectedScopes.length - 2}件` : ''}
               </p>
             </div>
@@ -1005,7 +1005,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <>
             <div className="mt-4 flex flex-wrap gap-2">
               {[
-                { id: 'recommended' as ScopeViewFilter, label: '推奨' },
+                { id: 'recommended' as ScopeViewFilter, label: '今日向け' },
                 { id: 'weak' as ScopeViewFilter, label: '弱点' },
                 { id: 'all' as ScopeViewFilter, label: '全範囲' },
               ].map((filter) => (
@@ -1582,7 +1582,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         {LEVEL_LABELS[userLevel]}
       </span>
       <span className="rounded-md border border-orange-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
-        {wordsLoading ? '単語を準備中' : samplePracticeActive ? '体験問題' : `${sessionWords.length}語で練習`}
+        {wordsLoading ? '単語を準備中' : samplePracticeActive ? 'お試し問題' : `${sessionWords.length}語で練習`}
       </span>
       <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
@@ -1595,13 +1595,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       {wordsLoading && sessionWords.length === 0 && (
         <section className="mb-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
           <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-          学習中の単語を確認しています。読み込み完了後に、履歴へ残る問題を開始できます。
+          単語を読み込んでいます。準備できたら、このまま1セット始められます。
         </section>
       )}
 
       {samplePracticeActive && (
         <section className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
-          学習中の単語がまだないため体験問題を表示しています。この結果は復習履歴やクラウド履歴には保存しません。
+          これはお試し問題です。あとから復習対象には入りません。
         </section>
       )}
 

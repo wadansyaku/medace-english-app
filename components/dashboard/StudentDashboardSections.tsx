@@ -42,6 +42,7 @@ import {
 type StudentDashboardController = ReturnType<typeof useStudentDashboardController>;
 type StudentDashboardViewModel = ReturnType<typeof useStudentDashboardViewModel>;
 type StudentDashboardSectionNavigation = ReturnType<typeof useDashboardSectionNavigation>;
+type FocusedPracticeLane = 'grammar' | 'translation' | 'reading' | 'writing';
 
 interface StudentDashboardSectionsProps {
   user: UserProfile;
@@ -52,6 +53,7 @@ interface StudentDashboardSectionsProps {
   navigation: StudentDashboardSectionNavigation;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   onSelectLearningRoute: (routeId: StudentDashboardLearningRouteId) => void;
+  onSelectPracticeLane: (lane: FocusedPracticeLane) => void;
   onStartTask: (task: LearningTaskIntent) => void;
   onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
@@ -65,6 +67,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   navigation,
   onSelectBook,
   onSelectLearningRoute,
+  onSelectPracticeLane,
   onStartTask,
   onSubmitCommercialRequest,
 }) => {
@@ -152,13 +155,20 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           todayCount={viewModel.todayCount}
           todayWordGoal={viewModel.todayWordGoal}
           todayProgressPercent={viewModel.todayProgressPercent}
+          learningRouteCards={viewModel.learningRouteCards}
+          primaryLearningRouteId={viewModel.primaryLearningRouteId}
+          practiceRecommendation={viewModel.practiceRecommendation}
           gameLeagueBadge={viewModel.isGameMode ? viewModel.userLeague : undefined}
           isMobileCompact={isStudentMobileShell}
+          practiceAnchorRef={navigation.englishPracticeSectionRef}
+          practiceAnchorStyle={navigation.mobileAnchorStyle}
           onOpenSettings={() => controller.setShowSettingsModal(true)}
           onOpenRecommendedCourse={viewModel.primaryRecommendedBook
             ? () => onSelectBook(viewModel.primaryRecommendedBook!.id, 'study')
             : undefined}
           onStartQuest={() => onSelectLearningRoute(viewModel.primaryLearningRouteId)}
+          onSelectLearningRoute={onSelectLearningRoute}
+          onSelectPracticeLane={onSelectPracticeLane}
           onOpenPlan={() => controller.setShowPlanEditModal(true)}
           onGeneratePlan={controller.handleGeneratePlan}
         />
