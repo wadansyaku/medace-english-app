@@ -13,7 +13,10 @@ import {
 import type { AnnouncementFeedController } from '../../hooks/useAnnouncementFeed';
 import type { useDashboardSectionNavigation } from '../../hooks/useDashboardSectionNavigation';
 import type { useStudentDashboardController } from '../../hooks/useStudentDashboardController';
-import type { useStudentDashboardViewModel } from '../../hooks/useStudentDashboardViewModel';
+import type {
+  StudentDashboardLearningRouteId,
+  useStudentDashboardViewModel,
+} from '../../hooks/useStudentDashboardViewModel';
 import type { CommercialRequestPayload } from '../../contracts/storage';
 import { workspaceService } from '../../services/workspace';
 import StudyCompanion from '../StudyCompanion';
@@ -48,6 +51,7 @@ interface StudentDashboardSectionsProps {
   isStudentMobileShell: boolean;
   navigation: StudentDashboardSectionNavigation;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
+  onSelectLearningRoute: (routeId: StudentDashboardLearningRouteId) => void;
   onStartTask: (task: LearningTaskIntent) => void;
   onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
@@ -60,6 +64,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   isStudentMobileShell,
   navigation,
   onSelectBook,
+  onSelectLearningRoute,
   onStartTask,
   onSubmitCommercialRequest,
 }) => {
@@ -153,13 +158,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           onOpenRecommendedCourse={viewModel.primaryRecommendedBook
             ? () => onSelectBook(viewModel.primaryRecommendedBook!.id, 'study')
             : undefined}
-          onStartQuest={() => {
-            if (viewModel.hasStudyBooks) {
-              onStartTask(todayTaskIntent);
-            } else {
-              controller.setShowCreateModal(true);
-            }
-          }}
+          onStartQuest={() => onSelectLearningRoute(viewModel.primaryLearningRouteId)}
           onOpenPlan={() => controller.setShowPlanEditModal(true)}
           onGeneratePlan={controller.handleGeneratePlan}
         />

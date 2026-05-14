@@ -6,10 +6,12 @@ import {
   createEmptyEnglishPracticeProgress,
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
   loadEnglishPracticeProgress,
+  markEnglishPracticeAttemptSynced,
   recordEnglishPracticeAttempt,
   saveEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
   toEnglishPracticeCloudQuizAttempt,
+  toEnglishPracticeStoragePayload,
   type EnglishPracticeStorage,
   getEnglishPracticeLaneLabel,
 } from '../utils/englishPracticeProgress';
@@ -169,6 +171,35 @@ describe('english practice progress', () => {
       responseTimeMs: 1200,
       grammarScopeId: 'basic-svo',
       translationFeedback: feedback,
+    });
+  });
+
+  it('keeps a stable client attempt id and marks cloud-synced attempts', () => {
+    const progress = recordEnglishPracticeAttempt(createEmptyEnglishPracticeProgress('student-sync'), {
+      lane: 'reading',
+      mode: 'READING',
+      correct: false,
+      score: 0,
+      maxScore: 1,
+      readingQuestionKind: 'REFERENCE_OR_MAIN_IDEA',
+      occurredAt: 500,
+    });
+    const attempt = progress.attempts[0];
+
+    expect(attempt.clientAttemptId).toBe(attempt.id);
+    expect(attempt.syncStatus).toBe('pending');
+    expect(toEnglishPracticeStoragePayload(attempt)).toMatchObject({
+      clientAttemptId: attempt.clientAttemptId,
+      lane: 'reading',
+      mode: 'READING',
+      readingQuestionKind: 'REFERENCE_OR_MAIN_IDEA',
+      occurredAt: 500,
+    });
+
+    const synced = markEnglishPracticeAttemptSynced(progress, attempt.clientAttemptId, 700);
+    expect(synced.attempts[0]).toMatchObject({
+      syncStatus: 'synced',
+      syncedAt: 700,
     });
   });
 

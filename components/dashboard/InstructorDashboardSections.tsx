@@ -132,10 +132,18 @@ const getCohortStyle = (cohortName?: string): string => (
 const getCohortLabel = (cohortName?: string): string => cohortName || '未設定';
 
 const getNextActionText = (student: StudentSummary): string => {
+  if (student.englishPracticeInsight) return student.englishPracticeInsight.nextActionLabel;
   if (student.recommendedAction) return student.recommendedAction;
   if (student.riskLevel === StudentRiskLevel.DANGER) return '今日のうちに声かけする';
   if (student.riskLevel === StudentRiskLevel.WARNING) return '次の学習開始を後押しする';
   return '現在のペースを維持する';
+};
+
+const getEnglishPracticeInsightTone = (student: StudentSummary): string => {
+  const accuracy = student.englishPracticeInsight?.accuracy;
+  if (accuracy != null && accuracy < 60) return 'border-red-200 bg-red-50 text-red-700';
+  if (student.englishPracticeInsight?.source === 'practice_attempts') return 'border-amber-200 bg-amber-50 text-amber-700';
+  return 'border-sky-200 bg-sky-50 text-sky-700';
 };
 
 const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = ({
@@ -200,6 +208,13 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                           <div className="mt-2">
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${getWeaknessTone(student.topWeaknesses[0].score)}`}>
                               {WEAKNESS_DIMENSION_LABELS[student.topWeaknesses[0].dimension]}
+                            </span>
+                          </div>
+                        )}
+                        {student.englishPracticeInsight && (
+                          <div className="mt-2">
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${getEnglishPracticeInsightTone(student)}`}>
+                              演習: {student.englishPracticeInsight.laneLabel}
                             </span>
                           </div>
                         )}
@@ -529,6 +544,23 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                             <div className="mt-2 text-sm leading-relaxed text-slate-600">{weakness.reason}</div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {controller.focusedStudent.englishPracticeInsight && (
+                    <div className="rounded-3xl border border-sky-200 bg-sky-50 px-5 py-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">英語演習の次手</div>
+                          <div className="mt-2 text-lg font-black text-slate-950">{controller.focusedStudent.englishPracticeInsight.nextActionLabel}</div>
+                          <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+                            {controller.focusedStudent.englishPracticeInsight.reason}
+                          </p>
+                        </div>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-black ${getEnglishPracticeInsightTone(controller.focusedStudent)}`}>
+                          {controller.focusedStudent.englishPracticeInsight.weaknessLabel}
+                        </span>
                       </div>
                     </div>
                   )}

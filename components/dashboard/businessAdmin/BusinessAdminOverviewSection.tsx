@@ -348,8 +348,15 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
                   <span className={`rounded-full border px-3 py-1 text-xs font-medium ${cohortTone(student.cohortName)}`}>
                     クラス: {cohortLabel(student.cohortName)}
                   </span>
+                  {student.englishPracticeInsight && (
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
+                      演習: {student.englishPracticeInsight.laneLabel}
+                    </span>
+                  )}
                 </div>
-                <div className="mt-3 text-sm text-slate-600">{student.recommendedAction || '担当講師の確認と次の声かけ内容を調整する'}</div>
+                <div className="mt-3 text-sm text-slate-600">
+                  {student.englishPracticeInsight?.nextActionLabel || student.recommendedAction || '担当講師の確認と次の声かけ内容を調整する'}
+                </div>
               </div>
             ))}
             {snapshot.atRiskStudentList.length === 0 && (

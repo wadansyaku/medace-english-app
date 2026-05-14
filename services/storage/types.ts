@@ -43,6 +43,8 @@ import type {
   ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  EnglishPracticeAttemptPayload,
+  EnglishPracticeAttemptResult,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
   GenerateWordHintAssetPayload,
@@ -95,6 +97,7 @@ export interface LearningStorageService {
     grammarScopeId?: GrammarCurriculumScopeId,
     translationFeedback?: JapaneseTranslationFeedback,
   ): Promise<void>;
+  recordEnglishPracticeAttempt(uid: string, payload: EnglishPracticeAttemptPayload): Promise<EnglishPracticeAttemptResult>;
   listAiGeneratedProblemReviewQueue(payload?: AiGeneratedProblemReviewQueueRequest): Promise<AiGeneratedProblemReviewQueueResponse>;
   reviewAiGeneratedProblem(payload: AiGeneratedProblemReviewPayload): Promise<AiGeneratedProblemReviewQueueItem>;
   getStudiedWordIdsByBook(uid: string, bookId: string): Promise<string[]>;

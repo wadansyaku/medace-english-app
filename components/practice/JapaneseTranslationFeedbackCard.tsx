@@ -29,9 +29,21 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
       <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
         {getExamTargetLabel(feedback)}
       </span>
+      <span className={`rounded-full border px-3 py-1 text-xs font-black ${
+        feedback.usedAi === false
+          ? 'border-slate-200 bg-white text-slate-600'
+          : 'border-medace-200 bg-medace-50 text-medace-700'
+      }`}>
+        {feedback.usedAi === false ? '簡易判定' : 'AI採点'}
+      </span>
     </div>
 
     <p className="mt-3 text-sm font-bold leading-relaxed text-slate-800">{feedback.summaryJa}</p>
+    {feedback.usedAi === false && (
+      <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
+        通信状況または設定により、正解例との一致を中心に簡易判定しています。
+      </p>
+    )}
 
     <div className="mt-4 grid gap-3 md:grid-cols-3">
       {feedback.criteria.map((criterion) => {

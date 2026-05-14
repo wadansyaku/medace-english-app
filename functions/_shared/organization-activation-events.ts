@@ -9,6 +9,7 @@ import {
 import { HttpError } from './http';
 import { requireActiveOrganizationContext } from './organization-memberships';
 import { readActiveOrganizationMember } from './organization-support';
+import { canAccessVisibleStudent } from './student-visibility';
 import { readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
 
@@ -141,6 +142,10 @@ export const handleRecordClassroomWorksheetLifecycleEvent = async (
 
   if (!student || student.role !== UserRole.STUDENT || student.organization_id !== organization.organizationId) {
     throw new HttpError(403, '担当組織の生徒のみ worksheet lifecycle を記録できます。');
+  }
+  const canAccessStudent = await canAccessVisibleStudent(env, user, input.studentUid, organization);
+  if (!canAccessStudent) {
+    throw new HttpError(403, '担当範囲の生徒のみ worksheet lifecycle を記録できます。');
   }
 
   const occurredAt = input.occurredAt || Date.now();

@@ -59,6 +59,7 @@ describe('R2 reset lifecycle', () => {
       'writing-submissions/org-1/assignment-1/attempt-1/a.pdf',
       'word-hints/word-1/example-image.jpg',
     ]);
+    expect(env.DB.prepare).toHaveBeenCalledWith('DELETE FROM english_practice_attempts');
     expect(env.DB.batch).toHaveBeenCalledTimes(1);
   });
 });

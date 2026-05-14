@@ -271,6 +271,7 @@ describe('QuizRunningView answer-bearing context', () => {
         improvedTranslation: 'その語は今日、生徒によって復習される。',
         grammarAdviceJa: 'be動詞 + 過去分詞を受け身として読みます。',
         nextDrillJa: '主語 / be+過去分詞 / by の3ますで確認しましょう。',
+        usedAi: false,
         criteria: [
           { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
           { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
@@ -317,6 +318,7 @@ describe('QuizRunningView answer-bearing context', () => {
         improvedTranslation: 'その語は今日、生徒によって復習される。',
         grammarAdviceJa: 'be動詞 + 過去分詞を受け身として読みます。',
         nextDrillJa: '主語 / be+過去分詞 / by の3ますで確認しましょう。',
+        usedAi: false,
         criteria: [
           { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
           { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
@@ -326,6 +328,8 @@ describe('QuizRunningView answer-bearing context', () => {
     });
 
     expect(rendered).toContain('data-testid="translation-feedback-next"');
+    expect(rendered).toContain('簡易判定');
+    expect(rendered).toContain('正解例との一致を中心に簡易判定しています');
     expect(rendered).toContain('フィードバックを読んだので次へ');
     expect(rendered).not.toContain('type="submit"');
     expect(rendered).not.toContain('和訳を判定する');

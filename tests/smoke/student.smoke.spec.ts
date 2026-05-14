@@ -25,24 +25,29 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await expect(page.getByText('今日やることは 1 つだけ')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
+  await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-grammar')).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-translation')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-practice-lane-reading')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-practice-lane-writing')).toHaveCount(0);
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByText('今日の英語演習')).toHaveCount(0);
   await expect(page.getByText('英語演習のおすすめ')).toHaveCount(0);
 
-  await page.getByTestId('dashboard-practice-lane-translation').click();
-  await expect(page).toHaveURL(/\/english-practice\/translation$/);
+  await page.getByTestId('dashboard-practice-lane-grammar').click();
+  await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
   await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '和訳トレーニング' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '参考書型の文法演習' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
 
-  await page.getByTestId('dashboard-practice-lane-translation').click();
-  await expect(page).toHaveURL(/\/english-practice\/translation$/);
+  await page.getByTestId('dashboard-practice-lane-grammar').click();
+  await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await page.getByTestId('english-practice-close').click();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);

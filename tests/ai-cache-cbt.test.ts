@@ -12,6 +12,7 @@ import {
   listAiGeneratedProblemReviewQueue,
   readReusableAiGrammarQuestions,
   readReusableAiGrammarProblems,
+  readCbtLearnerScopeSnapshot,
   recordCbtProblemAttempt,
   recordCbtScopeAttempt,
   recordAiGeneratedProblem,
@@ -199,7 +200,9 @@ describe('AI cache and CBT helpers', () => {
 
     expect(row.id).toBe('ai-problem-abc');
     expect(db.queries[0]).toContain('INSERT INTO ai_generated_contents');
+    expect(db.queries[0]).toContain("review_status = 'APPROVED'");
     expect(db.queries.some((queryText) => queryText.includes('INSERT INTO ai_generated_problems'))).toBe(true);
+    expect(db.queries.find((queryText) => queryText.includes('INSERT INTO ai_generated_problems'))).toContain("review_status = 'APPROVED'");
     const contentInsert = db.binds.find(({ query: queryText }) => queryText.includes('INSERT INTO ai_generated_contents'));
     expect(contentInsert?.values[12]).toBe('NEEDS_REVIEW');
     const metadataInsert = db.binds.find(({ query: queryText }) => queryText.includes('INSERT INTO assessment_item_metadata'));
@@ -231,6 +234,24 @@ describe('AI cache and CBT helpers', () => {
     expect(db.queries.at(-1)).toContain("m.review_status = 'APPROVED'");
     expect(db.queries.at(-1)).not.toContain("m.problem_id IS NULL AND c.quality_status = 'READY'");
     expect(db.binds.at(-1)?.values).toEqual(['word-1', 'word-2', 'GRAMMAR_CLOZE', 'basic-svo', 'basic-svo', 0.2, 0.8, 25]);
+  });
+
+  it('prefers CBT scope state when reading a scoped learner snapshot', async () => {
+    const db = createMockDb();
+    db.firstQueue.push({
+      mastery_level: 0.2,
+      confidence: 0.4,
+      attempt_count: 5,
+      correct_count: 1,
+      last_attempt_at: 100,
+      updated_at: 100,
+    });
+
+    const snapshot = await readCbtLearnerScopeSnapshot({ DB: db } as any, 'user-1', 'passive-voice', 'JA_TRANSLATION_INPUT');
+
+    expect(snapshot.learner.level).toBeCloseTo(0.2);
+    expect(db.queries[0]).toContain('cbt_learner_scope_states');
+    expect(db.binds[0]?.values).toEqual(['user-1', 'passive-voice', 'JA_TRANSLATION_INPUT']);
   });
 
   it('reads one reusable question per word and preserves generated problem ids', async () => {

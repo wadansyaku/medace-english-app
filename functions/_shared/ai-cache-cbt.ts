@@ -416,8 +416,30 @@ export const upsertAiGeneratedContent = async (
       expires_at, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)
     ON CONFLICT(cache_key) DO UPDATE SET
-      payload_json = excluded.payload_json,
-      quality_status = excluded.quality_status,
+      payload_json = CASE
+        WHEN ai_generated_contents.quality_status = 'READY'
+         AND EXISTS (
+           SELECT 1
+           FROM ai_generated_problems p
+           JOIN assessment_item_metadata m ON m.problem_id = p.id
+           WHERE p.content_id = ai_generated_contents.id
+             AND m.review_status = 'APPROVED'
+         )
+        THEN ai_generated_contents.payload_json
+        ELSE excluded.payload_json
+      END,
+      quality_status = CASE
+        WHEN ai_generated_contents.quality_status = 'READY'
+         AND EXISTS (
+           SELECT 1
+           FROM ai_generated_problems p
+           JOIN assessment_item_metadata m ON m.problem_id = p.id
+           WHERE p.content_id = ai_generated_contents.id
+             AND m.review_status = 'APPROVED'
+         )
+        THEN ai_generated_contents.quality_status
+        ELSE excluded.quality_status
+      END,
       expires_at = excluded.expires_at,
       updated_at = excluded.updated_at
   `).bind(
@@ -487,15 +509,33 @@ export const recordAiGeneratedProblem = async (
       difficulty_level, active, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
     ON CONFLICT(content_id) DO UPDATE SET
-      grammar_scope_id = excluded.grammar_scope_id,
-      prompt_text = excluded.prompt_text,
-      answer_text = excluded.answer_text,
-      options_json = excluded.options_json,
-      ordered_tokens_json = excluded.ordered_tokens_json,
-      source_sentence = excluded.source_sentence,
-      source_translation = excluded.source_translation,
-      grammar_focus = excluded.grammar_focus,
-      difficulty_level = excluded.difficulty_level,
+      grammar_scope_id = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.grammar_scope_id ELSE excluded.grammar_scope_id END,
+      prompt_text = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.prompt_text ELSE excluded.prompt_text END,
+      answer_text = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.answer_text ELSE excluded.answer_text END,
+      options_json = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.options_json ELSE excluded.options_json END,
+      ordered_tokens_json = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.ordered_tokens_json ELSE excluded.ordered_tokens_json END,
+      source_sentence = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.source_sentence ELSE excluded.source_sentence END,
+      source_translation = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.source_translation ELSE excluded.source_translation END,
+      grammar_focus = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.grammar_focus ELSE excluded.grammar_focus END,
+      difficulty_level = CASE
+        WHEN EXISTS (SELECT 1 FROM assessment_item_metadata m WHERE m.problem_id = ai_generated_problems.id AND m.review_status = 'APPROVED')
+        THEN ai_generated_problems.difficulty_level ELSE excluded.difficulty_level END,
       active = 1,
       updated_at = excluded.updated_at
   `).bind(
@@ -848,6 +888,27 @@ export const readCbtLearnerSnapshot = async (
     .bind(userId)
     .first<CbtRow>();
   const learner = toCbtState(row, 'ability_level');
+  return {
+    learner,
+    difficultyBand: selectCbtDifficultyBand(learner),
+  };
+};
+
+export const readCbtLearnerScopeSnapshot = async (
+  env: AppEnv,
+  userId: string | null | undefined,
+  grammarScopeId: GrammarCurriculumScopeId | null | undefined,
+  questionMode: string | null | undefined,
+): Promise<CbtLearnerSnapshot> => {
+  if (!userId || !grammarScopeId || !questionMode) {
+    return readCbtLearnerSnapshot(env, userId);
+  }
+  const row = await env.DB.prepare(`
+    SELECT * FROM cbt_learner_scope_states
+    WHERE user_id = ? AND grammar_scope_id = ? AND question_mode = ?
+  `).bind(userId, grammarScopeId, questionMode).first<CbtRow>();
+  if (!row) return readCbtLearnerSnapshot(env, userId);
+  const learner = toCbtState(row, 'mastery_level');
   return {
     learner,
     difficultyBand: selectCbtDifficultyBand(learner),

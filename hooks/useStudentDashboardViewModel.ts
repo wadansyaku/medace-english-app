@@ -2,6 +2,7 @@ import { getSubscriptionPolicy, isAdSupportedPlan } from '../config/subscription
 import { getTodayDateKey } from '../utils/date';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/weakness';
+import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
 import {
   EnglishLevel,
   MissionNextActionType,
@@ -14,13 +15,18 @@ import {
   WEEKLY_MISSION_STATUS_LABELS,
   WeeklyMissionStatus,
 } from '../types';
+import type {
+  EnglishPracticeLaneId,
+  EnglishPracticeRecommendation,
+} from '../utils/englishPracticeProgress';
 
 interface UseStudentDashboardViewModelParams {
   user: UserProfile;
   snapshot: DashboardSnapshot | null;
+  englishPracticeRecommendation?: EnglishPracticeRecommendation | null;
 }
 
-export type StudentDashboardLearningRouteId = 'today' | 'mission' | 'weakness' | 'writing';
+export type StudentDashboardLearningRouteId = 'today' | 'mission' | 'weakness' | 'englishPractice' | 'writing';
 
 export interface StudentDashboardLearningRouteCard {
   id: StudentDashboardLearningRouteId;
@@ -29,8 +35,17 @@ export interface StudentDashboardLearningRouteCard {
   ctaLabel: string;
   metricLabel: string;
   stateLabel: string;
-  tone: 'primary' | 'mission' | 'weakness' | 'writing';
+  tone: 'primary' | 'mission' | 'weakness' | 'practice' | 'writing';
   isPrimary: boolean;
+}
+
+export interface StudentDashboardPracticeRecommendation {
+  lane: EnglishPracticeLaneId;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  metricLabel: string;
+  stateLabel: string;
 }
 
 const getLeague = (level: number) => {
@@ -46,9 +61,37 @@ const orderBooksByIds = <T extends { id: string }>(books: T[], orderedIds: strin
     .filter((book): book is T => Boolean(book));
 };
 
+const PRACTICE_LANE_COPY: Record<EnglishPracticeLaneId, Pick<StudentDashboardPracticeRecommendation, 'title' | 'ctaLabel' | 'metricLabel' | 'stateLabel'>> = {
+  grammar: {
+    title: '文法演習',
+    ctaLabel: '文法を5問解く',
+    metricLabel: '5問',
+    stateLabel: '文法',
+  },
+  translation: {
+    title: '和訳演習',
+    ctaLabel: '全文和訳を始める',
+    metricLabel: '1セット',
+    stateLabel: '和訳',
+  },
+  reading: {
+    title: '長文読解',
+    ctaLabel: '短い長文を読む',
+    metricLabel: '1本文',
+    stateLabel: '長文',
+  },
+  writing: {
+    title: '英検英作文',
+    ctaLabel: '英作文を1テーマ書く',
+    metricLabel: '1テーマ',
+    stateLabel: '英作文',
+  },
+};
+
 export const useStudentDashboardViewModel = ({
   user,
   snapshot,
+  englishPracticeRecommendation,
 }: UseStudentDashboardViewModelParams) => {
   const dueCount = snapshot?.dueCount ?? 0;
   const books = snapshot?.officialBooks ?? [];
@@ -170,6 +213,24 @@ export const useStudentDashboardViewModel = ({
   const canShowWritingSection = currentPlan === SubscriptionPlan.TOB_PAID && Boolean(user.organizationName);
   const topWeakness = weaknessProfile?.topWeaknesses[0] || null;
   const hasWeaknessSignals = Boolean(weaknessProfile?.hasSufficientData && topWeakness);
+  const recommendedPracticeLane = englishPracticeRecommendation?.lane
+    || getEnglishPracticeLaneForWeakness(topWeakness)
+    || 'grammar';
+  const recommendedPracticeCopy = PRACTICE_LANE_COPY[recommendedPracticeLane];
+  const practiceRecommendation: StudentDashboardPracticeRecommendation = {
+    lane: recommendedPracticeLane,
+    title: englishPracticeRecommendation?.labelJa || recommendedPracticeCopy.title,
+    ctaLabel: englishPracticeRecommendation?.actionJa || recommendedPracticeCopy.ctaLabel,
+    metricLabel: recommendedPracticeCopy.metricLabel,
+    stateLabel: recommendedPracticeCopy.stateLabel,
+    body: topWeakness && getEnglishPracticeLaneForWeakness(topWeakness)
+      ? `${WEAKNESS_DIMENSION_LABELS[topWeakness.dimension]}を、英語演習で短く確認します。`
+      : englishPracticeRecommendation?.reasonJa
+        ? englishPracticeRecommendation.reasonJa
+      : remainingWords > 0
+        ? '単語学習の流れを崩さず、文法・和訳・長文へ短くつなげます。'
+        : '今日の語彙目標の後に、文法・和訳・長文を1つだけ進めます。',
+  };
   const hasActionableWriting = Boolean(
     canShowWritingSection
       && primaryMission
@@ -183,12 +244,21 @@ export const useStudentDashboardViewModel = ({
       && primaryMission.status !== WeeklyMissionStatus.COMPLETED
       && primaryMission.completionRate < 100,
   );
+  const hasEnglishPracticeWeakness = Boolean(getEnglishPracticeLaneForWeakness(topWeakness));
+  const shouldPrioritizePractice = Boolean(
+    hasStudyBooks
+      && !hasActionableWriting
+      && !hasActiveMission
+      && (hasEnglishPracticeWeakness || (!hasWeaknessSignals && remainingWords <= 0)),
+  );
   const primaryLearningRouteId: StudentDashboardLearningRouteId = !hasStudyBooks
     ? 'today'
     : hasActionableWriting
       ? 'writing'
       : hasActiveMission
         ? 'mission'
+        : shouldPrioritizePractice
+          ? 'englishPractice'
         : remainingWords > 0
           ? 'today'
           : hasWeaknessSignals
@@ -235,6 +305,15 @@ export const useStudentDashboardViewModel = ({
       stateLabel: hasWeaknessSignals ? '優先' : `${WEAKNESS_MIN_SAMPLE}問から判定`,
       tone: 'weakness' as const,
     },
+    hasStudyBooks ? {
+      id: 'englishPractice' as const,
+      title: '英語演習',
+      body: practiceRecommendation.body,
+      ctaLabel: practiceRecommendation.ctaLabel,
+      metricLabel: practiceRecommendation.metricLabel,
+      stateLabel: practiceRecommendation.stateLabel,
+      tone: 'practice' as const,
+    } : null,
     canShowWritingSection ? {
       id: 'writing' as const,
       title: '英作文',
@@ -253,6 +332,14 @@ export const useStudentDashboardViewModel = ({
       ...card,
       isPrimary: card.id === primaryLearningRouteId,
     }));
+  const primaryLearningRouteCard = learningRouteCards.find((card) => card.isPrimary) || null;
+  const heroRouteTitle = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
+    ? heroTitle
+    : `${primaryLearningRouteCard.title}: ${primaryLearningRouteCard.metricLabel}`;
+  const heroRouteCopy = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
+    ? heroCopy
+    : primaryLearningRouteCard.body;
+  const heroRouteButtonLabel = primaryLearningRouteCard?.ctaLabel || questButtonLabel;
 
   return {
     dueCount,
@@ -292,9 +379,9 @@ export const useStudentDashboardViewModel = ({
     recommendedOfficialBooks,
     primaryRecommendedBook,
     secondaryRecommendedBooks,
-    heroTitle,
-    heroCopy,
-    questButtonLabel,
+    heroTitle: heroRouteTitle,
+    heroCopy: heroRouteCopy,
+    questButtonLabel: heroRouteButtonLabel,
     aiBudgetPercent,
     aiUsageLabel,
     aiUsageCopy,
@@ -305,6 +392,7 @@ export const useStudentDashboardViewModel = ({
     topWeakness,
     hasWeaknessSignals,
     hasActionableWriting,
+    practiceRecommendation,
     primaryLearningRouteId,
     learningRouteCards,
   };

@@ -1,8 +1,17 @@
-import { UserRole, type WorksheetQuestionMode } from '../../../types';
+import {
+  EnglishLevel,
+  LearningTaskIntentType,
+  UserRole,
+  type WorksheetQuestionMode,
+} from '../../../types';
 import { WORKSHEET_QUESTION_MODES } from '../../../shared/worksheetQuestionMode';
+import {
+  ENGLISH_PRACTICE_ATTEMPT_MODES,
+  ENGLISH_PRACTICE_LANE_IDS,
+} from '../../../shared/englishPractice';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalNumber, expectOptionalObject, expectOptionalString, expectString } from '../request-validation';
+import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalEnum, expectOptionalNumber, expectOptionalObject, expectOptionalString, expectString } from '../request-validation';
 import {
   handleAddXP,
   handleGetActivityLogs,
@@ -12,6 +21,7 @@ import {
   handleGetLearningPreference,
   handleGetStudiedWordIdsByBook,
   handleRecordQuizAttempt,
+  handleRecordEnglishPracticeAttempt,
   handleResetAllData,
   handleSaveLearningPlan,
   handleSaveLearningPreference,
@@ -65,7 +75,7 @@ export const learningStorageActionDefinitions = {
         questionMode: expectEnum(record.questionMode, WORKSHEET_QUESTION_MODES, 'questionMode') as WorksheetQuestionMode,
         responseTimeMs: expectOptionalNumber(record, 'responseTimeMs') || 0,
         missionAssignmentId: expectOptionalString(record, 'missionAssignmentId'),
-        taskIntentType: expectOptionalString(record, 'taskIntentType') as never,
+        taskIntentType: expectOptionalEnum(record.taskIntentType, Object.values(LearningTaskIntentType), 'taskIntentType') as never,
         generatedProblemId: expectOptionalString(record, 'generatedProblemId'),
         grammarScopeId: expectOptionalString(record, 'grammarScopeId') as never,
         translationFeedback: expectOptionalObject(record.translationFeedback, 'translationFeedback') as never,
@@ -88,6 +98,31 @@ export const learningStorageActionDefinitions = {
       );
       return null;
     },
+  }),
+  recordEnglishPracticeAttempt: defineStorageAction<'recordEnglishPracticeAttempt'>({
+    parse: (payload) => {
+      const record = expectObject(payload);
+      return {
+        clientAttemptId: expectString(record, 'clientAttemptId'),
+        lane: expectEnum(record.lane, ENGLISH_PRACTICE_LANE_IDS, 'lane'),
+        mode: expectEnum(record.mode, ENGLISH_PRACTICE_ATTEMPT_MODES, 'mode'),
+        correct: expectBoolean(record, 'correct'),
+        score: expectOptionalNumber(record, 'score'),
+        maxScore: expectOptionalNumber(record, 'maxScore'),
+        occurredAt: expectOptionalNumber(record, 'occurredAt'),
+        responseTimeMs: expectOptionalNumber(record, 'responseTimeMs'),
+        wordId: expectOptionalString(record, 'wordId'),
+        bookId: expectOptionalString(record, 'bookId'),
+        word: expectOptionalString(record, 'word'),
+        grammarScopeId: expectOptionalString(record, 'grammarScopeId') as never,
+        scopeLabelJa: expectOptionalString(record, 'scopeLabelJa'),
+        level: expectOptionalEnum(record.level, Object.values(EnglishLevel), 'level'),
+        readingQuestionKind: expectOptionalString(record, 'readingQuestionKind'),
+        generatedProblemId: expectOptionalString(record, 'generatedProblemId'),
+        translationFeedback: expectOptionalObject(record.translationFeedback, 'translationFeedback') as never,
+      };
+    },
+    execute: ({ env, user }, payload) => handleRecordEnglishPracticeAttempt(env, user, payload),
   }),
   getStudiedWordIdsByBook: defineStorageAction({
     parse: (payload) => {
@@ -152,6 +187,7 @@ export const learningStorageActionDefinitions = {
   | 'getDueCount'
   | 'saveSRSHistory'
   | 'recordQuizAttempt'
+  | 'recordEnglishPracticeAttempt'
   | 'getStudiedWordIdsByBook'
   | 'getBookProgress'
   | 'resetAllData'

@@ -6,6 +6,8 @@ import {
   ClassroomWorksheetLifecycleEventPayload,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
+  EnglishPracticeAttemptPayload,
+  EnglishPracticeAttemptResult,
   GenerateWordHintAssetPayload,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
@@ -222,6 +224,16 @@ export class CloudflareStorageService implements IStorageService {
     await this.callStorage({
       action: 'recordQuizAttempt',
       payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId, grammarScopeId, translationFeedback },
+    });
+  }
+
+  async recordEnglishPracticeAttempt(
+    _uid: string,
+    payload: EnglishPracticeAttemptPayload,
+  ): Promise<EnglishPracticeAttemptResult> {
+    return this.callStorage({
+      action: 'recordEnglishPracticeAttempt',
+      payload,
     });
   }
 
