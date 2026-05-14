@@ -80,83 +80,48 @@ const LEARNING_ROUTE_TONE: Record<StudentDashboardLearningRouteCard['tone'], str
 
 interface StudentLearningLaunchPanelProps {
   cards: StudentDashboardLearningRouteCard[];
-  isMobileCompact: boolean;
   onSelectRoute: (routeId: StudentDashboardLearningRouteId) => void;
 }
 
 const StudentLearningLaunchPanel: React.FC<StudentLearningLaunchPanelProps> = ({
   cards,
-  isMobileCompact,
   onSelectRoute,
 }) => {
-  const orderedCards = React.useMemo(
-    () => [...cards].sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary)),
+  const secondaryCards = React.useMemo(
+    () => cards.filter((card) => !card.isPrimary && card.id !== 'englishPractice'),
     [cards],
   );
+  if (secondaryCards.length === 0) return null;
 
   return (
-    <section data-testid="dashboard-learning-launch-panel" className="order-2 min-w-0">
-      <div className="mb-3 flex min-w-0 flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-bold text-slate-400">開始</p>
-          <h2 className="text-xl font-black text-slate-950">次に始める場所</h2>
-        </div>
-        <p className="text-sm font-medium text-slate-500">重要タスクを一列で確認</p>
+    <section
+      data-testid="dashboard-learning-launch-panel"
+      className="order-2 min-w-0 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
+    >
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-xs font-black text-slate-500">必要なら切り替え</div>
+        <div className="text-[11px] font-bold text-slate-400">迷ったら上の1つだけ</div>
       </div>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:grid-cols-4">
-        {orderedCards.map((card) => {
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {secondaryCards.map((card) => {
           const Icon = LEARNING_ROUTE_ICON[card.id];
-          const isPrimary = card.isPrimary;
           return (
-            <article
-              key={card.id}
-              data-testid={`dashboard-learning-route-${card.id}`}
-              aria-current={isPrimary ? 'step' : undefined}
-              className={`flex min-w-[78vw] flex-col rounded-lg border p-4 shadow-sm sm:min-w-0 ${
-                isPrimary
-                  ? `${LEARNING_ROUTE_TONE[card.tone]} shadow-[0_12px_28px_rgba(15,23,42,0.10)]`
-                  : 'border-slate-200 bg-white text-slate-900'
-              }`}
-            >
-              <div className="flex min-w-0 items-start justify-between gap-3">
-                <div className={`rounded-lg border p-2 ${
-                  isPrimary ? 'border-white/70 bg-white/70' : LEARNING_ROUTE_TONE[card.tone]
-                }`}>
-                  <Icon className="h-4 w-4" />
-                </div>
-                <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                  isPrimary ? 'border-white/70 bg-white/70' : 'border-slate-200 bg-slate-50 text-slate-600'
-                }`}>
-                  {card.stateLabel}
-                </span>
-              </div>
-
-              <div className="mt-3 min-w-0">
-                <div className="text-sm font-black">{card.title}</div>
-                <div className={`mt-1 min-w-0 font-black ${isMobileCompact ? 'text-lg' : 'text-xl'}`}>
-                  {card.metricLabel}
-                </div>
-                <p className={`mt-2 min-h-[2.6rem] text-sm leading-relaxed ${
-                  isPrimary ? 'text-slate-700' : 'text-slate-600'
-                }`}>
-                  {card.body}
-                </p>
-              </div>
-
+            <div key={card.id} data-testid={`dashboard-learning-route-${card.id}`} className="min-w-0">
               <button
                 type="button"
                 data-testid={`dashboard-learning-route-${card.id}-cta`}
                 onClick={() => onSelectRoute(card.id)}
-                className={`mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${
-                  isPrimary
-                    ? 'bg-slate-950 text-white hover:bg-slate-800'
-                    : 'border border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
-                }`}
+                className="flex min-h-14 w-full min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition-colors hover:border-slate-300 hover:bg-white"
               >
-                <span className="min-w-0 whitespace-normal leading-snug">{card.ctaLabel}</span>
-                <ArrowRight className="h-4 w-4 shrink-0" />
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${LEARNING_ROUTE_TONE[card.tone]}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black text-slate-900">{card.title}</span>
+                  <span className="block truncate text-xs font-bold text-slate-500">{card.ctaLabel}</span>
+                </span>
               </button>
-            </article>
+            </div>
           );
         })}
       </div>
@@ -183,7 +148,7 @@ const PRACTICE_DOCK_OPTIONS: Array<{
     id: 'grammar',
     label: '文法',
     title: '文法を5問',
-    body: '範囲を絞って、文構造の弱点だけを確認します。',
+    body: '文の形を5問だけ練習します。',
     time: '3分',
     icon: Brain,
   },
@@ -191,7 +156,7 @@ const PRACTICE_DOCK_OPTIONS: Array<{
     id: 'translation',
     label: '和訳',
     title: '和訳を1セット',
-    body: '英文全体を日本語に直し、答案としての精度を見ます。',
+    body: '英文を訳して、意味の抜けを見直します。',
     time: '5分',
     icon: Languages,
   },
@@ -199,7 +164,7 @@ const PRACTICE_DOCK_OPTIONS: Array<{
     id: 'reading',
     label: '長文',
     title: '短い長文を読む',
-    body: '根拠文を探しながら、内容一致と要旨を確認します。',
+    body: '根拠になる文を探しながら答えます。',
     time: '8分',
     icon: LibraryBig,
   },
@@ -207,7 +172,7 @@ const PRACTICE_DOCK_OPTIONS: Array<{
     id: 'writing',
     label: '英検英作文',
     title: '英検ライティング',
-    body: '講師から届く自由英作文課題とは別に、級別テーマで自主練習します。',
+    body: '級ごとのテーマで、短く書く練習をします。',
     time: '12分',
     icon: NotebookPen,
   },
@@ -230,7 +195,7 @@ const DashboardPracticeDock: React.FC<DashboardPracticeDockProps> = ({
           <p className="text-xs font-black text-medace-600">英語演習</p>
           <h2 className="text-xl font-black text-slate-950">{recommendation.title}</h2>
           <p className="mt-1 max-w-2xl text-sm font-bold leading-relaxed text-slate-600">
-            {recommendation.body}
+            {item.body}
           </p>
         </div>
         <button
@@ -279,7 +244,7 @@ const DashboardPracticeFocus: React.FC<DashboardPracticeFocusProps> = ({
       fallback={
         <div className="flex min-h-[320px] flex-col items-center justify-center text-medace-500">
           <Loader2 className="mb-2 h-8 w-8 animate-spin" />
-          <p className="text-sm font-bold">英語演習を準備中...</p>
+          <p className="text-sm font-bold">演習を開いています...</p>
         </div>
       }
     >
@@ -288,7 +253,7 @@ const DashboardPracticeFocus: React.FC<DashboardPracticeFocusProps> = ({
         variant="embedded"
         embeddedMode="drill"
         initialLane={lane}
-        closeLabel="ホームへ戻る"
+        closeLabel="今日の画面へ戻る"
         onClose={onClose}
         onStartVocabulary={onStartVocabulary}
         onActiveLaneChange={(nextLane) => {
@@ -498,7 +463,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center text-medace-500">
         <Loader2 className="mb-2 h-10 w-10 animate-spin" />
-        <p className="text-sm font-medium">学習データを解析中...</p>
+        <p className="text-sm font-medium">学習データを読み込んでいます</p>
       </div>
     );
   }
@@ -535,7 +500,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       {!selectedPracticeLane && (
         <StudentLearningLaunchPanel
           cards={viewModel.learningRouteCards}
-          isMobileCompact={isStudentMobileShell}
           onSelectRoute={(routeId) => {
             void handleLearningRouteSelect(routeId);
           }}

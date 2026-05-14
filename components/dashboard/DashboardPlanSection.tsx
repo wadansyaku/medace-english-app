@@ -49,7 +49,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <p className={`font-bold text-medace-600 ${isCompact ? 'mt-3 text-sm' : 'mt-4 text-base'}`}>"{learningPlan.goalDescription}"</p>
         {learningPreference && (
           <div className="mt-4 rounded-2xl border border-medace-100 bg-medace-50/70 px-4 py-4 text-sm text-medace-900">
-            <div className="font-bold">プラン生成に使う条件</div>
+            <div className="font-bold">プラン作成に使う条件</div>
             <div className={`mt-1 leading-relaxed ${isCompact ? 'line-clamp-2' : ''}`}>{preferenceSummary}</div>
           </div>
         )}
@@ -103,7 +103,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         </p>
         {!canGenerateAiPlan && (
           <p className="mt-3 text-xs leading-relaxed text-white/70">
-            現在のプランでは、AIを使わずに教材と学習時間から標準プランを作成します。
+            現在のプランでは、教材と学習時間から標準プランを作成します。
           </p>
         )}
         <button
@@ -112,7 +112,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
           className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-medace-900 hover:bg-medace-50 disabled:opacity-50"
         >
           {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          プランを生成
+          プランを作成
         </button>
       </div>
     )}

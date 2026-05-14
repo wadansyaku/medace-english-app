@@ -64,7 +64,7 @@ const orderBooksByIds = <T extends { id: string }>(books: T[], orderedIds: strin
 const PRACTICE_LANE_COPY: Record<EnglishPracticeLaneId, Pick<StudentDashboardPracticeRecommendation, 'title' | 'ctaLabel' | 'metricLabel' | 'stateLabel'>> = {
   grammar: {
     title: '文法演習',
-    ctaLabel: '文法を5問解く',
+    ctaLabel: '文法を5問',
     metricLabel: '5問',
     stateLabel: '文法',
   },
@@ -167,18 +167,18 @@ export const useStudentDashboardViewModel = ({
   const secondaryRecommendedBooks = recommendedOfficialBooks.slice(1);
 
   const heroTitle = !hasStudyBooks
-    ? '最初の教材を 1 冊つくる'
+    ? '最初の教材を1冊つくる'
     : remainingWords > 0
-      ? `あと${remainingWords}語で今日の目標です`
+      ? `今日はあと${remainingWords}語`
       : '今日はここまでで十分です';
 
   const heroCopy = !hasStudyBooks
-    ? '写真・PDF・テキストから My単語帳 を作れば、そのままスマホ学習を始められます。まずは教科書 1 ページ分で十分です。'
+    ? '教科書の写真やPDFからMy単語帳を作れます。まずは1ページ分で始めましょう。'
     : remainingWords > 0
       ? dueCount > 0
-        ? `まずは復習待ちの ${reviewFirstCount} 語から始めれば、そのまま今日のノルマに入れます。`
-        : '今日は短く区切って進めれば十分です。まずはクエストを1回だけ始めましょう。'
-      : '余力があればテストかMy単語帳に進み、無理ならここで終えても流れは崩れません。';
+        ? `復習待ちの${reviewFirstCount}語から始めると、そのまま今日の分まで進められます。`
+        : 'まずは1セットだけ進めましょう。続きはあとで足せます。'
+      : '今日は目標達成です。余力があれば復習を1セットだけ足しましょう。';
 
   const questButtonLabel = !hasStudyBooks
     ? 'My単語帳を作る'
@@ -192,10 +192,10 @@ export const useStudentDashboardViewModel = ({
 
   const aiUsageLabel = aiBudgetPercent >= 85 ? '控えめに利用中' : aiBudgetPercent >= 55 ? '通常利用中' : 'ゆとりあり';
   const aiUsageCopy = aiBudgetPercent >= 85
-    ? '今月は軽いAIサポートを中心にご利用いただく想定です。'
+    ? '今月は軽めの教材作成と添削に絞るのがよさそうです。'
     : aiBudgetPercent >= 55
-      ? '今月のAIサポートは通常どおりご利用いただけます。'
-      : '今月のAIサポートは十分な余裕があります。';
+      ? '今月は通常どおり教材作成と添削に使えます。'
+      : '今月は教材作成や添削にまだ余裕があります。';
 
   const preferenceSummaryParts = [
     learningPreference?.targetExam ? `目標: ${learningPreference.targetExam}` : null,
@@ -224,12 +224,12 @@ export const useStudentDashboardViewModel = ({
     metricLabel: recommendedPracticeCopy.metricLabel,
     stateLabel: recommendedPracticeCopy.stateLabel,
     body: topWeakness && getEnglishPracticeLaneForWeakness(topWeakness)
-      ? `${WEAKNESS_DIMENSION_LABELS[topWeakness.dimension]}を、英語演習で短く確認します。`
+      ? `${WEAKNESS_DIMENSION_LABELS[topWeakness.dimension]}を5分だけ練習します。`
       : englishPracticeRecommendation?.reasonJa
         ? englishPracticeRecommendation.reasonJa
       : remainingWords > 0
-        ? '単語学習の流れを崩さず、文法・和訳・長文へ短くつなげます。'
-        : '今日の語彙目標の後に、文法・和訳・長文を1つだけ進めます。',
+        ? '単語のあとに、文法か和訳を1つだけ足します。'
+        : '語彙の目標が終わったので、文法・和訳・長文から1つ進めます。',
   };
   const hasActionableWriting = Boolean(
     canShowWritingSection
@@ -272,12 +272,12 @@ export const useStudentDashboardViewModel = ({
       id: 'today' as const,
       title: '今日の学習',
       body: !hasStudyBooks
-        ? '最初のMy単語帳を作ると、今日の学習をすぐ始められます。'
+        ? 'My単語帳を1冊作ると、今日の学習を始められます。'
         : remainingWords > 0
           ? dueCount > 0
-            ? `復習待ちを先に消化してから、残り${remainingWords}語を進めます。`
-            : `短いセッションで残り${remainingWords}語を進めます。`
-          : '今日の目標は達成済みです。余力があれば追加復習だけ進めます。',
+            ? `復習待ちを先に見直してから、残り${remainingWords}語を進めます。`
+            : `残り${remainingWords}語を1セットで進めます。`
+          : '今日の目標は達成済みです。余力があれば復習を追加します。',
       ctaLabel: questButtonLabel,
       metricLabel: hasStudyBooks ? `${remainingWords}語` : '教材未作成',
       stateLabel: hasStudyBooks ? `${estimatedMinutes}分目安` : '準備',
@@ -287,8 +287,8 @@ export const useStudentDashboardViewModel = ({
       id: 'mission' as const,
       title: 'ミッション',
       body: primaryMission.blockers.length > 0
-        ? `残り: ${primaryMission.blockers.join(' / ')}。次に押すべき操作をここにまとめています。`
-        : '今週のミッションは完了済みです。必要なら追加の復習へ進めます。',
+        ? `残り: ${primaryMission.blockers.join(' / ')}。次の操作をここから始められます。`
+        : '今週のミッションは完了済みです。必要なら復習を追加できます。',
       ctaLabel: primaryMission.nextActionLabel,
       metricLabel: `${primaryMission.completionRate}%`,
       stateLabel: WEEKLY_MISSION_STATUS_LABELS[primaryMission.status],
@@ -299,7 +299,7 @@ export const useStudentDashboardViewModel = ({
       title: hasWeaknessSignals ? '弱点集中' : '弱点診断',
       body: hasWeaknessSignals && topWeakness
         ? topWeakness.reason
-        : `まず${WEAKNESS_MIN_SAMPLE}問以上の学習ログを作ると、苦手だけを絞って復習できます。`,
+        : `${WEAKNESS_MIN_SAMPLE}問ほど解くと、苦手な型が見えてきます。`,
       ctaLabel: topWeakness?.nextActionLabel || buildWeaknessEmptyStateLabel(),
       metricLabel: topWeakness ? WEAKNESS_DIMENSION_LABELS[topWeakness.dimension] : 'ログ収集中',
       stateLabel: hasWeaknessSignals ? '優先' : `${WEAKNESS_MIN_SAMPLE}問から判定`,
@@ -318,7 +318,7 @@ export const useStudentDashboardViewModel = ({
       id: 'writing' as const,
       title: '英作文',
       body: hasActionableWriting
-        ? 'ミッションに紐づく英作文が残っています。提出画面まで迷わず移動できます。'
+        ? 'ミッションの英作文が残っています。提出画面をすぐ開けます。'
         : '配布済み課題、提出、返却コメントをまとめて確認できます。',
       ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || '英作文を提出') : '英作文を確認',
       metricLabel: primaryMission?.writingPromptTitle || '講師課題',
@@ -335,6 +335,8 @@ export const useStudentDashboardViewModel = ({
   const primaryLearningRouteCard = learningRouteCards.find((card) => card.isPrimary) || null;
   const heroRouteTitle = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
     ? heroTitle
+    : primaryLearningRouteId === 'englishPractice'
+      ? practiceRecommendation.title
     : `${primaryLearningRouteCard.title}: ${primaryLearningRouteCard.metricLabel}`;
   const heroRouteCopy = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
     ? heroCopy

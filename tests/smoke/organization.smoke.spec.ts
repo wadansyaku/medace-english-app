@@ -365,7 +365,7 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   const draftField = instructorPage.getByTestId('notification-message-draft');
   await expect(draftField).not.toHaveValue('');
 
-  const aiDraftButton = instructorPage.getByRole('button', { name: 'AIで下書きを作る' });
+  const aiDraftButton = instructorPage.getByRole('button', { name: '下書きを作る' });
   await aiDraftButton.click();
   await expect(aiDraftButton).toBeEnabled();
   await expect(draftField).not.toHaveValue('');

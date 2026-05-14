@@ -222,7 +222,7 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'My単語帳 作成' })).toBeVisible();
     await expect(page.getByTestId('phrasebook-create-submit')).toBeDisabled();
-    await expect(page.getByTestId('phrasebook-create-plan-warning')).toContainText('AI教材化は使えません');
+    await expect(page.getByTestId('phrasebook-create-plan-warning')).toContainText('教材化は使えません');
   });
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {

@@ -148,7 +148,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-xs font-bold uppercase text-slate-500">AIへの補足</label>
+              <label className="mb-2 block text-xs font-bold uppercase text-slate-500">下書きへの補足</label>
               <input
                 type="text"
                 value={controller.customInstruction}
@@ -165,7 +165,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-medace-200 bg-white px-4 py-3 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50 disabled:opacity-60"
           >
             {controller.drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            AIで下書きを作る
+            下書きを作る
           </button>
         </div>
 

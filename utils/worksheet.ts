@@ -452,7 +452,7 @@ export const buildDeterministicTranslationFeedback = ({
         : grammarExplanation?.commonMistakeJa || '文の骨組みをもう一度確認しましょう。',
     },
     {
-      label: '受験答案らしさ',
+      label: '答案として自然か',
       score: correct ? 3 : 1,
       maxScore: 3,
       comment: correct ? '高校受験・大学受験の答案として自然な範囲です。' : '採点者に伝わる日本語へ整える余地があります。',
@@ -472,7 +472,7 @@ export const buildDeterministicTranslationFeedback = ({
       ? '正解例と同じ意味で訳せています。次は同じ型を速く処理できるようにしましょう。'
       : '正解例と一致していません。まず3ますで主語・動詞・目的語を固定してから訳しましょう。',
     strengths: correct ? ['意味の中心を落とさず訳せています。'] : [],
-    issues: correct ? [] : ['正解例との差が大きいため、AI採点が利用できない場合は不正解扱いにします。'],
+    issues: correct ? [] : ['正解例との差が大きいため、答案チェックが利用できない場合は不正解扱いにします。'],
     improvedTranslation: answer,
     grammarAdviceJa: grammarExplanation?.patternJa || '英文の主語・動詞・目的語を先に固定します。',
     nextDrillJa: grammarExplanation?.automationDrillJa || '同じ型の短文を3回読み直してから、もう一度訳します。',

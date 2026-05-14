@@ -266,9 +266,9 @@ export const useStudentDashboardMutations = ({
       console.error(error);
       const message = error instanceof Error ? error.message : '作成に失敗しました。';
       if (isAiUnavailableError(error)) {
-        setErrorMsg('AI教材化はまだ利用できません。Gemini 設定後に再試行してください。');
+        setErrorMsg('教材化はまだ利用できません。設定を確認してから、もう一度お試しください。');
       } else {
-        setErrorMsg(message.includes('429') ? 'AIの利用上限(RPM)に達しました。時間をおいてください。' : message);
+        setErrorMsg(message.includes('429') ? '作成回数が一時的に上限に達しました。少し時間をおいてください。' : message);
       }
     } finally {
       setCreating(false);

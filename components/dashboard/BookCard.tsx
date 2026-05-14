@@ -58,7 +58,7 @@ const BookCard: React.FC<BookCardProps> = ({
         </h3>
         <p className="mt-1.5 min-h-8 line-clamp-2 text-[13px] leading-relaxed text-slate-500 sm:mt-2 sm:min-h-9 sm:text-sm">
           {isMine
-            ? (book.sourceContext ? `AI分析: ${book.sourceContext}` : 'オリジナル単語帳')
+            ? (book.sourceContext ? `取り込みメモ: ${book.sourceContext}` : 'オリジナル単語帳')
             : (book.description || (isLicensed ? 'ビジネス版向けの既存公式教材' : 'ビジネス版向けの公式教材'))}
         </p>
 

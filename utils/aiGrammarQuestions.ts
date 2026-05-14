@@ -226,7 +226,7 @@ const normalizeClozeDraft = (
     grammarFocus: grammarScope.labelJa,
     grammarScope,
     grammarExplanation: buildGrammarScopeExplanation(grammarScope),
-    instruction: normalizeWhitespace(draft.instruction || 'AIが作った文で、空所に入る語形と文の形を確認します。'),
+    instruction: normalizeWhitespace(draft.instruction || '練習文を読み、空所に入る語形と文の形を確認します。'),
   };
 };
 
@@ -266,7 +266,7 @@ const normalizeEnglishOrderDraft = (
     grammarFocus: grammarScope.labelJa,
     grammarScope,
     grammarExplanation: buildGrammarScopeExplanation(grammarScope),
-    instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を、文の構造を意識して組み立てます。'),
+    instruction: normalizeWhitespace(draft.instruction || '練習文を、文の構造を意識して組み立てます。'),
   };
 };
 
@@ -308,7 +308,7 @@ const normalizeJapaneseOrderDraft = (
     grammarFocus: grammarScope.labelJa,
     grammarScope,
     grammarExplanation: buildGrammarScopeExplanation(grammarScope),
-    instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を手がかりに、自然な日本語の順番へ戻します。'),
+    instruction: normalizeWhitespace(draft.instruction || '英文を手がかりに、自然な日本語の順番に並べます。'),
   };
 };
 
@@ -344,7 +344,7 @@ const normalizeJapaneseInputDraft = (
     grammarFocus: grammarScope.labelJa,
     grammarScope,
     grammarExplanation: buildGrammarScopeExplanation(grammarScope),
-    instruction: normalizeWhitespace(draft.instruction || 'AIが作った英文を読み、自然な日本語訳を最後まで入力します。'),
+    instruction: normalizeWhitespace(draft.instruction || '英文を読み、自然な日本語訳を最後まで入力します。'),
   };
 };
 

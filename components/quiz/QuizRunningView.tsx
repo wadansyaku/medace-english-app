@@ -346,7 +346,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                       ? 'border-slate-200 bg-white text-slate-600'
                       : 'border-medace-200 bg-medace-50 text-medace-700'
                   }`}>
-                    {translationFeedback.usedAi === false ? '簡易判定' : 'AI採点'}
+                    {translationFeedback.usedAi === false ? '簡易判定' : '答案チェック'}
                   </span>
                 </div>
               </div>
@@ -429,7 +429,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                 disabled={!answerInput.trim() || !!inputResult || isInputBusy}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? 'AI採点中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
+                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
               </button>
               {isHintMode && !showSpellingHint && !inputResult && (
                 <button

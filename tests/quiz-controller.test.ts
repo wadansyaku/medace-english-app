@@ -37,7 +37,7 @@ const buildFeedback = (overrides: Partial<JapaneseTranslationFeedback> = {}): Ja
   criteria: [
     { label: '意味', score: 3, maxScore: 4, comment: '中心は取れています。' },
     { label: '文法構造', score: 1, maxScore: 3, comment: '受け身が曖昧です。' },
-    { label: '受験答案らしさ', score: 2, maxScore: 3, comment: '答案として整えます。' },
+    { label: '答案として自然か', score: 2, maxScore: 3, comment: '答案として整えます。' },
   ],
   ...overrides,
 });
