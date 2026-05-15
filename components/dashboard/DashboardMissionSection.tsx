@@ -43,7 +43,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
           <p className="text-xs font-bold text-slate-400">週次ミッション</p>
           <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今週のミッション</h3>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            なぜこの課題か、あと何を進めれば完了か、次の1アクションを1枚で確認できます。
+            目的、残り、次にやることだけを確認します。
           </p>
         </div>
       </div>
@@ -63,7 +63,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
           </span>
           {mission.isSuggested && (
             <span className="rounded-full border border-dashed border-medace-200 bg-medace-50 px-3 py-1 text-medace-700">
-              自動提案
+              提案
             </span>
           )}
         </div>
@@ -99,7 +99,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
               <Target className="h-4 w-4" />
-              次の1アクション
+              次にやること
             </div>
             <div className="mt-2 font-bold text-slate-900">{mission.nextActionLabel}</div>
           </div>

@@ -307,7 +307,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   return (
     <div
       data-testid="student-dashboard"
-      className={`relative flex flex-col animate-in fade-in duration-500 md:gap-8 md:pb-20 ${
+      className={`relative flex min-w-0 flex-col overflow-x-hidden animate-in fade-in duration-500 md:gap-8 md:pb-20 ${
         isStudentMobileShell ? 'gap-4 pb-28' : 'gap-5 pb-24'
       }`}
     >

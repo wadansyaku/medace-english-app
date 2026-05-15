@@ -183,8 +183,8 @@ export const useStudentDashboardViewModel = ({
   const questButtonLabel = !hasStudyBooks
     ? 'My単語帳を作る'
     : remainingWords > 0
-      ? '今日のクエストを開始'
-      : '復習をもう1セットやる';
+      ? '今日の学習を始める'
+      : '復習を1セット足す';
 
   const aiBudgetPercent = accountOverview
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
