@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import {
   MOBILE_FLOW_TEST_IDS,
   completeDiagnostic,
+  findUnexpectedHorizontalOverflow,
   maybeCompleteOnboarding,
   seedPhrasebook,
 } from './smoke-support';
@@ -23,7 +24,7 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  await expect(page.getByText('今日はこれだけ')).toBeVisible();
+  await expect(page.getByText('今日の入口')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
@@ -52,6 +53,42 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await page.getByTestId('english-practice-close').click();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+test('desktop student dashboard keeps the command center calm and above the fold', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto('/');
+
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await maybeCompleteOnboarding(page);
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+
+  const commandCenter = page.getByTestId('dashboard-command-center');
+  const primaryCta = page.getByTestId('student-hero-primary-cta');
+  await expect(commandCenter).toBeVisible();
+  await expect(primaryCta).toHaveCount(1);
+
+  const ctaBox = await primaryCta.boundingBox();
+  const commandBox = await commandCenter.boundingBox();
+  expect(ctaBox, 'primary CTA should have a layout box').not.toBeNull();
+  expect(commandBox, 'command center should have a layout box').not.toBeNull();
+  expect(ctaBox!.y + ctaBox!.height, 'primary CTA should stay inside the first desktop viewport').toBeLessThanOrEqual(768);
+  expect(commandBox!.y + commandBox!.height, 'command center should stay inside the first desktop viewport').toBeLessThanOrEqual(768);
+
+  const palette = await commandCenter.evaluate((element) => {
+    const centerStyle = window.getComputedStyle(element);
+    const cta = element.querySelector('[data-testid="student-hero-primary-cta"]');
+    const ctaStyle = cta ? window.getComputedStyle(cta) : null;
+    return {
+      centerBackground: centerStyle.backgroundColor,
+      ctaBackground: ctaStyle?.backgroundColor || '',
+    };
+  });
+  expect(palette.centerBackground).toBe('rgb(255, 255, 255)');
+  expect(palette.ctaBackground).toBe('rgb(194, 65, 12)');
+
+  const offenders = await findUnexpectedHorizontalOverflow(page);
+  expect(offenders).toEqual([]);
 });
 
 test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {

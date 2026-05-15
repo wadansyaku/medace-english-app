@@ -23,20 +23,20 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
 
   if (!hasSignals) {
     return (
-      <section data-testid="dashboard-weakness-section" className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+      <section data-testid="dashboard-weakness-section" className="rounded-lg border border-orange-100 bg-white px-5 py-5 shadow-sm sm:px-6">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             <div className="text-xs font-bold text-slate-400">苦手フォーカス</div>
-            <h3 className="mt-3 text-xl font-black tracking-tight text-slate-950">まだ苦手分析は育成中です</h3>
+            <h3 className="mt-3 text-xl font-black tracking-tight text-slate-950">苦手はもう少し解くと見えてきます</h3>
             <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              まずは{WEAKNESS_MIN_SAMPLE}問以上の学習ログを作ると、次に10語だけ確認する場所を絞れます。
+              まずは{WEAKNESS_MIN_SAMPLE}問ほど解くと、次に見直す10語を選べます。
             </p>
           </div>
           <button
             type="button"
             data-testid="weakness-focus-cta"
             onClick={onStartFocusQuest}
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-700"
+            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-medace-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-800"
           >
             {buildWeaknessEmptyStateLabel()}
           </button>
@@ -50,7 +50,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
     : onStartFocusQuest;
 
   return (
-    <section data-testid="dashboard-weakness-section" className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+    <section data-testid="dashboard-weakness-section" className="rounded-lg border border-orange-100 bg-white px-5 py-5 shadow-sm sm:px-6">
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="max-w-2xl">
@@ -62,7 +62,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
             type="button"
             data-testid="weakness-focus-cta"
             onClick={handlePrimaryAction}
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-700"
+            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-medace-700 px-5 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-800"
           >
             {topWeakness.nextActionLabel}
           </button>
@@ -70,7 +70,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
 
         <div className="grid gap-3 md:grid-cols-3">
           {weaknessProfile.topWeaknesses.slice(0, 3).map((signal) => (
-            <article key={signal.dimension} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <article key={signal.dimension} className="rounded-lg border border-orange-100 bg-medace-50 px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">{WEAKNESS_DIMENSION_LABELS[signal.dimension]}</div>
                 <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600">

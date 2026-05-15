@@ -404,7 +404,7 @@ test.describe('student mobile ux', () => {
     });
     await page.reload();
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
-    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('まだ苦手分析は育成中');
+    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('苦手はもう少し解くと見えてきます');
 
     await page.getByTestId('weakness-focus-cta').click();
     await expect(page.getByTestId('study-card-front')).toBeVisible();
@@ -419,7 +419,7 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('study-finish-exit').click();
 
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
-    await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('まだ苦手分析は育成中');
+    await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('苦手はもう少し解くと見えてきます');
     await expect(page.getByTestId('dashboard-weakness-section')).toContainText('今日はここを先に整える');
   });
 

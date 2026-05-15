@@ -178,7 +178,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                       background: `conic-gradient(
                         #22c55e 0% ${Math.round((masteryDist.graduated / (masteryDist.total || 1)) * 100)}%,
                         #3b82f6 0% ${Math.round(((masteryDist.graduated + masteryDist.review) / (masteryDist.total || 1)) * 100)}%,
-                        #19006e 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
+                        #ff8216 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
                         #f1f5f9 0% 100%
                       )`,
                     }}
