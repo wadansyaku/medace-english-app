@@ -141,9 +141,13 @@ test.describe('student mobile ux', () => {
     const box = await primaryCta.boundingBox();
     expect(box).not.toBeNull();
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
+
+    const launcherBox = await page.getByTestId('dashboard-mobile-quick-nav').boundingBox();
+    expect(launcherBox).not.toBeNull();
+    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan((launcherBox?.y ?? 844) - 8);
   });
 
-  test('student dashboard quick nav jumps between today and the library on mobile', async ({ page }) => {
+  test('student dashboard action launcher starts practice and keeps library reachable on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
@@ -153,14 +157,18 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
+    await expect(page.getByTestId('dashboard-mobile-quick-nav').locator('button')).toHaveCount(4);
+    await expect.poll(async () => (
+      page.getByTestId('dashboard-mobile-quick-nav').evaluate((element) => element.scrollWidth <= element.clientWidth)
+    )).toBe(true);
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.getByTestId('dashboard-quicknav-english-practice').click();
 
-    await expect.poll(async () => {
-      const box = await page.getByTestId('dashboard-english-practice-entry').boundingBox();
-      return box?.y ?? 9999;
-    }).toBeLessThanOrEqual(220);
+    await expect(page).toHaveURL(/\/english-practice\/grammar$/);
+    await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
+    await page.getByTestId('english-practice-close').click();
+    await expect(page).toHaveURL(/\/dashboard$/);
 
     await page.getByTestId('dashboard-quicknav-library').click();
 
@@ -171,11 +179,7 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('dashboard-quicknav-library')).toHaveAttribute('aria-pressed', 'true');
 
     await page.getByTestId('dashboard-quicknav-today').click();
-    await expect.poll(async () => {
-      const box = await page.getByTestId('dashboard-hero-section').boundingBox();
-      return box?.y ?? 9999;
-    }).toBeLessThanOrEqual(220);
-    await expect(page.getByTestId('dashboard-quicknav-today')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
   });
 
   test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {

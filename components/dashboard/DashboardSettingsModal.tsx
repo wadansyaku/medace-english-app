@@ -246,7 +246,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
             <MobileSettingsSection
               title="今日の学習条件"
-              description="目標・学習時間・強度を先に整えると、毎日の導線が安定します。"
+              description="目標・学習時間・強度を先に決めると、毎日迷わず始められます。"
               defaultOpen
               badge={<span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-[11px] font-bold text-medace-700">優先</span>}
             >
@@ -504,7 +504,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                   className="ui-input h-32 resize-none font-medium"
                 />
                 <p className="ui-field-note">
-                  ここで設定した条件をもとに、学習プランと今日の導線を調整します。
+                  ここで設定した条件をもとに、学習プランと今日やる量を調整します。
                 </p>
               </div>
             </MobileSettingsSection>
@@ -886,7 +886,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                   className="ui-input h-32 resize-none font-medium"
                 />
                 <p className="ui-field-note">
-                  ここで設定した条件をもとに、学習プランと今日の導線を調整します。講師フォローがある場合は共有の前提にもなります。
+                  ここで設定した条件をもとに、学習プランと今日やる量を調整します。講師フォローがある場合は共有の前提にもなります。
                 </p>
               </div>
             </div>

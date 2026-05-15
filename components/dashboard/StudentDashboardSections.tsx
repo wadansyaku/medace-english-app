@@ -129,6 +129,259 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     controller.setShowPlanEditModal(true);
   };
 
+  const weaknessSection = (
+    <div
+      key="weakness"
+      ref={navigation.weaknessSectionRef}
+      data-testid="dashboard-weakness-anchor"
+      style={navigation.mobileAnchorStyle}
+    >
+      <DashboardWeaknessSection
+        weaknessProfile={viewModel.weaknessProfile}
+        onStartFocusQuest={() => {
+          if (viewModel.hasStudyBooks) {
+            onStartTask(weaknessTaskIntent);
+            return;
+          }
+          controller.setShowCreateModal(true);
+        }}
+        onOpenPlan={() => controller.setShowPlanEditModal(true)}
+      />
+    </div>
+  );
+
+  const missionSection = primaryMission ? (
+    <div
+      key="mission"
+      ref={navigation.missionSectionRef}
+      data-testid="dashboard-mission-anchor"
+      style={navigation.mobileAnchorStyle}
+    >
+      <DashboardMissionSection
+        mission={primaryMission}
+        isCompact={isStudentMobileShell}
+        onPrimaryAction={handlePrimaryMissionAction}
+      />
+    </div>
+  ) : null;
+
+  const writingSection = viewModel.canShowWritingSection ? (
+    <div
+      key="writing"
+      ref={navigation.writingSectionRef}
+      data-testid="dashboard-writing-anchor"
+      style={navigation.mobileAnchorStyle}
+    >
+      <WritingStudentSection user={user} />
+    </div>
+  ) : null;
+
+  const coachSection = viewModel.latestCoachNotification ? (
+    <div
+      key="coach"
+      ref={navigation.coachSectionRef}
+      data-testid="dashboard-coach-anchor"
+      style={navigation.mobileAnchorStyle}
+    >
+      <DashboardCoachSection
+        latestNotification={viewModel.latestCoachNotification}
+        notifications={viewModel.coachNotifications}
+        isCompact={isStudentMobileShell}
+        primaryActionLabel={coachTaskIntent?.label || (coachActionType
+          ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
+          : null)}
+        onPrimaryAction={coachActionType
+          ? () => {
+              if (coachActionType === RecommendedActionType.OPEN_PLAN) {
+                controller.setShowPlanEditModal(true);
+                return;
+              }
+              if (coachTaskIntent) {
+                onStartTask(coachTaskIntent);
+              }
+            }
+          : null}
+      />
+    </div>
+  ) : null;
+
+  const planSection = (
+    <div
+      key="plan"
+      ref={navigation.planSectionRef}
+      data-testid="dashboard-plan-anchor"
+      style={navigation.mobileAnchorStyle}
+    >
+      <DashboardPlanSection
+        learningPlan={viewModel.learningPlan}
+        learningPreference={viewModel.learningPreference}
+        preferenceSummary={viewModel.preferenceSummary}
+        plannedBooks={viewModel.plannedBooks}
+        canGenerateAiPlan={viewModel.canGenerateAiPlan}
+        generatingPlan={controller.generatingPlan}
+        hasStudyBooks={viewModel.hasStudyBooks}
+        isCompact={isStudentMobileShell}
+        onEditPlan={() => controller.setShowPlanEditModal(true)}
+        onGeneratePlan={controller.handleGeneratePlan}
+        onOpenCreateModal={() => controller.setShowCreateModal(true)}
+      />
+    </div>
+  );
+
+  const librarySection = (
+    <div
+      key="library"
+      ref={navigation.librarySectionRef}
+      data-testid="dashboard-library-section"
+      style={navigation.mobileAnchorStyle}
+    >
+      <DashboardLibrarySection
+        books={viewModel.books}
+        myBooks={viewModel.myBooks}
+        primaryRecommendedBook={viewModel.primaryRecommendedBook}
+        secondaryRecommendedBooks={viewModel.secondaryRecommendedBooks}
+        progressMap={viewModel.progressMap}
+        showLibrary={controller.showLibrary}
+        isCompact={isStudentMobileShell}
+        preparingExamplesBookId={controller.preparingExamplesBookId}
+        onToggleLibrary={() => controller.setShowLibrary((previous) => !previous)}
+        onOpenCreateModal={() => controller.setShowCreateModal(true)}
+        onDelete={controller.handleDeleteBook}
+        onPrepareExamples={controller.handlePrepareBookExamples}
+        onSelect={onSelectBook}
+      />
+    </div>
+  );
+
+  const progressSection = (
+    <div key="progress">
+      <DashboardProgressSection
+        open={controller.showProgressDetails}
+        activityLogs={viewModel.activityLogs}
+        dailyGoal={viewModel.learningPlan?.dailyWordGoal}
+        masteryDist={viewModel.masteryDist}
+        isGameMode={viewModel.isGameMode}
+        leaderboard={viewModel.leaderboard}
+        todayCount={viewModel.todayCount}
+        todayWordGoal={viewModel.todayWordGoal}
+        todayProgressPercent={viewModel.todayProgressPercent}
+        weekTotal={viewModel.weekTotal}
+        weeklyGoal={viewModel.weeklyGoal}
+        weeklyRemaining={viewModel.weeklyRemaining}
+        currentStreak={user.stats?.currentStreak || 0}
+        isCompact={isStudentMobileShell}
+        onToggle={() => controller.setShowProgressDetails((previous) => !previous)}
+      />
+    </div>
+  );
+
+  const accountSection = viewModel.canShowAccountDetails ? (
+    <div key="account">
+      <DashboardAccountSection
+        open={controller.showAccountDetails}
+        user={user}
+        accountOverview={viewModel.accountOverview}
+        commercialRequests={viewModel.commercialRequests}
+        aiBudgetPercent={viewModel.aiBudgetPercent}
+        aiUsageLabel={viewModel.aiUsageLabel}
+        aiUsageCopy={viewModel.aiUsageCopy}
+        plannedBookCount={viewModel.plannedBooks.length}
+        coachNotificationCount={viewModel.coachNotifications.length}
+        showAdSlots={viewModel.showAdSlots}
+        isCompact={isStudentMobileShell}
+        onSubmitCommercialRequest={onSubmitCommercialRequest}
+        onToggle={() => controller.setShowAccountDetails((previous) => !previous)}
+      />
+    </div>
+  ) : null;
+
+  const primarySupportSections = [
+    viewModel.primaryLearningRouteId === 'mission' ? missionSection : null,
+    viewModel.primaryLearningRouteId === 'writing' ? writingSection : null,
+    weaknessSection,
+    viewModel.primaryLearningRouteId !== 'mission' ? missionSection : null,
+    viewModel.primaryLearningRouteId !== 'writing' ? writingSection : null,
+  ].filter(Boolean);
+
+  const referenceSections = [
+    coachSection,
+    planSection,
+    <div key="announcement">
+      <DashboardAnnouncementSection feed={announcementFeed.feed} />
+    </div>,
+    viewModel.isGameMode && viewModel.hasStudyBooks ? (
+      <div key="companion">
+        <StudyCompanion
+          user={user}
+          dueCount={viewModel.dueCount}
+          todayCount={viewModel.todayCount}
+          weekTotal={viewModel.weekTotal}
+          dailyGoal={viewModel.todayWordGoal}
+          weeklyGoal={viewModel.weeklyGoal}
+          stabilizedWords={viewModel.stabilizedWords}
+          onStartQuest={() => onStartTask(todayTaskIntent)}
+        />
+      </div>
+    ) : null,
+    librarySection,
+    progressSection,
+    viewModel.motivationSnapshot ? (
+      <div key="motivation">
+        <MotivationBoard snapshot={viewModel.motivationSnapshot} isCompact={isStudentMobileShell} />
+      </div>
+    ) : null,
+    accountSection,
+  ].filter(Boolean);
+
+  const contextualMobileAction = viewModel.hasActionableWriting && writingSection
+    ? {
+        id: 'writing',
+        label: '提出',
+        kind: 'writing' as const,
+        active: navigation.activeQuickNavId === 'writing',
+        onClick: () => navigation.scrollToSection(navigation.writingSectionRef),
+      }
+    : primaryMission
+      ? {
+          id: 'mission',
+          label: '課題',
+          kind: 'mission' as const,
+          active: navigation.activeQuickNavId === 'mission',
+          onClick: () => navigation.scrollToSection(navigation.missionSectionRef),
+        }
+      : {
+          id: 'weakness',
+          label: '弱点',
+          kind: 'weakness' as const,
+          active: navigation.activeQuickNavId === 'weakness',
+          onClick: () => navigation.scrollToSection(navigation.weaknessSectionRef),
+        };
+
+  const mobileLauncherItems = [
+    {
+      id: 'today',
+      label: '始める',
+      kind: 'today' as const,
+      active: navigation.activeQuickNavId === 'today',
+      onClick: () => onSelectLearningRoute(viewModel.primaryLearningRouteId),
+    },
+    viewModel.primaryLearningRouteId === 'englishPractice' ? null : {
+      id: 'english-practice',
+      label: '演習',
+      kind: 'englishPractice' as const,
+      active: navigation.activeQuickNavId === 'english-practice',
+      onClick: () => onSelectPracticeLane(viewModel.practiceRecommendation.lane),
+    },
+    contextualMobileAction,
+    {
+      id: 'library',
+      label: '教材',
+      kind: 'library' as const,
+      active: navigation.activeQuickNavId === 'library',
+      onClick: () => navigation.scrollToSection(navigation.librarySectionRef),
+    },
+  ].filter(Boolean);
+
   return (
     <>
       <div
@@ -155,7 +408,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           todayCount={viewModel.todayCount}
           todayWordGoal={viewModel.todayWordGoal}
           todayProgressPercent={viewModel.todayProgressPercent}
-          learningRouteCards={viewModel.learningRouteCards}
           primaryLearningRouteId={viewModel.primaryLearningRouteId}
           practiceRecommendation={viewModel.practiceRecommendation}
           gameLeagueBadge={viewModel.isGameMode ? viewModel.userLeague : undefined}
@@ -167,205 +419,36 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
             ? () => onSelectBook(viewModel.primaryRecommendedBook!.id, 'study')
             : undefined}
           onStartQuest={() => onSelectLearningRoute(viewModel.primaryLearningRouteId)}
-          onSelectLearningRoute={onSelectLearningRoute}
           onSelectPracticeLane={onSelectPracticeLane}
           onOpenPlan={() => controller.setShowPlanEditModal(true)}
           onGeneratePlan={controller.handleGeneratePlan}
         />
       </div>
 
-      <div
-        ref={navigation.weaknessSectionRef}
-        data-testid="dashboard-weakness-anchor"
-        className="order-2 md:order-2"
-        style={navigation.mobileAnchorStyle}
+      <section
+        data-testid="dashboard-smart-workspace"
+        className="order-2 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"
       >
-        <DashboardWeaknessSection
-          weaknessProfile={viewModel.weaknessProfile}
-          onStartFocusQuest={() => {
-            if (viewModel.hasStudyBooks) {
-              onStartTask(weaknessTaskIntent);
-              return;
-            }
-            controller.setShowCreateModal(true);
-          }}
-          onOpenPlan={() => controller.setShowPlanEditModal(true)}
-        />
-      </div>
-
-      {primaryMission && (
-        <div
-          ref={navigation.missionSectionRef}
-          data-testid="dashboard-mission-anchor"
-          className="order-3 md:order-3"
-          style={navigation.mobileAnchorStyle}
-        >
-          <DashboardMissionSection
-            mission={primaryMission}
-            isCompact={isStudentMobileShell}
-            onPrimaryAction={handlePrimaryMissionAction}
-          />
+        <div data-testid="dashboard-primary-stack" className="grid min-w-0 content-start gap-4">
+          <div className="flex min-w-0 items-center justify-between gap-3 px-1">
+            <h2 className="text-sm font-black text-slate-950">今日使うもの</h2>
+            <span className="text-xs font-bold text-slate-400">必要な順に並べています</span>
+          </div>
+          {primarySupportSections}
         </div>
-      )}
 
-      {viewModel.canShowWritingSection && (
-        <div
-          ref={navigation.writingSectionRef}
-          data-testid="dashboard-writing-anchor"
-          className="order-4 md:order-6"
-          style={navigation.mobileAnchorStyle}
-        >
-          <WritingStudentSection user={user} />
-        </div>
-      )}
-
-      {viewModel.latestCoachNotification && (
-        <div
-          ref={navigation.coachSectionRef}
-          data-testid="dashboard-coach-anchor"
-          className="order-5 md:order-4"
-          style={navigation.mobileAnchorStyle}
-        >
-          <DashboardCoachSection
-            latestNotification={viewModel.latestCoachNotification}
-            notifications={viewModel.coachNotifications}
-            isCompact={isStudentMobileShell}
-            primaryActionLabel={coachTaskIntent?.label || (coachActionType
-              ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
-              : null)}
-            onPrimaryAction={coachActionType
-              ? () => {
-                  if (coachActionType === RecommendedActionType.OPEN_PLAN) {
-                    controller.setShowPlanEditModal(true);
-                    return;
-                  }
-                  if (coachTaskIntent) {
-                    onStartTask(coachTaskIntent);
-                  }
-                }
-              : null}
-          />
-        </div>
-      )}
-
-      <div
-        ref={navigation.planSectionRef}
-        data-testid="dashboard-plan-anchor"
-        className="order-5 md:order-4"
-        style={navigation.mobileAnchorStyle}
-      >
-        <DashboardPlanSection
-          learningPlan={viewModel.learningPlan}
-          learningPreference={viewModel.learningPreference}
-          preferenceSummary={viewModel.preferenceSummary}
-          plannedBooks={viewModel.plannedBooks}
-          canGenerateAiPlan={viewModel.canGenerateAiPlan}
-          generatingPlan={controller.generatingPlan}
-          hasStudyBooks={viewModel.hasStudyBooks}
-          isCompact={isStudentMobileShell}
-          onEditPlan={() => controller.setShowPlanEditModal(true)}
-          onGeneratePlan={controller.handleGeneratePlan}
-          onOpenCreateModal={() => controller.setShowCreateModal(true)}
-        />
-      </div>
-
-      <div className="order-6 md:order-5">
-        <DashboardAnnouncementSection feed={announcementFeed.feed} />
-      </div>
-
-      {viewModel.isGameMode && viewModel.hasStudyBooks && (
-        <div className="order-7 md:order-7">
-          <StudyCompanion
-            user={user}
-            dueCount={viewModel.dueCount}
-            todayCount={viewModel.todayCount}
-            weekTotal={viewModel.weekTotal}
-            dailyGoal={viewModel.todayWordGoal}
-            weeklyGoal={viewModel.weeklyGoal}
-            stabilizedWords={viewModel.stabilizedWords}
-            onStartQuest={() => onStartTask(todayTaskIntent)}
-          />
-        </div>
-      )}
-
-      <div
-        ref={navigation.librarySectionRef}
-        data-testid="dashboard-library-section"
-        className="order-8 md:order-11"
-        style={navigation.mobileAnchorStyle}
-      >
-        <DashboardLibrarySection
-          books={viewModel.books}
-          myBooks={viewModel.myBooks}
-          primaryRecommendedBook={viewModel.primaryRecommendedBook}
-          secondaryRecommendedBooks={viewModel.secondaryRecommendedBooks}
-          progressMap={viewModel.progressMap}
-          showLibrary={controller.showLibrary}
-          isCompact={isStudentMobileShell}
-          preparingExamplesBookId={controller.preparingExamplesBookId}
-          onToggleLibrary={() => controller.setShowLibrary((previous) => !previous)}
-          onOpenCreateModal={() => controller.setShowCreateModal(true)}
-          onDelete={controller.handleDeleteBook}
-          onPrepareExamples={controller.handlePrepareBookExamples}
-          onSelect={onSelectBook}
-        />
-      </div>
-
-      <div className="order-9 md:order-10">
-        <DashboardProgressSection
-          open={controller.showProgressDetails}
-          activityLogs={viewModel.activityLogs}
-          dailyGoal={viewModel.learningPlan?.dailyWordGoal}
-          masteryDist={viewModel.masteryDist}
-          isGameMode={viewModel.isGameMode}
-          leaderboard={viewModel.leaderboard}
-          todayCount={viewModel.todayCount}
-          todayWordGoal={viewModel.todayWordGoal}
-          todayProgressPercent={viewModel.todayProgressPercent}
-          weekTotal={viewModel.weekTotal}
-          weeklyGoal={viewModel.weeklyGoal}
-          weeklyRemaining={viewModel.weeklyRemaining}
-          currentStreak={user.stats?.currentStreak || 0}
-          isCompact={isStudentMobileShell}
-          onToggle={() => controller.setShowProgressDetails((previous) => !previous)}
-        />
-      </div>
-
-      {viewModel.motivationSnapshot && (
-        <div className="order-10 md:order-8">
-          <MotivationBoard snapshot={viewModel.motivationSnapshot} isCompact={isStudentMobileShell} />
-        </div>
-      )}
-
-      {viewModel.canShowAccountDetails && (
-        <div className="order-11 md:order-9">
-          <DashboardAccountSection
-            open={controller.showAccountDetails}
-            user={user}
-            accountOverview={viewModel.accountOverview}
-            commercialRequests={viewModel.commercialRequests}
-            aiBudgetPercent={viewModel.aiBudgetPercent}
-            aiUsageLabel={viewModel.aiUsageLabel}
-            aiUsageCopy={viewModel.aiUsageCopy}
-            plannedBookCount={viewModel.plannedBooks.length}
-            coachNotificationCount={viewModel.coachNotifications.length}
-            showAdSlots={viewModel.showAdSlots}
-            isCompact={isStudentMobileShell}
-            onSubmitCommercialRequest={onSubmitCommercialRequest}
-            onToggle={() => controller.setShowAccountDetails((previous) => !previous)}
-          />
-        </div>
-      )}
+        <aside data-testid="dashboard-reference-rail" className="grid min-w-0 content-start gap-4">
+          <div className="flex min-w-0 items-center justify-between gap-3 px-1">
+            <h2 className="text-sm font-black text-slate-950">あとで見る</h2>
+            <span className="text-xs font-bold text-slate-400">教材・記録・設定</span>
+          </div>
+          {referenceSections}
+        </aside>
+      </section>
 
       {isStudentMobileShell && (
         <DashboardMobileQuickNav
-          items={navigation.mobileQuickNavItems.map((item) => ({
-            id: item.id,
-            label: item.label,
-            kind: item.kind,
-            active: navigation.activeQuickNavId === item.id,
-            onClick: () => navigation.scrollToSection(item.ref),
-          }))}
+          items={mobileLauncherItems}
         />
       )}
     </>

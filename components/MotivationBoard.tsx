@@ -61,7 +61,7 @@ const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot, isCompact =
         </div>
         {isCompact ? (
           <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-bold text-slate-500">
-            左右にスワイプ
+            累計
           </div>
         ) : (
           <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700">
@@ -84,7 +84,7 @@ const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot, isCompact =
       </div>
 
       <div className={isCompact
-        ? 'mt-4 flex snap-x gap-3 overflow-x-auto pb-1'
+        ? 'mt-4 grid gap-3'
         : `mt-5 grid gap-4 ${snapshot.scopes.length === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
         {snapshot.scopes.map((scope) => {
           const scopeStyle = SCOPE_STYLES[scope.scope];
@@ -93,7 +93,7 @@ const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot, isCompact =
             <article
               key={scope.scope}
               className={`rounded-[28px] border shadow-sm ${scopeStyle.cardClassName} ${
-                isCompact ? 'w-[84vw] max-w-[320px] shrink-0 snap-start p-4' : 'p-5'
+                isCompact ? 'min-w-0 p-4' : 'p-5'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
