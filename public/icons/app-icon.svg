@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MedAce Study Space">
-  <rect width="512" height="512" rx="148" fill="#F66D0B" />
-  <circle cx="374" cy="126" r="66" fill="#FFD3A6" opacity="0.75" />
-  <circle cx="128" cy="392" r="88" fill="#FFE7C8" opacity="0.82" />
-  <path d="M132 164c0-37.6 30.4-68 68-68h170v48H207c-16.6 0-30 13.4-30 30v46h193v48H177v94c0 16.6 13.4 30 30 30h163v48H200c-37.6 0-68-30.4-68-68V164Z" fill="#FFF8EF" />
-  <path d="M238 196h154v30H238zM238 258h136v30H238zM238 320h118v30H238z" fill="#F7C18F" />
+  <rect width="512" height="512" rx="112" fill="#19006E" />
+  <rect x="56" y="56" width="400" height="400" rx="84" fill="#FFFFFF" opacity="0.08" />
+  <circle cx="382" cy="132" r="58" fill="#F3B80A" opacity="0.9" />
+  <circle cx="132" cy="390" r="76" fill="#E02323" opacity="0.82" />
+  <path d="M132 164c0-37.6 30.4-68 68-68h170v48H207c-16.6 0-30 13.4-30 30v46h193v48H177v94c0 16.6 13.4 30 30 30h163v48H200c-37.6 0-68-30.4-68-68V164Z" fill="#FFFFFF" />
+  <path d="M238 196h154v30H238zM238 258h136v30H238zM238 320h118v30H238z" fill="#F3B80A" />
 </svg>

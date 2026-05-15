@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MedAce Study Space maskable icon">
-  <rect width="512" height="512" rx="96" fill="#F66D0B" />
-  <rect x="56" y="56" width="400" height="400" rx="120" fill="#FFB15E" opacity="0.28" />
-  <circle cx="376" cy="144" r="60" fill="#FFE0BD" opacity="0.72" />
-  <circle cx="144" cy="376" r="86" fill="#FFF2DE" opacity="0.82" />
-  <path d="M138 174c0-35.3 28.7-64 64-64h164v48H209c-13.3 0-24 10.7-24 24v40h181v48H185v80c0 13.3 10.7 24 24 24h157v48H202c-35.3 0-64-28.7-64-64V174Z" fill="#FFF8EF" />
-  <path d="M242 200h142v28H242zM242 258h128v28H242zM242 316h110v28H242z" fill="#F7C18F" />
+  <rect width="512" height="512" rx="96" fill="#19006E" />
+  <rect x="56" y="56" width="400" height="400" rx="100" fill="#FFFFFF" opacity="0.08" />
+  <circle cx="376" cy="144" r="60" fill="#F3B80A" opacity="0.9" />
+  <circle cx="144" cy="376" r="86" fill="#E02323" opacity="0.82" />
+  <path d="M138 174c0-35.3 28.7-64 64-64h164v48H209c-13.3 0-24 10.7-24 24v40h181v48H185v80c0 13.3 10.7 24 24 24h157v48H202c-35.3 0-64-28.7-64-64V174Z" fill="#FFFFFF" />
+  <path d="M242 200h142v28H242zM242 258h128v28H242zM242 316h110v28H242z" fill="#F3B80A" />
 </svg>
