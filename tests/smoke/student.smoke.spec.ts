@@ -23,7 +23,7 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  await expect(page.getByText('今日やることは 1 つだけ')).toBeVisible();
+  await expect(page.getByText('今日はこれだけ')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();

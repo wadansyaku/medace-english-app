@@ -27,7 +27,7 @@ const BookCard: React.FC<BookCardProps> = ({
     <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
       <div className="relative z-10 flex-grow p-4 sm:p-6">
         <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4">
-          <div className={`rounded-lg p-2.5 sm:p-3 ${book.isPriority ? 'bg-orange-100 text-medace-600' : 'bg-slate-100 text-slate-500'}`}>
+          <div className={`rounded-lg p-2.5 sm:p-3 ${book.isPriority ? 'bg-medace-50 text-medace-700' : 'bg-slate-100 text-slate-500'}`}>
             <Book className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="flex items-center gap-2">

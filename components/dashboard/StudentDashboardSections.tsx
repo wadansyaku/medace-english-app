@@ -304,12 +304,16 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   ].filter(Boolean);
 
   const referenceSections = [
-    coachSection,
+    isStudentMobileShell ? null : coachSection,
     planSection,
-    <div key="announcement">
-      <DashboardAnnouncementSection feed={announcementFeed.feed} />
-    </div>,
-    viewModel.isGameMode && viewModel.hasStudyBooks ? (
+    librarySection,
+    progressSection,
+    isStudentMobileShell ? null : (
+      <div key="announcement">
+        <DashboardAnnouncementSection feed={announcementFeed.feed} />
+      </div>
+    ),
+    !isStudentMobileShell && viewModel.isGameMode && viewModel.hasStudyBooks ? (
       <div key="companion">
         <StudyCompanion
           user={user}
@@ -323,14 +327,12 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         />
       </div>
     ) : null,
-    librarySection,
-    progressSection,
-    viewModel.motivationSnapshot ? (
+    !isStudentMobileShell && viewModel.motivationSnapshot ? (
       <div key="motivation">
         <MotivationBoard snapshot={viewModel.motivationSnapshot} isCompact={isStudentMobileShell} />
       </div>
     ) : null,
-    accountSection,
+    isStudentMobileShell ? null : accountSection,
   ].filter(Boolean);
 
   const contextualMobileAction = viewModel.hasActionableWriting && writingSection
@@ -427,20 +429,20 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
 
       <section
         data-testid="dashboard-smart-workspace"
-        className="order-2 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.42fr)]"
+        className="order-2 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.38fr)]"
       >
         <div data-testid="dashboard-primary-stack" className="grid min-w-0 content-start gap-4">
           <div className="flex min-w-0 items-center justify-between gap-3 px-1">
-            <h2 className="text-sm font-black text-slate-950">今日使うもの</h2>
-            <span className="text-xs font-bold text-slate-400">必要な順に並べています</span>
+            <h2 className="text-sm font-black text-slate-950">次の確認</h2>
+            <span className="text-xs font-bold text-slate-400">必要なものだけ</span>
           </div>
           {primarySupportSections}
         </div>
 
         <aside data-testid="dashboard-reference-rail" className="grid min-w-0 content-start gap-4">
           <div className="flex min-w-0 items-center justify-between gap-3 px-1">
-            <h2 className="text-sm font-black text-slate-950">あとで見る</h2>
-            <span className="text-xs font-bold text-slate-400">教材・記録・設定</span>
+            <h2 className="text-sm font-black text-slate-950">教材と記録</h2>
+            <span className="text-xs font-bold text-slate-400">必要時に開く</span>
           </div>
           {referenceSections}
         </aside>

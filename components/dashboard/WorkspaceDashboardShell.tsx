@@ -46,8 +46,7 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
     {notice}
     {banner}
 
-    <section className="relative overflow-hidden rounded-[32px] bg-medace-500 p-8 text-white shadow-[0_24px_60px_rgba(255,130,22,0.22)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.26),_transparent_24%),radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.14),_transparent_22%)]" />
+    <section className="relative overflow-hidden rounded-[32px] bg-medace-700 p-8 text-white shadow-[0_24px_60px_rgba(25,0,110,0.18)]">
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">

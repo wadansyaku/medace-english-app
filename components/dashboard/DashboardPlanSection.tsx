@@ -79,7 +79,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         </div>
       </>
     ) : !hasStudyBooks ? (
-      <div className="mt-4 rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4">
+      <div className="mt-4 rounded-[28px] border border-slate-200 bg-slate-50 px-4 py-4">
         <div className="text-sm font-black text-slate-950">最初の教材を 1 冊用意する</div>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
           写真・PDF・テキストから My単語帳 を作ると、すぐにスマホ学習を始められます。
@@ -97,7 +97,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         </div>
       </div>
     ) : (
-      <div className="mt-5 rounded-3xl bg-medace-500 px-5 py-5 text-white">
+      <div className="mt-5 rounded-3xl bg-medace-700 px-5 py-5 text-white">
         <p className="text-sm leading-relaxed text-white/75">
           目標日と学習時間から、今日進める単語数と教材を1つに絞ります。
         </p>

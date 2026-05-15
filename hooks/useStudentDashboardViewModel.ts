@@ -51,7 +51,7 @@ export interface StudentDashboardPracticeRecommendation {
 const getLeague = (level: number) => {
   if (level >= 20) return { name: 'ゴールド', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' };
   if (level >= 10) return { name: 'シルバー', color: 'bg-slate-100 text-slate-700 border-slate-200' };
-  return { name: 'ブロンズ', color: 'bg-orange-50 text-orange-800 border-orange-200' };
+  return { name: 'ブロンズ', color: 'bg-slate-50 text-slate-700 border-slate-200' };
 };
 
 const orderBooksByIds = <T extends { id: string }>(books: T[], orderedIds: string[]): T[] => {
@@ -173,11 +173,11 @@ export const useStudentDashboardViewModel = ({
       : '今日はここまでで十分です';
 
   const heroCopy = !hasStudyBooks
-    ? '教科書の写真やPDFからMy単語帳を作れます。まずは1ページ分で始めましょう。'
+    ? '教科書の写真やPDFからMy単語帳を作れます。まずは1ページ分で十分です。'
     : remainingWords > 0
       ? dueCount > 0
         ? `復習待ちの${reviewFirstCount}語から始めると、そのまま今日の分まで進められます。`
-        : 'まずは1セットだけ進めましょう。続きはあとで足せます。'
+        : 'まずは1セットだけ進めます。続きはあとから足せます。'
       : '今日は目標達成です。余力があれば復習を1セットだけ足しましょう。';
 
   const questButtonLabel = !hasStudyBooks

@@ -152,16 +152,16 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(246,109,11,0.08)] ${
+      <header className={`bg-white/88 backdrop-blur-xl border-b border-medace-100 sticky top-0 z-50 shadow-[0_14px_34px_rgba(25,0,110,0.08)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
-          <div className="border-b border-amber-200/80 bg-[#fff4df]">
+          <div className="border-b border-[#f3b80a]/40 bg-[#fff9df]">
             {compactStudentShell ? (
               <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-black text-amber-700">体験版アクセス</p>
+                    <p className="text-[11px] font-black text-medace-800">体験版アクセス</p>
                     <p className="mt-1 text-sm font-semibold text-slate-800">
                       体験は <span className="font-black text-slate-950">{getDemoAccessWindowLabel()}</span> 限定です。
                     </p>
@@ -170,20 +170,20 @@ const Layout: React.FC<LayoutProps> = ({
                     type="button"
                     data-testid="demo-banner-toggle"
                     onClick={() => setShowDemoBannerDetails((previous) => !previous)}
-                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-2 text-xs font-black text-amber-800 transition-colors hover:bg-amber-50"
+                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-[#f3b80a]/70 bg-white px-3 py-2 text-xs font-black text-medace-800 transition-colors hover:bg-[#fff7d4]"
                   >
                     {showDemoBannerDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     {showDemoBannerDetails ? '閉じる' : '詳細'}
                   </button>
                 </div>
                 {showDemoBannerDetails && (
-                  <div className="mt-3 rounded-2xl border border-amber-200 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
+                  <div className="mt-3 rounded-2xl border border-[#f3b80a]/45 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
                     別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
                     {onResetDemo && (
                       <button
                         type="button"
                         onClick={onResetDemo}
-                        className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-amber-300 bg-white px-4 py-2.5 text-sm font-black text-amber-800 transition-colors hover:bg-amber-50"
+                        className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[#f3b80a]/70 bg-white px-4 py-2.5 text-sm font-black text-medace-800 transition-colors hover:bg-[#fff7d4]"
                       >
                         新しい体験を開始
                       </button>
@@ -194,7 +194,7 @@ const Layout: React.FC<LayoutProps> = ({
             ) : (
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-xs font-black text-amber-700">体験版アクセス</p>
+                  <p className="text-xs font-black text-medace-800">体験版アクセス</p>
                   <p className="mt-1 text-[0.95rem] font-medium leading-relaxed text-slate-700">
                     体験用アカウントは <span className="font-black text-slate-950">{getDemoAccessWindowLabel()} 限定</span> です。別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
                   </p>
@@ -203,7 +203,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <button
                     type="button"
                     onClick={onResetDemo}
-                    className="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-5 py-2.5 text-[0.95rem] font-black text-amber-800 transition-colors hover:bg-amber-50"
+                    className="inline-flex items-center justify-center rounded-full border border-[#f3b80a]/70 bg-white px-5 py-2.5 text-[0.95rem] font-black text-medace-800 transition-colors hover:bg-[#fff7d4]"
                   >
                     新しい体験を開始
                   </button>
@@ -237,8 +237,8 @@ const Layout: React.FC<LayoutProps> = ({
                   <div className="flex items-center gap-3 md:gap-6 bg-white/90 px-4 py-2.5 rounded-full border border-medace-100 mr-2 shadow-sm">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
-                          <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-orange-500 fill-orange-500' : 'text-slate-300'}`} />
-                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                          <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-[#f3b80a] fill-[#f3b80a]' : 'text-slate-300'}`} />
+                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-medace-800' : 'text-slate-400'}`}>
                               {stats.currentStreak}
                           </span>
                       </div>

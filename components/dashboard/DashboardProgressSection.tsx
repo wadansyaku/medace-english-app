@@ -108,8 +108,8 @@ const getLeague = (level: number) => {
   }
   return {
     name: 'ブロンズ',
-    icon: <Medal className="h-3 w-3 fill-orange-300 text-orange-600" />,
-    color: 'bg-orange-50 text-orange-800 border-orange-200',
+    icon: <Medal className="h-3 w-3 fill-slate-300 text-slate-500" />,
+    color: 'bg-slate-50 text-slate-700 border-slate-200',
   };
 };
 
@@ -178,7 +178,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                       background: `conic-gradient(
                         #22c55e 0% ${Math.round((masteryDist.graduated / (masteryDist.total || 1)) * 100)}%,
                         #3b82f6 0% ${Math.round(((masteryDist.graduated + masteryDist.review) / (masteryDist.total || 1)) * 100)}%,
-                        #f97316 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
+                        #19006e 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
                         #f1f5f9 0% 100%
                       )`,
                     }}
@@ -197,8 +197,8 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                     <div className="text-xs font-bold uppercase text-blue-600">{STATUS_LABELS.review}</div>
                     <div className="text-xl font-bold text-slate-800">{masteryDist.review}</div>
                   </div>
-                  <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
-                    <div className="text-xs font-bold uppercase text-orange-600">{STATUS_LABELS.learning}</div>
+                  <div className="rounded-lg border border-medace-100 bg-medace-50 p-3">
+                    <div className="text-xs font-bold uppercase text-medace-700">{STATUS_LABELS.learning}</div>
                     <div className="text-xl font-bold text-slate-800">{masteryDist.learning}</div>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -237,7 +237,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                               : index === 1
                                 ? 'bg-slate-100 text-slate-700'
                                 : index === 2
-                                  ? 'bg-orange-50 text-orange-700'
+                                  ? 'bg-medace-50 text-medace-700'
                                   : 'text-slate-400'
                           }`}
                         >

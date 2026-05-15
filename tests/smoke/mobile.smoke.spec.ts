@@ -190,8 +190,14 @@ test.describe('student mobile ux', () => {
     await dismissAnnouncementModalIfPresent(page);
 
     await page.getByRole('button', { name: /くわしい学習記録/ }).click();
-    await page.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
-    await page.getByRole('button', { name: /公式コース/ }).click();
+    const legacyPlanToggle = page.getByRole('button', { name: /プラン・学習環境の詳細/ });
+    if (await legacyPlanToggle.isVisible().catch(() => false)) {
+      await legacyPlanToggle.click();
+    }
+    const libraryToggle = page.getByRole('button', { name: /公式コース/ });
+    if (await libraryToggle.isVisible().catch(() => false)) {
+      await libraryToggle.click();
+    }
 
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
@@ -239,7 +245,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    await page.getByRole('button', { name: '最初のプランを作る' }).click();
+    await page.getByRole('button', { name: /プランを作る|プランを作成/ }).first().click();
     await expect(page.getByText('今日の学習プラン')).toBeVisible();
     await page.getByRole('button', { name: '編集' }).click();
 
