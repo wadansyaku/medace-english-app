@@ -44,7 +44,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   <div className={isCompact ? 'space-y-5' : 'space-y-7 md:space-y-10'}>
     <div className="min-h-[200px]">
       <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
-        <h3 className="min-w-0 border-l-4 border-purple-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
+        <h3 className="min-w-0 border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
         <button
           onClick={onOpenCreateModal}
           className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"

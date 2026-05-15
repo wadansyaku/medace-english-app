@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Steady Study">
-  <rect width="64" height="64" rx="14" fill="#19006E" />
+  <rect width="64" height="64" rx="14" fill="#FF8216" />
   <rect x="10" y="10" width="44" height="44" rx="10" fill="#FFFFFF" opacity="0.08" />
   <path d="M19 22c0-4.4 3.6-8 8-8h18v6H28a2 2 0 0 0-2 2v4h19v6H26v10a2 2 0 0 0 2 2h17v6H27c-4.4 0-8-3.6-8-8V22Z" fill="#FFFFFF" />
-  <path d="M30 24h17v4H30zM30 33h15v4H30z" fill="#F3B80A" />
+  <path d="M30 24h17v4H30zM30 33h15v4H30z" fill="#7C2D12" />
 </svg>
