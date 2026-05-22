@@ -129,9 +129,10 @@ export const completeDiagnostic = async (page: Page) => {
 export const maybeCompleteOnboarding = async (page: Page) => {
   const dashboard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard);
   const onboarding = page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingProfile);
+  const onboardingReadyTimeoutMs = 30_000;
   await Promise.race([
-    dashboard.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null),
-    onboarding.waitFor({ state: 'visible', timeout: 5000 }).catch(() => null),
+    dashboard.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs }).catch(() => null),
+    onboarding.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs }).catch(() => null),
   ]);
 
   if (await onboarding.isVisible().catch(() => false)) {

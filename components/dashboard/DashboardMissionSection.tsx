@@ -108,7 +108,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
               <CalendarClock className="h-4 w-4" />
               進め方
             </div>
-            <div className="mt-2">まず1セットだけ進めれば進行中に変わります。完了よりも、止めないことを優先します。</div>
+            <div className="mt-2">まず1セットだけ。今日は止めないことを優先します。</div>
           </div>
         </div>
 

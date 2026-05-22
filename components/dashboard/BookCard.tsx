@@ -103,7 +103,7 @@ const BookCard: React.FC<BookCardProps> = ({
             data-testid={`book-quiz-${book.id}`}
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
           >
-            <Play className="h-4 w-4 fill-current" /> 条件を決めてテスト
+            <Play className="h-4 w-4 fill-current" /> テスト設定
           </button>
         </div>
       </div>

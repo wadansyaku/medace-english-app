@@ -5,7 +5,12 @@ import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/wea
 import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
 import {
   EnglishLevel,
+  INTERVENTION_KIND_LABELS,
+  InterventionKind,
+  InterventionOutcome,
   MissionNextActionType,
+  RECOMMENDED_ACTION_TYPE_LABELS,
+  RecommendedActionType,
   SubscriptionPlan,
   type DashboardSnapshot,
   type UserProfile,
@@ -27,6 +32,17 @@ interface UseStudentDashboardViewModelParams {
 }
 
 export type StudentDashboardLearningRouteId = 'today' | 'mission' | 'weakness' | 'englishPractice' | 'writing';
+export type StudentDashboardTaskId =
+  | StudentDashboardLearningRouteId
+  | 'coach'
+  | 'plan'
+  | 'library'
+  | 'progress'
+  | 'announcements'
+  | 'companion'
+  | 'motivation'
+  | 'account';
+export type StudentDashboardTaskGroup = 'primary' | 'urgent' | 'supporting' | 'reference';
 
 export interface StudentDashboardLearningRouteCard {
   id: StudentDashboardLearningRouteId;
@@ -37,6 +53,20 @@ export interface StudentDashboardLearningRouteCard {
   stateLabel: string;
   tone: 'primary' | 'mission' | 'weakness' | 'practice' | 'writing';
   isPrimary: boolean;
+}
+
+export interface StudentDashboardTaskItem {
+  id: StudentDashboardTaskId;
+  routeId?: StudentDashboardLearningRouteId;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  metricLabel: string;
+  stateLabel: string;
+  tone: StudentDashboardLearningRouteCard['tone'] | 'coach' | 'reference';
+  group: StudentDashboardTaskGroup;
+  isPrimary: boolean;
+  mobileLabel: string;
 }
 
 export interface StudentDashboardPracticeRecommendation {
@@ -70,7 +100,7 @@ const PRACTICE_LANE_COPY: Record<EnglishPracticeLaneId, Pick<StudentDashboardPra
   },
   translation: {
     title: '和訳演習',
-    ctaLabel: '全文和訳を始める',
+    ctaLabel: '和訳を始める',
     metricLabel: '1セット',
     stateLabel: '和訳',
   },
@@ -82,10 +112,26 @@ const PRACTICE_LANE_COPY: Record<EnglishPracticeLaneId, Pick<StudentDashboardPra
   },
   writing: {
     title: '英検英作文',
-    ctaLabel: '英作文を1テーマ書く',
+    ctaLabel: '英作文を書く',
     metricLabel: '1テーマ',
     stateLabel: '英作文',
   },
+};
+
+const getRouteMobileLabel = (routeId: StudentDashboardLearningRouteId): string => {
+  switch (routeId) {
+    case 'mission':
+      return '課題';
+    case 'weakness':
+      return '弱点';
+    case 'englishPractice':
+      return '演習';
+    case 'writing':
+      return '提出';
+    case 'today':
+    default:
+      return '始める';
+  }
 };
 
 export const useStudentDashboardViewModel = ({
@@ -167,24 +213,24 @@ export const useStudentDashboardViewModel = ({
   const secondaryRecommendedBooks = recommendedOfficialBooks.slice(1);
 
   const heroTitle = !hasStudyBooks
-    ? '最初の教材を1冊つくる'
+    ? '教材を1冊作る'
     : remainingWords > 0
-      ? `今日はあと${remainingWords}語`
-      : '今日はここまでで十分です';
+      ? `あと${remainingWords}語`
+      : '今日は完了';
 
   const heroCopy = !hasStudyBooks
-    ? '教科書の写真やPDFからMy単語帳を作れます。まずは1ページ分で十分です。'
+    ? '教科書・PDF・本文から作成。1ページ分で始められます。'
     : remainingWords > 0
       ? dueCount > 0
-        ? `復習待ちの${reviewFirstCount}語から始めると、そのまま今日の分まで進められます。`
-        : 'まずは1セットだけ進めます。続きはあとから足せます。'
-      : '今日は目標達成です。余力があれば復習を1セットだけ足しましょう。';
+        ? `まず復習${reviewFirstCount}語。そのあと残りへ。`
+        : `${remainingWords}語だけ進めます。`
+      : '余力があれば、英語演習を1セットだけ追加します。';
 
   const questButtonLabel = !hasStudyBooks
-    ? 'My単語帳を作る'
+    ? '教材を作る'
     : remainingWords > 0
-      ? '今日の学習を始める'
-      : '復習を1セット足す';
+      ? '学習を始める'
+      : '復習を足す';
 
   const aiBudgetPercent = accountOverview
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
@@ -192,10 +238,10 @@ export const useStudentDashboardViewModel = ({
 
   const aiUsageLabel = aiBudgetPercent >= 85 ? '控えめに利用中' : aiBudgetPercent >= 55 ? '通常利用中' : 'ゆとりあり';
   const aiUsageCopy = aiBudgetPercent >= 85
-    ? '今月は軽めの教材作成と添削に絞るのがよさそうです。'
+    ? '今月は教材作成と添削を軽めにします。'
     : aiBudgetPercent >= 55
-      ? '今月は通常どおり教材作成と添削に使えます。'
-      : '今月は教材作成や添削にまだ余裕があります。';
+      ? '教材作成と添削は通常どおり使えます。'
+      : '教材作成や添削にまだ余裕があります。';
 
   const preferenceSummaryParts = [
     learningPreference?.targetExam ? `目標: ${learningPreference.targetExam}` : null,
@@ -206,10 +252,14 @@ export const useStudentDashboardViewModel = ({
 
   const preferenceSummary = preferenceSummaryParts.length > 0
     ? preferenceSummaryParts.join(' / ')
-    : '目標と使える時間を入れると、今日やる量を決めやすくなります。';
+    : '目標と使える時間を入れると、今日の量が決まります。';
 
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
   const latestCoachNotification = coachNotifications[0] || null;
+  const latestActionableCoachNotification = coachNotifications.find((notification) => (
+    !notification.interventionOutcome
+      || notification.interventionOutcome === InterventionOutcome.PENDING
+  )) || null;
   const canShowWritingSection = currentPlan === SubscriptionPlan.TOB_PAID && Boolean(user.organizationName);
   const topWeakness = weaknessProfile?.topWeaknesses[0] || null;
   const hasWeaknessSignals = Boolean(weaknessProfile?.hasSufficientData && topWeakness);
@@ -228,8 +278,8 @@ export const useStudentDashboardViewModel = ({
       : englishPracticeRecommendation?.reasonJa
         ? englishPracticeRecommendation.reasonJa
       : remainingWords > 0
-        ? '単語のあとに、文法か和訳を1つだけ足します。'
-        : '語彙の目標が終わったので、文法・和訳・長文から1つ進めます。',
+        ? '単語のあとに、文法か和訳を1つ足します。'
+        : '語彙の次に、文法・和訳・長文から1つ進めます。',
   };
   const hasActionableWriting = Boolean(
     canShowWritingSection
@@ -241,6 +291,7 @@ export const useStudentDashboardViewModel = ({
   );
   const hasActiveMission = Boolean(
     primaryMission
+      && !primaryMission.isSuggested
       && primaryMission.status !== WeeklyMissionStatus.COMPLETED
       && primaryMission.completionRate < 100,
   );
@@ -272,12 +323,12 @@ export const useStudentDashboardViewModel = ({
       id: 'today' as const,
       title: '今日の学習',
       body: !hasStudyBooks
-        ? 'My単語帳を1冊作ると、今日の学習を始められます。'
+        ? 'My単語帳を1冊作ると、学習を始められます。'
         : remainingWords > 0
           ? dueCount > 0
-            ? `復習待ちを先に見直してから、残り${remainingWords}語を進めます。`
-            : `残り${remainingWords}語を1セットで進めます。`
-          : '今日の目標は達成済みです。余力があれば復習を追加します。',
+            ? `復習から入り、残り${remainingWords}語へ進みます。`
+            : `残り${remainingWords}語を進めます。`
+          : '今日の目標は達成済みです。余力があれば復習します。',
       ctaLabel: questButtonLabel,
       metricLabel: hasStudyBooks ? `${remainingWords}語` : '教材未作成',
       stateLabel: hasStudyBooks ? `${estimatedMinutes}分目安` : '準備',
@@ -287,8 +338,8 @@ export const useStudentDashboardViewModel = ({
       id: 'mission' as const,
       title: 'ミッション',
       body: primaryMission.blockers.length > 0
-        ? `残り: ${primaryMission.blockers.join(' / ')}。次の操作をここから始められます。`
-        : '今週のミッションは完了済みです。必要なら復習を追加できます。',
+        ? `残り: ${primaryMission.blockers.join(' / ')}。ここから再開します。`
+        : '今週のミッションは完了済みです。必要なら復習します。',
       ctaLabel: primaryMission.nextActionLabel,
       metricLabel: `${primaryMission.completionRate}%`,
       stateLabel: WEEKLY_MISSION_STATUS_LABELS[primaryMission.status],
@@ -318,8 +369,8 @@ export const useStudentDashboardViewModel = ({
       id: 'writing' as const,
       title: '英作文',
       body: hasActionableWriting
-        ? 'ミッションの英作文が残っています。提出画面をすぐ開けます。'
-        : '配布済み課題、提出、返却コメントをまとめて確認できます。',
+        ? 'ミッションの英作文が未提出です。'
+        : '配布済み課題、提出、返却コメントを確認します。',
       ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || '英作文を提出') : '英作文を確認',
       metricLabel: primaryMission?.writingPromptTitle || '講師課題',
       stateLabel: hasActionableWriting ? '未提出' : '確認',
@@ -332,16 +383,196 @@ export const useStudentDashboardViewModel = ({
       ...card,
       isPrimary: card.id === primaryLearningRouteId,
     }));
+
+  const coachRecommendedActionType = latestActionableCoachNotification
+    ? (
+        latestActionableCoachNotification.recommendedActionType
+        || (
+          latestActionableCoachNotification.interventionKind === InterventionKind.PLAN_NUDGE
+            ? RecommendedActionType.OPEN_PLAN
+            : learningPlan
+              ? RecommendedActionType.OPEN_PLAN
+              : RecommendedActionType.START_REVIEW
+        )
+      )
+    : null;
+
+  const primaryTaskId: StudentDashboardTaskId = !hasStudyBooks
+    ? 'today'
+    : hasActionableWriting
+      ? 'writing'
+      : hasActiveMission
+        ? 'mission'
+        : latestActionableCoachNotification
+          ? 'coach'
+          : shouldPrioritizePractice
+            ? 'englishPractice'
+            : remainingWords > 0
+              ? 'today'
+              : hasWeaknessSignals
+                ? 'weakness'
+                : canShowWritingSection
+                  ? 'writing'
+                  : 'today';
+
+  const resolveRouteTaskGroup = (routeId: StudentDashboardLearningRouteId): StudentDashboardTaskGroup => {
+    if (routeId === primaryTaskId) return 'primary';
+    if (routeId === 'mission' && hasActiveMission) return 'urgent';
+    if (routeId === 'writing' && hasActionableWriting) return 'urgent';
+    if (routeId === 'weakness') return hasWeaknessSignals ? 'supporting' : 'reference';
+    if (routeId === 'englishPractice') return hasStudyBooks ? 'supporting' : 'reference';
+    if (routeId === 'today') return hasStudyBooks ? 'supporting' : 'reference';
+    return 'reference';
+  };
+
+  const routeTaskItems: StudentDashboardTaskItem[] = learningRouteCards.map((card) => {
+    const isPrimary = card.id === primaryTaskId;
+    const taskTitle = card.id === 'englishPractice'
+      ? practiceRecommendation.title
+      : (card.id === 'mission' || card.id === 'writing') && isPrimary
+        ? `${card.title}: ${card.metricLabel}`
+        : card.title;
+
+    return {
+      ...card,
+      id: card.id,
+      routeId: card.id,
+      title: taskTitle,
+      group: isPrimary ? 'primary' : resolveRouteTaskGroup(card.id),
+      isPrimary,
+      mobileLabel: getRouteMobileLabel(card.id),
+    };
+  });
+
+  const coachTask: StudentDashboardTaskItem | null = latestActionableCoachNotification ? {
+    id: 'coach',
+    title: '講師メッセージ',
+    body: latestActionableCoachNotification.message,
+    ctaLabel: coachRecommendedActionType
+      ? RECOMMENDED_ACTION_TYPE_LABELS[coachRecommendedActionType]
+      : 'メッセージを確認',
+    metricLabel: latestActionableCoachNotification.instructorName,
+    stateLabel: INTERVENTION_KIND_LABELS[latestActionableCoachNotification.interventionKind],
+    tone: 'coach',
+    group: primaryTaskId === 'coach' ? 'primary' : 'urgent',
+    isPrimary: primaryTaskId === 'coach',
+    mobileLabel: '講師',
+  } : null;
+
+  const referenceTaskItems: StudentDashboardTaskItem[] = [
+    {
+      id: 'plan',
+      title: '学習プラン',
+      body: preferenceSummary,
+      ctaLabel: learningPlan ? 'プランを調整' : 'プランを作る',
+      metricLabel: `${plannedBooks.length}冊`,
+      stateLabel: learningPlan ? '設定済み' : '未設定',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '計画',
+    },
+    {
+      id: 'library',
+      title: '教材',
+      body: hasStudyBooks ? '使う教材と進捗を確認します。' : '最初の教材を作ります。',
+      ctaLabel: hasStudyBooks ? '教材を見る' : '教材を作る',
+      metricLabel: `${planningBooks.length}冊`,
+      stateLabel: hasStudyBooks ? '利用中' : '準備',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '教材',
+    },
+    {
+      id: 'progress',
+      title: '学習記録',
+      body: '今日と今週の進み具合を確認します。',
+      ctaLabel: '記録を見る',
+      metricLabel: `${weekTotal}語`,
+      stateLabel: `${todayProgressPercent}%`,
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '記録',
+    },
+    motivationSnapshot ? {
+      id: 'motivation',
+      title: 'やる気ボード',
+      body: motivationSnapshot.insight.body,
+      ctaLabel: '状況を見る',
+      metricLabel: motivationSnapshot.insight.title,
+      stateLabel: '参考',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '動機',
+    } : null,
+    isGameMode && hasStudyBooks ? {
+      id: 'companion',
+      title: '学習コンパニオン',
+      body: 'ゲームモードの進行を確認します。',
+      ctaLabel: 'クエストを始める',
+      metricLabel: userLeague.name,
+      stateLabel: '任意',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '仲間',
+    } : null,
+    canShowAccountDetails ? {
+      id: 'account',
+      title: 'アカウント',
+      body: '利用状況と設定を確認します。',
+      ctaLabel: '設定を見る',
+      metricLabel: aiUsageLabel,
+      stateLabel: '参考',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '設定',
+    } : null,
+    {
+      id: 'announcements',
+      title: 'お知らせ',
+      body: '最新のお知らせを確認します。',
+      ctaLabel: 'お知らせを見る',
+      metricLabel: '更新',
+      stateLabel: '参考',
+      tone: 'reference',
+      group: 'reference',
+      isPrimary: false,
+      mobileLabel: '告知',
+    },
+  ].filter((task): task is StudentDashboardTaskItem => Boolean(task));
+
+  const allTasks = [
+    ...routeTaskItems,
+    ...(coachTask ? [coachTask] : []),
+    ...referenceTaskItems,
+  ];
+  const primaryTask = allTasks.find((task) => task.id === primaryTaskId)
+    || routeTaskItems.find((task) => task.id === 'today')
+    || allTasks[0]
+    || null;
+  const urgentTasks = allTasks.filter((task) => task.group === 'urgent');
+  const supportingTasks = allTasks.filter((task) => task.group === 'supporting');
+  const referenceTasks = allTasks.filter((task) => task.group === 'reference');
+
   const primaryLearningRouteCard = learningRouteCards.find((card) => card.isPrimary) || null;
-  const heroRouteTitle = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
+  const heroRouteTitle = primaryTask && primaryTask.id !== 'today'
+    ? primaryTask.title
+    : primaryLearningRouteId === 'today' || !primaryLearningRouteCard
     ? heroTitle
     : primaryLearningRouteId === 'englishPractice'
       ? practiceRecommendation.title
     : `${primaryLearningRouteCard.title}: ${primaryLearningRouteCard.metricLabel}`;
-  const heroRouteCopy = primaryLearningRouteId === 'today' || !primaryLearningRouteCard
+  const heroRouteCopy = primaryTask && primaryTask.id !== 'today'
+    ? primaryTask.body
+    : primaryLearningRouteId === 'today' || !primaryLearningRouteCard
     ? heroCopy
     : primaryLearningRouteCard.body;
-  const heroRouteButtonLabel = primaryLearningRouteCard?.ctaLabel || questButtonLabel;
+  const heroRouteButtonLabel = primaryTask?.ctaLabel || primaryLearningRouteCard?.ctaLabel || questButtonLabel;
 
   return {
     dueCount,
@@ -395,6 +626,12 @@ export const useStudentDashboardViewModel = ({
     hasWeaknessSignals,
     hasActionableWriting,
     practiceRecommendation,
+    coachRecommendedActionType,
+    primaryTask,
+    urgentTasks,
+    supportingTasks,
+    referenceTasks,
+    allTasks,
     primaryLearningRouteId,
     learningRouteCards,
   };

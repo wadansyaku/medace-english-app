@@ -102,14 +102,14 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       id: 'remaining',
       label: '残り',
       value: `${remainingWords}語`,
-      helper: remainingWords > 0 ? '残り' : '完了',
+      helper: remainingWords > 0 ? '今日進める' : '完了',
       icon: Target,
     },
     {
       id: 'due',
       label: '復習',
       value: `${dueCount}語`,
-      helper: dueCount > 0 ? '先に見る' : 'なし',
+      helper: dueCount > 0 ? '先に復習' : 'なし',
       icon: CheckCircle2,
     },
     {
@@ -165,8 +165,8 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         <div className="min-w-0">
           <div className="min-w-0 border-l-4 border-medace-500 pl-4">
             <p className="text-xs font-black text-medace-700">今日の入口</p>
-            <h2 className={`mt-2 font-black leading-tight text-slate-950 ${isMobileCompact ? 'text-[1.85rem]' : 'text-3xl md:text-4xl'}`}>
-              {hasStudyBooks ? heroTitle : '最初の教材を作る'}
+            <h2 className={`mt-2 font-black leading-tight text-slate-950 ${isMobileCompact ? 'text-[1.55rem] min-[360px]:text-[1.85rem]' : 'text-3xl md:text-4xl'}`}>
+              {heroTitle}
             </h2>
             <p className={`mt-3 max-w-2xl leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-2 text-sm' : 'text-base'}`}>
               {heroCopy}
@@ -190,7 +190,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                   isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
-                <BookOpenText className="h-4 w-4" /> プラン
+                <BookOpenText className="h-4 w-4" /> 今日のプラン
               </button>
             ) : hasStudyBooks ? (
               <button
@@ -200,16 +200,19 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                   isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
-                プランを作る
+                プラン作成
               </button>
             ) : null}
           </div>
 
-          <div data-testid="dashboard-command-metrics" className={`mt-5 grid min-w-0 gap-2 ${isMobileCompact ? 'grid-cols-3' : 'sm:grid-cols-3'}`}>
-            {compactMetrics.map((metric) => {
+          <div data-testid="dashboard-command-metrics" className={`mt-5 grid min-w-0 gap-2 ${isMobileCompact ? 'grid-cols-2 sm:grid-cols-3' : 'sm:grid-cols-3'}`}>
+            {compactMetrics.map((metric, index) => {
               const MetricIcon = metric.icon;
               return (
-                <div key={metric.id} className="min-w-0 rounded-lg border border-orange-100 bg-medace-50 px-3 py-3">
+                <div
+                  key={metric.id}
+                  className={`min-w-0 rounded-lg border border-orange-100 bg-medace-50 px-3 py-3 ${isMobileCompact && index === 2 ? 'col-span-2 sm:col-span-1' : ''}`}
+                >
                   <div className="flex items-center gap-2 text-[11px] font-black text-slate-500">
                     <MetricIcon className="h-3.5 w-3.5" />
                     <span>{metric.label}</span>
@@ -226,7 +229,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
           <div className="min-w-0 rounded-lg border border-orange-100 bg-medace-50 px-4 py-3">
             <div className="flex items-end justify-between gap-3">
               <div>
-                <div className="text-xs font-black text-slate-500">進み具合</div>
+                <div className="text-xs font-black text-slate-500">今日の進捗</div>
                 <div className="mt-1 text-2xl font-black text-slate-950">{safeProgressPercent}%</div>
               </div>
               <div className="text-right text-xs font-bold text-slate-500">

@@ -32,7 +32,7 @@ test('public readonly session endpoint is reachable before login', async ({ page
 test('public guide updates the URL and browser back returns to login', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'アプリの説明・料金を見る' }).click();
+  await page.getByRole('button', { name: '説明と料金を見る' }).click();
   await expect(page).toHaveURL(/\/public$/);
   await expect(page.getByText('アプリの説明と')).toBeVisible();
 
@@ -44,7 +44,7 @@ test('public guide updates the URL and browser back returns to login', async ({ 
 test('public guide keeps the business role previews visible', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'アプリの説明・料金を見る' }).click();
+  await page.getByRole('button', { name: '説明と料金を見る' }).click();
   await expect(page).toHaveURL(/\/public$/);
   await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-student')).toBeVisible();

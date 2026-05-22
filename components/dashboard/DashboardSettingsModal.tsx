@@ -176,7 +176,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
         <div className="flex-1 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
-            <section className="rounded-[28px] bg-medace-700 px-4 py-4 text-white shadow-[0_18px_45px_rgba(25,0,110,0.18)]">
+            <section className="rounded-[28px] bg-medace-700 px-4 py-4 text-white shadow-[0_18px_45px_rgba(194,65,12,0.16)]">
               <div className="text-xs font-bold text-white/58">今日の設定</div>
               <div className="mt-2 text-xl font-black tracking-tight">いまの学習条件を 1 画面で確認</div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -353,7 +353,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     step={5}
                     value={editDailyStudyMinutes}
                     onChange={(event) => onEditDailyStudyMinutes(Number(event.target.value))}
-                    className="w-full accent-[#f66d0b]"
+                    className="w-full accent-[#ff7a00]"
                   />
                   <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
                 </div>
@@ -826,7 +826,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     step={5}
                     value={editDailyStudyMinutes}
                     onChange={(event) => onEditDailyStudyMinutes(Number(event.target.value))}
-                    className="w-full accent-[#f66d0b]"
+                    className="w-full accent-[#ff7a00]"
                   />
                   <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
                 </div>
