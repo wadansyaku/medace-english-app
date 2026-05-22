@@ -38,6 +38,32 @@ const dismissAnnouncementModalIfPresent = async (page: Page) => {
   await expect(modal).toHaveCount(0);
 };
 
+const demoLoginByPage = async (
+  page: Page,
+  payload: { role: 'STUDENT' | 'INSTRUCTOR'; organizationRole?: 'STUDENT' | 'GROUP_ADMIN' },
+) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const result = await page.evaluate(async (nextPayload) => {
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'demo-login',
+        ...nextPayload,
+      }),
+    });
+    const text = await response.text();
+    return { ok: response.ok, status: response.status, text };
+  }, payload);
+
+  expect(result.ok, `demo-login failed with ${result.status}: ${result.text}`).toBeTruthy();
+  const session = await getCurrentSessionUser(page);
+  expect(session?.uid).toBeTruthy();
+  return result.text ? JSON.parse(result.text) : session;
+};
+
 const bootstrapDemoWritingOps = async (page: Page) => {
   const bootstrap = await runtimeAdminPost<{ studentUid: string }>(page, 'runtime-admin/bootstrap-demo-organization');
   await storageAction(page, 'sendInstructorNotification', {
@@ -156,11 +182,19 @@ test.describe('student mobile ux', () => {
     await seedPhrasebook(page, 'Mobile Quick Nav Drill');
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
+    await expect(page.getByTestId('dashboard-task-reference-library')).toBeVisible();
     await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
     await expect(page.getByTestId('dashboard-mobile-quick-nav').locator('button')).toHaveCount(4);
     await expect.poll(async () => (
       page.getByTestId('dashboard-mobile-quick-nav').evaluate((element) => element.scrollWidth <= element.clientWidth)
     )).toBe(true);
+
+    await page.getByTestId('dashboard-task-reference-library').click();
+    await expect.poll(async () => {
+      const box = await page.getByTestId('dashboard-library-section').boundingBox();
+      return box?.y ?? 9999;
+    }).toBeLessThanOrEqual(220);
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.getByTestId('dashboard-quicknav-english-practice').click();
@@ -180,6 +214,185 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId('dashboard-quicknav-today').click();
     await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+  });
+
+  test('student dashboard action launcher follows the mission primary task on mobile', async ({ browser, baseURL }) => {
+    test.skip(!baseURL, 'smoke baseURL is required for API-seeded launcher state');
+    const appBaseURL = baseURL!;
+    const adminContext = await browser.newContext({ baseURL: appBaseURL });
+    const studentContext = await browser.newContext({
+      baseURL: appBaseURL,
+      viewport: { width: 390, height: 844 },
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      hasTouch: true,
+      isMobile: true,
+    });
+    const adminPage = await adminContext.newPage();
+    const studentPage = await studentContext.newPage();
+
+    try {
+      await demoLoginByPage(adminPage, {
+        role: 'INSTRUCTOR',
+        organizationRole: 'GROUP_ADMIN',
+      });
+      const businessStudent = await demoLoginByPage(studentPage, {
+        role: 'STUDENT',
+        organizationRole: 'STUDENT',
+      });
+      await updateSessionProfile(studentPage, {
+        grade: 'JHS3',
+        englishLevel: 'B1',
+      });
+      expect(businessStudent?.uid).toBeTruthy();
+
+      const importResult = await seedPhrasebook(studentPage, 'Mobile Launcher Mission Drill');
+      const bookId = importResult.importedBookIds?.[0];
+      expect(bookId).toBeTruthy();
+
+      const weeklyMission = await storageAction<any>(adminPage, 'createWeeklyMission', {
+        learningTrack: 'EIKEN_2',
+        title: 'Mobile Launcher Mission',
+        rationale: 'mobile launcher should follow the canonical mission task',
+        bookId,
+        bookTitle: 'Mobile Launcher Mission Drill',
+        newWordsTarget: 2,
+        reviewWordsTarget: 0,
+        quizTargetCount: 0,
+      });
+      expect(weeklyMission.id).toBeTruthy();
+      await storageAction(adminPage, 'assignWeeklyMission', {
+        missionId: weeklyMission.id,
+        studentUid: businessStudent?.uid,
+      });
+
+      await studentPage.goto('/dashboard');
+      await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+      const missionSection = studentPage.getByTestId('dashboard-mission-section');
+      await expect(missionSection).toBeVisible();
+      await expect(missionSection.getByRole('heading', { name: 'Mobile Launcher Mission' })).toBeVisible();
+
+      const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+      const studentBefore = beforeSnapshot.studentAssignments.find((student: { uid: string }) => (
+        student.uid === businessStudent?.uid
+      ));
+      expect(studentBefore?.primaryMissionStatus).toBe('ASSIGNED');
+
+      const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
+      await expect(quickNav).toBeVisible();
+      await expect(quickNav.locator('button')).toHaveCount(4);
+      await expect.poll(async () => (
+        quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
+      )).toBe(true);
+
+      const primaryQuickNav = quickNav.locator('button').first();
+      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-today');
+      await expect(primaryQuickNav).toContainText('課題');
+      await expect(studentPage.getByTestId('dashboard-quicknav-mission')).toHaveCount(0);
+
+      await primaryQuickNav.click();
+      const studyCard = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront);
+      const quizRunningView = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
+      await Promise.race([
+        studyCard.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => null),
+        quizRunningView.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => null),
+      ]);
+      expect(
+        await studyCard.isVisible().catch(() => false)
+          || await quizRunningView.isVisible().catch(() => false),
+      ).toBe(true);
+
+      await expect.poll(async () => {
+        const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+        const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string }) => (
+          student.uid === businessStudent?.uid
+        ));
+        return studentAfter?.primaryMissionStatus || '';
+      }).toBe('IN_PROGRESS');
+    } finally {
+      await adminContext.close();
+      await studentContext.close();
+    }
+  });
+
+  test('student dashboard action launcher follows the coach primary task on mobile', async ({ browser, baseURL }) => {
+    test.skip(!baseURL, 'smoke baseURL is required for API-seeded launcher state');
+    const appBaseURL = baseURL!;
+    const adminContext = await browser.newContext({ baseURL: appBaseURL });
+    const studentContext = await browser.newContext({
+      baseURL: appBaseURL,
+      viewport: { width: 390, height: 844 },
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      hasTouch: true,
+      isMobile: true,
+    });
+    const adminPage = await adminContext.newPage();
+    const studentPage = await studentContext.newPage();
+
+    try {
+      await demoLoginByPage(adminPage, {
+        role: 'INSTRUCTOR',
+        organizationRole: 'GROUP_ADMIN',
+      });
+      const businessStudent = await demoLoginByPage(studentPage, {
+        role: 'STUDENT',
+        organizationRole: 'STUDENT',
+      });
+      await updateSessionProfile(studentPage, {
+        grade: 'JHS3',
+        englishLevel: 'B1',
+      });
+      expect(businessStudent?.uid).toBeTruthy();
+
+      await seedPhrasebook(studentPage, 'Mobile Launcher Coach Drill');
+      const missionBoard = await storageAction<any>(adminPage, 'getWeeklyMissionBoard');
+      const activeAssignments = missionBoard.assignments.filter((assignment: any) => (
+        assignment.studentUid === businessStudent?.uid
+          && assignment.progress?.status !== 'COMPLETED'
+      ));
+      for (const assignment of activeAssignments) {
+        await storageAction(adminPage, 'updateMissionProgress', {
+          assignmentId: assignment.id,
+          eventType: 'MANUAL_COMPLETE',
+        });
+      }
+      await storageAction(adminPage, 'sendInstructorNotification', {
+        studentUid: businessStudent?.uid,
+        message: '復習を10語だけ再開しましょう。',
+        triggerReason: 'smoke-mobile-coach-primary',
+        usedAi: false,
+        interventionKind: 'REVIEW_RESTART',
+        recommendedActionType: 'START_REVIEW',
+      });
+
+      await studentPage.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+
+      const coachOverviewTask = studentPage.getByTestId('dashboard-task-overview-coach');
+      await expect(studentPage.getByTestId('dashboard-task-overview-rail')).toBeVisible();
+      await expect(coachOverviewTask).toBeVisible();
+      await expect(coachOverviewTask).toContainText('講師');
+      await expect(coachOverviewTask).toContainText('復習を10語始める');
+      await expect(studentPage.getByTestId('dashboard-task-reference-library')).toBeVisible();
+      await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeVisible();
+
+      const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
+      await expect(quickNav).toBeVisible();
+      await expect(quickNav.locator('button')).toHaveCount(4);
+      await expect.poll(async () => (
+        quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
+      )).toBe(true);
+
+      const primaryQuickNav = quickNav.locator('button').first();
+      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-today');
+      await expect(primaryQuickNav).toContainText('講師');
+      await expect(studentPage.getByTestId('dashboard-quicknav-coach')).toHaveCount(0);
+
+      await primaryQuickNav.click();
+      await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+    } finally {
+      await adminContext.close();
+      await studentContext.close();
+    }
   });
 
   test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {
@@ -226,7 +439,7 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
-    await expect(primaryCta).toContainText('My単語帳を作る');
+    await expect(primaryCta).toContainText('教材を作る');
     await primaryCta.click();
 
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
@@ -245,7 +458,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    await page.getByRole('button', { name: /プランを作る|プランを作成/ }).first().click();
+    await page.getByRole('button', { name: /プランを作る|プランを作成|プラン作成/ }).first().click();
     await expect(page.getByText('今日の学習プラン')).toBeVisible();
     await page.getByRole('button', { name: '編集' }).click();
 
@@ -404,7 +617,7 @@ test.describe('student mobile ux', () => {
     });
     await page.reload();
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
-    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('苦手はもう少し解くと見えてきます');
+    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('あと少し解くと苦手が見えます');
 
     await page.getByTestId('weakness-focus-cta').click();
     await expect(page.getByTestId('study-card-front')).toBeVisible();
@@ -419,8 +632,8 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('study-finish-exit').click();
 
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
-    await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('苦手はもう少し解くと見えてきます');
-    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('今日はここを先に整える');
+    await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('あと少し解くと苦手が見えます');
+    await expect(page.getByTestId('dashboard-weakness-section')).toContainText('今日はここから直す');
   });
 
   test('student quiz shows an empty learned-only state before any study ratings on mobile', async ({ page }) => {

@@ -5,12 +5,15 @@ import { getTodayDateKey } from '../utils/date';
 import {
   BookCatalogSource,
   EnglishLevel,
+  InterventionKind,
+  InterventionOutcome,
   LearningTrack,
   MissionNextActionType,
   RecommendedActionType,
   SubscriptionPlan,
   type BookMetadata,
   type DashboardSnapshot,
+  type InstructorNotification,
   type PrimaryMissionSnapshot,
   type UserProfile,
   UserGrade,
@@ -81,6 +84,48 @@ const buildSnapshot = (overrides: Partial<DashboardSnapshot>): DashboardSnapshot
   ...overrides,
 });
 
+type CanonicalDashboardTask = {
+  id: string;
+  routeId?: string;
+  title: string;
+  body: string;
+  ctaLabel: string;
+};
+
+type CanonicalDashboardTasks = {
+  primaryTask: CanonicalDashboardTask | null;
+  urgentTasks: CanonicalDashboardTask[];
+  supportingTasks: CanonicalDashboardTask[];
+  referenceTasks: CanonicalDashboardTask[];
+  allTasks: CanonicalDashboardTask[];
+};
+
+const asCanonicalTasks = (
+  viewModel: ReturnType<typeof useStudentDashboardViewModel>,
+): ReturnType<typeof useStudentDashboardViewModel> & CanonicalDashboardTasks => (
+  viewModel as ReturnType<typeof useStudentDashboardViewModel> & CanonicalDashboardTasks
+);
+
+const taskIds = (tasks: CanonicalDashboardTask[] | undefined): string[] => (
+  (tasks ?? []).map((task) => task.id)
+);
+
+const getLaneTaskIds = (canonicalTasks: CanonicalDashboardTasks): string[] => [
+  ...(canonicalTasks.primaryTask ? [canonicalTasks.primaryTask.id] : []),
+  ...taskIds(canonicalTasks.urgentTasks),
+  ...taskIds(canonicalTasks.supportingTasks),
+  ...taskIds(canonicalTasks.referenceTasks),
+];
+
+const expectCanonicalLanesAreExclusive = (canonicalTasks: CanonicalDashboardTasks) => {
+  const laneTaskIds = getLaneTaskIds(canonicalTasks);
+  const allTaskIds = taskIds(canonicalTasks.allTasks);
+
+  expect(new Set(laneTaskIds).size).toBe(laneTaskIds.length);
+  expect(new Set(allTaskIds).size).toBe(allTaskIds.length);
+  expect(new Set(allTaskIds)).toEqual(new Set(laneTaskIds));
+};
+
 const makeMission = (overrides: Partial<PrimaryMissionSnapshot> = {}): PrimaryMissionSnapshot => ({
   assignmentId: 'assignment-1',
   missionId: 'mission-1',
@@ -110,6 +155,22 @@ const makeMission = (overrides: Partial<PrimaryMissionSnapshot> = {}): PrimaryMi
   nextActionType: MissionNextActionType.OPEN_STUDY,
   nextActionLabel: 'ミッションの語彙を進める',
   blockers: ['新出語', '復習', '小テスト'],
+  ...overrides,
+});
+
+const makeCoachNotification = (overrides: Partial<InstructorNotification> = {}): InstructorNotification => ({
+  id: 1,
+  studentUid: 'student-1',
+  studentName: 'Learner',
+  instructorUid: 'coach-1',
+  instructorName: 'Coach',
+  message: '復習を10語だけ再開しましょう。',
+  triggerReason: 'missed-review',
+  deliveryChannel: 'IN_APP',
+  usedAi: true,
+  interventionKind: InterventionKind.REVIEW_RESTART,
+  recommendedActionType: RecommendedActionType.START_REVIEW,
+  createdAt: new Date('2026-05-13T09:00:00+09:00').getTime(),
   ...overrides,
 });
 
@@ -171,6 +232,7 @@ describe('useStudentDashboardViewModel', () => {
 
     expect(viewModel.hasActionableWriting).toBe(true);
     expect(viewModel.primaryLearningRouteId).toBe('writing');
+    expect(asCanonicalTasks(viewModel).primaryTask).toMatchObject({ id: 'writing' });
     expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'writing']);
     expect(viewModel.learningRouteCards.find((card) => card.id === 'writing')).toMatchObject({
       ctaLabel: '作文を提出する',
@@ -259,6 +321,332 @@ describe('useStudentDashboardViewModel', () => {
     });
   });
 
+  it('places coach notifications in the canonical primary or urgent task lane', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 12,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      coachNotifications: [makeCoachNotification()],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+    const primaryOrUrgentTaskIds = [
+      canonicalTasks.primaryTask?.id,
+      ...taskIds(canonicalTasks.urgentTasks),
+    ].filter(Boolean);
+
+    expect(viewModel.latestCoachNotification?.recommendedActionType).toBe(RecommendedActionType.START_REVIEW);
+    expect(primaryOrUrgentTaskIds).toContain('coach');
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'coach',
+      title: '講師メッセージ',
+      ctaLabel: '復習を10語始める',
+    });
+    expect(viewModel.heroTitle).toBe(canonicalTasks.primaryTask?.title);
+    expect(viewModel.heroCopy).toBe(canonicalTasks.primaryTask?.body);
+    expect(viewModel.questButtonLabel).toBe(canonicalTasks.primaryTask?.ctaLabel);
+    expect([
+      ...taskIds(canonicalTasks.supportingTasks),
+      ...taskIds(canonicalTasks.referenceTasks),
+    ]).not.toContain('coach');
+  });
+
+  it('keeps plan library and progress in the canonical reference task lane', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 12,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const referenceTaskIds = taskIds(asCanonicalTasks(viewModel).referenceTasks);
+
+    expect(referenceTaskIds).toEqual(expect.arrayContaining(['plan', 'library', 'progress']));
+  });
+
+  it('keeps canonical task lanes mutually exclusive and ordered for an active mission', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 12,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      primaryMission: makeMission(),
+      weaknessProfile: {
+        hasSufficientData: true,
+        updatedAt: Date.now(),
+        signals: [],
+        topWeaknesses: [{
+          dimension: WeaknessDimension.SPELLING_RECALL,
+          level: WeaknessSignalLevel.HIGH,
+          score: 82,
+          sampleSize: 18,
+          reason: 'スペルの想起で落としやすい単語があります。',
+          nextActionLabel: 'スペルを5問だけ確認',
+          recommendedActionType: RecommendedActionType.START_REVIEW,
+          targetQuestionModes: ['SPELLING_HINT'],
+          updatedAt: Date.now(),
+        }],
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+    const primaryTaskIds = canonicalTasks.primaryTask ? [canonicalTasks.primaryTask.id] : [];
+    const urgentTaskIds = taskIds(canonicalTasks.urgentTasks);
+    const supportingTaskIds = taskIds(canonicalTasks.supportingTasks);
+    const referenceTaskIds = taskIds(canonicalTasks.referenceTasks);
+
+    expect(primaryTaskIds).toEqual(['mission']);
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'mission',
+      routeId: 'mission',
+      ctaLabel: 'ミッションの語彙を進める',
+    });
+    expect(urgentTaskIds).toEqual([]);
+    expect(supportingTaskIds).toEqual(['today', 'weakness', 'englishPractice']);
+    expect(referenceTaskIds.slice(0, 3)).toEqual(['plan', 'library', 'progress']);
+    expect(referenceTaskIds).toEqual(expect.arrayContaining(['plan', 'library', 'progress']));
+    expect(referenceTaskIds).not.toEqual(expect.arrayContaining(['mission', 'writing', 'coach']));
+    expect(taskIds(canonicalTasks.allTasks).slice(0, 4)).toEqual(['today', 'mission', 'weakness', 'englishPractice']);
+    expect(viewModel.coachRecommendedActionType).toBeNull();
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('keeps an active mission primary while coach notifications stay urgent', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 12,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      primaryMission: makeMission(),
+      coachNotifications: [makeCoachNotification({
+        interventionKind: InterventionKind.PLAN_NUDGE,
+        recommendedActionType: RecommendedActionType.OPEN_PLAN,
+        message: '次の週のプランを一緒に整えましょう。',
+      })],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+
+    expect(viewModel.primaryLearningRouteId).toBe('mission');
+    expect(viewModel.latestCoachNotification?.recommendedActionType).toBe(RecommendedActionType.OPEN_PLAN);
+    expect(viewModel.coachRecommendedActionType).toBe(RecommendedActionType.OPEN_PLAN);
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'mission',
+      routeId: 'mission',
+      ctaLabel: 'ミッションの語彙を進める',
+    });
+    expect(taskIds(canonicalTasks.urgentTasks)).toEqual(['coach']);
+    expect(canonicalTasks.urgentTasks[0]).toMatchObject({
+      id: 'coach',
+      title: '講師メッセージ',
+      ctaLabel: '今日のプランに戻る',
+    });
+    expect(taskIds(canonicalTasks.supportingTasks)).toEqual(['today', 'englishPractice']);
+    expect(taskIds(canonicalTasks.referenceTasks)).toContain('weakness');
+    expect(taskIds(canonicalTasks.referenceTasks)).not.toEqual(expect.arrayContaining(['mission', 'coach']));
+    expect(taskIds(canonicalTasks.allTasks).slice(0, 6)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'coach', 'plan']);
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('does not let a suggested mission outrank an actionable coach notification', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 12,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      primaryMission: makeMission({
+        assignmentId: undefined,
+        missionId: undefined,
+        isSuggested: true,
+      }),
+      coachNotifications: [makeCoachNotification()],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'coach',
+      ctaLabel: '復習を10語始める',
+    });
+    expect(taskIds(canonicalTasks.urgentTasks)).not.toContain('mission');
+    expect(taskIds(canonicalTasks.referenceTasks)).toContain('mission');
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('does not promote resolved coach notifications over the next learning task', () => {
+    const snapshot = buildSnapshot({
+      dueCount: 10,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      coachNotifications: [makeCoachNotification({
+        interventionOutcome: InterventionOutcome.REACTIVATED,
+        recommendedActionType: RecommendedActionType.START_REVIEW,
+      })],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+
+    expect(viewModel.latestCoachNotification?.interventionOutcome).toBe(InterventionOutcome.REACTIVATED);
+    expect(viewModel.coachRecommendedActionType).toBeNull();
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'today',
+      routeId: 'today',
+    });
+    expect(taskIds(canonicalTasks.urgentTasks)).not.toContain('coach');
+    expect(taskIds(canonicalTasks.supportingTasks)).toEqual(['englishPractice']);
+    expect(taskIds(canonicalTasks.referenceTasks)).toContain('weakness');
+    expect(taskIds(canonicalTasks.referenceTasks)).not.toContain('coach');
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('keeps actionable writing primary while the source mission stays urgent', () => {
+    const paidOverview = {
+      ...buildSnapshot({}).accountOverview!,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    };
+    const snapshot = buildSnapshot({
+      dueCount: 9,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      accountOverview: paidOverview,
+      primaryMission: makeMission({
+        nextActionType: MissionNextActionType.OPEN_WRITING,
+        nextActionLabel: '作文を提出する',
+        writingRequired: true,
+        writingCompleted: false,
+        writingAssignmentId: 'writing-1',
+        writingPromptTitle: 'スマホ学習の意見文',
+      }),
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: {
+        ...baseUser,
+        subscriptionPlan: SubscriptionPlan.TOB_PAID,
+        organizationName: 'MedAce School',
+      },
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+
+    expect(viewModel.primaryLearningRouteId).toBe('writing');
+    expect(viewModel.coachRecommendedActionType).toBeNull();
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'writing',
+      routeId: 'writing',
+      title: '英作文: スマホ学習の意見文',
+      ctaLabel: '作文を提出する',
+    });
+    expect(taskIds(canonicalTasks.urgentTasks)).toEqual(['mission']);
+    expect(canonicalTasks.urgentTasks[0]).toMatchObject({
+      id: 'mission',
+      routeId: 'mission',
+      ctaLabel: '作文を提出する',
+    });
+    expect(taskIds(canonicalTasks.supportingTasks)).toEqual(['today', 'englishPractice']);
+    expect(taskIds(canonicalTasks.referenceTasks).slice(0, 4)).toEqual(['weakness', 'plan', 'library', 'progress']);
+    expect(taskIds(canonicalTasks.referenceTasks)).not.toEqual(expect.arrayContaining(['writing', 'coach']));
+    expect(taskIds(canonicalTasks.allTasks).slice(0, 5)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'writing']);
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('keeps a coach nudge primary after mission and writing no longer need action', () => {
+    const paidOverview = {
+      ...buildSnapshot({}).accountOverview!,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    };
+    const snapshot = buildSnapshot({
+      dueCount: 6,
+      officialBooks: [makeBook('book-1', 'Core 1')],
+      accountOverview: paidOverview,
+      primaryMission: makeMission({
+        completionRate: 100,
+        status: WeeklyMissionStatus.COMPLETED,
+        writingRequired: true,
+        writingCompleted: true,
+        writingAssignmentId: 'writing-1',
+        writingPromptTitle: 'スマホ学習の意見文',
+        nextActionType: MissionNextActionType.OPEN_PLAN,
+        nextActionLabel: '次のプランを見る',
+        blockers: [],
+      }),
+      coachNotifications: [makeCoachNotification({
+        interventionKind: InterventionKind.PLAN_NUDGE,
+        recommendedActionType: RecommendedActionType.OPEN_PLAN,
+        message: '次の週のプランを一緒に整えましょう。',
+      })],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: {
+        ...baseUser,
+        subscriptionPlan: SubscriptionPlan.TOB_PAID,
+        organizationName: 'MedAce School',
+      },
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+
+    expect(viewModel.primaryLearningRouteId).toBe('today');
+    expect(viewModel.coachRecommendedActionType).toBe(RecommendedActionType.OPEN_PLAN);
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'coach',
+      ctaLabel: '今日のプランに戻る',
+    });
+    expect(canonicalTasks.primaryTask?.routeId).toBeUndefined();
+    expect(taskIds(canonicalTasks.urgentTasks)).toEqual([]);
+    expect(taskIds(canonicalTasks.supportingTasks)).toEqual(['today', 'englishPractice']);
+    expect(taskIds(canonicalTasks.referenceTasks).slice(0, 5)).toEqual(['mission', 'weakness', 'writing', 'plan', 'library']);
+    expect(canonicalTasks.referenceTasks.find((task) => task.id === 'writing')).toMatchObject({
+      routeId: 'writing',
+      ctaLabel: '英作文を確認',
+    });
+    expect(taskIds(canonicalTasks.allTasks).slice(0, 6)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'writing', 'coach']);
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
+  it('keeps business writing available as a reference task before assignments exist', () => {
+    const paidOverview = {
+      ...buildSnapshot({}).accountOverview!,
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+    };
+    const snapshot = buildSnapshot({
+      accountOverview: paidOverview,
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: {
+        ...baseUser,
+        subscriptionPlan: SubscriptionPlan.TOB_PAID,
+        organizationName: 'MedAce School',
+      },
+      snapshot,
+    });
+    const canonicalTasks = asCanonicalTasks(viewModel);
+    const referenceTaskIds = taskIds(canonicalTasks.referenceTasks);
+    const allTaskIds = taskIds(canonicalTasks.allTasks);
+
+    expect(viewModel.canShowWritingSection).toBe(true);
+    expect(referenceTaskIds).toContain('writing');
+    expect(taskIds(canonicalTasks.urgentTasks)).not.toContain('writing');
+    expect(taskIds(canonicalTasks.supportingTasks)).not.toContain('writing');
+    expect(allTaskIds).toEqual(expect.arrayContaining(getLaneTaskIds(canonicalTasks)));
+    expectCanonicalLanesAreExclusive(canonicalTasks);
+  });
+
   it('uses English practice as the follow-up when daily work is done and no stronger signal exists', () => {
     const snapshot = buildSnapshot({
       dueCount: 0,
@@ -287,6 +675,13 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
     expect(viewModel.practiceRecommendation.lane).toBe('grammar');
     expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'weakness', 'englishPractice']);
+    const canonicalTasks = asCanonicalTasks(viewModel);
+    expect(canonicalTasks.primaryTask).toMatchObject({ id: 'englishPractice' });
+    expect(taskIds(canonicalTasks.urgentTasks)).not.toContain('weakness');
+    expect([
+      ...taskIds(canonicalTasks.supportingTasks),
+      ...taskIds(canonicalTasks.referenceTasks),
+    ]).toContain('weakness');
   });
 
   it('uses the English practice progress recommendation when it is available', () => {

@@ -67,6 +67,8 @@ test('desktop student dashboard keeps the command center calm and above the fold
   const primaryCta = page.getByTestId('student-hero-primary-cta');
   await expect(commandCenter).toBeVisible();
   await expect(primaryCta).toHaveCount(1);
+  await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
+  await expect(page.getByTestId('dashboard-task-overview-today')).toBeVisible();
 
   const ctaBox = await primaryCta.boundingBox();
   const commandBox = await commandCenter.boundingBox();
@@ -85,10 +87,33 @@ test('desktop student dashboard keeps the command center calm and above the fold
     };
   });
   expect(palette.centerBackground).toBe('rgb(255, 255, 255)');
-  expect(palette.ctaBackground).toBe('rgb(194, 65, 12)');
+  expect(palette.ctaBackground).toBe('rgb(210, 70, 0)');
 
   const offenders = await findUnexpectedHorizontalOverflow(page);
   expect(offenders).toEqual([]);
+
+  await page.getByTestId('dashboard-task-reference-library').click();
+  await expect.poll(async () => {
+    const box = await page.getByTestId('dashboard-library-section').boundingBox();
+    return box?.y ?? 9999;
+  }).toBeLessThanOrEqual(260);
+
+  const announcementsShortcut = page.getByTestId('dashboard-task-reference-announcements');
+  if (await announcementsShortcut.count()) {
+    await announcementsShortcut.scrollIntoViewIfNeeded();
+    await announcementsShortcut.click();
+    await expect.poll(async () => {
+      const box = await page.getByTestId('dashboard-announcements-section').boundingBox();
+      return box?.y ?? 9999;
+    }).toBeLessThanOrEqual(260);
+  }
+
+  await page.getByTestId('dashboard-task-overview-today').scrollIntoViewIfNeeded();
+  await page.getByTestId('dashboard-task-overview-today').click();
+  const startedStudy = await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront).isVisible({ timeout: 5000 }).catch(() => false);
+  if (!startedStudy) {
+    await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
+  }
 });
 
 test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {

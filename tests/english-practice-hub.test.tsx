@@ -30,7 +30,7 @@ describe('EnglishPracticeHub', () => {
       '文法演習',
       '和訳',
       '長文',
-      '英検英作文',
+      '英作文',
       '文法範囲を選ぶ',
       'B1 標準',
       '単語を準備中',
@@ -76,8 +76,8 @@ describe('EnglishPracticeHub', () => {
     expect(rendered).not.toContain('data-testid="english-practice-lane-overview"');
 
     [
-      'border-orange-100',
-      'bg-orange-50',
+      'border-medace-100',
+      'bg-medace-50',
       'text-medace-700',
       'bg-medace-600',
     ].forEach((className) => {
@@ -95,7 +95,7 @@ describe('EnglishPracticeHub', () => {
     );
 
     expect(rendered).toContain('英語演習');
-    expect(rendered).toContain('英検英作文');
+    expect(rendered).toContain('英作文');
     expect(rendered).not.toContain('別ページへ移動せず');
     expect(rendered).toContain('english-practice-hub');
     expect(rendered).not.toContain('Steady Study');

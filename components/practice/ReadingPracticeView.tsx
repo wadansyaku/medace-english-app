@@ -67,14 +67,14 @@ const getNextActionForQuestion = (
   correct: boolean,
 ): string => {
   if (correct) {
-    if (question.kind === 'GRAMMAR_STRUCTURE') return '同じ文の主語・動詞・修飾語をもう一度声に出して確認します。';
-    if (question.kind === 'VOCAB_INFERENCE') return '根拠文の前後から、知らない語の意味を日本語で一言にまとめます。';
-    return '根拠文と選択肢の言い換えを1つだけメモします。';
+    if (question.kind === 'GRAMMAR_STRUCTURE') return '主語・動詞・修飾語を声に出して確認します。';
+    if (question.kind === 'VOCAB_INFERENCE') return '前後の文から語の意味を一言でまとめます。';
+    return '根拠文と選択肢の言い換えを1つメモします。';
   }
-  if (question.kind === 'CONTENT_MATCH') return '選択肢の日本語を先に細かく読まず、本文中で同じ内容を述べる一文を探します。';
-  if (question.kind === 'REFERENCE_OR_MAIN_IDEA') return '指示語は直前の名詞、要旨は最初と最後の文を優先して確認します。';
-  if (question.kind === 'VOCAB_INFERENCE') return '知らない語だけを見ず、直前直後の動作・理由・結果から意味を絞ります。';
-  return 'その文の主語、動詞、後ろから説明する語句を線で分けます。';
+  if (question.kind === 'CONTENT_MATCH') return '本文で同じ内容を述べる一文を探します。';
+  if (question.kind === 'REFERENCE_OR_MAIN_IDEA') return '指示語は直前、要旨は最初と最後の文を確認します。';
+  if (question.kind === 'VOCAB_INFERENCE') return '前後の動作・理由・結果から意味を絞ります。';
+  return '主語、動詞、説明する語句を線で分けます。';
 };
 
 const HighlightedPassage: React.FC<{ text: string; evidenceSentence?: string }> = ({
@@ -274,7 +274,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs font-bold text-slate-400">設問タイプ</div>
-            <p className="mt-1 text-sm font-bold text-slate-700">設問ごとに弱点を残して、次の本文選びにつなげます。</p>
+            <p className="mt-1 text-sm font-bold text-slate-700">弱点を次の本文選びに使います。</p>
           </div>
           {completed && (
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
@@ -286,9 +286,9 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
           {kindProgress.map((item) => (
             <div key={item.kind} className="rounded-2xl border border-white/80 bg-white px-3 py-3">
               <div className="text-xs font-black text-slate-500">{item.label}</div>
-              <div className="mt-2 flex items-end justify-between gap-2">
+              <div className="mt-2 flex min-w-0 items-end justify-between gap-2">
                 <span className="text-lg font-black text-slate-950">{item.answered}/{item.total}</span>
-                <span className={`text-xs font-black ${item.answered > 0 && item.accuracy < 70 ? 'text-red-600' : 'text-medace-700'}`}>
+                <span className={`shrink-0 text-xs font-black ${item.answered > 0 && item.accuracy < 70 ? 'text-red-600' : 'text-medace-700'}`}>
                   {item.answered > 0 ? `${item.accuracy}%` : '未回答'}
                 </span>
               </div>
@@ -306,9 +306,9 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
         </div>
         <div className="mt-4 flex items-start gap-3">
           <BookOpen className="mt-1 h-6 w-6 shrink-0 text-medace-600" />
-          <div>
-            <h3 className="text-2xl font-black leading-tight text-slate-950">{currentPassage.titleJa}</h3>
-            <div className="mt-1 text-sm font-bold text-slate-400">{currentPassage.titleEn}</div>
+          <div className="min-w-0">
+            <h3 className="text-xl font-black leading-tight text-slate-950 sm:text-2xl">{currentPassage.titleJa}</h3>
+            <div className="mt-1 break-words text-sm font-bold text-slate-400">{currentPassage.titleEn}</div>
           </div>
         </div>
         <p className="mt-5 max-w-readable text-base font-semibold leading-8 text-slate-800">
@@ -346,7 +346,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
           )}
         </div>
 
-        <p className="mt-4 text-xl font-black leading-relaxed text-slate-950">{currentQuestion.promptJa}</p>
+        <p className="mt-4 text-lg font-black leading-relaxed text-slate-950 sm:text-xl">{currentQuestion.promptJa}</p>
 
         <div className="mt-5 grid gap-3">
           {currentQuestion.options.map((option) => {
@@ -361,7 +361,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
                 aria-pressed={isSelected}
                 disabled={Boolean(answerResult)}
                 onClick={() => setSelectedOptionId(option.id)}
-                className={`flex min-h-12 w-full items-start gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-bold transition-all ${
+                className={`flex min-h-12 w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left text-sm font-bold transition-all sm:px-4 ${
                   isCorrect
                     ? 'border-emerald-300 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-100'
                     : isWrongSelection
@@ -374,7 +374,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
                 <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-black text-slate-500 shadow-sm">
                   {option.id.toUpperCase()}
                 </span>
-                <span className="leading-relaxed">{option.textJa}</span>
+                <span className="min-w-0 break-words leading-relaxed">{option.textJa}</span>
               </button>
             );
           })}
@@ -422,7 +422,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
         <div className="flex items-start gap-3">
           <HelpCircle className="mt-0.5 h-5 w-5 shrink-0 text-medace-600" />
           <p className="text-sm font-bold leading-relaxed text-slate-700">
-            迷ったら、選択肢を先に決めず、本文中で同じ内容を言っている文を探します。判定後に根拠文が色付きで表示されます。
+            迷ったら、本文中で同じ内容を言う文を探します。判定後に根拠文を表示します。
           </p>
         </div>
       </section>

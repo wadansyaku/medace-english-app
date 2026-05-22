@@ -108,13 +108,13 @@ const Layout: React.FC<LayoutProps> = ({
   }, [forceNoIndex, isPreviewDeployment]);
 
   return (
-    <div className="min-h-screen bg-medace-100 flex flex-col font-sans">
+    <div className="flex min-h-screen flex-col bg-medace-100 font-sans">
       {showOfflineBlocker && (
         <div
           data-testid="offline-blocking-banner"
           className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/72 px-4"
         >
-          <div className="max-w-lg rounded-[28px] border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
+          <div className="max-w-lg rounded-panel border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
             <p className="text-xs font-black text-amber-300">オンライン専用テスト</p>
             <h2 className="mt-3 text-2xl font-black">オフラインでは操作を継続できません</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-200">
@@ -123,7 +123,7 @@ const Layout: React.FC<LayoutProps> = ({
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-5 inline-flex items-center justify-center rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-900"
+              className="mt-5 inline-flex items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-bold text-slate-900"
             >
               再読み込み
             </button>
@@ -143,7 +143,7 @@ const Layout: React.FC<LayoutProps> = ({
                 この URL は preview 環境です。検索対象にせず、動作確認と内部レビュー専用として扱ってください。
               </p>
             </div>
-            <div className="rounded-full border border-sky-400 bg-white px-3 py-1 text-xs font-black text-sky-700">
+            <div className="rounded-lg border border-sky-400 bg-white px-3 py-1 text-xs font-black text-sky-700">
               noindex
             </div>
           </div>
@@ -152,7 +152,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header className={`bg-white/92 backdrop-blur-xl border-b border-orange-100 sticky top-0 z-50 shadow-[0_10px_28px_rgba(194,65,12,0.07)] ${
+      <header className={`sticky top-0 z-50 border-b border-medace-200 bg-white/92 shadow-[0_8px_22px_rgba(154,52,18,0.06)] backdrop-blur-xl ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
@@ -170,20 +170,20 @@ const Layout: React.FC<LayoutProps> = ({
                     type="button"
                     data-testid="demo-banner-toggle"
                     onClick={() => setShowDemoBannerDetails((previous) => !previous)}
-                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-[#f3b80a]/70 bg-white px-3 py-2 text-xs font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
+                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-[#f3b80a]/70 bg-white px-3 py-2 text-xs font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
                   >
                     {showDemoBannerDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     {showDemoBannerDetails ? '閉じる' : '詳細'}
                   </button>
                 </div>
                 {showDemoBannerDetails && (
-                  <div className="mt-3 rounded-2xl border border-[#f3b80a]/45 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
+                  <div className="mt-3 rounded-xl border border-[#f3b80a]/45 bg-white/80 px-4 py-3 text-sm leading-relaxed text-slate-700">
                     別端末では別の体験セッションが作成され、一定時間後に自動でリセットされます。
                     {onResetDemo && (
                       <button
                         type="button"
                         onClick={onResetDemo}
-                        className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[#f3b80a]/70 bg-white px-4 py-2.5 text-sm font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
+                        className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#f3b80a]/70 bg-white px-4 py-2.5 text-sm font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
                       >
                         新しい体験を開始
                       </button>
@@ -203,7 +203,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <button
                     type="button"
                     onClick={onResetDemo}
-                    className="inline-flex items-center justify-center rounded-full border border-[#f3b80a]/70 bg-white px-5 py-2.5 text-[0.95rem] font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
+                    className="inline-flex items-center justify-center rounded-xl border border-[#f3b80a]/70 bg-white px-5 py-2.5 text-[0.95rem] font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
                   >
                     新しい体験を開始
                   </button>
@@ -216,7 +216,7 @@ const Layout: React.FC<LayoutProps> = ({
           compactStudentShell ? 'min-h-[62px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
-            <div className={`border border-orange-100 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-2xl p-2.5' : 'rounded-2xl p-3'}`}>
+            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
               <BookOpen className={`text-medace-700 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
             <div className={compactStudentShell ? 'block' : 'hidden sm:block'}>
@@ -234,7 +234,7 @@ const Layout: React.FC<LayoutProps> = ({
               
               {/* Gamification HUD */}
               {user.role === UserRole.STUDENT && isGameMode && !compactStudentShell && (
-                  <div className="flex items-center gap-3 rounded-full border border-orange-100 bg-white/90 px-4 py-2.5 shadow-sm md:gap-6">
+                  <div className="flex items-center gap-3 rounded-xl border border-medace-200 bg-white/90 px-4 py-2.5 shadow-sm md:gap-6">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
                           <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-[#f3b80a] fill-[#f3b80a]' : 'text-slate-300'}`} />
@@ -248,7 +248,7 @@ const Layout: React.FC<LayoutProps> = ({
 
                       {/* Level & XP */}
                       <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full border border-orange-100 bg-medace-50 text-xs font-bold text-medace-700">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-medace-200 bg-medace-50 text-xs font-bold text-medace-700">
                               {stats.level}
                           </div>
                           <div className="flex flex-col w-20 md:w-32">
@@ -270,7 +270,7 @@ const Layout: React.FC<LayoutProps> = ({
               <nav className="hidden md:flex gap-1">
                 <button 
                   onClick={() => onChangeView(homeView)}
-                  className={`px-4 py-3 rounded-full text-[0.95rem] font-bold transition-colors ${
+                  className={`rounded-xl px-4 py-3 text-[0.95rem] font-bold transition-colors ${
                     currentView === homeView || (user.role === UserRole.STUDENT && currentView === 'englishPractice')
                       ? 'bg-medace-700 text-white'
                       : 'text-slate-700 hover:bg-medace-50 hover:text-medace-700'
@@ -287,7 +287,7 @@ const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <button 
                   onClick={onLogout}
-                  className={`rounded-full border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
+                  className={`rounded-xl border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
                     compactStudentShell ? 'p-2.5' : 'p-3'
                   }`}
                   title="ログアウト"
@@ -299,7 +299,7 @@ const Layout: React.FC<LayoutProps> = ({
           )}
         </div>
         {user && workspaceSections.length > 0 && onSelectWorkspaceSection && activeWorkspaceSection && (
-          <div className="border-t border-orange-100 bg-white/90 backdrop-blur-xl">
+          <div className="border-t border-medace-200 bg-white/90 backdrop-blur-xl">
             <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
               {workspaceSections.map((section) => (
                 <button
@@ -307,7 +307,7 @@ const Layout: React.FC<LayoutProps> = ({
                   type="button"
                   onClick={() => onSelectWorkspaceSection(section.id)}
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
-                  className={`shrink-0 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                  className={`shrink-0 rounded-xl border px-4 py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
                       ? 'border-medace-700 bg-medace-700 text-white'
                       : 'border-orange-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
@@ -337,7 +337,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Footer */}
       {!immersiveContent && (
-      <footer className={`bg-white/85 backdrop-blur border-t border-orange-100 mt-auto ${
+      <footer className={`mt-auto border-t border-medace-200 bg-white/85 backdrop-blur ${
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
         {compactStudentShell ? (

@@ -148,35 +148,35 @@ const laneConfig: Array<{
     id: 'overview',
     label: '全体',
     title: '英語演習',
-    description: 'ホームから選んだ演習を集中して進める',
+    description: '選んだ演習を1セット進める',
     icon: Sparkles,
   },
   {
     id: 'grammar',
     label: '文法',
     title: '参考書型の文法演習',
-    description: '範囲を複数選択し、固定でもランダムでも演習',
+    description: '範囲を選んで短く演習',
     icon: Brain,
   },
   {
     id: 'translation',
     label: '和訳',
     title: '受験答案としての和訳',
-    description: '文法範囲を選ばず、英文全体を訳す',
+    description: '英文全体を訳して確認',
     icon: Languages,
   },
   {
     id: 'reading',
     label: '長文',
     title: '根拠を探す長文読解',
-    description: '内容一致・要旨・語彙推測・文構造を確認',
+    description: '本文から根拠を探す',
     icon: LibraryBig,
   },
   {
     id: 'writing',
-    label: '英検英作文',
+    label: '英作文',
     title: '英検ライティング練習',
-    description: 'Eメール・意見論述・要約を級別テーマで練習',
+    description: '級別テーマで書く',
     icon: NotebookPen,
   },
 ];
@@ -903,15 +903,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderGrammar = () => (
     <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
+      <section className="order-2 rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm xl:order-1">
         <div className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-medace-700" />
           <h2 className="text-xl font-black text-slate-950">文法範囲を選ぶ</h2>
         </div>
         <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
-          Next Stage・Vintage・Scramble・Evergreen 型の章立てに近いカテゴリで、複数範囲を横断できます。
+          参考書に近い章立てから、今日使う範囲を選びます。
         </p>
-        <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+        <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-xs font-black text-medace-700">範囲コーチ</div>
@@ -980,7 +980,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           </button>
         </div>
 
-        <div className="mt-4 rounded-lg border border-orange-100 bg-white px-3 py-3">
+        <div className="mt-4 rounded-lg border border-medace-100 bg-white px-3 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-black text-slate-500">選択中の範囲</div>
@@ -994,7 +994,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <button
               type="button"
               onClick={() => setScopePickerOpen((current) => !current)}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-medace-200 bg-medace-50 px-3 py-2 text-sm font-black text-medace-800 transition-colors hover:bg-orange-50"
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-medace-200 bg-medace-50 px-3 py-2 text-sm font-black text-medace-800 transition-colors hover:bg-medace-100"
             >
               {scopePickerOpen ? '範囲選択を閉じる' : '範囲を変更'}
             </button>
@@ -1055,7 +1055,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <div className="mt-4 max-h-[360px] overflow-y-auto pr-1">
               <div className="grid gap-2">
                 {visibleGrammarScopes.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-3 py-4 text-sm font-bold text-medace-800">
+                  <div className="rounded-lg border border-dashed border-medace-200 bg-medace-50 px-3 py-4 text-sm font-bold text-medace-800">
                     この条件の範囲はまだありません。全範囲か別の章に切り替えてください。
                   </div>
                 )}
@@ -1081,7 +1081,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                         <div className="flex shrink-0 flex-col items-end gap-1">
                           <span className="rounded-full bg-white px-2 py-1 text-[11px] font-black text-medace-700">{scope.levelMin}-{scope.levelMax}</span>
                           {weakScope && (
-                            <span className="rounded-full bg-orange-100 px-2 py-1 text-[11px] font-black text-orange-800">
+                            <span className="rounded-full bg-medace-100 px-2 py-1 text-[11px] font-black text-medace-800">
                               弱点 {weakScope.accuracy}%
                             </span>
                           )}
@@ -1097,11 +1097,11 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       </section>
 
       <section className="order-1 space-y-3 xl:order-2">
-        <div className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+        <div className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
           <div className="text-xs font-black text-medace-700">今回の問題</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">選んだ範囲から {grammarItems.length} 問</h2>
           <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
-            選んだ範囲と単語に合わせた例文で練習します。
+            選択範囲の例文で練習します。
           </p>
         </div>
         {grammarItems.map(renderGrammarItem)}
@@ -1111,13 +1111,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderTranslation = () => (
     <div className="grid gap-4 xl:grid-cols-[0.78fr_1.22fr]">
-      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
+      <section className="order-2 rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm xl:order-1">
         <div className="flex items-center gap-2">
           <Languages className="h-5 w-5 text-medace-700" />
           <h2 className="text-xl font-black text-slate-950">和訳トレーニング</h2>
         </div>
         <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
-          英文全体を訳して、意味の抜けと構文の取り違えを見直します。
+          英文全体を訳し、意味と構文を見直します。
         </p>
         <div className="mt-4 grid gap-2">
           {[
@@ -1130,7 +1130,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 key={item.mode}
                 type="button"
                 onClick={() => setTranslationMode(item.mode)}
-                className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-black transition-colors ${
+                className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-black transition-colors sm:px-4 sm:py-3 ${
                   translationMode === item.mode
                     ? 'border-medace-600 bg-medace-600 text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
@@ -1142,10 +1142,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             );
           })}
         </div>
-        <div className="mt-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+        <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
           <div className="text-xs font-black text-medace-700">答案チェック</div>
           <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
-            正解例と違う訳は、意味の抜けと構文の取り違えを確認します。
+            正解例と比べ、抜けや構文を確認します。
           </p>
         </div>
       </section>
@@ -1274,7 +1274,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderReading = () => (
     <div className="space-y-4">
-      <section className="rounded-lg border border-orange-100 bg-white px-4 py-3 shadow-sm">
+      <section className="rounded-lg border border-medace-100 bg-white px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {Object.values(EnglishLevel).map((level) => {
@@ -1288,7 +1288,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     practiceLevel === level
                       ? 'border-medace-600 bg-medace-600 text-white'
                       : isChallengeLevel
-                        ? 'border-orange-200 bg-orange-50 text-orange-800 hover:border-medace-300'
+                        ? 'border-medace-200 bg-medace-50 text-medace-800 hover:border-medace-300'
                         : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
                   }`}
                 >
@@ -1308,15 +1308,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </div>
       </section>
       {readingSummary && (
-        <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+        <section className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
           <div className="text-xs font-black text-medace-700">読解レビュー</div>
           <h3 className="mt-1 text-lg font-black text-slate-950">
             今回 {readingSummary.correct} / {readingSummary.total} 問正解
           </h3>
           <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
             {readingSummary.weakQuestionKinds.length > 0
-              ? `次は ${readingSummary.weakQuestionKinds.map(getReadingQuestionKindLabel).join('・')} の根拠探しを短く復習します。`
-              : '設問種別の偏りはありません。次は1つ上の本文に挑戦できます。'}
+              ? `次は ${readingSummary.weakQuestionKinds.map(getReadingQuestionKindLabel).join('・')} を短く復習します。`
+              : '偏りはありません。次は1つ上に挑戦できます。'}
           </p>
         </section>
       )}
@@ -1331,13 +1331,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderWriting = () => (
     <div data-testid="english-practice-lane-writing-panel" className="grid gap-4 xl:grid-cols-[0.72fr_1.28fr]">
-      <section className="order-2 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm xl:order-1">
+      <section className="order-2 rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm xl:order-1">
         <div className="flex items-center gap-2">
           <NotebookPen className="h-5 w-5 text-medace-700" />
           <h2 className="text-xl font-black text-slate-950">英検ライティング</h2>
         </div>
         <p className="mt-2 text-sm font-bold leading-relaxed text-slate-500">
-          級と形式を選び、採点観点を見ながら短時間で1答案を書きます。
+          級と形式を選び、1答案を書きます。
         </p>
 
         <div className="mt-4 space-y-4">
@@ -1422,7 +1422,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <section className="order-1 space-y-3 xl:order-2">
         {selectedWritingTask ? (
           <>
-            <article className="rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm">
+            <article className="rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-xs font-black text-medace-700">
@@ -1430,7 +1430,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   </div>
                   <h2 className="mt-1 text-2xl font-black text-slate-950">{selectedWritingTask.titleJa}</h2>
                 </div>
-                <span className="rounded-full border border-orange-100 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
+                <span className="rounded-full border border-medace-100 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
                   {selectedWritingTask.wordRange.min}-{selectedWritingTask.wordRange.max} words
                 </span>
               </div>
@@ -1440,7 +1440,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               {selectedWritingTask.sourcePassageEn && (
                 <section
                   data-testid="eiken-writing-source-passage"
-                  className="mt-4 rounded-lg border border-orange-100 bg-white px-4 py-4"
+                  className="mt-4 rounded-lg border border-medace-100 bg-white px-4 py-4"
                 >
                   <div className="text-xs font-black text-medace-700">要約用英文</div>
                   <p className="mt-2 whitespace-pre-line text-[0.95rem] font-medium leading-8 text-slate-800">
@@ -1452,7 +1452,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             </article>
 
             <div className="grid gap-3 lg:grid-cols-2">
-              <section className="rounded-lg border border-orange-100 bg-orange-50 px-4 py-4">
+              <section className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
                 <div className="text-xs font-black text-medace-700">見る観点</div>
                 <ul className="mt-3 space-y-2 text-sm font-bold leading-relaxed text-slate-700">
                   {selectedWritingTask.focusPoints.map((point) => (
@@ -1487,7 +1487,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   className={`rounded-full border px-3 py-1 text-xs font-black ${
                     writingWithinRange
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                      : 'border-orange-200 bg-orange-50 text-medace-700'
+                      : 'border-medace-200 bg-medace-50 text-medace-700'
                   }`}
                 >
                   {writingWordCount} words
@@ -1501,7 +1501,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-4 py-4 text-base font-medium leading-8 text-slate-900 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
                 placeholder="Write your answer here."
               />
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100">
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-medace-100">
                 <div
                   className={`h-full rounded-full transition-all ${writingWithinRange ? 'bg-emerald-500' : 'bg-medace-500'}`}
                   style={{
@@ -1525,7 +1525,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             </article>
           </>
         ) : (
-          <section className="rounded-lg border border-dashed border-orange-200 bg-orange-50 px-4 py-6 text-sm font-bold text-medace-800">
+          <section className="rounded-lg border border-dashed border-medace-200 bg-medace-50 px-4 py-6 text-sm font-bold text-medace-800">
             この条件の英作文テーマはまだありません。別の級または形式を選んでください。
           </section>
         )}
@@ -1552,27 +1552,27 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const renderLaneTabs = () => {
     const visibleLanes = laneConfig.filter((lane) => lane.id !== 'overview');
     return (
-    <div className="mb-4 grid grid-cols-4 gap-2 sm:flex sm:overflow-x-auto sm:pb-1">
-      {visibleLanes.map((lane) => {
-        const Icon = lane.icon;
-        return (
-          <button
-            key={lane.id}
-            type="button"
-            data-testid={`english-practice-lane-${lane.id}`}
-            onClick={() => activateLane(lane.id)}
-            className={`inline-flex min-h-14 shrink-0 flex-col items-center justify-center gap-1 rounded-md border px-1.5 py-2 text-[11px] font-black leading-tight transition-colors sm:min-h-10 sm:flex-row sm:gap-2 sm:px-3 sm:text-sm ${
-              activeLane === lane.id
-                ? 'border-medace-600 bg-medace-600 text-white'
-                : 'border-orange-100 bg-white text-slate-700 hover:border-medace-200 hover:bg-orange-50'
-            }`}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 text-center">{lane.label}</span>
-          </button>
-        );
-      })}
-    </div>
+      <div data-testid="english-practice-lanes" className="mb-4 grid min-w-0 grid-cols-4 gap-1.5 sm:gap-2">
+        {visibleLanes.map((lane) => {
+          const Icon = lane.icon;
+          return (
+            <button
+              key={lane.id}
+              type="button"
+              data-testid={`english-practice-lane-${lane.id}`}
+              onClick={() => activateLane(lane.id)}
+              className={`flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1.5 py-2 text-[11px] font-black leading-tight transition-colors sm:min-h-11 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
+                activeLane === lane.id
+                  ? 'border-medace-600 bg-medace-600 text-white'
+                  : 'border-medace-100 bg-white text-slate-700 hover:border-medace-200 hover:bg-medace-50'
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 truncate text-center">{lane.label}</span>
+            </button>
+          );
+        })}
+      </div>
     );
   };
 
@@ -1581,10 +1581,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         {LEVEL_LABELS[userLevel]}
       </span>
-      <span className="rounded-md border border-orange-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
+      <span className="rounded-md border border-medace-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
         {wordsLoading ? '単語を準備中' : samplePracticeActive ? 'お試し問題' : `${sessionWords.length}語で練習`}
       </span>
-      <span className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-black text-medace-700">
+      <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
       </span>
     </div>
@@ -1593,15 +1593,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const renderPracticeNotices = () => (
     <>
       {wordsLoading && sessionWords.length === 0 && (
-        <section className="mb-4 rounded-lg border border-orange-100 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
+        <section className="mb-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
           <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-          単語を読み込んでいます。準備できたら、このまま1セット始められます。
+          単語を読み込み中です。
         </section>
       )}
 
       {samplePracticeActive && (
-        <section className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-bold text-medace-800">
-          これはお試し問題です。あとから復習対象には入りません。
+        <section className="mb-4 rounded-lg border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
+          お試し問題です。復習対象には入りません。
         </section>
       )}
 
@@ -1662,22 +1662,22 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     return (
       <div
         data-testid="english-practice-hub"
-        className="overflow-hidden rounded-lg border border-orange-100 bg-[#fffaf5] text-slate-900 shadow-sm shadow-orange-950/5"
+        className="overflow-hidden rounded-lg border border-medace-100 bg-medace-50 text-slate-900 shadow-sm"
       >
-        <div className="border-b border-orange-100 bg-white px-4 py-4 md:px-5">
+        <div className="border-b border-medace-100 bg-white px-4 py-4 md:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-[11px] font-black text-medace-700">
+              <div className="inline-flex items-center gap-2 rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-[11px] font-black text-medace-700">
                 英語演習
               </div>
               <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 md:text-2xl">
                 英語演習
               </h2>
               <p className="mt-1 max-w-3xl text-sm font-bold leading-relaxed text-slate-600">
-                文法、和訳、長文、英作文をここから切り替えます。迷ったら左から1つだけ進めましょう。
+                文法、和訳、長文、英作文を切り替えます。
               </p>
             </div>
-            <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-xs font-black text-medace-700">
+            <div className="rounded-md border border-medace-100 bg-medace-50 px-3 py-2 text-xs font-black text-medace-700">
               {currentStreak > 0 ? `${currentStreak}日連続中` : '今日から開始'}
             </div>
           </div>
@@ -1697,25 +1697,27 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const ActiveIcon = activeLaneConfig.icon;
 
   return (
-    <div data-testid="english-practice-hub" className="min-h-screen bg-[#fffaf5] text-slate-900">
+    <div data-testid="english-practice-hub" className="min-h-screen bg-medace-50 text-slate-900">
       <main className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
-        <section className="mb-4 rounded-lg border border-orange-100 bg-white px-4 py-4 shadow-sm shadow-orange-950/5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
+        <section className="mb-4 rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <button
                 type="button"
                 onClick={handleBack}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-orange-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition-colors hover:bg-orange-50 hover:text-medace-700"
+                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-medace-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition-colors hover:bg-medace-50 hover:text-medace-700"
               >
                 <ArrowLeft className="h-4 w-4" />
                 戻る
               </button>
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
-                <ActiveIcon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-black text-medace-700">英語演習</div>
-                <h1 className="truncate text-xl font-black text-slate-950 md:text-2xl">{activeLaneConfig.title}</h1>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
+                  <ActiveIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black text-medace-700">英語演習</div>
+                  <h1 className="truncate text-xl font-black text-slate-950 md:text-2xl">{activeLaneConfig.title}</h1>
+                </div>
               </div>
             </div>
             <p className="max-w-2xl text-sm font-bold leading-relaxed text-slate-500">

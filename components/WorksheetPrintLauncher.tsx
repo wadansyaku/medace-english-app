@@ -181,7 +181,7 @@ export const buildPrintableWorksheetHtml = (
           --ink: #1f2937;
           --muted: #6b7280;
           --line: #d1d5db;
-          --accent: #ff8216;
+          --accent: #ff7a00;
           --soft: #fff8f1;
         }
         * {
@@ -235,7 +235,7 @@ export const buildPrintableWorksheetHtml = (
           justify-content: center;
           border-radius: 999px;
           background: #fff1e5;
-          border: 1px solid #fed7aa;
+          border: 1px solid #ffd4a3;
           color: #9a3412;
           font-size: 7pt;
           font-weight: 800;
@@ -244,7 +244,7 @@ export const buildPrintableWorksheetHtml = (
         .chip-subtle {
           background: white;
           border-color: #fdba74;
-          color: #c2410c;
+          color: #d24600;
         }
         .meta-grid {
           display: grid;
@@ -326,7 +326,7 @@ export const buildPrintableWorksheetHtml = (
         .index-cell {
           font-size: 7pt;
           font-weight: 800;
-          color: #c2410c;
+          color: #d24600;
           background: #fffaf5;
         }
         .prompt-cell {

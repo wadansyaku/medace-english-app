@@ -47,8 +47,8 @@ const DashboardMobileQuickNav: React.FC<DashboardMobileQuickNavProps> = ({ items
         aria-label="今日の操作"
         className="pointer-events-auto mx-auto max-w-3xl rounded-[24px] border border-slate-200 bg-white/96 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
       >
-        <div className="flex min-w-0 gap-2">
-          {visibleItems.map((item, index) => {
+        <div className="grid min-w-0 grid-cols-4 gap-1.5">
+          {visibleItems.map((item) => {
             const Icon = ICON_BY_KIND[item.kind];
             return (
               <button
@@ -57,14 +57,14 @@ const DashboardMobileQuickNav: React.FC<DashboardMobileQuickNavProps> = ({ items
                 data-testid={`dashboard-quicknav-${item.id}`}
                 aria-pressed={item.active}
                 onClick={item.onClick}
-                className={`flex min-h-12 min-w-0 ${index === 0 ? 'flex-[1.35]' : 'flex-1'} items-center justify-center gap-2 rounded-2xl px-2.5 py-2 text-center transition-colors ${
+                className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 py-2 text-center transition-colors ${
                   item.active
                     ? 'bg-medace-700 text-white shadow-sm'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 <Icon className="h-4 w-4" />
-                <span className="truncate text-[11px] font-black">{item.label}</span>
+                <span className="w-full truncate text-[10px] font-black leading-none sm:text-[11px]">{item.label}</span>
               </button>
             );
           })}
