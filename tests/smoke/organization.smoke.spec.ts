@@ -89,7 +89,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
 
   const snapshot = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
-  expect(['SEND_FIRST_NOTIFICATION', 'ACTIVE']).toContain(snapshot.activationState);
+  expect(['SEND_FIRST_NOTIFICATION', 'ISSUE_FIRST_WRITING_ASSIGNMENT', 'ACTIVE']).toContain(snapshot.activationState);
   expect(snapshot.assignmentCoverageRate).toBeGreaterThan(0);
   expect(
     snapshot.studentAssignments.some((student: {
@@ -144,6 +144,11 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await page.getByTestId('workspace-tab-writing').click();
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+  } else if (snapshot.activationState === 'ISSUE_FIRST_WRITING_ASSIGNMENT') {
+    await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '初回作文を配布する' })).toBeVisible();
+    await page.getByTestId('workspace-tab-writing').click();
+    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+    await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
   } else {
     await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '導入完了' })).toBeVisible();
   }
@@ -156,11 +161,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   await expect(page.getByTestId('assignment-history-section')).not.toContainText('まだ担当変更の履歴はありません。');
 
   await page.getByTestId('workspace-tab-writing').click();
-  if (snapshot.activationState === 'SEND_FIRST_NOTIFICATION') {
-    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
-  } else {
-    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
-  }
+  await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
 });
 
 test('group admin can open settings and organization rename survives reload across business roles', async ({ browser }) => {

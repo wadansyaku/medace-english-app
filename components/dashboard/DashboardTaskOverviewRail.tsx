@@ -108,6 +108,7 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
         <div className="mt-3 grid min-w-0 gap-2">
           {actionTasks.map((task) => {
             const Icon = TASK_ICON_BY_ID[task.id] || Target;
+            const actionLabel = task.ctaLabel || task.mobileLabel;
             return (
               <button
                 key={task.id}
@@ -121,8 +122,10 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[11px] font-black text-slate-500">{TASK_GROUP_LABELS[task.group]}</span>
-                    <span className="block truncate text-sm font-black">{task.mobileLabel}</span>
+                    <span className="block text-[11px] font-black text-slate-500">
+                      {TASK_GROUP_LABELS[task.group]} / {task.mobileLabel}
+                    </span>
+                    <span className="block truncate text-sm font-black">{actionLabel}</span>
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1 text-right text-[11px] font-bold text-slate-500">
