@@ -16,7 +16,7 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
   feedback,
 }) => (
   <div
-    className="mt-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-4"
+    className="mt-4 rounded-lg border border-medace-200 bg-medace-50 px-4 py-4"
     data-testid="english-practice-translation-feedback-card"
   >
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -26,7 +26,7 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
           {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
         </div>
       </div>
-      <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+      <span className="rounded-full border border-medace-200 bg-white px-3 py-1 text-xs font-black text-medace-800">
         {getExamTargetLabel(feedback)}
       </span>
       <span className={`rounded-full border px-3 py-1 text-xs font-black ${
@@ -49,13 +49,13 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
       {feedback.criteria.map((criterion) => {
         const width = `${Math.min(100, Math.max(0, (criterion.score / Math.max(criterion.maxScore, 1)) * 100))}%`;
         return (
-          <div key={criterion.label} className="rounded-lg border border-orange-100 bg-white px-3 py-3">
+          <div key={criterion.label} className="rounded-lg border border-medace-100 bg-white px-3 py-3">
             <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-700">
               <span>{criterion.label}</span>
               <span>{criterion.score}/{criterion.maxScore}</span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-orange-100">
-              <div className="h-full rounded-full bg-orange-500" style={{ width }} />
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-medace-100">
+              <div className="h-full rounded-full bg-medace-500" style={{ width }} />
             </div>
             <p className="mt-2 text-xs font-bold leading-relaxed text-slate-600">{criterion.comment}</p>
           </div>
@@ -91,12 +91,12 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
       </div>
     </div>
     <div className="mt-3 grid gap-3 md:grid-cols-2">
-      <div className="rounded-lg border border-orange-100 bg-white px-3 py-3">
-        <div className="text-xs font-black text-orange-700">文法の見方</div>
+      <div className="rounded-lg border border-medace-100 bg-white px-3 py-3">
+        <div className="text-xs font-black text-medace-700">文法の見方</div>
         <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{feedback.grammarAdviceJa}</p>
       </div>
-      <div className="rounded-lg border border-orange-100 bg-white px-3 py-3">
-        <div className="text-xs font-black text-orange-700">次の1問</div>
+      <div className="rounded-lg border border-medace-100 bg-white px-3 py-3">
+        <div className="text-xs font-black text-medace-700">次の1問</div>
         <p className="mt-1 text-sm font-bold leading-relaxed text-slate-700">{feedback.nextDrillJa}</p>
       </div>
     </div>

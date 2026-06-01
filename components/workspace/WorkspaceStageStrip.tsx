@@ -24,7 +24,7 @@ const WorkspaceStageStrip: React.FC<WorkspaceStageStripProps> = ({ steps }) => (
       >
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Step {step.index}</div>
-          <div className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${step.active ? 'bg-medace-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+          <div className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${step.active ? 'bg-medace-600 text-slate-950' : 'bg-slate-100 text-slate-500'}`}>
             {step.label}
           </div>
         </div>

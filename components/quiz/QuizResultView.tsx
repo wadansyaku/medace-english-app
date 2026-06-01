@@ -74,10 +74,10 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                   </div>
                   {question.translationFeedback && (
                     <div
-                      className="mt-3 rounded-xl border border-orange-100 bg-orange-50 px-3 py-3 text-sm leading-relaxed text-slate-700"
+                      className="mt-3 rounded-xl border border-medace-100 bg-medace-50 px-3 py-3 text-sm leading-relaxed text-slate-700"
                       data-testid="quiz-review-translation-feedback-summary"
                     >
-                      <div className="font-black text-orange-800">
+                      <div className="font-black text-medace-800">
                         {question.translationFeedback.score} / {question.translationFeedback.maxScore}・{question.translationFeedback.verdictLabel}
                       </div>
                       <div className="mt-1">改善訳: {question.translationFeedback.improvedTranslation}</div>
@@ -115,10 +115,10 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
 
       {translationFeedbackSummaries.length > 0 && (
         <div
-          className="mt-6 rounded-3xl border border-orange-200 bg-orange-50 p-5"
+          className="mt-6 rounded-3xl border border-medace-200 bg-medace-50 p-5"
           data-testid="quiz-result-translation-feedback-summary"
         >
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-orange-500">和訳フィードバック</div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-500">和訳フィードバック</div>
           <div className="mt-4 space-y-3">
             {translationFeedbackSummaries.map((question) => {
               const feedback = question.translationFeedback;
@@ -126,12 +126,12 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
               return (
                 <div
                   key={question.id}
-                  className="rounded-2xl border border-orange-100 bg-white px-4 py-4"
+                  className="rounded-2xl border border-medace-100 bg-white px-4 py-4"
                   data-testid="quiz-result-translation-feedback-item"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="font-bold text-slate-900">{question.promptText}</div>
-                    <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-800">
+                    <span className="rounded-full bg-medace-50 px-3 py-1 text-xs font-black text-medace-800">
                       {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
                     </span>
                   </div>
@@ -160,7 +160,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
           type="button"
           data-testid="quiz-result-retry"
           onClick={onRetry}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-white transition-colors hover:bg-medace-700"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700"
         >
           <RotateCcw className="h-4 w-4" /> 同じ条件で再挑戦
         </button>

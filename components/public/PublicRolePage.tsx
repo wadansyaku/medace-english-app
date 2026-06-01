@@ -101,7 +101,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               onClick={handlePrimaryAction}
               className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold ${
                 primaryAction.kind === 'demo'
-                  ? 'bg-medace-600 text-white'
+                  ? 'bg-medace-600 text-slate-950'
                   : primaryAction.kind === 'preview'
                     ? 'border border-medace-200 bg-white text-medace-700'
                     : 'border border-slate-200 bg-white text-slate-700'

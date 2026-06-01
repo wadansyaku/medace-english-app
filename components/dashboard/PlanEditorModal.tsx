@@ -32,26 +32,28 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
   const isMobileViewport = useIsMobileViewport();
   const selectedBooks = planningBooks.filter((book) => selectedBookIds.includes(book.id));
   const dailyGoalPresets = [10, 15, 20, 30, 40];
-  const validationMessage = planningBooks.length === 0
-    ? '先に学習対象の教材を作成してください。'
-    : selectedBooks.length === 0
-      ? '少なくとも1冊を選んでください。'
-      : selectedBooks.length > MAX_SELECTED_PLAN_BOOKS
-        ? `学習対象は${MAX_SELECTED_PLAN_BOOKS}冊以内に絞ってください。`
-        : '';
-  if (!open) return null;
+	  const validationMessage = planningBooks.length === 0
+	    ? '先に学習対象の教材を作成してください。'
+	    : selectedBooks.length === 0
+	      ? '少なくとも1冊を選んでください。'
+	      : selectedBooks.length > MAX_SELECTED_PLAN_BOOKS
+	        ? `学習対象は${MAX_SELECTED_PLAN_BOOKS}冊以内に絞ってください。`
+	        : '';
+	  const dailyGoalInputId = 'plan-editor-daily-goal';
+	  if (!open) return null;
 
   return (
     <MobileSheetDialog
       onClose={onClose}
       mode="fullscreen"
+      ariaLabelledBy="plan-editor-title"
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
       <div data-testid="plan-editor-modal" className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
         <div className="flex items-center gap-3">
           <Edit2 className="h-5 w-5 text-medace-600" />
           <div>
-            <div className="text-lg font-black text-slate-950">学習プランの編集</div>
+            <div id="plan-editor-title" className="text-lg font-black text-slate-950">学習プランの編集</div>
             <div className="mt-1 text-sm text-slate-500">1日の目標単語数と学習対象コースを調整します。</div>
           </div>
         </div>
@@ -59,17 +61,17 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
 
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
       <div className="space-y-6">
-        {isMobileViewport && (
-          <div className="rounded-[28px] bg-medace-500 px-4 py-4 text-white">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/58">Plan Summary</div>
-            <div className="mt-2 text-lg font-black tracking-tight">{dailyGoal}語 / 日で進める</div>
-            <div className="mt-2 text-sm leading-relaxed text-white/78">
-              選択中 {selectedBooks.length} 冊。多すぎると毎日の出題が散るので、最初は 1-3 冊がおすすめです。
-            </div>
-          </div>
+	        {isMobileViewport && (
+	          <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-4 py-4 text-slate-950">
+	            <div className="text-xs font-bold text-slate-500">プラン概要</div>
+	            <div className="mt-2 text-lg font-black tracking-tight">{dailyGoal}語 / 日で進める</div>
+	            <div className="mt-2 text-sm leading-relaxed text-slate-600">
+	              選択中 {selectedBooks.length} 冊。多すぎると毎日の出題が散るので、最初は 1-3 冊がおすすめです。
+	            </div>
+	          </div>
         )}
         <div>
-          <label className="block text-sm font-bold text-slate-700 mb-2">1日の目標単語数</label>
+	          <label htmlFor={dailyGoalInputId} className="block text-sm font-bold text-slate-700 mb-2">1日の目標単語数</label>
           {isMobileViewport && (
             <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
               {dailyGoalPresets.map((preset) => (
@@ -88,8 +90,9 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
               ))}
             </div>
           )}
-          <input
-            type="number"
+	          <input
+	            id={dailyGoalInputId}
+	            type="number"
             value={dailyGoal}
             onChange={(event) => onChangeDailyGoal(Number(event.target.value))}
             className="w-full rounded-lg border border-slate-300 bg-white p-3 text-xl font-bold text-slate-800 outline-none focus:ring-2 focus:ring-medace-500"
@@ -116,23 +119,35 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
             </div>
           )}
           <div className={`overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100 ${isMobileViewport ? 'max-h-[36dvh]' : 'max-h-[45dvh]'}`}>
-            {planningBooks.map((book) => (
-              <div
-                key={book.id}
-                onClick={() => onToggleBook(book.id)}
-                className={`flex min-h-12 cursor-pointer items-center gap-3 p-3 hover:bg-slate-50 ${selectedBookIds.includes(book.id) ? 'bg-medace-50' : ''}`}
-              >
-                <div className={`flex h-5 w-5 items-center justify-center rounded border ${selectedBookIds.includes(book.id) ? 'border-medace-500 bg-medace-500 text-white' : 'border-slate-300 bg-white'}`}>
-                  {selectedBookIds.includes(book.id) && <Check className="h-3 w-3" />}
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-slate-800">{book.title}</div>
-                  {book.isPriority && (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">推奨</span>
-                  )}
-                </div>
-              </div>
-            ))}
+            {planningBooks.map((book) => {
+              const isSelected = selectedBookIds.includes(book.id);
+              return (
+                <button
+                  key={book.id}
+	                  type="button"
+	                  onClick={() => onToggleBook(book.id)}
+	                  onKeyDown={(event) => {
+	                    if (event.key === ' ' || event.key === 'Enter') {
+	                      event.preventDefault();
+	                      onToggleBook(book.id);
+	                    }
+	                  }}
+	                  aria-pressed={isSelected}
+                  data-testid={`plan-editor-book-${book.id}`}
+                  className={`flex min-h-12 w-full items-center gap-3 p-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-[-3px] focus-visible:outline-medace-300 ${isSelected ? 'bg-medace-50' : 'bg-white'}`}
+                >
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${isSelected ? 'border-medace-500 bg-medace-500 text-slate-950' : 'border-slate-300 bg-white'}`}>
+                    {isSelected && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-slate-800">{book.title}</span>
+                    {book.isPriority && (
+                      <span className="mt-1 inline-flex rounded-full bg-medace-50 px-1.5 py-0.5 text-[10px] text-medace-700">推奨</span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <p className="mt-1 text-xs text-slate-400">選択したコースから日々の問題が出題されます。</p>
           {validationMessage && (
@@ -158,7 +173,7 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
             onClick={onSave}
             data-testid="plan-editor-save-button"
             disabled={Boolean(validationMessage)}
-            className="min-h-11 rounded-xl bg-medace-600 px-5 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 rounded-xl bg-medace-600 px-5 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             設定を更新する
           </button>

@@ -1,6 +1,6 @@
 {
-  "name": "MedAce Study Space",
-  "short_name": "MedAce Study",
+  "name": "Steady Study",
+  "short_name": "Steady Study",
   "description": "英単語学習と自由英作文の提出・返却をスマホで続けやすくする学習PWAです。",
   "start_url": "/",
   "scope": "/",

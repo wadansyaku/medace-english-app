@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
   MOBILE_FLOW_TEST_IDS,
@@ -20,6 +20,8 @@ test('group admin and business student can complete the writing workflow with on
   const studentContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   const studentPage = await studentContext.newPage();
+  attachSmokeDiagnostics(adminPage, test.info(), 'writing-admin');
+  attachSmokeDiagnostics(studentPage, test.info(), 'writing-student');
 
   await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();

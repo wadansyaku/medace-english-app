@@ -193,7 +193,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
             data-testid="notification-send-submit"
             onClick={controller.handleSendNotification}
             disabled={controller.sending || !controller.messageDraft.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
           >
             {controller.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             通知を保存する

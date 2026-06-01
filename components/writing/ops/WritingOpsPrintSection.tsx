@@ -175,7 +175,7 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
                   data-testid="writing-issue-assignment"
                   disabled={issuing}
                   onClick={onIssue}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
                 >
                   {issuing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   配布状態にする

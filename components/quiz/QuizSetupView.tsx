@@ -136,16 +136,16 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         })}
       </div>
       {isGrammarQuizMode(setupConfig.questionMode) && (
-        <div className="mt-5 space-y-4 rounded-2xl border border-orange-100 bg-orange-50/50 px-4 py-4">
+        <div className="mt-5 space-y-4 rounded-2xl border border-medace-100 bg-medace-50/50 px-4 py-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-bold text-orange-500">文法範囲</div>
+              <div className="text-xs font-bold text-medace-500">文法範囲</div>
               <h3 className="mt-1 text-lg font-black text-slate-950">文法範囲を選ぶ</h3>
               <p className="mt-1 text-sm leading-relaxed text-slate-600">
                 単語は同じでも、どの文法で使うかを固定できます。
               </p>
             </div>
-            <div className="inline-grid grid-cols-2 overflow-hidden rounded-2xl border border-orange-200 bg-white p-1">
+            <div className="inline-grid grid-cols-2 overflow-hidden rounded-2xl border border-medace-200 bg-white p-1">
               {[
                 { value: true, label: '明示する' },
                 { value: false, label: '伏せる' },
@@ -158,7 +158,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                     data-testid={`quiz-grammar-scope-visibility-${item.value ? 'show' : 'hide'}`}
                     onClick={() => onUpdateSetupConfig({ showGrammarScopeHint: item.value })}
                     className={`min-h-10 rounded-xl px-3 text-sm font-bold transition-colors ${
-                      isActive ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-600 hover:bg-orange-50'
+                      isActive ? 'bg-medace-500 text-slate-950 shadow-sm' : 'text-slate-600 hover:bg-medace-50'
                     }`}
                   >
                     {item.label}
@@ -178,8 +178,8 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                   onClick={() => onUpdateSetupConfig({ grammarScopeId: scope.id })}
                   className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
                     isActive
-                      ? 'border-orange-400 bg-white text-slate-950 shadow-sm'
-                      : 'border-orange-100 bg-white/70 text-slate-600 hover:border-orange-300'
+                      ? 'border-medace-400 bg-white text-slate-950 shadow-sm'
+                      : 'border-medace-100 bg-white/70 text-slate-600 hover:border-medace-300'
                   }`}
                 >
                   <div className="text-sm font-black">{scope.labelJa}</div>
@@ -270,7 +270,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         data-testid="quiz-setup-primary-cta"
         disabled={setupActualQuestionCount === 0}
         onClick={onAdvanceToReady}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-white transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
       >
         条件を確認する <ChevronRight className="h-4 w-4" />
       </button>

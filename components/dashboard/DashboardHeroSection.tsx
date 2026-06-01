@@ -124,18 +124,22 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   return (
     <section
       data-testid="dashboard-command-center"
-      className={`min-w-0 rounded-lg border border-orange-100 bg-white text-slate-950 shadow-[0_18px_48px_rgba(194,65,12,0.08)] ${
+      className={`min-w-0 rounded-lg border border-medace-100 bg-white text-slate-950 shadow-[0_18px_48px_rgba(255,122,0,0.08)] ${
         isMobileCompact ? 'p-4' : 'p-5 md:p-6'
       }`}
     >
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-orange-100 pb-4">
+      <div className={`min-w-0 gap-3 border-b border-slate-100 pb-4 ${
+        isMobileCompact
+          ? 'grid grid-cols-[minmax(0,1fr)_auto] items-start'
+          : 'flex flex-wrap items-center justify-between'
+      }`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className={`rounded-md border border-orange-200 bg-medace-50 font-black text-medace-700 ${
+          <span className={`rounded-md border border-medace-200 bg-medace-50 font-black text-medace-700 ${
             isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
           }`}>
             {BRAND.productLabel}
           </span>
-          <span className={`rounded-md border border-orange-100 bg-white font-bold text-slate-600 ${
+          <span className={`rounded-md border border-medace-100 bg-white font-bold text-slate-600 ${
             isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
           }`}>
             {GRADE_LABELS[grade]} / {englishLevel || '未診断'}
@@ -152,7 +156,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
           onClick={onOpenSettings}
           data-testid="student-hero-settings"
           aria-label="設定"
-          className={`flex items-center gap-2 rounded-lg border border-orange-100 bg-white font-bold text-slate-600 transition-colors hover:border-orange-200 hover:bg-medace-50 ${
+          className={`flex items-center gap-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-600 transition-colors hover:border-medace-200 hover:bg-medace-50 ${
             isMobileCompact ? 'h-11 w-11 justify-center p-0' : 'px-4 py-2 text-sm'
           }`}
         >
@@ -177,7 +181,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             <button
               onClick={onStartQuest}
               data-testid="student-hero-primary-cta"
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg bg-medace-700 font-black text-white transition-colors hover:bg-medace-800 sm:w-auto ${
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg bg-medace-600 font-black text-slate-950 transition-colors hover:bg-medace-700 sm:w-auto ${
                 isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-6 py-3.5 text-base'
               }`}
             >
@@ -186,7 +190,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             {hasStudyBooks && learningPlan ? (
               <button
                 onClick={onOpenPlan}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-orange-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 sm:w-auto ${
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 sm:w-auto ${
                   isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
@@ -196,7 +200,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               <button
                 onClick={onGeneratePlan}
                 disabled={generatingPlan}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-orange-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 disabled:opacity-50 sm:w-auto ${
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 disabled:opacity-50 sm:w-auto ${
                   isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
@@ -205,13 +209,13 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             ) : null}
           </div>
 
-          <div data-testid="dashboard-command-metrics" className={`mt-5 grid min-w-0 gap-2 ${isMobileCompact ? 'grid-cols-2 sm:grid-cols-3' : 'sm:grid-cols-3'}`}>
+          <div data-testid="dashboard-command-metrics" className={`mt-5 min-w-0 gap-2 ${isMobileCompact ? 'hidden' : 'grid sm:grid-cols-3'}`}>
             {compactMetrics.map((metric, index) => {
               const MetricIcon = metric.icon;
               return (
                 <div
                   key={metric.id}
-                  className={`min-w-0 rounded-lg border border-orange-100 bg-medace-50 px-3 py-3 ${isMobileCompact && index === 2 ? 'col-span-2 sm:col-span-1' : ''}`}
+                  className={`min-w-0 rounded-lg border border-medace-100 bg-medace-50 px-3 py-3 ${isMobileCompact && index === 2 ? 'col-span-2 sm:col-span-1' : ''}`}
                 >
                   <div className="flex items-center gap-2 text-[11px] font-black text-slate-500">
                     <MetricIcon className="h-3.5 w-3.5" />
@@ -226,7 +230,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </div>
 
         <aside className="grid min-w-0 gap-2.5">
-          <div className="min-w-0 rounded-lg border border-orange-100 bg-medace-50 px-4 py-3">
+          <div className={`min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-4 ${isMobileCompact ? 'py-3' : 'py-3'}`}>
             <div className="flex items-end justify-between gap-3">
               <div>
                 <div className="text-xs font-black text-slate-500">今日の進捗</div>
@@ -236,26 +240,36 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                 {todayCount} / {todayWordGoal}語
               </div>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100">
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-medace-100">
               <div className="h-full rounded-full bg-medace-500" style={{ width: `${safeProgressPercent}%` }} />
             </div>
+            {isMobileCompact && (
+              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200 pt-3 text-center">
+                {compactMetrics.map((metric) => (
+                  <div key={metric.id} className="min-w-0">
+                    <div className="truncate text-[11px] font-black text-slate-500">{metric.label}</div>
+                    <div className="mt-0.5 truncate text-sm font-black text-slate-950">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div
             ref={practiceAnchorRef}
             data-testid="dashboard-english-practice-entry"
             style={practiceAnchorStyle}
-            className="min-w-0 rounded-lg border border-orange-100 bg-white p-4 text-slate-950"
+            className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 ${isMobileCompact ? 'p-3' : 'p-4'}`}
           >
             <div data-testid="dashboard-practice-dock" className="min-w-0">
               <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-orange-100 bg-medace-50 text-medace-700">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
                   <PracticeIcon className="h-5 w-5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-xs font-black text-slate-500">英語演習</p>
                   <h3 className="mt-1 text-base font-black leading-tight text-slate-950">{practiceRecommendation.title}</h3>
-                  <p className="mt-1 line-clamp-2 text-sm font-bold leading-relaxed text-slate-600">{practiceRecommendation.body}</p>
+                  <p className={`mt-1 text-sm font-bold leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>{practiceRecommendation.body}</p>
                 </div>
               </div>
               {!isPracticePrimary && (
@@ -263,15 +277,15 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                   type="button"
                   data-testid={`dashboard-practice-lane-${practiceRecommendation.lane}`}
                   onClick={() => onSelectPracticeLane(practiceRecommendation.lane)}
-                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-orange-100 bg-white px-4 py-3 text-sm font-black text-slate-800 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700"
+                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white px-4 py-3 text-sm font-black text-slate-800 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700"
                 >
                   {practiceRecommendation.ctaLabel}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               )}
               <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-black">
-                <span className="rounded-md border border-orange-100 bg-medace-50 px-2.5 py-1 text-slate-700">{practiceRecommendation.metricLabel}</span>
-                <span className="rounded-md border border-orange-100 bg-medace-50 px-2.5 py-1 text-slate-600">{practiceRecommendation.stateLabel}</span>
+                <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-700">{practiceRecommendation.metricLabel}</span>
+                <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-600">{practiceRecommendation.stateLabel}</span>
               </div>
             </div>
           </div>

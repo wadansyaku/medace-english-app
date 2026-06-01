@@ -59,7 +59,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           <button
             type="button"
             onClick={() => onChangeStep(1)}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950"
           >
             <ListChecks className="h-4 w-4" />
             ファイル選択へ進む
@@ -81,7 +81,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
             type="button"
             onClick={() => onChangeStep(2)}
             disabled={!fileValidation.valid}
-            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+            className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
           >
             最終送信へ進む
           </button>
@@ -102,7 +102,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           data-testid="writing-submit-upload"
           onClick={onSubmit}
           disabled={submitting || !fileValidation.valid}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
           答案を提出する
@@ -118,6 +118,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
         onClose();
       }}
       mode={isMobileViewport ? 'fullscreen' : 'sheet'}
+      ariaLabel={`英作文提出: ${submitTarget.promptTitle}`}
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-4xl sm:rounded-[28px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
       <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[28px] sm:px-6">
@@ -158,7 +159,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           {(!isMobileViewport || mobileSubmitStep === 0) && (
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">1</div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-600 text-xs font-black text-slate-950">1</div>
                 <div>
                   <div className="text-sm font-black text-slate-950">提出条件</div>
                   <div className="mt-1 text-sm text-slate-500">形式と提出コード、提出回数を確認します。</div>
@@ -187,7 +188,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           {(!isMobileViewport || mobileSubmitStep === 1) && (
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">2</div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-600 text-xs font-black text-slate-950">2</div>
                 <div>
                   <div className="text-sm font-black text-slate-950">答案ファイルを選ぶ</div>
                   <div className="mt-1 text-sm text-slate-500">スマホで撮影した画像か PDF を選択します。</div>
@@ -248,7 +249,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           {(!isMobileViewport || mobileSubmitStep === 2) && (
             <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-700 text-xs font-black text-white">3</div>
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-600 text-xs font-black text-slate-950">3</div>
                 <div>
                   <div className="text-sm font-black text-slate-950">最終送信</div>
                   <div className="mt-1 text-sm text-slate-500">OCR が読み取りにくい場合だけ補助テキストを入れて送信します。</div>
@@ -286,7 +287,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
               data-testid="writing-submit-upload"
               onClick={onSubmit}
               disabled={submitting || !fileValidation.valid}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
               答案を提出する

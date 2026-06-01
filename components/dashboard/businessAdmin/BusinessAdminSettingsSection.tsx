@@ -58,7 +58,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
             data-testid="organization-settings-save"
             onClick={() => void controller.handleOrganizationProfileSave()}
             disabled={controller.organizationSaving || controller.organizationDisplayName.trim() === ''}
-            className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {controller.organizationSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
             表示名を保存する
@@ -96,7 +96,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
                 data-testid="cohort-create-submit"
                 onClick={() => void controller.handleCohortSave()}
                 disabled={controller.cohortSavingKey === 'new' || controller.newCohortName.trim() === ''}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
               >
                 {controller.cohortSavingKey === 'new' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
                 追加する

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
   storageAction,
@@ -11,6 +11,8 @@ test('student can submit an upgrade request and admin can approve it with a one-
   const adminContext = await browser.newContext();
   const studentPage = await studentContext.newPage();
   const adminPage = await adminContext.newPage();
+  attachSmokeDiagnostics(studentPage, test.info(), 'commercial-student');
+  attachSmokeDiagnostics(adminPage, test.info(), 'commercial-admin');
   const announcementTitle = 'Phase 4 smoke announcement';
   const announcementBody = '導入相談の動線とお知らせ表示を追加しました。';
 

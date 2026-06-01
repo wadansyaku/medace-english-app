@@ -75,7 +75,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
           </p>
           <button
             onClick={onOpenCreateModal}
-            className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 font-bold text-white transition-colors hover:bg-medace-700 ${isCompact ? 'mt-3 w-full px-4 py-3 text-sm' : 'mt-4 px-4 py-3 text-sm'}`}
+            className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 font-bold text-slate-950 transition-colors hover:bg-medace-700 ${isCompact ? 'mt-3 w-full px-4 py-3 text-sm' : 'mt-4 px-4 py-3 text-sm'}`}
           >
             今すぐ作成する
           </button>

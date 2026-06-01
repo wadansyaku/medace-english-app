@@ -39,7 +39,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     subtitle: 'まだ小さな灯り。最初の学習で目を覚まします。',
     unlockScore: 0,
     auraClass: 'bg-[#fff8f1]',
-    sparkClass: 'bg-orange-200/70',
+    sparkClass: 'bg-medace-200/70',
     reward: 'ルーモのはじめてバッジ',
   },
   {
@@ -63,7 +63,7 @@ const COMPANION_STAGES: CompanionStage[] = [
     subtitle: '連続学習が続くと、教室を照らす案内役へ進化します。',
     unlockScore: 680,
     auraClass: 'bg-[#ffe5ca]',
-    sparkClass: 'bg-orange-300/80',
+    sparkClass: 'bg-medace-300/80',
     reward: 'グロウ演出エフェクト',
   },
   {
@@ -236,7 +236,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
       target: streakMilestone,
       reward: streakMilestone >= 7 ? '演出アンロック' : '+20 きらめき',
       icon: <Flame className="h-4 w-4" />,
-      toneClass: 'border-orange-100 bg-orange-50 text-orange-900',
+      toneClass: 'border-medace-100 bg-medace-50 text-medace-900',
     },
     {
       id: 'weekly-pace',
@@ -251,7 +251,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
   ];
 
   return (
-    <section className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_24px_60px_rgba(228,94,4,0.12)]">
+    <section className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_24px_60px_rgba(255,122,0,0.12)]">
       <div className="grid gap-0 xl:grid-cols-[0.95fr_1.05fr]">
         <div className={`relative overflow-hidden ${currentStage.auraClass} px-6 py-7 md:px-7 md:py-8`}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.72),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(246,109,11,0.14),_transparent_30%)]" />
@@ -304,7 +304,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
               </div>
             <button
               onClick={onStartQuest}
-              className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-colors hover:bg-medace-700"
+              className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
             >
               <Zap className="h-4 w-4" /> クエストへ進む
             </button>
@@ -372,7 +372,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
                         key={index}
                         className={`flex aspect-square items-center justify-center rounded-2xl border text-xs font-black ${
                           isActive
-                            ? 'border-medace-200 bg-medace-500 text-white shadow-sm'
+                            ? 'border-medace-200 bg-medace-500 text-slate-950 shadow-sm'
                             : 'border-slate-200 bg-slate-50 text-slate-300'
                         }`}
                       >

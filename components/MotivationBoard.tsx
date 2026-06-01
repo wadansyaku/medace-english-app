@@ -70,15 +70,15 @@ const MotivationBoard: React.FC<MotivationBoardProps> = ({ snapshot, isCompact =
         )}
       </div>
 
-      <div className={`rounded-[28px] bg-medace-500 text-white ${isCompact ? 'mt-4 px-4 py-4' : 'mt-5 px-5 py-5'}`}>
+      <div className={`rounded-[28px] border border-medace-200 bg-medace-50 text-slate-950 ${isCompact ? 'mt-4 px-4 py-4' : 'mt-5 px-5 py-5'}`}>
         <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-white/15 p-3 text-white">
+          <div className="rounded-2xl border border-medace-200 bg-white p-3 text-medace-600">
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-bold text-white/80">今日のモチベーション</div>
+            <div className="text-sm font-bold text-medace-700">今日のモチベーション</div>
             <div className={`font-black tracking-tight ${isCompact ? 'mt-1 text-lg' : 'mt-1 text-xl'}`}>{snapshot.insight.title}</div>
-            <div className={`text-sm leading-relaxed text-white/85 ${isCompact ? 'mt-1.5 line-clamp-3' : 'mt-2'}`}>{snapshot.insight.body}</div>
+            <div className={`text-sm leading-relaxed text-slate-700 ${isCompact ? 'mt-1.5 line-clamp-3' : 'mt-2'}`}>{snapshot.insight.body}</div>
           </div>
         </div>
       </div>

@@ -44,6 +44,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
   return (
     <ModalOverlay
       onClose={onClose}
+      ariaLabel={`スタッフ代理提出: ${scannerTarget.promptTitle}`}
       panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
     >
       <div>
@@ -110,7 +111,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
             type="button"
             onClick={onSubmit}
             disabled={submittingScan || !fileValidation.valid}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
           >
             {submittingScan ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanText className="h-4 w-4" />}
             スキャン答案を登録する

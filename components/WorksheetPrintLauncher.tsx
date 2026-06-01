@@ -244,7 +244,7 @@ export const buildPrintableWorksheetHtml = (
         .chip-subtle {
           background: white;
           border-color: #fdba74;
-          color: #d24600;
+          color: #e65100;
         }
         .meta-grid {
           display: grid;
@@ -326,7 +326,7 @@ export const buildPrintableWorksheetHtml = (
         .index-cell {
           font-size: 7pt;
           font-weight: 800;
-          color: #d24600;
+          color: #e65100;
           background: #fffaf5;
         }
         .prompt-cell {
@@ -639,6 +639,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       {open && (
         <ModalOverlay
           onClose={() => setOpen(false)}
+          ariaLabel="PDF問題作成"
           panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
         >
           <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-medace-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700 shadow-sm">
@@ -799,12 +800,12 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">出力数</div>
                         <div className="mt-2 text-3xl font-black text-slate-950">{generatedQuestions.length}</div>
                       </div>
-                      <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4 sm:col-span-2">
-                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-500">
+                      <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4 sm:col-span-2">
+                        <div className="text-xs font-bold uppercase tracking-[0.14em] text-medace-500">
                           {grammarModeSelected ? '文法化できる語数' : '出題可能'}
                         </div>
-                        <div className="mt-2 text-3xl font-black text-orange-900">{eligibleQuestionWords.length}</div>
-                        <p className="mt-1 text-sm font-medium leading-relaxed text-orange-900/80">
+                        <div className="mt-2 text-3xl font-black text-medace-900">{eligibleQuestionWords.length}</div>
+                        <p className="mt-1 text-sm font-medium leading-relaxed text-medace-900/80">
                           {grammarModeSelected
                             ? '英字の単語と日本語の意味がある既習語を、文法・語順の復習へ再利用します。例文がある場合は例文を優先します。'
                             : '現在の出題モードで問題に使える単語数です。'}
@@ -880,7 +881,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         type="button"
                         onClick={() => handleOpenPreview('ANSWER_KEY')}
                         disabled={generatedQuestions.length === 0}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
                       >
                         <Eye className="h-4 w-4" />
                         解答を開く
@@ -902,6 +903,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
         <ModalOverlay
           onClose={() => setShowPreview(false)}
           zIndexClassName="z-[60]"
+          ariaLabel="印刷プレビュー"
           panelClassName="max-w-6xl rounded-[32px] border border-slate-200 bg-white shadow-2xl"
         >
           <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-medace-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700 shadow-sm">
@@ -946,7 +948,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
                 >
                   <Printer className="h-4 w-4" />
                   この版を印刷 / PDF保存

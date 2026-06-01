@@ -810,7 +810,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={!selected || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -875,7 +875,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={orderedChipIds.length !== item.correctChipIds.length || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -942,7 +942,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               onClick={() => setGrammarMode(item.mode)}
               className={`rounded-lg border px-4 py-3 text-sm font-black transition-colors ${
                 grammarMode === item.mode
-                  ? 'border-medace-600 bg-medace-600 text-white'
+                  ? 'border-medace-600 bg-medace-600 text-slate-950'
                   : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
               }`}
             >
@@ -1132,7 +1132,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 onClick={() => setTranslationMode(item.mode)}
                 className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-black transition-colors sm:px-4 sm:py-3 ${
                   translationMode === item.mode
-                    ? 'border-medace-600 bg-medace-600 text-white'
+                    ? 'border-medace-600 bg-medace-600 text-slate-950'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
                 }`}
               >
@@ -1181,7 +1181,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       <button
                         type="button"
                         onClick={resetGeneratedPractice}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800"
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700"
                       >
                         次の和訳へ <ArrowRight className="h-4 w-4" />
                       </button>
@@ -1203,7 +1203,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                         type="button"
                         disabled={!trimmedTranslationInput || checkingTranslationId === item.id || repeatedSubmittedTranslation}
                         onClick={() => void handleTranslationSubmit(item)}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
                         {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         答案チェック
@@ -1252,7 +1252,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       type="button"
                       disabled={orderedChipIds.length !== item.correctChipIds.length || orderChecked}
                       onClick={() => handleTranslationOrderCheck(item, orderCorrect)}
-                      className="inline-flex min-h-10 items-center rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="inline-flex min-h-10 items-center rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                       判定する
                     </button>
@@ -1286,7 +1286,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   onClick={() => setPracticeLevel(level)}
                   className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
                     practiceLevel === level
-                      ? 'border-medace-600 bg-medace-600 text-white'
+                      ? 'border-medace-600 bg-medace-600 text-slate-950'
                       : isChallengeLevel
                         ? 'border-medace-200 bg-medace-50 text-medace-800 hover:border-medace-300'
                         : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
@@ -1351,7 +1351,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   onClick={() => setWritingLevel(level)}
                   className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
                     writingLevel === level
-                      ? 'border-medace-600 bg-medace-600 text-white'
+                      ? 'border-medace-600 bg-medace-600 text-slate-950'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
                   }`}
                 >
@@ -1374,7 +1374,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     onClick={() => setWritingTaskType(taskType)}
                     className={`min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-black transition-colors ${
                       writingTaskType === taskType && enabled
-                        ? 'border-medace-600 bg-medace-600 text-white'
+                        ? 'border-medace-600 bg-medace-600 text-slate-950'
                         : enabled
                           ? 'border-slate-200 bg-white text-slate-700 hover:border-medace-300'
                           : 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-300'
@@ -1518,7 +1518,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 type="button"
                 disabled={!writingDraft.trim()}
                 onClick={handleWritingRecord}
-                className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-medace-700 px-4 py-2 text-sm font-black text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 英検英作文の練習として記録
               </button>
@@ -1563,7 +1563,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               onClick={() => activateLane(lane.id)}
               className={`flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1.5 py-2 text-[11px] font-black leading-tight transition-colors sm:min-h-11 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
                 activeLane === lane.id
-                  ? 'border-medace-600 bg-medace-600 text-white'
+                  ? 'border-medace-600 bg-medace-600 text-slate-950'
                   : 'border-medace-100 bg-white text-slate-700 hover:border-medace-200 hover:bg-medace-50'
               }`}
             >

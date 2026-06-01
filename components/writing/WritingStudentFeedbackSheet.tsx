@@ -47,6 +47,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
     <MobileSheetDialog
       onClose={onClose}
       mode={isMobileViewport ? 'fullscreen' : 'sheet'}
+      ariaLabel={`添削フィードバック: ${feedbackDetail.assignment.promptTitle}`}
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-5xl sm:rounded-[28px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
       <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[28px] sm:px-6">
@@ -305,7 +306,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             onClick={onClose}
             className={`min-h-11 rounded-2xl px-4 py-3 text-sm font-bold ${
               isMobileViewport
-                ? 'bg-medace-700 text-white'
+                ? 'bg-medace-600 text-slate-950'
                 : 'border border-slate-200 text-slate-600'
             }`}
           >
@@ -317,7 +318,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
               isMobileViewport
                 ? 'border border-slate-200 bg-white text-slate-700'
-                : 'bg-medace-700 text-white hover:bg-medace-800'
+                : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
             }`}
           >
             <FileDown className="h-4 w-4" />

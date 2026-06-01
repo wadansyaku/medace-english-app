@@ -50,12 +50,12 @@ const QuizReadyView: React.FC<QuizReadyViewProps> = ({
         </div>
         {isGrammarQuizMode(setupConfig.questionMode) && grammarScope && (
           <>
-            <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">文法範囲</div>
+            <div className="rounded-2xl border border-medace-100 bg-medace-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-500">文法範囲</div>
               <div className="mt-1 text-lg font-black text-slate-950">{grammarScope.labelJa}</div>
             </div>
-            <div className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">出題中の表示</div>
+            <div className="rounded-2xl border border-medace-100 bg-medace-50 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-500">出題中の表示</div>
               <div className="mt-1 text-lg font-black text-slate-950">
                 {setupConfig.showGrammarScopeHint === false ? '範囲を伏せる' : '範囲を明示'}
               </div>
@@ -75,7 +75,7 @@ const QuizReadyView: React.FC<QuizReadyViewProps> = ({
         type="button"
         data-testid="quiz-ready-start"
         onClick={onStart}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-white transition-colors hover:bg-medace-700"
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700"
       >
         この条件で始める <ChevronRight className="h-4 w-4" />
       </button>

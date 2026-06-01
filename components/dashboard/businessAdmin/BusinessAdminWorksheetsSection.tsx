@@ -20,7 +20,7 @@ const BusinessAdminWorksheetsSection: React.FC<BusinessAdminWorksheetsSectionPro
       <WorksheetPrintLauncher
         user={user}
         buttonLabel="生徒別にPDF問題を作る"
-        buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+        buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
       />
     </section>
   </div>

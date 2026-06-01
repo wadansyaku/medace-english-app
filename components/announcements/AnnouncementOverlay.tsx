@@ -63,7 +63,7 @@ const AnnouncementOverlay: React.FC<AnnouncementOverlayProps> = ({
               <button
                 type="button"
                 onClick={() => onAcknowledge(feed.highestPriorityModal!.id)}
-                className="rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white"
+                className="rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950"
               >
                 確認しました
               </button>

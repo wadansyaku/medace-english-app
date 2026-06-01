@@ -116,7 +116,7 @@ const DashboardMissionSection: React.FC<DashboardMissionSectionProps> = ({
           type="button"
           data-testid="dashboard-mission-primary-cta"
           onClick={onPrimaryAction}
-          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800"
+          className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
         >
           {mission.nextActionLabel}
           <ArrowRight className="h-4 w-4" />

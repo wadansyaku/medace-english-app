@@ -239,7 +239,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                         type="button"
                         data-testid={`send-notification-${student.uid}`}
                         onClick={() => controller.openComposer(student)}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
                       >
                         <Bell className="h-4 w-4" />
                         通知を作る
@@ -351,7 +351,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                     key={option.key}
                     type="button"
                     onClick={() => controller.setFilter(option.key as 'IMMEDIATE' | 'WAITING' | 'REACTIVATED')}
-                    className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.filter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.filter === option.key ? 'bg-medace-600 text-slate-950' : 'text-slate-500'}`}
                   >
                     {option.label}
                   </button>
@@ -601,7 +601,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                       type="button"
                       data-testid={`send-notification-${controller.focusedStudent.uid}`}
                       onClick={() => controller.openComposer(controller.focusedStudent)}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                      className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
                     >
                       <Bell className="h-4 w-4" />
                       通知文を作る

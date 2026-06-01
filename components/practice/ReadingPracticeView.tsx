@@ -434,7 +434,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
               type="button"
               onClick={handleNext}
               disabled={!canMoveNext}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isLastQuestionInPassage && isLastPassage ? '結果を確認する' : '次の設問へ'}
               <ArrowRight className="h-5 w-5" />
@@ -454,7 +454,7 @@ const ReadingPracticeView: React.FC<ReadingPracticeViewProps> = ({
               type="button"
               onClick={handleCheck}
               disabled={!selectedOptionId}
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <CheckCircle className="h-5 w-5" />
               判定する

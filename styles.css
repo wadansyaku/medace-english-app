@@ -13,16 +13,16 @@
     --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
-    --color-medace-50: 255 250 245;
-    --color-medace-100: 255 244 232;
-    --color-medace-200: 255 212 163;
-    --color-medace-300: 255 178 95;
-    --color-medace-400: 255 149 36;
+    --color-medace-50: 255 248 237;
+    --color-medace-100: 255 239 216;
+    --color-medace-200: 255 214 168;
+    --color-medace-300: 255 183 107;
+    --color-medace-400: 255 152 47;
     --color-medace-500: 255 122 0;
-    --color-medace-600: 230 81 0;
-    --color-medace-700: 210 70 0;
-    --color-medace-800: 168 58 0;
-    --color-medace-900: 122 47 18;
+    --color-medace-600: 255 122 0;
+    --color-medace-700: 230 81 0;
+    --color-medace-800: 200 76 6;
+    --color-medace-900: 138 53 16;
     --color-medace-950: 67 20 7;
     --color-ink: 17 24 39;
     --color-muted: 71 85 105;
@@ -37,7 +37,7 @@
     --radius-control: 0.75rem;
     --radius-chip: 9999px;
     --shadow-panel: 0 16px 42px rgba(15, 23, 42, 0.08);
-    --shadow-raised: 0 24px 60px rgba(210, 70, 0, 0.12);
+    --shadow-raised: 0 24px 60px rgba(255, 122, 0, 0.14);
     --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
 
@@ -200,7 +200,7 @@
   }
 
   .ui-hero-surface {
-    @apply relative overflow-hidden bg-medace-600 text-white;
+    @apply relative overflow-hidden bg-medace-600 text-slate-950;
     border-radius: var(--radius-panel);
     box-shadow: var(--shadow-raised);
   }
@@ -227,7 +227,7 @@
   }
 
   .ui-button-primary {
-    @apply bg-medace-600 text-white shadow-sm hover:bg-medace-700;
+    @apply bg-medace-600 text-slate-950 shadow-sm hover:bg-medace-700;
   }
 
   .ui-button-secondary {

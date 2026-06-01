@@ -29,7 +29,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
   onGeneratePlan,
   onOpenCreateModal,
 }) => (
-  <section className={`rounded-lg border border-orange-100 bg-white shadow-sm ${isCompact ? 'p-5' : 'p-6 md:p-7'}`}>
+  <section className={`rounded-lg border border-medace-100 bg-white shadow-sm ${isCompact ? 'p-5' : 'p-6 md:p-7'}`}>
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-xs font-bold text-slate-400">学習プラン</p>
@@ -49,23 +49,23 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
       <>
         <p className={`font-bold text-medace-600 ${isCompact ? 'mt-3 text-sm' : 'mt-4 text-base'}`}>{learningPlan.goalDescription}</p>
         {learningPreference && (
-          <div className="mt-4 rounded-lg border border-orange-100 bg-medace-50 px-4 py-3 text-sm text-slate-700">
+          <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm text-slate-700">
             <div className="font-bold">使う条件</div>
             <div className={`mt-1 leading-relaxed ${isCompact ? 'line-clamp-2' : ''}`}>{preferenceSummary}</div>
           </div>
         )}
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-orange-100 bg-medace-50 px-4 py-3">
+          <div className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-3">
             <div className="text-[11px] font-black text-slate-500">1日の目標</div>
             <div className="mt-2 text-2xl font-black text-slate-950">{learningPlan.dailyWordGoal}</div>
             <div className="text-sm text-slate-500">語 / 日</div>
           </div>
-          <div className="rounded-lg border border-orange-100 bg-medace-50 px-4 py-3">
+          <div className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-3">
             <div className="text-[11px] font-black text-slate-500">目標日</div>
             <div className="mt-2 text-lg font-black text-slate-950">{learningPlan.targetDate}</div>
             <div className="text-sm text-slate-500">完了予定</div>
           </div>
-          <div className="rounded-lg border border-orange-100 bg-medace-50 px-4 py-3">
+          <div className="rounded-lg border border-medace-100 bg-medace-50 px-4 py-3">
             <div className="text-[11px] font-black text-slate-500">対象教材</div>
             <div className="mt-2 text-2xl font-black text-slate-950">{plannedBooks.length}</div>
             <div className="text-sm text-slate-500">優先教材</div>
@@ -80,7 +80,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         </div>
       </>
     ) : !hasStudyBooks ? (
-      <div className="mt-4 rounded-lg border border-orange-100 bg-medace-50 px-4 py-4">
+      <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
         <div className="text-sm font-black text-slate-950">まず教材を1冊</div>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
           写真・PDF・テキストからMy単語帳を作れます。
@@ -91,14 +91,14 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
           </div>
           <button
             onClick={onOpenCreateModal}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-medace-700 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
           >
             My単語帳を作る
           </button>
         </div>
       </div>
     ) : (
-      <div className="mt-5 rounded-lg border border-orange-100 bg-medace-50 px-5 py-5 text-slate-700">
+      <div className="mt-5 rounded-lg border border-medace-100 bg-medace-50 px-5 py-5 text-slate-700">
         <p className="text-sm leading-relaxed">
           目標日と学習時間から、今日やる量を決めます。
         </p>
@@ -110,7 +110,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <button
           onClick={onGeneratePlan}
           disabled={generatingPlan || !hasStudyBooks}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
         >
           {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           プラン作成

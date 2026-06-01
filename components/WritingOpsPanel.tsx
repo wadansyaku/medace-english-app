@@ -110,7 +110,7 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
           <button
             type="button"
             onClick={() => controller.setTab(triage.tab)}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
           >
             {triage.ctaLabel}
             <ArrowRight className="h-4 w-4" />
@@ -172,7 +172,7 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
               onClick={() => controller.setTab(key)}
               className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
                 controller.tab === key
-                  ? 'bg-medace-700 text-white'
+                  ? 'bg-medace-600 text-slate-950'
                   : 'border border-slate-200 bg-white text-slate-600 hover:border-medace-200 hover:text-medace-700'
               }`}
             >

@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+
+import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
   MOBILE_FLOW_TEST_IDS,
@@ -229,6 +231,8 @@ test.describe('student mobile ux', () => {
     });
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
+    attachSmokeDiagnostics(adminPage, test.info(), 'mobile-mission-admin');
+    attachSmokeDiagnostics(studentPage, test.info(), 'mobile-mission-student');
 
     try {
       await demoLoginByPage(adminPage, {
@@ -285,9 +289,10 @@ test.describe('student mobile ux', () => {
       )).toBe(true);
 
       const primaryQuickNav = quickNav.locator('button').first();
-      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-today');
+      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-mission');
+      await expect(primaryQuickNav).toHaveAttribute('aria-pressed', 'true');
       await expect(primaryQuickNav).toContainText('課題');
-      await expect(studentPage.getByTestId('dashboard-quicknav-mission')).toHaveCount(0);
+      await expect(studentPage.getByTestId('dashboard-quicknav-today')).toHaveCount(0);
 
       await primaryQuickNav.click();
       const studyCard = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront);
@@ -327,6 +332,8 @@ test.describe('student mobile ux', () => {
     });
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
+    attachSmokeDiagnostics(adminPage, test.info(), 'mobile-coach-admin');
+    attachSmokeDiagnostics(studentPage, test.info(), 'mobile-coach-student');
 
     try {
       await demoLoginByPage(adminPage, {
@@ -383,9 +390,10 @@ test.describe('student mobile ux', () => {
       )).toBe(true);
 
       const primaryQuickNav = quickNav.locator('button').first();
-      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-today');
+      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-coach');
+      await expect(primaryQuickNav).toHaveAttribute('aria-pressed', 'true');
       await expect(primaryQuickNav).toContainText('講師');
-      await expect(studentPage.getByTestId('dashboard-quicknav-coach')).toHaveCount(0);
+      await expect(studentPage.getByTestId('dashboard-quicknav-today')).toHaveCount(0);
 
       await primaryQuickNav.click();
       await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
@@ -443,6 +451,8 @@ test.describe('student mobile ux', () => {
     await primaryCta.click();
 
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'phrasebook-create-title');
+    await expect(page.getByRole('button', { name: '閉じる' })).toBeFocused();
     await expect(page.getByRole('heading', { name: 'My単語帳 作成' })).toBeVisible();
     await expect(page.getByTestId('phrasebook-create-submit')).toBeDisabled();
     await expect(page.getByTestId('phrasebook-create-plan-warning')).toContainText('教材化は使えません');
@@ -454,7 +464,9 @@ test.describe('student mobile ux', () => {
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    await seedPhrasebook(page, 'Mobile Plan Drill');
+    const importResult = await seedPhrasebook(page, 'Mobile Plan Drill');
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -463,6 +475,14 @@ test.describe('student mobile ux', () => {
     await page.getByRole('button', { name: '編集' }).click();
 
     await expect(page.getByTestId('plan-editor-modal')).toBeVisible();
+    const bookToggle = page.getByTestId(`plan-editor-book-${bookId}`);
+    await expect(bookToggle).toBeVisible();
+    await expect(bookToggle).toHaveAttribute('aria-pressed', 'true');
+    await bookToggle.focus();
+    await bookToggle.press('Space');
+    await expect(bookToggle).toHaveAttribute('aria-pressed', 'false');
+    await bookToggle.press('Space');
+    await expect(bookToggle).toHaveAttribute('aria-pressed', 'true');
     const saveButton = page.getByTestId('plan-editor-save-button');
     await expect(saveButton).toBeVisible();
     const saveBox = await saveButton.boundingBox();
@@ -821,6 +841,8 @@ test.describe('student mobile ux', () => {
     });
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
+    attachSmokeDiagnostics(adminPage, test.info(), 'mobile-writing-submit-admin');
+    attachSmokeDiagnostics(studentPage, test.info(), 'mobile-writing-submit-student');
 
     await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
@@ -892,6 +914,8 @@ test.describe('student mobile ux', () => {
     });
     const adminPage = await adminContext.newPage();
     const studentPage = await studentContext.newPage();
+    attachSmokeDiagnostics(adminPage, test.info(), 'mobile-writing-feedback-admin');
+    attachSmokeDiagnostics(studentPage, test.info(), 'mobile-writing-feedback-student');
 
     await loginGroupAdminDemo(adminPage);
     await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();

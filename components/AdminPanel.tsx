@@ -260,7 +260,12 @@ const AdminPanel: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
       {showResetModal && (
-        <ModalOverlay onClose={() => !resetting && setShowResetModal(false)} align="center" panelClassName="max-w-lg">
+        <ModalOverlay
+          onClose={() => !resetting && setShowResetModal(false)}
+          align="center"
+          ariaLabel="デモデータを初期化する"
+          panelClassName="max-w-lg"
+        >
           <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-red-500" />

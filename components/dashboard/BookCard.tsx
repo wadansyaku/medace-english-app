@@ -36,7 +36,7 @@ const BookCard: React.FC<BookCardProps> = ({
                 <Trophy className="h-3 w-3 fill-current" /> 完了
               </span>
             ) : book.isPriority ? (
-              <span className="flex items-center gap-1 rounded-full bg-medace-500 px-2 py-1 text-xs font-bold text-white shadow-sm">
+              <span className="flex items-center gap-1 rounded-full bg-medace-500 px-2 py-1 text-xs font-bold text-slate-950 shadow-sm">
                 <Star className="h-3 w-3 fill-current" /> 推奨
               </span>
             ) : null}
@@ -101,7 +101,7 @@ const BookCard: React.FC<BookCardProps> = ({
           <button
             onClick={() => onSelect(book.id, 'quiz')}
             data-testid={`book-quiz-${book.id}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-600 sm:hover:text-white"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-700 sm:hover:text-slate-950"
           >
             <Play className="h-4 w-4 fill-current" /> テスト設定
           </button>
