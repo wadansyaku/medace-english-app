@@ -233,7 +233,7 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
               setSubmitting(false);
             }
           }}
-          className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+          className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 disabled:opacity-60"
         >
           {submitting ? '送信中...' : submitLabel}
         </button>

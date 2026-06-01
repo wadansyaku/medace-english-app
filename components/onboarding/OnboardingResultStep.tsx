@@ -35,7 +35,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
           data-testid="onboarding-save-button"
           onClick={onSave}
           disabled={isSaving}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-white transition-colors hover:bg-medace-700 disabled:opacity-50 md:mx-auto md:max-w-sm"
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-50 md:mx-auto md:max-w-sm"
         >
           {isSaving ? '保存中...' : 'このレベルで学習を始める'}
           {!isSaving && <ChevronRight className="h-5 w-5" />}
@@ -84,13 +84,13 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-medace-600 bg-medace-500 p-5 text-white shadow-xl md:p-7">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">おすすめペース</div>
+          <div className="rounded-[32px] border border-medace-200 bg-medace-50 p-5 text-slate-950 shadow-[0_18px_44px_rgba(255,122,0,0.12)] md:p-7">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700">おすすめペース</div>
             <div className="mt-3 text-4xl font-black tracking-tight">
               {result.recommendedDailyGoal}
-              <span className="ml-1 text-lg text-white/65">語 / 日</span>
+              <span className="ml-1 text-lg text-slate-600">語 / 日</span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-white/78">
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
               最初の 2 週間は、このペースで復習を崩さず回せるかを優先してください。詰め込みより、翌日も再現できることが重要です。
             </p>
           </div>

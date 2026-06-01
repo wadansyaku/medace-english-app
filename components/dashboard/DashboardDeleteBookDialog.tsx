@@ -22,13 +22,14 @@ const DashboardDeleteBookDialog: React.FC<DashboardDeleteBookDialogProps> = ({
     <MobileSheetDialog
       onClose={onClose}
       mode={isMobileViewport ? 'fullscreen' : 'sheet'}
+      ariaLabelledBy="delete-book-title"
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
       <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
         <div className="flex items-center gap-3">
           <Trash2 className="h-5 w-5 text-red-500" />
           <div>
-            <div className="text-lg font-black text-slate-950">単語帳を削除する</div>
+            <div id="delete-book-title" className="text-lg font-black text-slate-950">単語帳を削除する</div>
             <div className="mt-1 text-sm text-slate-500">「{pendingDeleteBook.title}」を削除します。</div>
           </div>
         </div>

@@ -114,7 +114,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     return (
       <div className="p-10 text-center">
         <p className="mb-2 text-lg font-bold text-slate-700">学習対象の単語はありません</p>
-        <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-white">ダッシュボードに戻る</button>
+        <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-slate-950">ダッシュボードに戻る</button>
       </div>
     );
   }
@@ -155,7 +155,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
           <button
             onClick={(event) => controller.speakText(event, controller.currentWord.word)}
-            className="rounded-full bg-orange-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
+            className="rounded-full bg-medace-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
           >
             <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
@@ -176,48 +176,48 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     <section
       data-testid="study-card-back"
       aria-hidden={!controller.isFlipped}
-      className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-white shadow-xl sm:px-6 sm:py-5"
+      className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
       onClick={controller.closeBack}
     >
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-200">意味</div>
-            <div className="mt-2 text-base font-black text-white/95 sm:text-lg">{controller.currentWord.word}</div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-800">意味</div>
+            <div className="mt-2 text-base font-black text-slate-950 sm:text-lg">{controller.currentWord.word}</div>
           </div>
           {!controller.isEditing ? (
             <button
               onClick={controller.startEditing}
-              className={`rounded-full border border-white/15 p-2 transition-colors ${controller.isBookOwner ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-white/70 hover:bg-red-500/20 hover:text-red-100'}`}
+              className={`rounded-full border border-medace-200 p-2 transition-colors ${controller.isBookOwner ? 'text-slate-950/70 hover:bg-medace-100 hover:text-slate-950' : 'text-slate-950/70 hover:bg-red-500/20 hover:text-red-100'}`}
               title={controller.isBookOwner ? '定義を編集' : '問題を報告する'}
             >
               {controller.isBookOwner ? <Edit2 className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={controller.saveEditing} className="rounded-full border border-white/15 p-2 text-green-200 transition-colors hover:bg-white/10 hover:text-green-100"><Save className="h-4 w-4" /></button>
-              <button onClick={controller.cancelEditing} className="rounded-full border border-white/15 p-2 text-red-200 transition-colors hover:bg-white/10 hover:text-red-100"><X className="h-4 w-4" /></button>
+              <button onClick={controller.saveEditing} className="rounded-full border border-medace-200 p-2 text-green-200 transition-colors hover:bg-medace-100 hover:text-green-100"><Save className="h-4 w-4" /></button>
+              <button onClick={controller.cancelEditing} className="rounded-full border border-medace-200 p-2 text-red-200 transition-colors hover:bg-medace-100 hover:text-red-100"><X className="h-4 w-4" /></button>
             </div>
           )}
         </div>
 
-        <div className="mt-3 shrink-0 rounded-[24px] border border-white/10 bg-white/8 px-4 py-4">
+        <div className="mt-3 shrink-0 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
           {controller.isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
               <input
                 type="text"
                 value={controller.editWord}
                 onChange={(event) => controller.setEditWord(event.target.value)}
-                className="w-full rounded-2xl border border-white/20 bg-white/10 p-3 text-white"
+                className="w-full rounded-2xl border border-medace-200 bg-white/80 p-3 text-slate-950"
               />
               <textarea
                 value={controller.editDef}
                 onChange={(event) => controller.setEditDef(event.target.value)}
-                className="h-28 w-full resize-none rounded-2xl border border-white/20 bg-white/10 p-3 text-white"
+                className="h-28 w-full resize-none rounded-2xl border border-medace-200 bg-white/80 p-3 text-slate-950"
               />
             </div>
           ) : (
-            <p className="text-center text-[1.35rem] font-black leading-snug text-white sm:text-3xl">{controller.currentWord.definition}</p>
+            <p className="text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
           )}
         </div>
 
@@ -230,36 +230,36 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                   event.stopPropagation();
                   controller.setShowHints(true);
                 }}
-                className="flex min-h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/6 px-4 py-5 text-center text-white/78 transition-colors hover:bg-white/10"
+                className="flex min-h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-medace-200 bg-white/70 px-4 py-5 text-center text-slate-600 transition-colors hover:bg-medace-100"
               >
                 <Sparkles className="h-5 w-5 text-medace-300" />
                 <span className="text-sm font-bold">まだ難しいときだけヒントを見る</span>
-                <span className="text-xs text-white/60">例文・訳・画像ヒントをあとから開けます</span>
+                <span className="text-xs text-slate-500">例文・訳・画像ヒントをあとから開けます</span>
               </button>
             ) : (
               <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-white/68">
+                <div className="flex items-center justify-between rounded-2xl border border-medace-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                   <span>ヒントを表示中</span>
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
                       controller.setShowHints(false);
                     }}
-                    className="rounded-full border border-white/15 px-3 py-1 text-[11px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                    className="rounded-full border border-medace-200 px-3 py-1 text-[11px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
                   >
                     閉じる
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiContextLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-5 text-medace-200">
+                    <div className="flex flex-col items-center gap-2 py-5 text-medace-800">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span className="text-xs">例文を作成中...</span>
                     </div>
                   ) : controller.aiContext ? (
                     <div className="text-center">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
+                      <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-800">
                         <span className="flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
                           例文ヒント
@@ -270,7 +270,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                               {exampleAuditTone.label}
                             </span>
                           ) : null}
-                          <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-white"><Volume2 className="h-4 w-4" /></button>
+                          <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-slate-950"><Volume2 className="h-4 w-4" /></button>
                           {controller.canGenerateExampleHint ? (
                             <button
                               type="button"
@@ -278,24 +278,24 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                                 event.stopPropagation();
                                 void controller.generateExampleHint(true);
                               }}
-                              className="rounded-full border border-white/15 px-2 py-1 text-[10px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                              className="rounded-full border border-medace-200 px-2 py-1 text-[10px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
                             >
                               新しく作る
                             </button>
                           ) : null}
                         </div>
                       </div>
-                      <p className="mb-3 text-lg font-semibold leading-relaxed text-white/92 sm:text-[1.45rem]">"{controller.aiContext.english}"</p>
+                      <p className="mb-3 text-lg font-semibold leading-relaxed text-slate-800 sm:text-[1.45rem]">"{controller.aiContext.english}"</p>
 
                       {controller.showTranslation ? (
-                        <p className="animate-in fade-in border-t border-white/10 pt-3 text-sm leading-relaxed text-white/78 sm:text-base">{controller.aiContext.japanese}</p>
+                        <p className="animate-in fade-in border-t border-medace-200 pt-3 text-sm leading-relaxed text-slate-600 sm:text-base">{controller.aiContext.japanese}</p>
                       ) : (
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
                             controller.setShowTranslation(true);
                           }}
-                          className="mx-auto flex items-center justify-center gap-1 text-xs text-white/65 transition-colors hover:text-white"
+                          className="mx-auto flex items-center justify-center gap-1 text-xs text-slate-500 transition-colors hover:text-slate-950"
                         >
                           <Languages className="h-3 w-3" /> 訳を表示
                         </button>
@@ -308,11 +308,11 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                     </div>
                   ) : (
                     <div className="space-y-3 text-center">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">例文はまだありません</div>
-                      <p className="text-base font-semibold leading-relaxed text-white/88 sm:text-lg">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">例文はまだありません</div>
+                      <p className="text-base font-semibold leading-relaxed text-slate-700 sm:text-lg">
                         必要なときだけ、ここで新しく作れます。
                       </p>
-                      <p className="text-sm leading-relaxed text-white/68">
+                      <p className="text-sm leading-relaxed text-slate-500">
                         「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
                       </p>
                       {controller.exampleError ? (
@@ -327,27 +327,27 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                             event.stopPropagation();
                             void controller.generateExampleHint();
                           }}
-                          className="mx-auto flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                          className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
                         >
                           <Sparkles className="h-4 w-4" />
                           例文を作る
                         </button>
                       ) : (
-                        <p className="text-xs text-white/60">このプランでは例文生成は利用できません。</p>
+                        <p className="text-xs text-slate-500">このプランでは例文生成は利用できません。</p>
                       )}
                     </div>
                   )}
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
+                <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiImageLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-6 text-medace-200">
+                    <div className="flex flex-col items-center gap-2 py-6 text-medace-800">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span className="text-xs text-center">画像ヒントを作成中...</span>
                     </div>
                   ) : controller.aiImage ? (
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-200">
+                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-800">
                         <span className="flex items-center gap-1">
                           <ImageIcon className="h-3 w-3" />
                           画像ヒント
@@ -365,14 +365,14 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                                 event.stopPropagation();
                                 void controller.generateImageHint(true);
                               }}
-                              className="rounded-full border border-white/15 px-2 py-1 text-[10px] font-bold text-white/82 transition-colors hover:bg-white/10"
+                              className="rounded-full border border-medace-200 px-2 py-1 text-[10px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
                             >
                               新しく作る
                             </button>
                           ) : null}
                         </div>
                       </div>
-                      <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-white/5">
+                      <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-white/70">
                         <img src={controller.aiImage} alt="視覚的な記憶補助" className="h-full w-full object-contain" />
                       </div>
                       {controller.imageError ? (
@@ -383,8 +383,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                     </div>
                   ) : (
                     <div className="space-y-3 text-center">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-white/65">画像ヒントはまだありません</div>
-                      <p className="text-sm leading-relaxed text-white/72">
+                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">画像ヒントはまだありません</div>
+                      <p className="text-sm leading-relaxed text-slate-600">
                         画像はコストが高いので、必要なときだけ自分で作ります。
                       </p>
                       {controller.imageError ? (
@@ -399,13 +399,13 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                             event.stopPropagation();
                             void controller.generateImageHint();
                           }}
-                          className="mx-auto flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                          className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
                         >
                           <ImageIcon className="h-4 w-4" />
                           画像を作る
                         </button>
                       ) : (
-                        <p className="text-xs text-white/60">画像ヒントは上位プランで利用できます。</p>
+                        <p className="text-xs text-slate-500">画像ヒントは上位プランで利用できます。</p>
                       )}
                     </div>
                   )}
@@ -499,7 +499,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
               onClick={controller.openBack}
               disabled={controller.isEditing || controller.isAdvancingCard}
               className={`flex min-h-12 items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
-                controller.isEditing || controller.isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-white hover:bg-medace-700'
+                controller.isEditing || controller.isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
               }`}
             >
               <RotateCw className="h-5 w-5" /> 答えを確認

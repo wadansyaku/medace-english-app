@@ -8,6 +8,9 @@ interface MobileSheetDialogProps {
   panelClassName?: string;
   closeOnOverlayClick?: boolean;
   zIndexClassName?: string;
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  initialFocusSelector?: string;
 }
 
 const MobileSheetDialog: React.FC<MobileSheetDialogProps> = ({
@@ -17,6 +20,9 @@ const MobileSheetDialog: React.FC<MobileSheetDialogProps> = ({
   panelClassName = '',
   closeOnOverlayClick = true,
   zIndexClassName,
+  ariaLabel,
+  ariaLabelledBy,
+  initialFocusSelector,
 }) => (
   <ModalOverlay
     onClose={onClose}
@@ -24,6 +30,9 @@ const MobileSheetDialog: React.FC<MobileSheetDialogProps> = ({
     closeOnOverlayClick={closeOnOverlayClick}
     panelClassName={panelClassName}
     zIndexClassName={zIndexClassName}
+    ariaLabel={ariaLabel}
+    ariaLabelledBy={ariaLabelledBy}
+    initialFocusSelector={initialFocusSelector}
   >
     {children}
   </ModalOverlay>

@@ -139,7 +139,7 @@ describe('ReadingPracticeView', () => {
     expect(rendered).toContain('長文読解');
   });
 
-  it('renders a Japanese orange-toned reading practice surface and keeps explanations hidden before scoring', () => {
+  it('renders a Japanese medace-toned reading practice surface and keeps explanations hidden before scoring', () => {
     const passages = buildReadingPracticePassages({ level: EnglishLevel.A2, seed: 'view' });
     const rendered = renderToStaticMarkup(<ReadingPracticeView passages={passages} />);
 

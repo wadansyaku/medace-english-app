@@ -56,10 +56,11 @@ const DashboardMobileQuickNav: React.FC<DashboardMobileQuickNavProps> = ({ items
                 type="button"
                 data-testid={`dashboard-quicknav-${item.id}`}
                 aria-pressed={item.active}
+                aria-label={`${item.label}を開く`}
                 onClick={item.onClick}
                 className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 py-2 text-center transition-colors ${
                   item.active
-                    ? 'bg-medace-700 text-white shadow-sm'
+                    ? 'bg-medace-600 text-slate-950 shadow-sm'
                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >

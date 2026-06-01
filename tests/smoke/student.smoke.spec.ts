@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './diagnostics';
 
 import {
   MOBILE_FLOW_TEST_IDS,
@@ -87,7 +87,7 @@ test('desktop student dashboard keeps the command center calm and above the fold
     };
   });
   expect(palette.centerBackground).toBe('rgb(255, 255, 255)');
-  expect(palette.ctaBackground).toBe('rgb(210, 70, 0)');
+  expect(palette.ctaBackground).toBe('rgb(255, 122, 0)');
 
   const offenders = await findUnexpectedHorizontalOverflow(page);
   expect(offenders).toEqual([]);

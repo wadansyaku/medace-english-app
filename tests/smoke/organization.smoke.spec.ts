@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
   emailAuth,
@@ -171,6 +171,9 @@ test('group admin can open settings and organization rename survives reload acro
   const adminPage = await adminContext.newPage();
   const instructorPage = await instructorContext.newPage();
   const studentPage = await studentContext.newPage();
+  attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
+  attachSmokeDiagnostics(instructorPage, test.info(), 'organization-instructor');
+  attachSmokeDiagnostics(studentPage, test.info(), 'organization-student');
   const renamedOrganization = 'Smoke Rename Academy';
 
   await loginGroupAdminDemo(adminPage);
@@ -221,6 +224,11 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
   const instructorPage = await instructorContext.newPage();
   const studentAPage = await studentAContext.newPage();
   const studentBPage = await studentBContext.newPage();
+  attachSmokeDiagnostics(platformAdminPage, test.info(), 'organization-platform-admin');
+  attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
+  attachSmokeDiagnostics(instructorPage, test.info(), 'organization-instructor');
+  attachSmokeDiagnostics(studentAPage, test.info(), 'organization-student-a');
+  attachSmokeDiagnostics(studentBPage, test.info(), 'organization-student-b');
 
   await loginAdminDemo(platformAdminPage);
   await loginGroupAdminDemo(adminPage);
@@ -337,6 +345,9 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   const adminPage = await adminContext.newPage();
   const instructorPage = await instructorContext.newPage();
   const studentPage = await studentContext.newPage();
+  attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
+  attachSmokeDiagnostics(instructorPage, test.info(), 'organization-instructor');
+  attachSmokeDiagnostics(studentPage, test.info(), 'organization-student');
 
   await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
@@ -386,6 +397,9 @@ test('admin reload sees organization KPI changes after notification and study', 
   const adminPage = await adminContext.newPage();
   const instructorPage = await instructorContext.newPage();
   const studentPage = await studentContext.newPage();
+  attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
+  attachSmokeDiagnostics(instructorPage, test.info(), 'organization-instructor');
+  attachSmokeDiagnostics(studentPage, test.info(), 'organization-student');
 
   await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
@@ -449,6 +463,8 @@ test('group admin can issue a weekly mission and student can restart it from the
   const studentContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   const studentPage = await studentContext.newPage();
+  attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
+  attachSmokeDiagnostics(studentPage, test.info(), 'organization-student');
 
   await loginGroupAdminDemo(adminPage);
   await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();

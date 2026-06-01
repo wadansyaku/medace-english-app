@@ -9,6 +9,9 @@ interface ModalOverlayProps {
   closeOnOverlayClick?: boolean;
   align?: 'top' | 'center';
   mobileBehavior?: 'default' | 'sheet' | 'fullscreen';
+  ariaLabel?: string;
+  ariaLabelledBy?: string;
+  initialFocusSelector?: string;
 }
 
 const ModalOverlay: React.FC<ModalOverlayProps> = ({
@@ -19,10 +22,22 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   closeOnOverlayClick = true,
   align = 'top',
   mobileBehavior = 'default',
+  ariaLabel,
+  ariaLabelledBy,
+  initialFocusSelector,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     const previousBodyOverflow = document.body.style.overflow;
     const previousHtmlOverflow = document.documentElement.style.overflow;
     const previousBodyPaddingRight = document.body.style.paddingRight;
@@ -35,12 +50,52 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      panelRef.current?.focus();
+      const panel = panelRef.current;
+      const initialFocusTarget = initialFocusSelector
+        ? panel?.querySelector<HTMLElement>(initialFocusSelector)
+        : null;
+      const fallbackFocusTarget = panel?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (initialFocusTarget || fallbackFocusTarget || panel)?.focus();
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !panelRef.current) {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        panelRef.current.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element): element is HTMLElement => (
+        element instanceof HTMLElement
+          && !element.hasAttribute('disabled')
+          && element.offsetParent !== null
+      ));
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        panelRef.current.focus();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+      if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
@@ -52,8 +107,9 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
       document.body.style.overflow = previousBodyOverflow;
       document.documentElement.style.overflow = previousHtmlOverflow;
       document.body.style.paddingRight = previousBodyPaddingRight;
+      previouslyFocusedRef.current?.focus?.();
     };
-  }, [onClose]);
+  }, [initialFocusSelector]);
 
   if (typeof document === 'undefined') {
     return null;
@@ -79,6 +135,8 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
+          aria-label={ariaLabelledBy ? undefined : (ariaLabel || 'ダイアログ')}
+          aria-labelledby={ariaLabelledBy}
           tabIndex={-1}
           className={`relative w-full outline-none ${panelClassName} ${
             mobileBehavior === 'sheet'

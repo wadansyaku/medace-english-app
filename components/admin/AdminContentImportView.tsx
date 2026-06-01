@@ -290,7 +290,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       <button
         onClick={onOpenResetModal}
         disabled={!destructiveActionsEnabled}
-        className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 transition-colors hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:bg-white disabled:text-red-300"
+        className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 transition-colors hover:bg-red-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:bg-white disabled:text-red-300"
       >
         <Trash2 className="w-4 h-4" /> データをリセット
       </button>

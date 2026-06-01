@@ -36,7 +36,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
           <section className="rounded-[28px] bg-white px-5 py-5 shadow-xl">
             <div className="flex flex-col items-center text-center">
               {leveledUp && (
-                <div className="mb-3 inline-flex rounded-full bg-medace-500 px-4 py-2 text-xs font-black text-white shadow-lg">
+                <div className="mb-3 inline-flex rounded-full bg-medace-500 px-4 py-2 text-xs font-black text-slate-950 shadow-lg">
                   LEVEL UP!
                 </div>
               )}
@@ -101,7 +101,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             <button
               type="button"
               onClick={onStartSpellingCheck}
-              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
             >
               スペルチェックを5問
             </button>
@@ -123,7 +123,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
       <div className="absolute inset-0 bg-gradient-to-b from-yellow-50 via-white to-white"></div>
       <div className="relative z-10">
         <div className="flex flex-col items-center text-center">
-          {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-medace-500 px-4 py-2 text-sm font-black text-white shadow-lg">LEVEL UP!</span></div>}
+          {leveledUp && <div className="mb-4 animate-bounce"><span className="inline-block rounded-full bg-medace-500 px-4 py-2 text-sm font-black text-slate-950 shadow-lg">LEVEL UP!</span></div>}
           <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-green-100 text-green-600 shadow-inner">
             <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
           </div>
@@ -179,7 +179,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
           <button
             type="button"
             onClick={onStartSpellingCheck}
-            className="rounded-2xl bg-medace-600 px-6 py-3 font-bold text-white shadow-lg transition-all hover:bg-medace-700"
+            className="rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
           >
             スペルチェックを5問
           </button>

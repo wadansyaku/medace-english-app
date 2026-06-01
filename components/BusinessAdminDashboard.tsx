@@ -150,7 +150,7 @@ const BusinessAdminDecisionPanel: React.FC<BusinessAdminDecisionPanelProps> = ({
           data-testid="business-admin-primary-decision-action"
           onClick={() => onAction(model.primaryAction)}
           disabled={model.primaryAction.kind === 'SEND_FIRST_NOTIFICATION' && actionPending}
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {model.primaryAction.kind === 'SEND_FIRST_NOTIFICATION' && actionPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />

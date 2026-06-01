@@ -177,7 +177,7 @@ const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
           data-testid="business-admin-gate-send-first-notification"
           onClick={() => void controller.handleSendActivationNotification(nextRequiredActionTarget)}
           disabled={controller.activationNotificationPending}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-60"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-60"
         >
           {controller.activationNotificationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           最初の通知を送る
@@ -186,7 +186,7 @@ const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
         <button
           type="button"
           onClick={() => onChangeView(gate.targetView)}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white hover:bg-medace-800"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
         >
           {gate.ctaLabel} <ArrowRight className="h-4 w-4" />
         </button>

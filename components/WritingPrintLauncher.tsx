@@ -107,7 +107,7 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
 const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
   assignment,
   buttonLabel = '問題を印刷する',
-  buttonClassName = 'inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50',
+  buttonClassName = 'inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50',
 }) => {
   const [open, setOpen] = useState(false);
   const printableHtml = useMemo(() => (assignment ? buildPrintableAssignmentHtml(assignment) : ''), [assignment]);
@@ -148,6 +148,7 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
       {open && assignment && (
         <ModalOverlay
           onClose={() => setOpen(false)}
+          ariaLabel={`英作文印刷: ${assignment.promptTitle}`}
           panelClassName="max-w-6xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -178,7 +179,7 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
               <button
                 type="button"
                 onClick={handleDownload}
-                className="inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800"
+                className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
               >
                 <FileDown className="h-4 w-4" />
                 HTML保存

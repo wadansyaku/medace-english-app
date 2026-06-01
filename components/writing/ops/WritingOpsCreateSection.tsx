@@ -106,7 +106,7 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           data-testid="writing-generate-submit"
           disabled={generating || !selectedStudentUid || !selectedTemplateId}
           onClick={onGenerate}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-3 text-sm font-bold text-white hover:bg-medace-800 disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           課題を生成する

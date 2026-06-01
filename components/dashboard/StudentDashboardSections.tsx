@@ -557,14 +557,16 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         onClick: () => navigation.scrollToSection(navigation.weaknessSectionRef),
       };
 
-  const mobileLauncherItems: DashboardMobileQuickNavItem[] = [
-    {
-      id: 'today',
-      label: viewModel.primaryTask?.mobileLabel || '始める',
-      kind: viewModel.primaryTask ? getTaskLauncherKind(viewModel.primaryTask.id) : 'today',
-      active: navigation.activeQuickNavId === 'today' || navigation.activeQuickNavId === viewModel.primaryTask?.id,
-      onClick: handlePrimaryTaskAction,
-    },
+	  const primaryLauncherId = viewModel.primaryTask?.id || 'today';
+	  const primaryQuickNavId = primaryLauncherId === 'englishPractice' ? 'english-practice' : primaryLauncherId;
+	  const mobileLauncherItems: DashboardMobileQuickNavItem[] = [
+	    {
+	      id: primaryQuickNavId,
+	      label: viewModel.primaryTask?.mobileLabel || '始める',
+	      kind: viewModel.primaryTask ? getTaskLauncherKind(viewModel.primaryTask.id) : 'today',
+	      active: navigation.activeQuickNavId === primaryQuickNavId || navigation.activeQuickNavId === 'today',
+	      onClick: handlePrimaryTaskAction,
+	    },
     viewModel.primaryTask?.id === 'englishPractice' ? null : {
       id: 'english-practice',
       label: '演習',

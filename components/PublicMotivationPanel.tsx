@@ -128,15 +128,15 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
           </div>
 
           <div className="grid gap-3">
-            <div className="rounded-[28px] bg-medace-500 px-5 py-5 text-white">
+            <div className="rounded-[28px] border border-medace-200 bg-medace-50 px-5 py-5 text-slate-950">
               <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-white/15 p-3 text-white">
+                <div className="rounded-2xl border border-medace-200 bg-white p-3 text-medace-600">
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white/80">いまの積み上がり</div>
+                  <div className="text-sm font-bold text-medace-700">いまの積み上がり</div>
                   <div className="mt-1 text-xl font-black tracking-tight">{snapshot.snapshot.insight.title}</div>
-                  <div className="mt-2 text-sm leading-relaxed text-white/85">{snapshot.snapshot.insight.body}</div>
+                  <div className="mt-2 text-sm leading-relaxed text-slate-700">{snapshot.snapshot.insight.body}</div>
                 </div>
               </div>
             </div>
@@ -206,15 +206,15 @@ const PublicMotivationPanel: React.FC<PublicMotivationPanelProps> = ({
       </div>
 
       <div className="grid gap-6 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-8">
-        <div className="rounded-[28px] bg-medace-500 px-5 py-5 text-white">
+        <div className="rounded-[28px] border border-medace-200 bg-medace-50 px-5 py-5 text-slate-950">
           <div className="flex items-start gap-3">
-            <div className="rounded-2xl bg-white/15 p-3 text-white">
+            <div className="rounded-2xl border border-medace-200 bg-white p-3 text-medace-600">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-white/80">公開ホームから見える積み上がり</div>
+              <div className="text-sm font-bold text-medace-700">公開ホームから見える積み上がり</div>
               <div className="mt-1 text-2xl font-black tracking-tight">{snapshot.snapshot.insight.title}</div>
-              <div className="mt-3 text-sm leading-relaxed text-white/85">{snapshot.snapshot.insight.body}</div>
+              <div className="mt-3 text-sm leading-relaxed text-slate-700">{snapshot.snapshot.insight.body}</div>
             </div>
           </div>
         </div>

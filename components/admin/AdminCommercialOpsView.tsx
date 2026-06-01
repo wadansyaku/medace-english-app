@@ -345,7 +345,7 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
                     setSavingAnnouncement(false);
                   }
                 }}
-                className="rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white"
+                className="rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950"
               >
                 {savingAnnouncement ? '保存中...' : 'お知らせを配信'}
               </button>

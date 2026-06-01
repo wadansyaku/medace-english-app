@@ -30,6 +30,7 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
       <MobileSheetDialog
         onClose={onCloseReportModal}
         mode={mode}
+        ariaLabel="問題を報告"
         panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-md sm:rounded-[28px] sm:border sm:border-medace-100 sm:shadow-2xl"
       >
         <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[28px] sm:px-6">
@@ -61,6 +62,7 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
       <MobileSheetDialog
         onClose={onCloseNotice}
         mode={mode}
+        ariaLabel="報告受付完了"
         panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-md sm:rounded-[28px] sm:border sm:border-medace-100 sm:shadow-[0_18px_50px_rgba(15,23,42,0.18)]"
       >
         <div className="flex-1 px-4 py-8 sm:px-6 sm:py-6">
@@ -71,7 +73,7 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
         <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
           <button
             onClick={onCloseNotice}
-            className="w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+            className="w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
           >
             閉じる
           </button>

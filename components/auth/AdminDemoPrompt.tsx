@@ -17,7 +17,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
   onClose,
   onSubmit,
 }) => (
-  <ModalOverlay onClose={onClose} panelClassName="max-w-md" align="center">
+  <ModalOverlay onClose={onClose} panelClassName="max-w-md" align="center" ariaLabel="管理者デモ認証">
     <form
       onSubmit={onSubmit}
       className="rounded-[28px] border border-medace-100 bg-white p-6 shadow-[0_18px_50px_rgba(15,23,42,0.18)]"
@@ -54,7 +54,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
         <button
           type="submit"
           data-testid="admin-demo-submit"
-          className="flex-1 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-700"
+          className="flex-1 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
         >
           デモを開く
         </button>

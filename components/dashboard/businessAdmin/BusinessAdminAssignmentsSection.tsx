@@ -67,7 +67,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                 key={option.key}
                 type="button"
                 onClick={() => controller.setAssignmentFilter(option.key as 'ALL' | 'IMMEDIATE' | 'UNASSIGNED_AT_RISK')}
-                className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.assignmentFilter === option.key ? 'bg-medace-700 text-white' : 'text-slate-500'}`}
+                className={`rounded-xl px-4 py-2 text-sm font-bold ${controller.assignmentFilter === option.key ? 'bg-medace-600 text-slate-950' : 'text-slate-500'}`}
               >
                 {option.label}
               </button>
@@ -439,7 +439,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                     data-testid="weekly-mission-issue-submit"
                     onClick={controller.handleIssueMission}
                     disabled={controller.missionSavingUid === controller.selectedAssignmentStudent.uid}
-                    className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:opacity-60"
+                    className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
                   >
                     配布する
                   </button>

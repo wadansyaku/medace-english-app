@@ -61,7 +61,7 @@ const BusinessAdminInstructorsSection: React.FC<BusinessAdminInstructorsSectionP
               data-testid="business-admin-first-notification-send"
               onClick={onSendFirstNotification}
               disabled={!firstNotificationTarget || activationNotificationPending || firstNotificationNotice?.tone === 'success'}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-700 px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {activationNotificationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               初回通知を送る

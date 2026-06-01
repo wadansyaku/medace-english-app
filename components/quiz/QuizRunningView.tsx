@@ -171,15 +171,15 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       {shouldShowReferencePanel && (
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
           {visibleSourceSentence && (
-            <div className="rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">English</div>
+            <div className="rounded-2xl border border-medace-100 bg-medace-50/60 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-500">English</div>
               <div className="mt-2 text-base font-bold leading-relaxed text-slate-800">{visibleSourceSentence}</div>
             </div>
           )}
           {hasHiddenSourceSentence && (
-            <div className="rounded-2xl border border-orange-100 bg-orange-50/60 px-4 py-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-orange-500">English</div>
-              <div className="mt-2 text-sm font-bold leading-relaxed text-orange-900">
+            <div className="rounded-2xl border border-medace-100 bg-medace-50/60 px-4 py-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-500">English</div>
+              <div className="mt-2 text-sm font-bold leading-relaxed text-medace-900">
                 元の英文は、判定後に表示します。
               </div>
             </div>
@@ -209,27 +209,27 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       )}
 
       {shouldShowGrammarExplanation && currentQuestion.grammarExplanation && (
-        <div className="mt-5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
-          <div className="flex items-center gap-2 text-sm font-black text-orange-800">
+        <div className="mt-5 rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4">
+          <div className="flex items-center gap-2 text-sm font-black text-medace-800">
             <BookOpenCheck className="h-4 w-4" />
             {currentQuestion.grammarExplanation.labelJa}
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Pattern</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-medace-500">Pattern</div>
               <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.patternJa}</p>
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Exam</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-medace-500">Exam</div>
               <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.examFocusJa}</p>
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-500">Auto</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-medace-500">Auto</div>
               <p className="mt-1 text-sm font-bold leading-relaxed text-slate-800">{currentQuestion.grammarExplanation.automationDrillJa}</p>
             </div>
           </div>
           {currentQuestion.grammarExplanation.threeSlotFrameJa && (
-            <div className="mt-3 inline-flex rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+            <div className="mt-3 inline-flex rounded-full border border-medace-200 bg-white px-3 py-1 text-xs font-black text-medace-800">
               3ます: {currentQuestion.grammarExplanation.threeSlotFrameJa}
             </div>
           )}
@@ -272,7 +272,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           )}
         </div>
       ) : isOrderMode ? (
-        <div className="mt-6 rounded-2xl border border-orange-100 bg-orange-50/70 px-4 py-4 text-sm leading-relaxed text-orange-900">
+        <div className="mt-6 rounded-2xl border border-medace-100 bg-medace-50/70 px-4 py-4 text-sm leading-relaxed text-medace-900">
           チップをタップして解答欄に並べます。登場済み単語を文の中でどう使うかまで確認します。
         </div>
       ) : (
@@ -325,16 +325,16 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             </div>
           )}
           {isTranslationInputMode && translationFeedback && (
-            <div className="mt-4 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4" data-testid="translation-feedback-card">
+            <div className="mt-4 rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4" data-testid="translation-feedback-card">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-[11px] font-bold text-orange-500">採点フィードバック</div>
+                  <div className="text-[11px] font-bold text-medace-500">採点フィードバック</div>
                   <div className="mt-1 text-xl font-black text-slate-900">
                     {translationFeedback.score} / {translationFeedback.maxScore}・{translationFeedback.verdictLabel}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-black text-orange-800">
+                  <span className="rounded-full border border-medace-200 bg-white px-3 py-1 text-xs font-black text-medace-800">
                     {translationFeedback.examTarget === 'HIGH_SCHOOL_ENTRANCE'
                       ? '高校受験'
                       : translationFeedback.examTarget === 'UNIVERSITY_ENTRANCE'
@@ -360,13 +360,13 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                 {translationFeedback.criteria.map((criterion) => {
                   const width = `${Math.min(100, Math.max(0, (criterion.score / Math.max(criterion.maxScore, 1)) * 100))}%`;
                   return (
-                    <div key={criterion.label} className="rounded-xl border border-orange-100 bg-white px-3 py-3">
+                    <div key={criterion.label} className="rounded-xl border border-medace-100 bg-white px-3 py-3">
                       <div className="flex items-center justify-between gap-2 text-xs font-black text-slate-700">
                         <span>{criterion.label}</span>
                         <span>{criterion.score}/{criterion.maxScore}</span>
                       </div>
-                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-orange-100">
-                        <div className="h-full rounded-full bg-orange-500" style={{ width }} />
+                      <div className="mt-2 h-2 overflow-hidden rounded-full bg-medace-100">
+                        <div className="h-full rounded-full bg-medace-500" style={{ width }} />
                       </div>
                       <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">{criterion.comment}</p>
                     </div>
@@ -398,12 +398,12 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                 <div className="mt-1 text-sm font-black leading-relaxed text-slate-900">{translationFeedback.improvedTranslation}</div>
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-orange-100 bg-white px-3 py-3">
-                  <div className="text-xs font-black text-orange-700">文法の見方</div>
+                <div className="rounded-xl border border-medace-100 bg-white px-3 py-3">
+                  <div className="text-xs font-black text-medace-700">文法の見方</div>
                   <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">{translationFeedback.grammarAdviceJa}</p>
                 </div>
-                <div className="rounded-xl border border-orange-100 bg-white px-3 py-3">
-                  <div className="text-xs font-black text-orange-700">次の1問</div>
+                <div className="rounded-xl border border-medace-100 bg-white px-3 py-3">
+                  <div className="text-xs font-black text-medace-700">次の1問</div>
                   <p className="mt-1 text-sm font-medium leading-relaxed text-slate-700">{translationFeedback.nextDrillJa}</p>
                 </div>
               </div>
@@ -418,7 +418,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               data-testid="translation-feedback-next"
               onClick={onAdvanceAfterTranslationFeedback}
               disabled={!translationAwaitingAdvance || isInputBusy || Boolean(saveError && hasPendingAttempt)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <ArrowRight className="h-5 w-5" /> {translationAdvanceLabel}
             </button>
@@ -427,7 +427,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               <button
                 type="submit"
                 disabled={!answerInput.trim() || !!inputResult || isInputBusy}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
               </button>
@@ -456,7 +456,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               type="button"
               onClick={onOrderTokensClear}
               disabled={orderedTokenIds.length === 0 || Boolean(orderFeedback) || persistingAttempt}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:border-orange-200 hover:text-orange-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:border-medace-200 hover:text-medace-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <RotateCcw className="h-4 w-4" />
               やり直す
@@ -477,7 +477,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                     key={`${token.id}-${index}`}
                     className={`inline-flex min-h-11 items-center gap-1 rounded-2xl border bg-white px-3 py-2 text-sm font-black shadow-sm ${
                       token.learnedWordId || token.learnedWord
-                        ? 'border-orange-300 text-orange-800 ring-2 ring-orange-100'
+                        ? 'border-medace-300 text-medace-800 ring-2 ring-medace-100'
                         : 'border-slate-200 text-slate-800'
                     }`}
                   >
@@ -546,7 +546,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Chips</div>
               <h3 className="mt-1 text-lg font-black text-slate-950">使う語句を選ぶ</h3>
             </div>
-            <div className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+            <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
               {orderedTokenIds.length} / {expectedTokenCount}
             </div>
           </div>
@@ -564,8 +564,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                     isSelected
                       ? 'border-slate-200 bg-slate-100 text-slate-400'
                       : isLearned
-                        ? 'border-orange-300 bg-orange-50 text-orange-800 shadow-sm hover:bg-orange-100'
-                        : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:border-orange-200 hover:text-orange-700'
+                        ? 'border-medace-300 bg-medace-50 text-medace-800 shadow-sm hover:bg-medace-100'
+                        : 'border-slate-200 bg-white text-slate-700 shadow-sm hover:border-medace-200 hover:text-medace-700'
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   {token.text}
@@ -581,7 +581,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             data-testid="quiz-order-submit"
             onClick={() => void onOrderSubmit()}
             disabled={!canSubmitOrder}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-700 px-4 py-4 font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '判定する'}
           </button>
@@ -605,7 +605,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     ) : (
       <div className="grid grid-cols-1 gap-3 animate-in zoom-in duration-200 fade-in">
         {currentQuestion.options?.map((option, index) => {
-          let buttonClass = 'bg-white border-2 border-slate-100 hover:border-medace-300 hover:bg-orange-50 text-slate-700 shadow-sm';
+          let buttonClass = 'bg-white border-2 border-slate-100 hover:border-medace-300 hover:bg-medace-50 text-slate-700 shadow-sm';
           let icon = null;
 
           if (selectedOption) {

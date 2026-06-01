@@ -215,7 +215,12 @@ const Layout: React.FC<LayoutProps> = ({
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between ${
           compactStudentShell ? 'min-h-[62px] py-1' : 'min-h-[80px] py-2'
         }`}>
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => onChangeView(homeView)}>
+          <button
+            type="button"
+            className="flex min-h-11 items-center gap-3 rounded-xl text-left transition-colors hover:bg-medace-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-medace-200"
+            onClick={() => onChangeView(homeView)}
+            aria-label={`${BRAND.productLabel} ホームへ戻る`}
+          >
             <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
               <BookOpen className={`text-medace-700 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
@@ -227,7 +232,7 @@ const Layout: React.FC<LayoutProps> = ({
                 {compactStudentShell ? '生徒モバイル' : BRAND.productLabel}
               </p>
             </div>
-          </div>
+          </button>
 
           {user && (
             <div className={`flex items-center flex-1 justify-end ${compactStudentShell ? 'gap-2' : 'gap-4'}`}>
@@ -244,7 +249,7 @@ const Layout: React.FC<LayoutProps> = ({
                       </div>
 
                       {/* Divider */}
-                      <div className="h-4 w-px bg-orange-100"></div>
+                      <div className="h-4 w-px bg-medace-100"></div>
 
                       {/* Level & XP */}
                       <div className="flex items-center gap-2">
@@ -256,7 +261,7 @@ const Layout: React.FC<LayoutProps> = ({
                                   <span>LVL {stats.level}</span>
                                   <span>{stats.xp}/{xpToNext}</span>
                               </div>
-                              <div className="h-1.5 overflow-hidden rounded-full bg-orange-100">
+                              <div className="h-1.5 overflow-hidden rounded-full bg-medace-100">
                                   <div 
                                       className="h-full rounded-full bg-medace-500 transition-all duration-1000 ease-out"
                                       style={{ width: `${progressPercent}%` }}
@@ -272,7 +277,7 @@ const Layout: React.FC<LayoutProps> = ({
                   onClick={() => onChangeView(homeView)}
                   className={`rounded-xl px-4 py-3 text-[0.95rem] font-bold transition-colors ${
                     currentView === homeView || (user.role === UserRole.STUDENT && currentView === 'englishPractice')
-                      ? 'bg-medace-700 text-white'
+                      ? 'bg-medace-600 text-slate-950'
                       : 'text-slate-700 hover:bg-medace-50 hover:text-medace-700'
                   }`}
                 >
@@ -287,7 +292,8 @@ const Layout: React.FC<LayoutProps> = ({
                 </div>
                 <button 
                   onClick={onLogout}
-                  className={`rounded-xl border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
+                  aria-label="ログアウト"
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
                     compactStudentShell ? 'p-2.5' : 'p-3'
                   }`}
                   title="ログアウト"
@@ -309,8 +315,8 @@ const Layout: React.FC<LayoutProps> = ({
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
                   className={`shrink-0 rounded-xl border px-4 py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
-                      ? 'border-medace-700 bg-medace-700 text-white'
-                      : 'border-orange-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
+                      ? 'border-medace-600 bg-medace-600 text-slate-950'
+                      : 'border-medace-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
                   }`}
                 >
                   <div className="text-sm font-bold">{section.label}</div>

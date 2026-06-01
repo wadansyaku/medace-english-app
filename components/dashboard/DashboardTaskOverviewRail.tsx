@@ -62,12 +62,12 @@ const uniqueTasks = (tasks: StudentDashboardTaskItem[]): StudentDashboardTaskIte
 
 const actionToneClass = (task: StudentDashboardTaskItem): string => {
   if (task.group === 'primary') {
-    return 'border-medace-200 bg-white text-medace-900 hover:border-medace-300 hover:bg-orange-50';
+    return 'border-medace-200 bg-white text-medace-900 hover:border-medace-300 hover:bg-medace-50';
   }
   if (task.group === 'urgent' || task.id === 'mission' || task.id === 'writing') {
     return 'border-amber-200 bg-white text-amber-950 hover:border-amber-300 hover:bg-amber-50';
   }
-  return 'border-orange-100 bg-white text-slate-800 hover:border-medace-200 hover:bg-white';
+  return 'border-medace-100 bg-white text-slate-800 hover:border-medace-200 hover:bg-white';
 };
 
 const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
@@ -92,14 +92,14 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
   return (
     <section
       data-testid="dashboard-task-overview-rail"
-      className="min-w-0 rounded-lg border border-orange-100 bg-medace-50/70 px-3 py-3 shadow-[0_10px_30px_rgba(194,65,12,0.05)]"
+      className="min-w-0 rounded-lg border border-medace-100 bg-medace-50/70 px-3 py-3 shadow-[0_10px_30px_rgba(255,122,0,0.05)]"
     >
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-black text-medace-700">今日の順番</p>
           <h3 className="mt-0.5 truncate text-sm font-black text-slate-950">{headlineTask.title}</h3>
         </div>
-        <span className="shrink-0 rounded-md border border-orange-100 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
+        <span className="shrink-0 rounded-md border border-medace-100 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
           {headlineTask.stateLabel}
         </span>
       </div>
@@ -139,7 +139,7 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
       )}
 
       {referenceShortcutTasks.length > 0 && (
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2 border-t border-orange-100 pt-3">
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2 border-t border-medace-100 pt-3">
           <span className="mr-1 self-center text-[11px] font-black text-slate-400">あとで見る</span>
           {referenceShortcutTasks.map((task) => {
             const Icon = TASK_ICON_BY_ID[task.id] || BookOpenText;
@@ -149,7 +149,7 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
                 type="button"
                 data-testid={`dashboard-task-reference-${task.id}`}
                 onClick={() => onSelectReferenceTask(task.id)}
-                className="inline-flex min-h-9 min-w-0 items-center gap-1.5 rounded-md border border-orange-100 bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 transition-colors hover:border-medace-200 hover:text-medace-800"
+                className="inline-flex min-h-9 min-w-0 items-center gap-1.5 rounded-md border border-medace-100 bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 transition-colors hover:border-medace-200 hover:text-medace-800"
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{task.mobileLabel}</span>

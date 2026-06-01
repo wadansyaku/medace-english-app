@@ -23,7 +23,7 @@ const WorkspaceSectionTabs = <T extends string>({
         data-testid={`workspace-tab-${section.id.toLowerCase()}`}
         className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition-colors ${
           activeSection === section.id
-            ? 'border-medace-700 bg-medace-700 text-white'
+            ? 'border-medace-600 bg-medace-600 text-slate-950'
             : 'border-slate-200 bg-white text-slate-600 hover:border-medace-200 hover:text-medace-700'
         }`}
         aria-pressed={activeSection === section.id}

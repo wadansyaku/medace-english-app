@@ -108,15 +108,15 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   );
 
   const authCard = (
-    <div className="overflow-hidden rounded-panel border border-medace-200 bg-white shadow-[0_18px_48px_rgba(154,52,18,0.10)]">
+    <div className="overflow-hidden rounded-panel border border-medace-200 bg-white shadow-[0_18px_48px_rgba(255,122,0,0.10)]">
         <div className="grid lg:grid-cols-[1.04fr_0.96fr]">
-          <div className="relative overflow-hidden bg-medace-600 p-6 text-white sm:p-8 md:p-10">
+          <div className="relative overflow-hidden border-b border-medace-200 bg-medace-50 p-6 text-slate-950 sm:p-8 md:p-10 lg:border-b-0 lg:border-r">
             <div className="relative space-y-7">
               <div>
-                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl border border-white/25 bg-white/15 shadow-sm backdrop-blur-sm sm:h-16 sm:w-16">
-                  <span className="text-2xl font-black text-white">{BRAND.mark}</span>
+                <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl border border-medace-200 bg-white shadow-sm sm:h-16 sm:w-16">
+                  <span className="text-2xl font-black text-medace-700">{BRAND.mark}</span>
                 </div>
-                <p className="text-[0.82rem] font-bold tracking-[0.12em] text-white/82 sm:text-[0.95rem]">{AUTH_COPY.eyebrow}</p>
+                <p className="text-[0.82rem] font-bold tracking-[0.12em] text-medace-700 sm:text-[0.95rem]">{AUTH_COPY.eyebrow}</p>
                 <h1 className="mt-3 text-2xl font-black leading-tight sm:text-3xl md:text-4xl">
                   {AUTH_COPY.title[0]}
                   <br />
@@ -124,7 +124,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                   <br />
                   {AUTH_COPY.title[2]}
                 </h1>
-                <p className="mt-4 max-w-lg text-[0.98rem] leading-relaxed text-white/88 md:text-[1.05rem]">
+                <p className="mt-4 max-w-lg text-[0.98rem] leading-relaxed text-slate-700 md:text-[1.05rem]">
                   {AUTH_COPY.body}
                 </p>
                 {isMobileViewport && (
@@ -132,7 +132,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                     <button
                       onClick={() => onDemoLogin(UserRole.STUDENT)}
                       data-testid="demo-login-student"
-                      className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-[0.98rem] font-bold leading-tight text-medace-800 shadow-sm transition-colors hover:bg-orange-50"
+                      className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-[0.98rem] font-bold leading-tight text-medace-800 shadow-sm transition-colors hover:bg-medace-50"
                     >
                       生徒としてすぐ試す
                     </button>
@@ -140,7 +140,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                       type="button"
                       onClick={onOpenPublicInfo}
                       data-testid="open-business-guide-mobile"
-                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold leading-tight text-white"
+                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold leading-tight text-medace-800"
                     >
                       教室向け導入を見る
                     </button>
@@ -150,28 +150,28 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
               <div className="grid gap-3">
                 {(authMode === 'SIGNUP' ? AUTH_COPY.signupSteps : AUTH_COPY.loginSteps).map((step) => (
-                  <div key={step} className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-white" />
+                  <div key={step} className="flex items-center gap-3 rounded-xl border border-medace-100 bg-white px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-medace-600" />
                     <span className="text-base font-medium leading-relaxed">{step}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-panel border border-white/15 bg-medace-900/15 p-5">
+              <div className="rounded-panel border border-medace-200 bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-bold tracking-[0.12em] text-white/78">{AUTH_COPY.demoEyebrow}</p>
-                  <span className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black tracking-[0.12em] text-white/92">
+                  <p className="text-sm font-bold tracking-[0.12em] text-medace-700">{AUTH_COPY.demoEyebrow}</p>
+                  <span className="rounded-lg border border-medace-200 bg-medace-50 px-3 py-1.5 text-xs font-black tracking-[0.12em] text-medace-800">
                     {getDemoAccessWindowLabel()} 限定
                   </span>
                 </div>
-                <p className="mt-3 text-[0.98rem] leading-relaxed text-white/88">
+                <p className="mt-3 text-[0.98rem] leading-relaxed text-slate-700">
                   生徒向けの画面に加えて、学校・教室向けのビジネス版デモもこの画面からそのまま確認できます。体験用アカウントは期間限定で、別端末では別の体験セッションが作られます。
                 </p>
-                <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-white/78">
+                <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
                   初回診断やテストを最初から試せるよう、体験ログインごとに新しいデモ環境を作成します。前回の demo 状態は別ブラウザや別端末へ共有されません。
                 </p>
                 {runtimeFlags.appOnlineOnly && (
-                  <p className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-white/78">
+                  <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
                     現在の導入 pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は段階導入前の対象外です。
                   </p>
                 )}
@@ -180,7 +180,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                     <button
                       onClick={() => onDemoLogin(UserRole.STUDENT)}
                       data-testid="demo-login-student"
-                      className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-base font-bold text-medace-800 shadow-sm transition-colors hover:bg-orange-50"
+                      className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-base font-bold text-medace-800 shadow-sm transition-colors hover:bg-medace-50"
                     >
                       生徒としてすぐ試す
                     </button>
@@ -188,7 +188,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                       type="button"
                       onClick={onOpenPublicInfo}
                       data-testid="open-business-guide-desktop"
-                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-bold text-white"
+                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-800"
                     >
                       教室向け導入を見る
                     </button>
@@ -300,7 +300,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
               <button
                 type="submit"
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-medace-700 px-4 py-3 text-base font-bold leading-tight text-white shadow-sm transition-colors hover:bg-medace-800"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-medace-600 px-4 py-3 text-base font-bold leading-tight text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
               >
                 {authMode === 'LOGIN' ? (
                   <><LogIn className="h-4 w-4" /> ログイン</>

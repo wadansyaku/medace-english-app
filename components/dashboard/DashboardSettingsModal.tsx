@@ -156,13 +156,19 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
       <MobileSheetDialog
         onClose={onClose}
         mode="fullscreen"
+        ariaLabel="設定・プロフィール"
         panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-slate-50"
       >
         <div
           data-testid="settings-modal-mobile"
           className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur"
         >
-          <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="閉じる"
+            className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
             <X className="h-5 w-5" />
           </button>
           <div className="pr-12">
@@ -176,37 +182,38 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
         <div className="flex-1 overflow-y-auto px-4 py-5">
           <div className="space-y-4">
-            <section className="rounded-[28px] bg-medace-700 px-4 py-4 text-white shadow-[0_18px_45px_rgba(194,65,12,0.16)]">
-              <div className="text-xs font-bold text-white/58">今日の設定</div>
+            <section className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 text-slate-950 shadow-panel">
+              <div className="text-xs font-bold text-slate-500">今日の設定</div>
               <div className="mt-2 text-xl font-black tracking-tight">いまの学習条件を 1 画面で確認</div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold">
+                <span className="rounded-full border border-medace-100 bg-medace-50 px-3 py-1.5 text-xs font-bold text-medace-700">
                   {GRADE_LABELS[editGrade]}
                 </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
                   {USER_STUDY_MODE_LABELS[editStudyMode]}
                 </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
                   {editDailyStudyMinutes}分 / 日
                 </span>
-                <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700">
                   {LEARNING_PREFERENCE_INTENSITY_LABELS[editIntensity]}
                 </span>
               </div>
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
-                <div className="text-[11px] font-bold text-white/58">現在のレベル</div>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-[11px] font-bold text-slate-500">現在のレベル</div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="text-lg font-black">{currentEnglishLevel || '未診断'}</span>
                   <button
+                    type="button"
                     onClick={onRetakeLevel}
-                    className="inline-flex min-h-11 items-center gap-1 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-bold text-white"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-full border border-medace-200 bg-white px-4 py-2 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                     再診断
                   </button>
                 </div>
                 {accountOverview && (
-                  <div className="mt-3 text-sm leading-relaxed text-white/78">
+                  <div className="mt-3 text-sm leading-relaxed text-slate-500">
                     {SUBSCRIPTION_PLAN_LABELS[accountOverview.subscriptionPlan]} / {accountOverview.priceLabel}
                   </div>
                 )}
@@ -353,7 +360,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     step={5}
                     value={editDailyStudyMinutes}
                     onChange={(event) => onEditDailyStudyMinutes(Number(event.target.value))}
-                    className="w-full accent-[#ff7a00]"
+                    className="w-full accent-medace-500"
                   />
                   <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
                 </div>
@@ -524,7 +531,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
               data-testid="settings-save-button"
               onClick={onSave}
               disabled={isSavingProfile}
-              className="min-h-11 rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="min-h-11 rounded-2xl bg-medace-600 px-6 py-3 text-base font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSavingProfile ? '保存中...' : '変更を保存'}
             </button>
@@ -538,10 +545,16 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
     <MobileSheetDialog
       onClose={onClose}
       mode="fullscreen"
+      ariaLabel="設定・プロフィール"
       panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
     >
       <div className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-7 sm:pt-6">
-        <button onClick={onClose} className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 sm:right-5 sm:top-5">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="閉じる"
+          className="absolute right-4 top-4 rounded-full p-2.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 sm:right-5 sm:top-5"
+        >
           <X className="h-5 w-5" />
         </button>
         <div className="flex flex-wrap items-start gap-4 pr-12">
@@ -826,7 +839,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     step={5}
                     value={editDailyStudyMinutes}
                     onChange={(event) => onEditDailyStudyMinutes(Number(event.target.value))}
-                    className="w-full accent-[#ff7a00]"
+                    className="w-full accent-medace-500"
                   />
                   <div className="rounded-full bg-medace-50 px-4 py-2 text-base font-black text-medace-700">{editDailyStudyMinutes}分</div>
                 </div>
@@ -907,7 +920,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
           <button
             onClick={onSave}
             disabled={isSavingProfile}
-            className="min-h-11 rounded-2xl bg-medace-700 px-6 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-medace-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="min-h-11 rounded-2xl bg-medace-600 px-6 py-3 text-base font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {isSavingProfile ? '保存中...' : '変更を保存'}
           </button>
