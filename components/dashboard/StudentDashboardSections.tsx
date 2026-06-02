@@ -431,6 +431,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     usedReferenceSectionIds.add(task.id);
     return [section];
   });
+  const hasReferenceSections = referenceSections.length > 0;
 
   const getTaskLauncherKind = (taskId: StudentDashboardTaskId): DashboardMobileQuickNavItem['kind'] => {
     switch (taskId) {
@@ -661,9 +662,17 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
             onSelectReferenceTask={scrollToTaskSection}
             onStartPrimary={handlePrimaryTaskAction}
           />
-          {referenceSections}
         </aside>
       </section>
+
+      {hasReferenceSections && (
+        <section
+          data-testid="dashboard-reference-sections"
+          className="order-3 grid min-w-0 gap-4"
+        >
+          {referenceSections}
+        </section>
+      )}
 
       {isStudentMobileShell && (
         <DashboardMobileQuickNav
