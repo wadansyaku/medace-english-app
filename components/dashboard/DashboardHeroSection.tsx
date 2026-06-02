@@ -165,7 +165,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         </button>
       </div>
 
-      <div className={`grid min-w-0 gap-4 ${isMobileCompact ? 'mt-4' : 'mt-5 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start'}`}>
+      <div className={`grid min-w-0 gap-4 ${isMobileCompact ? 'mt-4' : 'mt-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start'}`}>
         <div className="min-w-0">
           <div className="min-w-0 border-l-4 border-medace-500 pl-4">
             <p className="text-xs font-black text-medace-700">今日の入口</p>
