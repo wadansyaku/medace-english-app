@@ -124,15 +124,16 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
               return (
                 <button
                   key={book.id}
-	                  type="button"
-	                  onClick={() => onToggleBook(book.id)}
-	                  onKeyDown={(event) => {
-	                    if (event.key === ' ' || event.key === 'Enter') {
-	                      event.preventDefault();
-	                      onToggleBook(book.id);
-	                    }
-	                  }}
-	                  aria-pressed={isSelected}
+                  type="button"
+                  onClick={() => onToggleBook(book.id)}
+                  onKeyDown={(event) => {
+                    const isActivationKey = event.key === ' ' || event.key === 'Space' || event.code === 'Space' || event.key === 'Enter';
+                    if (isActivationKey) {
+                      event.preventDefault();
+                      onToggleBook(book.id);
+                    }
+                  }}
+                  aria-pressed={isSelected}
                   data-testid={`plan-editor-book-${book.id}`}
                   className={`flex min-h-12 w-full items-center gap-3 p-3 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-[-3px] focus-visible:outline-medace-300 ${isSelected ? 'bg-medace-50' : 'bg-white'}`}
                 >

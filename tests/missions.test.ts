@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   LearningTrack,
+  MissionProgressEventType,
   MissionNextActionType,
+  OrganizationRole,
   StudentRiskLevel,
+  UserRole,
   WeeklyMissionStatus,
   type MissionAssignment,
+  type UserProfile,
 } from '../types';
 import {
   buildMissionProgress,
@@ -14,6 +18,22 @@ import {
   calculateMissionStartedRate,
 } from '../shared/missions';
 import { getInstructorQueueSegment } from '../shared/retention';
+import {
+  assignLocalWeeklyMission,
+  createLocalWeeklyMission,
+  resetLocalMissionState,
+  updateLocalMissionProgress,
+} from '../services/storage/missions';
+
+const makeMissionUser = (overrides: Partial<UserProfile> = {}): UserProfile => ({
+  uid: 'admin-local',
+  displayName: 'Local Admin',
+  role: UserRole.ADMIN,
+  email: 'admin-local@example.test',
+  organizationId: 'org-local',
+  organizationRole: OrganizationRole.GROUP_ADMIN,
+  ...overrides,
+});
 
 describe('missions', () => {
   it('keeps untouched missions in ASSIGNED until the first action happens', () => {
@@ -86,6 +106,33 @@ describe('missions', () => {
 
     expect(progress.nextActionType).toBe(MissionNextActionType.OPEN_STUDY);
     expect(progress.nextActionLabel).toBe('新出を8語進める');
+  });
+
+  it('keeps student mission updates to normal progress events while staff can manually complete', () => {
+    resetLocalMissionState();
+    const admin = makeMissionUser();
+    const student = makeMissionUser({
+      uid: 'student-local',
+      displayName: 'Local Student',
+      role: UserRole.STUDENT,
+      email: 'student-local@example.test',
+      organizationRole: OrganizationRole.STUDENT,
+    });
+    const mission = createLocalWeeklyMission(admin, {
+      learningTrack: LearningTrack.EIKEN_2,
+      title: 'Manual Complete Guard',
+      newWordsTarget: 2,
+      reviewWordsTarget: 0,
+      quizTargetCount: 0,
+    });
+    const assignment = assignLocalWeeklyMission(admin, mission.id, student.uid, student.displayName);
+
+    expect(updateLocalMissionProgress(student, assignment.id, MissionProgressEventType.OPENED).progress.status)
+      .toBe(WeeklyMissionStatus.IN_PROGRESS);
+    expect(() => updateLocalMissionProgress(student, assignment.id, MissionProgressEventType.MANUAL_COMPLETE))
+      .toThrow('ミッションの手動完了は講師または管理者が実行してください。');
+    expect(updateLocalMissionProgress(admin, assignment.id, MissionProgressEventType.MANUAL_COMPLETE).progress.status)
+      .toBe(WeeklyMissionStatus.COMPLETED);
   });
 
   it('aggregates track completion, started rate, and overdue recovery rate from mission assignments', () => {

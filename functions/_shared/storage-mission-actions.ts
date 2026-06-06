@@ -903,6 +903,9 @@ export const handleUpdateMissionProgress = async (
   if (!assignmentId || !isMissionProgressEventType(eventType)) {
     throw new HttpError(400, 'ミッション進捗イベントが不正です。');
   }
+  if (currentUser.role === UserRole.STUDENT && eventType === MissionProgressEventType.MANUAL_COMPLETE) {
+    throw new HttpError(403, 'ミッションの手動完了は講師または管理者が実行してください。');
+  }
 
   const row = await readFirst<DbMissionProgressRow & { organization_id: string | null; assigned_by_user_id: string }>(
     env,

@@ -54,6 +54,9 @@ jobs:
       - name: Fast verification gate
         run: npm run verify:fast
 
+      - name: Build app for local integration tests
+        run: npm run build
+
       - name: API integration tests
         run: npm run test:api
 
@@ -66,7 +69,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run cf:doctor
 
-      - name: Build
+      - name: Build deploy artifact
         run: npm run build
 
       - name: Update preview deployment runtime metadata
@@ -126,7 +129,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|preview deployment surfaces a visible preview banner and noindex marker|preview deployment supports demo login, D1 read, and Writing visibility"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|preview deployment surfaces a visible preview banner and noindex marker|preview deployment supports demo login, D1 read, and Writing visibility"
 
       - name: Inspect preview Pages secrets
         id: preview-secrets
@@ -173,7 +176,7 @@ jobs:
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: verify:fast + API integration tests + full smoke suite + cf:doctor"
+            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + build)"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Preview Secrets: \`${{ steps.preview-secrets.outputs.names }}\`"
             echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"

@@ -194,6 +194,7 @@ export class IndexedDBStorageService implements IStorageService {
       getBooks: this.getBooks.bind(this),
       getWordsByBook: this.getWordsByBook.bind(this),
       getSession: this.getSession.bind(this),
+      getLearningPlan: this.getLearningPlan.bind(this),
     };
   }
 

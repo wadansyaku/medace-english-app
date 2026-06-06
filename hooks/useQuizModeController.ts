@@ -356,7 +356,10 @@ export const useQuizModeController = ({
         ]);
         if (cancelled) return;
 
-        const sortedWords = [...nextWords].sort((left, right) => left.number - right.number);
+        const shouldPreserveSessionOrder = autoStart && isSmartSessionBookId(bookId);
+        const sortedWords = shouldPreserveSessionOrder
+          ? nextWords
+          : [...nextWords].sort((left, right) => left.number - right.number);
         const nextMin = sortedWords.length > 0 ? Math.min(...sortedWords.map((word) => word.number)) : 1;
         const nextMax = sortedWords.length > 0 ? Math.max(...sortedWords.map((word) => word.number)) : 1;
 

@@ -23,6 +23,7 @@ interface DashboardTaskOverviewRailProps {
   urgentTasks: StudentDashboardTaskItem[];
   supportingTasks: StudentDashboardTaskItem[];
   referenceTasks: StudentDashboardTaskItem[];
+  showPrimaryAction?: boolean;
   onSelectTask: (taskId: StudentDashboardTaskId) => void;
   onSelectReferenceTask: (taskId: StudentDashboardTaskId) => void;
   onStartPrimary: () => void;
@@ -75,17 +76,18 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
   urgentTasks,
   supportingTasks,
   referenceTasks,
+  showPrimaryAction = true,
   onSelectTask,
   onSelectReferenceTask,
   onStartPrimary,
 }) => {
   const actionTasks = uniqueTasks([
-    ...(primaryTask ? [primaryTask] : []),
+    ...(showPrimaryAction && primaryTask ? [primaryTask] : []),
     ...urgentTasks,
     ...supportingTasks,
   ]).slice(0, 3);
   const referenceShortcutTasks = uniqueTasks(referenceTasks).slice(0, 4);
-  const headlineTask = primaryTask || actionTasks[0] || referenceShortcutTasks[0] || null;
+  const headlineTask = actionTasks[0] || referenceShortcutTasks[0] || (showPrimaryAction ? primaryTask : null);
 
   if (!headlineTask) return null;
 
@@ -96,7 +98,9 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
     >
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-black text-medace-700">今日の順番</p>
+          <p className="text-[11px] font-black text-medace-700">
+            {actionTasks.length > 0 ? '次に開けるもの' : '教材・記録'}
+          </p>
           <h3 className="mt-0.5 truncate text-sm font-black text-slate-950">{headlineTask.title}</h3>
         </div>
         <span className="shrink-0 rounded-md border border-medace-100 bg-white px-2 py-1 text-[11px] font-bold text-slate-600">
@@ -140,7 +144,7 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
 
       {referenceShortcutTasks.length > 0 && (
         <div className="mt-3 flex min-w-0 flex-wrap gap-2 border-t border-medace-100 pt-3">
-          <span className="mr-1 self-center text-[11px] font-black text-slate-400">あとで見る</span>
+          <span className="mr-1 self-center text-[11px] font-black text-slate-400">教材・記録</span>
           {referenceShortcutTasks.map((task) => {
             const Icon = TASK_ICON_BY_ID[task.id] || BookOpenText;
             return (

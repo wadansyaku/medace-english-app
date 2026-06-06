@@ -168,7 +168,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       <div className={`grid min-w-0 gap-4 ${isMobileCompact ? 'mt-4' : 'mt-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start'}`}>
         <div className="min-w-0">
           <div className="min-w-0 border-l-4 border-medace-500 pl-4">
-            <p className="text-xs font-black text-medace-700">今日の入口</p>
+            <p className="text-xs font-black text-medace-700">今日やること</p>
             <h2 className={`mt-2 font-black leading-tight text-slate-950 ${isMobileCompact ? 'text-[1.55rem] min-[360px]:text-[1.85rem]' : 'text-3xl md:text-4xl'}`}>
               {heroTitle}
             </h2>
@@ -204,7 +204,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                   isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
                 }`}
               >
-                プラン作成
+                プランを作る
               </button>
             ) : null}
           </div>

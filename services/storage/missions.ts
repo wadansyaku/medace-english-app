@@ -365,6 +365,9 @@ export const updateLocalMissionProgress = (
 ): MissionAssignment => {
   const index = getAssignmentIndex(assignmentId);
   const current = LOCAL_MISSION_ASSIGNMENTS[index];
+  if (user.role === UserRole.STUDENT && eventType === MissionProgressEventType.MANUAL_COMPLETE) {
+    throw new Error('ミッションの手動完了は講師または管理者が実行してください。');
+  }
   if (user.role === UserRole.STUDENT && current.studentUid !== user.uid) {
     throw new Error('自分のミッションのみ更新できます。');
   }

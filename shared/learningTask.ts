@@ -16,6 +16,19 @@ import {
 } from './studySession';
 
 const TASK_QUERY_KEY = 'task';
+const MAX_PREFERRED_BOOK_IDS = 5;
+
+export const normalizeTaskPreferredBookIds = (bookIds: unknown): string[] => {
+  if (!Array.isArray(bookIds)) return [];
+  const normalized: string[] = [];
+  bookIds.forEach((bookId) => {
+    if (typeof bookId !== 'string') return;
+    const trimmed = bookId.trim();
+    if (!trimmed || normalized.includes(trimmed)) return;
+    normalized.push(trimmed);
+  });
+  return normalized.slice(0, MAX_PREFERRED_BOOK_IDS);
+};
 
 const serializeTaskPayload = (task: LearningTaskIntent): string => (
   encodeURIComponent(JSON.stringify(task))
@@ -32,7 +45,14 @@ export const parseTaskIntent = (value: string | null | undefined): LearningTaskI
     const parsed = JSON.parse(decodeURIComponent(value)) as LearningTaskIntent;
     if (!parsed || (parsed.mode !== 'study' && parsed.mode !== 'quiz')) return null;
     if (!parsed.intentType || !parsed.selectionPolicy || !parsed.label) return null;
-    return parsed;
+    const preferredBookIds = normalizeTaskPreferredBookIds(parsed.preferredBookIds);
+    const normalizedTask = { ...parsed };
+    if (preferredBookIds.length > 0) {
+      normalizedTask.preferredBookIds = preferredBookIds;
+    } else {
+      delete normalizedTask.preferredBookIds;
+    }
+    return normalizedTask;
   } catch {
     return null;
   }
@@ -88,13 +108,19 @@ export const createFollowUpSpellingTaskIntent = (bookId: string): LearningTaskIn
   autoStart: true,
 });
 
-export const createTodayFocusTaskIntent = (): LearningTaskIntent => ({
-  mode: 'study',
-  intentType: LearningTaskIntentType.TODAY_FOCUS,
-  label: '今日のクエスト',
-  selectionPolicy: 'DUE_FIRST',
-  limit: DEFAULT_SMART_SESSION_LIMIT,
-});
+export const createTodayFocusTaskIntent = (
+  options: { preferredBookIds?: string[] } = {},
+): LearningTaskIntent => {
+  const preferredBookIds = normalizeTaskPreferredBookIds(options.preferredBookIds);
+  return {
+    mode: 'study',
+    intentType: LearningTaskIntentType.TODAY_FOCUS,
+    label: '今日のクエスト',
+    selectionPolicy: 'DUE_FIRST',
+    limit: DEFAULT_SMART_SESSION_LIMIT,
+    ...(preferredBookIds.length > 0 ? { preferredBookIds } : {}),
+  };
+};
 
 export const createCoachTaskIntent = ({
   recommendedActionType,

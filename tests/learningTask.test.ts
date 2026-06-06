@@ -29,6 +29,15 @@ describe('learning tasks', () => {
     });
   });
 
+  it('carries deduplicated preferred books for Today Focus', () => {
+    expect(createTodayFocusTaskIntent({
+      preferredBookIds: ['book-2', 'book-1', 'book-2', '  ', 'book-3'],
+    })).toMatchObject({
+      intentType: LearningTaskIntentType.TODAY_FOCUS,
+      preferredBookIds: ['book-2', 'book-1', 'book-3'],
+    });
+  });
+
   it('builds a short follow-up spelling check for finished study sessions', () => {
     expect(createFollowUpSpellingTaskIntent('book-1')).toMatchObject({
       mode: 'quiz',

@@ -13,7 +13,6 @@ interface DashboardPlanSectionProps {
   isCompact?: boolean;
   onEditPlan: () => void;
   onGeneratePlan: () => void;
-  onOpenCreateModal: () => void;
 }
 
 const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
@@ -27,7 +26,6 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
   isCompact = false,
   onEditPlan,
   onGeneratePlan,
-  onOpenCreateModal,
 }) => (
   <section className={`rounded-lg border border-medace-100 bg-white shadow-sm ${isCompact ? 'p-5' : 'p-6 md:p-7'}`}>
     <div className="flex items-center justify-between gap-4">
@@ -85,16 +83,8 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
           写真・PDF・テキストからMy単語帳を作れます。
         </p>
-        <div className={`grid gap-3 ${isCompact ? 'mt-3' : 'mt-4 sm:grid-cols-[1fr_auto]'}`}>
-          <div className="rounded-lg border border-white/80 bg-white/80 px-4 py-2.5 text-[13px] leading-relaxed text-slate-600">
-            教科書1ページ分でOK。あとから追加できます。
-          </div>
-          <button
-            onClick={onOpenCreateModal}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
-          >
-            My単語帳を作る
-          </button>
+        <div className={`rounded-lg border border-white/80 bg-white/80 px-4 py-2.5 text-[13px] leading-relaxed text-slate-600 ${isCompact ? 'mt-3' : 'mt-4'}`}>
+          教材を作ると、ここに1日の量と使う教材が表示されます。
         </div>
       </div>
     ) : (
@@ -113,7 +103,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
           className="mt-4 inline-flex items-center gap-2 rounded-lg bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
         >
           {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          プラン作成
+          プランを作る
         </button>
       </div>
     )}

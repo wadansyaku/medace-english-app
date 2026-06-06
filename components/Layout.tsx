@@ -65,6 +65,7 @@ const Layout: React.FC<LayoutProps> = ({
   const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
   const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
   const isPreviewDeployment = runtimeFlags.deployment.isPagesPreviewHost;
+  const isStudentPracticeView = user?.role === UserRole.STUDENT && currentView === 'englishPractice';
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -275,14 +276,24 @@ const Layout: React.FC<LayoutProps> = ({
               <nav className="hidden md:flex gap-1">
                 <button 
                   onClick={() => onChangeView(homeView)}
+                  data-testid="layout-nav-home"
                   className={`rounded-xl px-4 py-3 text-[0.95rem] font-bold transition-colors ${
-                    currentView === homeView || (user.role === UserRole.STUDENT && currentView === 'englishPractice')
+                    currentView === homeView
                       ? 'bg-medace-600 text-slate-950'
                       : 'text-slate-700 hover:bg-medace-50 hover:text-medace-700'
                   }`}
                 >
                   {navLabel}
                 </button>
+                {isStudentPracticeView && (
+                  <span
+                    data-testid="layout-nav-english-practice-current"
+                    aria-current="page"
+                    className="rounded-xl bg-medace-600 px-4 py-3 text-[0.95rem] font-bold text-slate-950"
+                  >
+                    英語演習
+                  </span>
+                )}
               </nav>
 
               <div className="flex items-center gap-2">

@@ -202,9 +202,13 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('dashboard-quicknav-english-practice').click();
 
     await expect(page).toHaveURL(/\/english-practice\/grammar$/);
-    await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
+    await expect(page.getByTestId('student-dashboard')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-practice-focus')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-reference-rail')).toHaveCount(0);
+    await expect(page.getByTestId('english-practice-hub')).toBeVisible();
     await page.getByTestId('english-practice-close').click();
     await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     await page.getByTestId('dashboard-quicknav-library').click();
 
@@ -374,11 +378,8 @@ test.describe('student mobile ux', () => {
       await studentPage.goto('/dashboard', { waitUntil: 'domcontentloaded' });
       await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
-      const coachOverviewTask = studentPage.getByTestId('dashboard-task-overview-coach');
       await expect(studentPage.getByTestId('dashboard-task-overview-rail')).toBeVisible();
-      await expect(coachOverviewTask).toBeVisible();
-      await expect(coachOverviewTask).toContainText('講師');
-      await expect(coachOverviewTask).toContainText('復習を10語始める');
+      await expect(studentPage.getByTestId('dashboard-task-overview-coach')).toHaveCount(0);
       await expect(studentPage.getByTestId('dashboard-task-reference-library')).toBeVisible();
       await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeVisible();
 

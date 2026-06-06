@@ -123,6 +123,51 @@ describe('AI action contract validation', () => {
     });
   });
 
+  it('accepts empty optional learning preference fields for plan generation', () => {
+    const request = validateAiActionRequest({
+      action: 'generateLearningPlan',
+      payload: {
+        grade: 'ADULT',
+        level: 'B1',
+        availableBooks: [
+          {
+            id: 'system-v5',
+            title: 'システム英単語 5訂版',
+            wordCount: 2027,
+            isPriority: false,
+          },
+        ],
+        learningPreference: {
+          userUid: 'student-1',
+          targetExam: '',
+          targetScore: '',
+          examDate: '',
+          weeklyStudyDays: 5,
+          dailyStudyMinutes: 5,
+          weakSkillFocus: '',
+          motivationNote: '',
+          intensity: 'BALANCED',
+          updatedAt: 0,
+        },
+      },
+    });
+
+    expect(request).toMatchObject({
+      action: 'generateLearningPlan',
+      payload: {
+        learningPreference: {
+          targetExam: '',
+          targetScore: '',
+          weeklyStudyDays: 5,
+          dailyStudyMinutes: 5,
+          weakSkillFocus: '',
+          motivationNote: '',
+          intensity: 'BALANCED',
+        },
+      },
+    });
+  });
+
   it('rejects oversized targetWords before metering or provider calls', async () => {
     await expectPreflightRejection({
       action: 'generateAIQuiz',

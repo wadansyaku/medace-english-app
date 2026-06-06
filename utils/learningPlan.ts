@@ -19,6 +19,10 @@ interface BuildFallbackLearningPlanInput {
   now?: Date;
 }
 
+interface NormalizeGeneratedLearningPlanInput extends BuildFallbackLearningPlanInput {
+  plan: Partial<LearningPlan> | null | undefined;
+}
+
 const BASE_DAILY_GOAL: Record<EnglishLevel, number> = {
   [EnglishLevel.A1]: 8,
   [EnglishLevel.A2]: 10,
@@ -34,6 +38,7 @@ const INTENSITY_MULTIPLIER: Record<LearningPreferenceIntensity, number> = {
   [LearningPreferenceIntensity.INTENSIVE]: 1.2,
 };
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const MAX_SELECTED_PLAN_BOOKS = 5;
 
 const toIsoDate = (date: Date): string => formatDateKey(date);
 
@@ -127,6 +132,45 @@ const selectBooks = (
     .slice(0, desiredCount);
 };
 
+const normalizeSelectedBookIds = (
+  selectedBookIds: unknown,
+  availableBooks: BookMetadata[],
+): string[] => {
+  if (!Array.isArray(selectedBookIds)) return [];
+  const validIds = new Set(availableBooks.map((book) => book.id));
+  const normalized: string[] = [];
+
+  selectedBookIds.forEach((bookId) => {
+    if (typeof bookId !== 'string') return;
+    const trimmed = bookId.trim();
+    if (!trimmed || !validIds.has(trimmed) || normalized.includes(trimmed)) return;
+    normalized.push(trimmed);
+  });
+
+  return normalized.slice(0, MAX_SELECTED_PLAN_BOOKS);
+};
+
+const normalizeDailyWordGoal = (value: unknown, fallback: number): number => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return clamp(Math.round(numeric), 8, 36);
+};
+
+const normalizeTargetDate = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string') return fallback;
+  const parsed = parseDate(value);
+  return parsed ? toIsoDate(parsed) : fallback;
+};
+
+const normalizeGoalDescription = (
+  value: unknown,
+  fallback: string,
+): string => {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 240) : fallback;
+};
+
 const buildGoalDescription = (input: {
   grade: UserGrade;
   targetExam?: string;
@@ -198,6 +242,41 @@ export const buildFallbackLearningPlan = ({
     }),
     dailyWordGoal,
     selectedBookIds: selectedBooks.map((book) => book.id),
+    status: 'ACTIVE',
+  };
+};
+
+export const normalizeGeneratedLearningPlan = ({
+  plan,
+  uid,
+  grade,
+  level,
+  availableBooks,
+  learningPreference = null,
+  now = new Date(),
+}: NormalizeGeneratedLearningPlanInput): LearningPlan => {
+  const fallbackPlan = buildFallbackLearningPlan({
+    uid,
+    grade,
+    level,
+    availableBooks,
+    learningPreference,
+    now,
+  });
+  const selectedBookIds = normalizeSelectedBookIds(plan?.selectedBookIds, availableBooks);
+  const normalizedSelectedBookIds = selectedBookIds.length > 0
+    ? selectedBookIds
+    : fallbackPlan.selectedBookIds;
+
+  return {
+    uid,
+    createdAt: typeof plan?.createdAt === 'number' && Number.isFinite(plan.createdAt)
+      ? plan.createdAt
+      : fallbackPlan.createdAt,
+    targetDate: normalizeTargetDate(plan?.targetDate, fallbackPlan.targetDate),
+    goalDescription: normalizeGoalDescription(plan?.goalDescription, fallbackPlan.goalDescription),
+    dailyWordGoal: normalizeDailyWordGoal(plan?.dailyWordGoal, fallbackPlan.dailyWordGoal),
+    selectedBookIds: normalizedSelectedBookIds,
     status: 'ACTIVE',
   };
 };

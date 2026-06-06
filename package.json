@@ -10,6 +10,8 @@
     "dev": "node node_modules/vite/bin/vite.js",
     "build": "node node_modules/vite/bin/vite.js build",
     "preview": "node node_modules/vite/bin/vite.js preview",
+    "release:gate:local": "node scripts/run-release-gate-local.mjs",
+    "release:gate:local:dry": "node scripts/run-release-gate-local.mjs --dry-run",
     "verify:fast": "npm run db:migrations:check-names && npm run db:migrate:verify && npm run typecheck && npm run test:unit",
     "test": "npm run verify:fast && npm run build && npm run test:api",
     "test:unit": "node node_modules/vitest/vitest.mjs run",

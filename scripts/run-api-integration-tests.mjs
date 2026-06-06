@@ -909,6 +909,16 @@ const main = async () => {
       },
     });
 
+    const savedStudentPlan = await orgStudent.storage('getLearningPlan');
+    assert(savedStudentPlan?.selectedBookIds?.[0] === orgBooks[0].id, 'saved learning plan should round-trip selected book ids');
+    assert(savedStudentPlan?.dailyWordGoal === 15, 'saved learning plan should round-trip the daily word goal');
+
+    const studentDashboardAfterPlan = await orgStudent.storage('getDashboardSnapshot');
+    assert(
+      studentDashboardAfterPlan.learningPlan?.selectedBookIds?.[0] === orgBooks[0].id,
+      'student dashboard snapshot should expose the saved learning plan',
+    );
+
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     const orgStudentAfterPlan = orgSnapshot.studentAssignments.find((student) => student.uid === orgStudentUser.uid);
     const todayTrendAfterPlan = findTrendPoint(orgSnapshot, todayDateKey);

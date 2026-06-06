@@ -412,14 +412,14 @@ const validateLearningPreference = (value: unknown): LearningPreference | null |
   const record = value as Record<string, unknown>;
   return {
     ...(value as Partial<LearningPreference>),
-    targetExam: readString(record, 'targetExam', { required: true, max: MAX_MEDIUM_TEXT_CHARS, label: 'learningPreference.targetExam' }),
-    targetScore: readString(record, 'targetScore', { required: true, max: MAX_MEDIUM_TEXT_CHARS, label: 'learningPreference.targetScore' }),
+    targetExam: readString(record, 'targetExam', { max: MAX_MEDIUM_TEXT_CHARS, label: 'learningPreference.targetExam' }) || '',
+    targetScore: readString(record, 'targetScore', { max: MAX_MEDIUM_TEXT_CHARS, label: 'learningPreference.targetScore' }) || '',
     examDate: readString(record, 'examDate', { max: MAX_SHORT_TEXT_CHARS, label: 'learningPreference.examDate' }),
-    weeklyStudyDays: readNumber(record, 'weeklyStudyDays', { required: true, min: 0, max: 7, integer: true, label: 'learningPreference.weeklyStudyDays' }) || 0,
-    dailyStudyMinutes: readNumber(record, 'dailyStudyMinutes', { required: true, min: 0, max: 600, integer: true, label: 'learningPreference.dailyStudyMinutes' }) || 0,
-    weakSkillFocus: readString(record, 'weakSkillFocus', { required: true, max: MAX_LONG_TEXT_CHARS, label: 'learningPreference.weakSkillFocus' }),
-    motivationNote: readString(record, 'motivationNote', { required: true, max: MAX_LONG_TEXT_CHARS, label: 'learningPreference.motivationNote' }),
-    intensity: readEnum(record, 'intensity', Object.values(LearningPreferenceIntensity), { required: true, label: 'learningPreference.intensity' }),
+    weeklyStudyDays: readNumber(record, 'weeklyStudyDays', { min: 0, max: 7, integer: true, label: 'learningPreference.weeklyStudyDays' }) ?? 4,
+    dailyStudyMinutes: readNumber(record, 'dailyStudyMinutes', { min: 0, max: 600, integer: true, label: 'learningPreference.dailyStudyMinutes' }) ?? 20,
+    weakSkillFocus: readString(record, 'weakSkillFocus', { max: MAX_LONG_TEXT_CHARS, label: 'learningPreference.weakSkillFocus' }) || '',
+    motivationNote: readString(record, 'motivationNote', { max: MAX_LONG_TEXT_CHARS, label: 'learningPreference.motivationNote' }) || '',
+    intensity: readEnum(record, 'intensity', Object.values(LearningPreferenceIntensity), { label: 'learningPreference.intensity' }) || LearningPreferenceIntensity.BALANCED,
   } as LearningPreference;
 };
 

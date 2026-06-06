@@ -1,11 +1,14 @@
+import {
+  LearningTaskIntentType,
+} from '../../types';
 import type {
   BookMetadata,
   BookProgress,
   GrammarCurriculumScopeId,
   JapaneseTranslationFeedback,
   LearningHistory,
+  LearningPlan,
   LearningTaskIntent,
-  LearningTaskIntentType,
   MasteryDistribution,
   StudentWeaknessProfile,
   UserProfile,
@@ -24,6 +27,7 @@ import {
   MASTERY_INTERACTION_SOURCE,
 } from '../../shared/learningHistory';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import {
   buildWeaknessProfile,
   deriveWeaknessSignals,
@@ -56,7 +60,60 @@ export interface LearningHistoryContext {
   getBooks: () => Promise<BookMetadata[]>;
   getWordsByBook: (bookId: string) => Promise<WordData[]>;
   getSession: () => Promise<UserProfile | null>;
+  getLearningPlan?: (uid: string) => Promise<LearningPlan | null>;
 }
+
+const resolvePreferredBookIds = async (
+  context: LearningHistoryContext,
+  uid: string,
+  taskIntent?: LearningTaskIntent,
+): Promise<string[]> => {
+  const taskBookIds = normalizeTaskPreferredBookIds(taskIntent?.preferredBookIds);
+  if (taskBookIds.length > 0) return taskBookIds;
+  if (!context.getLearningPlan) return [];
+
+  try {
+    const plan = await context.getLearningPlan(uid);
+    return normalizeTaskPreferredBookIds(plan?.selectedBookIds);
+  } catch {
+    return [];
+  }
+};
+
+const sortWordsByPreferredBookOrder = (
+  words: WordData[],
+  preferredBookIds: string[],
+): WordData[] => {
+  const bookOrder = new Map(preferredBookIds.map((bookId, index) => [bookId, index]));
+  return [...words].sort((left, right) => {
+    const leftOrder = bookOrder.get(left.bookId) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = bookOrder.get(right.bookId) ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    if (left.bookId !== right.bookId) return left.bookId.localeCompare(right.bookId);
+    if (left.number !== right.number) return left.number - right.number;
+    return left.id.localeCompare(right.id);
+  });
+};
+
+const filterBooksByPreferredIds = (
+  books: BookMetadata[],
+  preferredBookIds: string[],
+): BookMetadata[] => {
+  if (preferredBookIds.length === 0) return books;
+  const booksById = new Map(books.map((book) => [book.id, book]));
+  return preferredBookIds
+    .map((bookId) => booksById.get(bookId))
+    .filter((book): book is BookMetadata => Boolean(book));
+};
+
+const filterWordsByPreferredIds = (
+  words: WordData[],
+  preferredBookIds: string[],
+): WordData[] => {
+  if (preferredBookIds.length === 0) return words;
+  const preferredBookIdSet = new Set(preferredBookIds);
+  return words.filter((word) => preferredBookIdSet.has(word.bookId));
+};
 
 export const getUserHistoryRecords = (
   records: StoredLearningHistoryRecord[],
@@ -177,11 +234,17 @@ export const getDailySessionWords = async (
   const historyStore = await context.getStore(STORES.HISTORY);
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);
+  const preferredBookIds = await resolvePreferredBookIds(context, uid, taskIntent);
+  const preferredBookIdSet = new Set(preferredBookIds);
+  const isInPreferredBookScope = (bookId: string): boolean => (
+    preferredBookIds.length === 0 || preferredBookIdSet.has(bookId)
+  );
   const masteryHistories = userHistories.filter((history) => isMasteryHistoryRecord(history));
-  const masteryHistoryExists = masteryHistories.some((history) => isStudyInteractionSource(history.interactionSource));
-  const studiedWordIds = new Set(masteryHistories.map((history) => history.wordId));
+  const scopedMasteryHistories = masteryHistories.filter((history) => isInPreferredBookScope(history.bookId));
+  const masteryHistoryExists = scopedMasteryHistories.some((history) => isStudyInteractionSource(history.interactionSource));
+  const studiedWordIds = new Set(scopedMasteryHistories.map((history) => history.wordId));
   const now = Date.now();
-  const dueHistories = masteryHistories
+  const dueHistories = scopedMasteryHistories
     .filter((history) => isDueMasteryHistory(history, now))
     .sort((left, right) => left.nextReviewDate - right.nextReviewDate);
 
@@ -192,13 +255,23 @@ export const getDailySessionWords = async (
     ]);
     const wordsStore = await context.getStore(STORES.WORDS);
     const allWords = await readAllStoreRecords<WordData>(wordsStore);
+    const scopedBooks = filterBooksByPreferredIds(books, preferredBookIds);
+    const scopedWords = sortWordsByPreferredBookOrder(
+      filterWordsByPreferredIds(allWords, preferredBookIds),
+      preferredBookIds,
+    );
+    if (preferredBookIds.length > 0) {
+      return scopedWords
+        .filter((word) => !studiedWordIds.has(word.id))
+        .slice(0, limit);
+    }
     const selection = selectColdStartSessionWords({
       uid,
       limit,
       grade: sessionUser?.grade,
       level: sessionUser?.englishLevel,
-      books,
-      words: allWords,
+      books: scopedBooks,
+      words: scopedWords,
     });
 
     if (selection.selectedWords.length >= limit) {
@@ -206,7 +279,7 @@ export const getDailySessionWords = async (
     }
 
     const selectedIds = new Set(selection.selectedWords.map((word) => word.id));
-    const fallbackWords = allWords
+    const fallbackWords = scopedWords
       .filter((word) => !selectedIds.has(word.id) && !studiedWordIds.has(word.id))
       .sort((left, right) => (
         left.bookId === right.bookId
@@ -235,27 +308,35 @@ export const getDailySessionWords = async (
       context.getSession(),
       getWeaknessProfile(context, uid),
     ]);
+    const scopedWords = sortWordsByPreferredBookOrder(
+      filterWordsByPreferredIds(allWords, preferredBookIds),
+      preferredBookIds,
+    );
     const bookBandsById = Object.fromEntries(
       books.map((book) => [book.id, getBookProgressionIndex(book)]),
     );
     const targetedWords = typeof taskIntent?.targetBandIndex === 'number'
-      ? allWords.filter((word) => {
+      ? scopedWords.filter((word) => {
         const band = bookBandsById[word.bookId];
         return studiedWordIds.has(word.id)
           ? false
           : band === null || band === undefined || band >= taskIntent.targetBandIndex! - 1;
       })
-      : allWords.filter((word) => !studiedWordIds.has(word.id));
-    const rankedNewWords = rankWeaknessFocusedWords({
-      uid,
-      words: targetedWords,
-      weaknessProfile,
-      grade: sessionUser?.grade,
-      level: sessionUser?.englishLevel,
-      dateKey: formatDateKey(now),
-      bookBandsById,
-    });
-    sessionWords.push(...rankedNewWords.slice(0, limit - sessionWords.length));
+      : scopedWords.filter((word) => !studiedWordIds.has(word.id));
+    const shouldUseSequentialNewWords = taskIntent?.intentType === LearningTaskIntentType.TODAY_FOCUS
+      || preferredBookIds.length > 0;
+    const newWords = shouldUseSequentialNewWords
+      ? targetedWords
+      : rankWeaknessFocusedWords({
+          uid,
+          words: targetedWords,
+          weaknessProfile,
+          grade: sessionUser?.grade,
+          level: sessionUser?.englishLevel,
+          dateKey: formatDateKey(now),
+          bookBandsById,
+        });
+    sessionWords.push(...newWords.slice(0, limit - sessionWords.length));
   }
 
   return sessionWords;
