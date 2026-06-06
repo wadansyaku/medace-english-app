@@ -235,9 +235,15 @@ export const getDailySessionWords = async (
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);
   const preferredBookIds = await resolvePreferredBookIds(context, uid, taskIntent);
-  const preferredBookIdSet = new Set(preferredBookIds);
+  const books = await context.getBooks();
+  const preferredBooks = filterBooksByPreferredIds(books, preferredBookIds);
+  const effectivePreferredBookIds = preferredBookIds.length > 0 && preferredBooks.length === 0
+    ? []
+    : preferredBookIds;
+  const effectiveBooks = effectivePreferredBookIds.length === 0 ? books : preferredBooks;
+  const preferredBookIdSet = new Set(effectivePreferredBookIds);
   const isInPreferredBookScope = (bookId: string): boolean => (
-    preferredBookIds.length === 0 || preferredBookIdSet.has(bookId)
+    effectivePreferredBookIds.length === 0 || preferredBookIdSet.has(bookId)
   );
   const masteryHistories = userHistories.filter((history) => isMasteryHistoryRecord(history));
   const scopedMasteryHistories = masteryHistories.filter((history) => isInPreferredBookScope(history.bookId));
@@ -249,18 +255,14 @@ export const getDailySessionWords = async (
     .sort((left, right) => left.nextReviewDate - right.nextReviewDate);
 
   if (!masteryHistoryExists) {
-    const [books, sessionUser] = await Promise.all([
-      context.getBooks(),
-      context.getSession(),
-    ]);
+    const sessionUser = await context.getSession();
     const wordsStore = await context.getStore(STORES.WORDS);
     const allWords = await readAllStoreRecords<WordData>(wordsStore);
-    const scopedBooks = filterBooksByPreferredIds(books, preferredBookIds);
     const scopedWords = sortWordsByPreferredBookOrder(
-      filterWordsByPreferredIds(allWords, preferredBookIds),
-      preferredBookIds,
+      filterWordsByPreferredIds(allWords, effectivePreferredBookIds),
+      effectivePreferredBookIds,
     );
-    if (preferredBookIds.length > 0) {
+    if (effectivePreferredBookIds.length > 0) {
       return scopedWords
         .filter((word) => !studiedWordIds.has(word.id))
         .slice(0, limit);
@@ -270,7 +272,7 @@ export const getDailySessionWords = async (
       limit,
       grade: sessionUser?.grade,
       level: sessionUser?.englishLevel,
-      books: scopedBooks,
+      books: effectiveBooks,
       words: scopedWords,
     });
 
@@ -309,8 +311,8 @@ export const getDailySessionWords = async (
       getWeaknessProfile(context, uid),
     ]);
     const scopedWords = sortWordsByPreferredBookOrder(
-      filterWordsByPreferredIds(allWords, preferredBookIds),
-      preferredBookIds,
+      filterWordsByPreferredIds(allWords, effectivePreferredBookIds),
+      effectivePreferredBookIds,
     );
     const bookBandsById = Object.fromEntries(
       books.map((book) => [book.id, getBookProgressionIndex(book)]),
@@ -324,7 +326,7 @@ export const getDailySessionWords = async (
       })
       : scopedWords.filter((word) => !studiedWordIds.has(word.id));
     const shouldUseSequentialNewWords = taskIntent?.intentType === LearningTaskIntentType.TODAY_FOCUS
-      || preferredBookIds.length > 0;
+      || effectivePreferredBookIds.length > 0;
     const newWords = shouldUseSequentialNewWords
       ? targetedWords
       : rankWeaknessFocusedWords({

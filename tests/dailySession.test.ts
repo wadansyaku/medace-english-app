@@ -173,6 +173,39 @@ describe('daily session word selection', () => {
     expect(words.map((word) => word.number)).toEqual([1, 2, 3]);
   });
 
+  it('falls back to visible cloud books when saved plan books are no longer accessible', async () => {
+    readAllMock.mockReset();
+    readFirstMock.mockReset();
+    readVisibleBookRowsMock.mockReset();
+    readLearningPlanBookIdsMock.mockReset();
+    readWeaknessProfileMock.mockReset();
+
+    readVisibleBookRowsMock.mockResolvedValueOnce([
+      makeBookRow('book-a'),
+      makeBookRow('book-b'),
+    ]);
+    readLearningPlanBookIdsMock.mockResolvedValueOnce(['stale-book']);
+    readFirstMock.mockResolvedValueOnce({ count: 0 });
+    readAllMock.mockResolvedValueOnce([
+      makeWordRow('book-a', 1),
+      makeWordRow('book-b', 1),
+    ]);
+
+    const words = await handleGetDailySessionWords(
+      { DB: { prepare: vi.fn() } } as any,
+      {
+        id: 'student-1',
+        role: UserRole.STUDENT,
+        grade: UserGrade.SHS1,
+        english_level: EnglishLevel.B1,
+      } as any,
+      2,
+    );
+
+    expect(readLearningPlanBookIdsMock).toHaveBeenCalledWith(expect.anything(), 'student-1');
+    expect(words.map((word) => word.bookId).sort()).toEqual(['book-a', 'book-b']);
+  });
+
   it('falls back to the saved learning plan for local Today Focus sessions', async () => {
     const recordsByStore = new Map<string, unknown[]>([
       [STORES.HISTORY, [] satisfies StoredLearningHistoryRecord[]],
@@ -194,5 +227,25 @@ describe('daily session word selection', () => {
 
     expect(words.map((word) => word.bookId)).toEqual(['book-b', 'book-b', 'book-b']);
     expect(words.map((word) => word.number)).toEqual([1, 2, 3]);
+  });
+
+  it('falls back to visible local books when saved plan books are no longer accessible', async () => {
+    const recordsByStore = new Map<string, unknown[]>([
+      [STORES.HISTORY, [] satisfies StoredLearningHistoryRecord[]],
+      [STORES.WORDS, [
+        makeWord('book-a', 1),
+        makeWord('book-b', 1),
+      ]],
+    ]);
+
+    const words = await getLocalDailySessionWords({
+      getStore: async (storeName) => makeRequestStore(recordsByStore.get(storeName) || []),
+      getBooks: async () => [makeBook('book-a'), makeBook('book-b')],
+      getWordsByBook: async () => [],
+      getSession: async () => makeUser(),
+      getLearningPlan: async () => makeLearningPlan(['stale-book']),
+    }, 'student-1', 2, createTodayFocusTaskIntent());
+
+    expect(words.map((word) => word.bookId).sort()).toEqual(['book-a', 'book-b']);
   });
 });

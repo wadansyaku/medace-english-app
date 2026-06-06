@@ -502,7 +502,12 @@ export const handleGetDailySessionWords = async (
   const limit = ensurePositiveLimit(limitInput, 20);
   const allVisibleBookRows = await readVisibleBookRows(env, user);
   const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
-  const visibleBookRows = filterBookRowsByPreferredIds(allVisibleBookRows, preferredBookIds);
+  const preferredVisibleBookRows = filterBookRowsByPreferredIds(allVisibleBookRows, preferredBookIds);
+  const shouldFallbackToAllVisibleBooks = preferredBookIds.length > 0
+    && preferredVisibleBookRows.length === 0
+    && allVisibleBookRows.length > 0;
+  const effectivePreferredBookIds = shouldFallbackToAllVisibleBooks ? [] : preferredBookIds;
+  const visibleBookRows = shouldFallbackToAllVisibleBooks ? allVisibleBookRows : preferredVisibleBookRows;
   const visibleBookIds = visibleBookRows.map((row) => row.id);
   if (visibleBookIds.length === 0) return [];
 
@@ -523,9 +528,9 @@ export const handleGetDailySessionWords = async (
        ORDER BY w.book_id ASC, w.word_number ASC`,
       ...visibleBookIds,
     );
-    const sortedVisibleRows = sortWordRowsByPreferredBookOrder(allVisibleRows, preferredBookIds);
+    const sortedVisibleRows = sortWordRowsByPreferredBookOrder(allVisibleRows, effectivePreferredBookIds);
 
-    if (preferredBookIds.length > 0) {
+    if (effectivePreferredBookIds.length > 0) {
       return sortedVisibleRows.map(toWordData).slice(0, limit);
     }
 
@@ -589,7 +594,7 @@ export const handleGetDailySessionWords = async (
   );
   const weaknessProfile = await readWeaknessProfile(env, user.id);
   const bookBandsById = Object.fromEntries(visibleBookRows.map((row) => [row.id, getBookProgressionIndex(toBookMetadata(row))]));
-  const sortedNewRows = sortWordRowsByPreferredBookOrder(newRows, preferredBookIds);
+  const sortedNewRows = sortWordRowsByPreferredBookOrder(newRows, effectivePreferredBookIds);
   const targetedNewWords = typeof taskIntent?.targetBandIndex === 'number'
     ? sortedNewRows
       .filter((row) => {
@@ -599,7 +604,7 @@ export const handleGetDailySessionWords = async (
       .map(toWordData)
     : sortedNewRows.map(toWordData);
   const shouldUseSequentialNewWords = taskIntent?.intentType === LearningTaskIntentType.TODAY_FOCUS
-    || preferredBookIds.length > 0;
+    || effectivePreferredBookIds.length > 0;
   const rankedNewWords = shouldUseSequentialNewWords
     ? targetedNewWords
     : rankWeaknessFocusedWords({
