@@ -59,6 +59,17 @@ const makeBookRow = (id: string, title = id): DbBookRow => ({
   created_by: null,
   catalog_source: BookCatalogSource.STEADY_STUDY_ORIGINAL,
   access_scope: BookAccessScope.ALL_PLANS,
+  ledger_source_id: `ledger-${id}`,
+  ledger_rights_status: 'approved',
+  ledger_review_status: 'approved',
+  ledger_content_qa_report: 'content-qa.json',
+  ledger_qa_word_count: 100,
+  ledger_qa_required_blank_rows: 0,
+  ledger_qa_rows_with_sentinel: 0,
+  ledger_qa_sentinel_value_count: 0,
+  ledger_qa_duplicate_headword_count: 0,
+  ledger_qa_source_coverage_rate: 1,
+  ledger_qa_example_pair_coverage_rate: 1,
 });
 
 const makeWordRow = (bookId: string, number: number): DbWordRow => ({
@@ -204,6 +215,43 @@ describe('daily session word selection', () => {
 
     expect(readLearningPlanBookIdsMock).toHaveBeenCalledWith(expect.anything(), 'student-1');
     expect(words.map((word) => word.bookId).sort()).toEqual(['book-a', 'book-b']);
+  });
+
+  it('keeps Today Focus on source-approved cloud books when a saved plan points to review-pending material', async () => {
+    readAllMock.mockReset();
+    readFirstMock.mockReset();
+    readVisibleBookRowsMock.mockReset();
+    readLearningPlanBookIdsMock.mockReset();
+    readWeaknessProfileMock.mockReset();
+
+    readVisibleBookRowsMock.mockResolvedValueOnce([
+      {
+        ...makeBookRow('pending-book'),
+        ledger_rights_status: 'pending',
+        ledger_review_status: 'needs_review',
+      },
+      makeBookRow('approved-book'),
+    ]);
+    readLearningPlanBookIdsMock.mockResolvedValueOnce(['pending-book']);
+    readFirstMock.mockResolvedValueOnce({ count: 0 });
+    readAllMock.mockResolvedValueOnce([
+      makeWordRow('approved-book', 1),
+    ]);
+
+    const words = await handleGetDailySessionWords(
+      { DB: { prepare: vi.fn() } } as any,
+      {
+        id: 'student-1',
+        role: UserRole.STUDENT,
+        grade: UserGrade.SHS1,
+        english_level: EnglishLevel.B1,
+      } as any,
+      1,
+    );
+
+    expect(readAllMock.mock.calls[0]).toContain('approved-book');
+    expect(readAllMock.mock.calls[0]).not.toContain('pending-book');
+    expect(words.map((word) => word.bookId)).toEqual(['approved-book']);
   });
 
   it('falls back to the saved learning plan for local Today Focus sessions', async () => {

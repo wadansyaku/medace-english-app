@@ -17,6 +17,10 @@ import {
   getMasteryProgressSqlCondition,
   MASTERY_INTERACTION_SOURCE,
 } from '../../shared/learningHistory';
+import {
+  evaluateMaterialQualityGate,
+  toMaterialLedgerSnapshot,
+} from '../../shared/materialQuality';
 import { formatDateKey, formatMonthKey, getTodayDateKey, shiftDateKey } from '../../utils/date';
 import { isDemoEmail } from '../../utils/demo';
 import { canAccessOfficialBook as canAccessOfficialBookForPlan, normalizeOfficialBookText } from '../../utils/bookAccess';
@@ -37,6 +41,17 @@ export interface DbBookRow {
   created_by: string | null;
   catalog_source: string | null;
   access_scope: string | null;
+  ledger_source_id?: string | null;
+  ledger_rights_status?: string | null;
+  ledger_review_status?: string | null;
+  ledger_content_qa_report?: string | null;
+  ledger_qa_word_count?: number | null;
+  ledger_qa_required_blank_rows?: number | null;
+  ledger_qa_rows_with_sentinel?: number | null;
+  ledger_qa_sentinel_value_count?: number | null;
+  ledger_qa_duplicate_headword_count?: number | null;
+  ledger_qa_source_coverage_rate?: number | null;
+  ledger_qa_example_pair_coverage_rate?: number | null;
 }
 
 export interface DbWordRow {
@@ -107,7 +122,28 @@ export interface DbAssignmentEventRow {
   created_at: number;
 }
 
-const BOOK_LIST_SQL = 'SELECT * FROM books ORDER BY (created_by IS NOT NULL) ASC, is_priority DESC, title ASC';
+const BOOK_SELECT_SQL = `
+SELECT
+  b.*,
+  m.source_id AS ledger_source_id,
+  m.rights_status AS ledger_rights_status,
+  m.review_status AS ledger_review_status,
+  m.content_qa_report AS ledger_content_qa_report,
+  m.qa_word_count AS ledger_qa_word_count,
+  m.qa_required_blank_rows AS ledger_qa_required_blank_rows,
+  m.qa_rows_with_sentinel AS ledger_qa_rows_with_sentinel,
+  m.qa_sentinel_value_count AS ledger_qa_sentinel_value_count,
+  m.qa_duplicate_headword_count AS ledger_qa_duplicate_headword_count,
+  m.qa_source_coverage_rate AS ledger_qa_source_coverage_rate,
+  m.qa_example_pair_coverage_rate AS ledger_qa_example_pair_coverage_rate
+FROM books b
+LEFT JOIN material_source_ledger m ON m.book_id = b.id
+`;
+
+const BOOK_LIST_SQL = `
+${BOOK_SELECT_SQL}
+ORDER BY (b.created_by IS NOT NULL) ASC, b.is_priority DESC, b.title ASC
+`;
 
 const slugifySegment = (value: string): string => value
   .normalize('NFKC')
@@ -166,16 +202,22 @@ export const buildWordHintImageUrl = (wordId: string, generatedAt?: number | nul
   return `/api/word-hints/${encodeURIComponent(wordId)}/image${version}`;
 };
 
-export const toBookMetadata = (row: DbBookRow): BookMetadata => ({
-  id: row.id,
-  title: row.title,
-  wordCount: row.word_count,
-  isPriority: Boolean(row.is_priority),
-  description: normalizeOfficialBookText(row.description),
-  sourceContext: normalizeOfficialBookText(row.source_context),
-  catalogSource: (row.catalog_source as BookCatalogSource | null) || (row.created_by ? BookCatalogSource.USER_GENERATED : BookCatalogSource.LICENSED_PARTNER),
-  accessScope: (row.access_scope as BookAccessScope | null) || (row.created_by ? BookAccessScope.ALL_PLANS : BookAccessScope.BUSINESS_ONLY),
-});
+export const toBookMetadata = (row: DbBookRow): BookMetadata => {
+  const book: BookMetadata = {
+    id: row.id,
+    title: row.title,
+    wordCount: row.word_count,
+    isPriority: Boolean(row.is_priority),
+    description: normalizeOfficialBookText(row.description),
+    sourceContext: normalizeOfficialBookText(row.source_context),
+    catalogSource: (row.catalog_source as BookCatalogSource | null) || (row.created_by ? BookCatalogSource.USER_GENERATED : BookCatalogSource.LICENSED_PARTNER),
+    accessScope: (row.access_scope as BookAccessScope | null) || (row.created_by ? BookAccessScope.ALL_PLANS : BookAccessScope.BUSINESS_ONLY),
+  };
+  return {
+    ...book,
+    qualityGate: evaluateMaterialQualityGate(book, toMaterialLedgerSnapshot(row)),
+  };
+};
 
 export const toWordData = (row: DbWordRow): WordData => ({
   id: row.id,
@@ -321,7 +363,7 @@ export const getBookOwnership = async (env: AppEnv, bookId: string): Promise<{ i
 );
 
 export const getBookRow = async (env: AppEnv, bookId: string): Promise<DbBookRow | null> => (
-  readFirst<DbBookRow>(env, 'SELECT * FROM books WHERE id = ?', bookId)
+  readFirst<DbBookRow>(env, `${BOOK_SELECT_SQL} WHERE b.id = ?`, bookId)
 );
 
 export const assertBookReadAccess = async (env: AppEnv, user: DbUserRow, bookId: string): Promise<void> => {

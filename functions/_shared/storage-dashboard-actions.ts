@@ -1,6 +1,11 @@
 import { AI_ACTION_ESTIMATES, getSubscriptionPolicy } from '../../config/subscription';
 import { getTokyoMonthRange } from '../../utils/date';
 import { buildMasteryDistribution } from '../../shared/learningHistory';
+import {
+  evaluateMaterialQualityGate,
+  isBookSelectableForToday,
+  toMaterialLedgerSnapshot,
+} from '../../shared/materialQuality';
 import { toPrimaryMissionSnapshot } from '../../shared/missions';
 import {
   AccountOverview,
@@ -12,6 +17,7 @@ import {
   AdminRiskBreakdownItem,
   AdminTrendPoint,
   AdminWordReportSummary,
+  BookCatalogSource,
   BookMetadata,
   BookProgress,
   DashboardSnapshot,
@@ -197,6 +203,18 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
       title: string;
       word_count: number;
       created_by: string | null;
+      catalog_source: string | null;
+      ledger_source_id: string | null;
+      ledger_rights_status: string | null;
+      ledger_review_status: string | null;
+      ledger_content_qa_report: string | null;
+      ledger_qa_word_count: number | null;
+      ledger_qa_required_blank_rows: number | null;
+      ledger_qa_rows_with_sentinel: number | null;
+      ledger_qa_sentinel_value_count: number | null;
+      ledger_qa_duplicate_headword_count: number | null;
+      ledger_qa_source_coverage_rate: number | null;
+      ledger_qa_example_pair_coverage_rate: number | null;
       learner_count: number;
       learned_entries: number;
       average_progress: number;
@@ -207,6 +225,18 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
          b.title AS title,
          b.word_count AS word_count,
          b.created_by AS created_by,
+         b.catalog_source AS catalog_source,
+         m.source_id AS ledger_source_id,
+         m.rights_status AS ledger_rights_status,
+         m.review_status AS ledger_review_status,
+         m.content_qa_report AS ledger_content_qa_report,
+         m.qa_word_count AS ledger_qa_word_count,
+         m.qa_required_blank_rows AS ledger_qa_required_blank_rows,
+         m.qa_rows_with_sentinel AS ledger_qa_rows_with_sentinel,
+         m.qa_sentinel_value_count AS ledger_qa_sentinel_value_count,
+         m.qa_duplicate_headword_count AS ledger_qa_duplicate_headword_count,
+         m.qa_source_coverage_rate AS ledger_qa_source_coverage_rate,
+         m.qa_example_pair_coverage_rate AS ledger_qa_example_pair_coverage_rate,
          COUNT(DISTINCT h.user_id) AS learner_count,
          COUNT(h.word_id) AS learned_entries,
          CASE
@@ -214,10 +244,11 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
            ELSE ROUND((COUNT(h.word_id) * 100.0) / (b.word_count * COUNT(DISTINCT h.user_id)), 1)
          END AS average_progress
        FROM books b
+       LEFT JOIN material_source_ledger m ON m.book_id = b.id
        LEFT JOIN learning_histories h
          ON h.book_id = b.id
         AND ${getMasteryProgressSql('h')}
-       GROUP BY b.id, b.title, b.word_count, b.created_by
+       GROUP BY b.id, b.title, b.word_count, b.created_by, b.catalog_source, m.source_id
        ORDER BY learner_count DESC, average_progress DESC, learned_entries DESC, b.title ASC
        LIMIT 6`,
     ),
@@ -358,6 +389,12 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     learnedEntries: Number(row.learned_entries || 0),
     averageProgress: Number(row.average_progress || 0),
     isOfficial: !row.created_by,
+    qualityGate: evaluateMaterialQualityGate({
+      id: row.book_id,
+      title: row.title,
+      wordCount: Number(row.word_count || 0),
+      catalogSource: row.created_by ? BookCatalogSource.USER_GENERATED : (row.catalog_source as BookMetadata['catalogSource']),
+    }, toMaterialLedgerSnapshot(row)),
   }));
 
   const recentNotifications = recentNotificationRows.map((row) => ({
@@ -744,6 +781,7 @@ export const handleGetPublicMotivationSnapshot = async (env: AppEnv): Promise<Pu
 
 export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise<DashboardSnapshot> => {
   const allBooks = await readVisibleBookRows(env, user);
+  const todaySelectableBooks = allBooks.filter((row) => isBookSelectableForToday(toBookMetadata(row)));
 
   const officialBooks: BookMetadata[] = [];
   const myBooks: BookMetadata[] = [];
@@ -798,7 +836,7 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     : (user.role === UserRole.STUDENT
       ? buildSuggestedPrimaryMission({
           user,
-          books: allBooks,
+          books: todaySelectableBooks,
           learningPlan: learningPlan
             ? {
                 dailyWordGoal: learningPlan.dailyWordGoal,

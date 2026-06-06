@@ -1,5 +1,5 @@
 import React from 'react';
-import { Book, BookOpen, Play, Star, Trash2, Trophy } from 'lucide-react';
+import { AlertTriangle, Book, BookOpen, Play, ShieldCheck, Star, Trash2, Trophy } from 'lucide-react';
 import { BookCatalogSource, type BookMetadata, type BookProgress } from '../../types';
 
 interface BookCardProps {
@@ -22,6 +22,10 @@ const BookCard: React.FC<BookCardProps> = ({
   onSelect,
 }) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
+  const qualityGate = book.qualityGate;
+  const qualityBadgeClass = qualityGate?.isApprovedForLearner
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-amber-200 bg-amber-50 text-amber-800';
 
   return (
     <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
@@ -38,6 +42,15 @@ const BookCard: React.FC<BookCardProps> = ({
             ) : book.isPriority ? (
               <span className="flex items-center gap-1 rounded-full bg-medace-500 px-2 py-1 text-xs font-bold text-slate-950 shadow-sm">
                 <Star className="h-3 w-3 fill-current" /> 推奨
+              </span>
+            ) : null}
+            {!isMine && qualityGate ? (
+              <span
+                className={`flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-bold ${qualityBadgeClass}`}
+                title={qualityGate.summary}
+              >
+                {qualityGate.isApprovedForLearner ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                {qualityGate.label}
               </span>
             ) : null}
             {isMine && (

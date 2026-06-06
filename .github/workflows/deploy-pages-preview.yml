@@ -85,6 +85,21 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node node_modules/wrangler/bin/wrangler.js d1 migrations apply "$CF_D1_BINDING" --remote --env preview
 
+      - name: Generate preview content QA report
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact
+
+      - name: Enforce preview content QA gate
+        run: npm run content:qa:gate -- --input tmp/content-qa/preview-content-qa.json
+
+      - name: Enforce preview source ledger gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"
+
       - name: Deploy preview to Cloudflare Pages
         id: deploy
         env:
@@ -176,7 +191,9 @@ jobs:
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + build)"
+            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + build)"
+            echo "- Content QA Gate: \`passed\`"
+            echo "- Source Ledger Gate: \`passed\`"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Preview Secrets: \`${{ steps.preview-secrets.outputs.names }}\`"
             echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"
@@ -216,7 +233,9 @@ jobs:
               `- Preview Secrets: \`${process.env.PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Required Preview Secrets: \`${process.env.MISSING_REQUIRED_PREVIEW_SECRETS || '(none)'}\``,
               `- Missing Optional Preview Secrets: \`${process.env.MISSING_OPTIONAL_PREVIEW_SECRETS || '(none)'}\``,
-              '- Verification: verify:fast + API integration tests + full smoke suite + cf:doctor',
+              '- Verification: verify:fast + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate',
+              '- Source Ledger Gate: `passed`',
+              '- Content QA Gate: `passed`',
               '- Schema: remote preview D1 migrations applied before deploy.',
             ].join('\n');
 

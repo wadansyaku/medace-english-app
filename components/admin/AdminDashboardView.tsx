@@ -433,7 +433,14 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="font-bold text-slate-900">{book.title}</div>
-                          <div className="mt-1 text-xs text-slate-500">{book.isOfficial ? '公式教材' : '独自教材'} / {book.wordCount.toLocaleString()} 語</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span>{book.isOfficial ? '公式教材' : '独自教材'} / {book.wordCount.toLocaleString()} 語</span>
+                            {book.qualityGate ? (
+                              <span className={`rounded-full border px-2 py-0.5 font-bold ${book.qualityGate.isApprovedForLearner ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                                {book.qualityGate.label}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                         <span className="rounded-full border border-medace-200 bg-white px-2.5 py-1 text-xs font-bold text-medace-800">
                           平均進行 {book.averageProgress.toFixed(0)}%

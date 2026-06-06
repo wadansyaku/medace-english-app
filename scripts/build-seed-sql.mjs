@@ -11,6 +11,20 @@ const DEFAULT_ORIGINAL_CATALOG_SOURCE = 'STEADY_STUDY_ORIGINAL';
 const DEFAULT_ORIGINAL_ACCESS_SCOPE = 'BUSINESS_ONLY';
 const DEFAULT_LICENSED_CATALOG_SOURCE = 'LICENSED_PARTNER';
 const DEFAULT_LICENSED_ACCESS_SCOPE = 'BUSINESS_ONLY';
+const BLOCKED_CONTENT_MARKERS = [
+  '[未抽出]',
+];
+const CSV_HEADER_ALIASES = {
+  word: ['単語', 'Word', 'word', 'headword', 'headword_norm'],
+  definition: ['日本語訳', 'Meaning', 'meaning', 'definition', 'meaning_ja_short', 'meaning_ja'],
+  exampleSentence: ['exampleSentence', 'ExampleSentence', 'example_sentence', '例文', '英文例文', 'example_en'],
+  exampleMeaning: ['exampleMeaning', 'ExampleMeaning', 'example_meaning', '例文訳', '例文日本語訳', 'example_ja'],
+  category: ['category', 'カテゴリ', '大分類', 'stage_label'],
+  subcategory: ['subcategory', '小分類', 'grade_bucket_default_label'],
+  section: ['section', 'セクション', 'source_primary_title', 'source_primary_name', 'source_primary_label'],
+  sourceSheet: ['sourceSheet', 'source_sheet', 'sheet', 'シート', '出典シート'],
+  sourceEntryId: ['sourceEntryId', 'source_entry_id', 'entry_id', 'source_primary_number', '出典番号', 'sourceid', 'source_id'],
+};
 const BALANCED_ORIGINAL_LEVELS = [
   { title: 'レベル1', audience: '中1目安' },
   { title: 'レベル2', audience: '中2目安' },
@@ -256,6 +270,71 @@ const sqlValue = (value) => {
   return `'${String(value).replace(/'/g, "''")}'`;
 };
 
+const pickFirst = (row, keys) => {
+  for (const key of keys) {
+    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') {
+      return String(row[key]).trim();
+    }
+  }
+  return '';
+};
+
+const normalizeOptionalText = (value) => {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+};
+
+const normalizeOptionalInteger = (value) => {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const toCoverageRate = (coveredCount, totalCount) => (
+  totalCount > 0 ? Math.round((coveredCount / totalCount) * 10000) / 10000 : 0
+);
+
+const countDuplicateHeadwords = (words) => {
+  const counts = new Map();
+  words.forEach((word) => {
+    const key = String(word.searchKey || word.word || '').trim().toLowerCase();
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+};
+
+const buildMaterialLedgerInsert = (group, now) => {
+  const isApprovedOriginal = group.catalogSource === originalCatalogSource || group.catalogSource === DEFAULT_ORIGINAL_CATALOG_SOURCE;
+  const sourceCoverageRate = toCoverageRate(
+    group.words.filter((word) => word.sourceSheet && Number.isFinite(word.sourceEntryId)).length,
+    group.words.length,
+  );
+  const examplePairCoverageRate = toCoverageRate(
+    group.words.filter((word) => word.exampleSentence && word.exampleMeaning).length,
+    group.words.length,
+  );
+  return `INSERT INTO material_source_ledger (source_id, book_id, catalog_source, book_title, edition, rights_status, review_status, source_file, extracted_at, transform_log, content_qa_report, qa_word_count, qa_required_blank_rows, qa_rows_with_sentinel, qa_sentinel_value_count, qa_duplicate_headword_count, qa_source_coverage_rate, qa_example_pair_coverage_rate, notes, created_at, updated_at) VALUES (${sqlValue(`ledger-${group.id}`)}, ${sqlValue(group.id)}, ${sqlValue(group.catalogSource)}, ${sqlValue(group.title)}, 'seed-sql', ${sqlValue(isApprovedOriginal ? 'approved' : 'pending')}, ${sqlValue(isApprovedOriginal ? 'approved' : 'needs_review')}, ${sqlValue(group.sourceContext || 'seed-sql')}, ${sqlValue(new Date(now).toISOString())}, 'scripts/build-seed-sql.mjs', 'seed-sql-inline-content-qa', ${group.words.length}, 0, 0, 0, ${countDuplicateHeadwords(group.words)}, ${sourceCoverageRate}, ${examplePairCoverageRate}, ${sqlValue(isApprovedOriginal ? 'Steady Study original seed. Required fields were normalized and blocked markers were rejected before storage.' : 'Seeded official material registered for review. Rights evidence and source granularity must be approved before Today Focus selection.')}, ${now}, ${now}) ON CONFLICT(book_id) DO UPDATE SET source_id = excluded.source_id, catalog_source = excluded.catalog_source, book_title = excluded.book_title, edition = excluded.edition, rights_status = excluded.rights_status, review_status = excluded.review_status, source_file = excluded.source_file, extracted_at = excluded.extracted_at, transform_log = excluded.transform_log, content_qa_report = excluded.content_qa_report, qa_word_count = excluded.qa_word_count, qa_required_blank_rows = excluded.qa_required_blank_rows, qa_rows_with_sentinel = excluded.qa_rows_with_sentinel, qa_sentinel_value_count = excluded.qa_sentinel_value_count, qa_duplicate_headword_count = excluded.qa_duplicate_headword_count, qa_source_coverage_rate = excluded.qa_source_coverage_rate, qa_example_pair_coverage_rate = excluded.qa_example_pair_coverage_rate, notes = excluded.notes, updated_at = excluded.updated_at;`;
+};
+
+const hasBlockedContentMarker = (value) => {
+  const normalized = String(value || '').normalize('NFKC').trim();
+  return BLOCKED_CONTENT_MARKERS.some((marker) => normalized.includes(marker));
+};
+
+const assertAllowedRequiredContent = ({ inputBasename, bookName, rowIndex, word, definition }) => {
+  const blockedFields = [
+    ['word', word],
+    ['definition', definition],
+  ].filter(([, value]) => hasBlockedContentMarker(value));
+
+  if (blockedFields.length === 0) return;
+
+  const fieldList = blockedFields.map(([field]) => field).join(', ');
+  throw new Error(
+    `Blocked content marker found in ${inputBasename} row ${rowIndex + 2} (${bookName}): ${fieldList}. Re-extract the source before building seed SQL.`,
+  );
+};
+
 const getDatasetLabel = (catalogSource) => {
   if (catalogSource === 'STEADY_STUDY_ORIGINAL') return 'Steady Study Original';
   if (catalogSource === 'LICENSED_PARTNER') return '既存公式教材';
@@ -360,6 +439,14 @@ for (const dataset of datasets) {
       : (row['日本語訳'] || row['Meaning'] || '').trim();
     if (!word || !definition) return;
 
+    assertAllowedRequiredContent({
+      inputBasename,
+      bookName,
+      rowIndex: index,
+      word,
+      definition,
+    });
+
     const groupKey = `${dataset.catalogSource}:${bookName}`;
     if (!grouped.has(groupKey)) {
       grouped.set(groupKey, {
@@ -386,6 +473,7 @@ for (const dataset of datasets) {
       ? (row['headword_norm'] || word).trim().toLowerCase()
       : word.toLowerCase();
     const wordIdSuffix = row['entry_id'] || row['source_primary_number'] || row['単語番号'] || number;
+    const sourceSheet = normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.sourceSheet)) || inputBasename;
 
     group.words.push({
       id: `${group.id}_${wordIdSuffix}_${index}`,
@@ -394,6 +482,13 @@ for (const dataset of datasets) {
       word,
       definition,
       searchKey,
+      category: normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.category)),
+      subcategory: normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.subcategory)),
+      section: normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.section)),
+      sourceSheet,
+      sourceEntryId: normalizeOptionalInteger(pickFirst(row, CSV_HEADER_ALIASES.sourceEntryId)),
+      exampleSentence: normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.exampleSentence)),
+      exampleMeaning: normalizeOptionalText(pickFirst(row, CSV_HEADER_ALIASES.exampleMeaning)),
     });
     totalImportedWords += 1;
   });
@@ -409,6 +504,7 @@ const lines = [
   'DELETE FROM word_reports;',
   'DELETE FROM learning_histories;',
   'DELETE FROM words;',
+  'DELETE FROM material_source_ledger;',
   'DELETE FROM books;',
 ];
 
@@ -423,10 +519,11 @@ for (const group of [...grouped.values()].sort((left, right) => {
   lines.push(
     `INSERT INTO books (id, title, word_count, is_priority, description, source_context, created_by, catalog_source, access_scope, created_at, updated_at) VALUES (${sqlValue(group.id)}, ${sqlValue(group.title)}, ${group.words.length}, ${/duo/i.test(group.title) ? 1 : 0}, ${sqlValue(group.description)}, ${sqlValue(group.sourceContext)}, NULL, ${sqlValue(group.catalogSource)}, ${sqlValue(group.accessScope)}, ${now}, ${now});`
   );
+  lines.push(buildMaterialLedgerInsert(group, now));
 
   group.words.forEach((word) => {
     lines.push(
-      `INSERT INTO words (id, book_id, word_number, word, definition, search_key, example_sentence, example_meaning, is_reported, created_at, updated_at) VALUES (${sqlValue(word.id)}, ${sqlValue(word.bookId)}, ${word.number}, ${sqlValue(word.word)}, ${sqlValue(word.definition)}, ${sqlValue(word.searchKey)}, NULL, NULL, 0, ${now}, ${now});`
+      `INSERT INTO words (id, book_id, word_number, word, definition, search_key, category, subcategory, section, source_sheet, source_entry_id, example_sentence, example_meaning, is_reported, created_at, updated_at) VALUES (${sqlValue(word.id)}, ${sqlValue(word.bookId)}, ${word.number}, ${sqlValue(word.word)}, ${sqlValue(word.definition)}, ${sqlValue(word.searchKey)}, ${sqlValue(word.category)}, ${sqlValue(word.subcategory)}, ${sqlValue(word.section)}, ${sqlValue(word.sourceSheet)}, ${sqlValue(word.sourceEntryId)}, ${sqlValue(word.exampleSentence)}, ${sqlValue(word.exampleMeaning)}, 0, ${now}, ${now});`
     );
   });
 }

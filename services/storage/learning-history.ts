@@ -28,6 +28,7 @@ import {
 } from '../../shared/learningHistory';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
+import { isBookSelectableForToday } from '../../shared/materialQuality';
 import {
   buildWeaknessProfile,
   deriveWeaknessSignals,
@@ -235,7 +236,7 @@ export const getDailySessionWords = async (
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);
   const preferredBookIds = await resolvePreferredBookIds(context, uid, taskIntent);
-  const books = await context.getBooks();
+  const books = (await context.getBooks()).filter(isBookSelectableForToday);
   const preferredBooks = filterBooksByPreferredIds(books, preferredBookIds);
   const effectivePreferredBookIds = preferredBookIds.length > 0 && preferredBooks.length === 0
     ? []

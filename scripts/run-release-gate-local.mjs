@@ -44,7 +44,7 @@ const runCommand = (command, commandArgs) => new Promise((resolve) => {
   });
 });
 
-const createSteps = (d1PersistDir) => {
+const createSteps = (d1PersistDir, contentQaReportPath) => {
   const migrationReplay = createNodeToolCommand('wrangler', [
     'd1',
     'migrations',
@@ -55,6 +55,7 @@ const createSteps = (d1PersistDir) => {
     d1PersistDir,
   ]);
   const viteBuild = createNodeToolCommand('vite', ['build']);
+  const d1Database = process.env.CF_D1_DATABASE || 'medace-db';
 
   return [
     {
@@ -98,6 +99,34 @@ const createSteps = (d1PersistDir) => {
       args: ['scripts/cf-doctor.mjs'],
     },
     {
+      label: 'Remote D1 content QA report',
+      command: process.execPath,
+      args: [
+        'scripts/analysis/run-d1-content-qa.mjs',
+        '--remote',
+        '--database',
+        d1Database,
+        '--output',
+        contentQaReportPath,
+        '--compact',
+      ],
+    },
+    {
+      label: 'Content QA blocking check',
+      command: process.execPath,
+      args: ['scripts/check-content-qa-report.mjs', '--input', contentQaReportPath],
+    },
+    {
+      label: 'Remote D1 source ledger gate',
+      command: process.execPath,
+      args: [
+        'scripts/analysis/check-d1-material-source-ledger.mjs',
+        '--remote',
+        '--database',
+        d1Database,
+      ],
+    },
+    {
       label: 'Build deploy artifact',
       command: viteBuild.command,
       args: viteBuild.args,
@@ -106,13 +135,17 @@ const createSteps = (d1PersistDir) => {
 };
 
 let persistDir;
+let contentQaReportPath;
 
 try {
   persistDir = dryRun
     ? '<temp-d1-persist-dir>'
     : await mkdtemp(path.join(os.tmpdir(), 'medace-release-gate-'));
+  contentQaReportPath = persistDir === '<temp-d1-persist-dir>'
+    ? '<temp-content-qa-report>'
+    : path.join(persistDir, 'content-qa-report.json');
 
-  const steps = createSteps(persistDir);
+  const steps = createSteps(persistDir, contentQaReportPath);
 
   console.log(dryRun ? 'Local release gate dry run:' : 'Local release gate:');
   steps.forEach((step, index) => {

@@ -22,6 +22,7 @@ import {
   isWritingReturnedForMission,
   toPrimaryMissionSnapshot,
 } from '../../shared/missions';
+import { isBookSelectableForToday } from '../../shared/materialQuality';
 import { requireActiveOrganizationContext, appendOrganizationAuditLog } from './organization-memberships';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
 import { recordProductEventForUser } from './product-events';
@@ -31,7 +32,9 @@ import { HttpError } from './http';
 import {
   readAll,
   readFirst,
+  getBookRow,
   toTokyoDateKey,
+  toBookMetadata,
 } from './storage-support';
 
 interface DbMissionBoardRow {
@@ -666,9 +669,14 @@ export const handleCreateWeeklyMission = async (
   const rationale = (payload.rationale || '').trim() || '今週の学習継続を戻すための週次ミッションです。';
   let bookTitle = payload.bookTitle?.trim() || '';
 
-  if (payload.bookId && !bookTitle) {
-    const book = await readFirst<{ title: string }>(env, 'SELECT title FROM books WHERE id = ?', payload.bookId);
-    bookTitle = book?.title || '';
+  if (payload.bookId) {
+    const book = await getBookRow(env, payload.bookId);
+    if (!book) throw new HttpError(404, '紐づける教材が見つかりません。');
+    const metadata = toBookMetadata(book);
+    if (!isBookSelectableForToday(metadata)) {
+      throw new HttpError(400, 'source ledger と content QA を通過した教材だけをミッションに紐づけできます。');
+    }
+    bookTitle = bookTitle || book.title || '';
   }
 
   let writingPromptTitle: string | undefined;

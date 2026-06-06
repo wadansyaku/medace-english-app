@@ -167,17 +167,18 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
         <div className="mt-8 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={onStartSpellingCheck}
+            data-testid="study-finish-exit"
+            onClick={onExit}
             className="rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
           >
-            スペルチェックを5問
+            ダッシュボードに戻る
           </button>
           <button
             type="button"
-            onClick={onExit}
+            onClick={onStartSpellingCheck}
             className="rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700 transition-all hover:border-medace-300 hover:text-medace-700"
           >
-            ダッシュボードに戻る
+            スペル5問
           </button>
         </div>
       </div>

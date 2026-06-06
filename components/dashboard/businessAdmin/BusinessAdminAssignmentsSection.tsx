@@ -379,7 +379,13 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                       >
                         <option value="">smart-session に任せる</option>
                         {books.map((book) => (
-                          <option key={book.id} value={book.id}>{book.title}</option>
+                          <option
+                            key={book.id}
+                            value={book.id}
+                            disabled={book.qualityGate ? !book.qualityGate.isSelectableForToday : false}
+                          >
+                            {book.title}{book.qualityGate ? ` / ${book.qualityGate.label}` : ''}
+                          </option>
                         ))}
                       </select>
                     </div>

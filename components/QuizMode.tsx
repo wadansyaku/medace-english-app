@@ -42,7 +42,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
   };
 
   const headerTitle = controller.screen === 'SETUP'
-    ? 'テスト条件を決める'
+    ? '5問クイズ'
     : controller.screen === 'READY'
       ? 'この条件で始める'
       : controller.screen === 'RUNNING'
@@ -50,7 +50,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
         : '結果を見る';
 
   const headerSubtitle = controller.screen === 'SETUP'
-    ? '出題パターン、方向、問題数を先に固定してから始めます。'
+    ? '必要なときだけ条件を変えて、すぐ始めます。'
     : controller.screen === 'READY'
       ? '条件を確認してから開始します。設定と出題はこの画面で分けます。'
       : controller.activeSummary;
@@ -91,7 +91,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           minWordNumber={controller.minWordNumber}
           maxWordNumber={controller.maxWordNumber}
           onUpdateSetupConfig={controller.updateSetupConfig}
-          onAdvanceToReady={controller.goToReady}
+          onAdvanceToReady={() => controller.startQuiz(controller.setupConfig)}
         />
       )}
 

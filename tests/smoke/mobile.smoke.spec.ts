@@ -42,6 +42,13 @@ const dismissAnnouncementModalIfPresent = async (page: Page) => {
   await expect(modal).toHaveCount(0);
 };
 
+const startQuizFromSetup = async (page: Page) => {
+  const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta);
+  await expect(primaryCta).toBeEnabled();
+  await primaryCta.click();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView)).toBeVisible();
+};
+
 const demoLoginByPage = async (
   page: Page,
   payload: { role: 'STUDENT' | 'INSTRUCTOR'; organizationRole?: 'STUDENT' | 'GROUP_ADMIN' },
@@ -486,11 +493,7 @@ test.describe('student mobile ux', () => {
         maxScrollHeight: viewport.quizSetupScrollHeight,
       });
 
-      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta)).toBeEnabled();
-      await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta).click();
-      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizReadyView)).toBeVisible();
-      await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizReadyStart).click();
-      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView)).toBeVisible();
+      await startQuizFromSetup(page);
       await expect(page.getByText(/第 1 問 \/ 5/)).toBeVisible();
 
       await expectMobileReadableSurface(page, {
@@ -811,11 +814,7 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('quiz-advanced-settings-toggle').click();
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSelectionLearnedOnly).click();
     await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
-    await page.getByTestId('quiz-setup-primary-cta').click();
-
-    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
-    await page.getByTestId('quiz-ready-start').click();
-    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+    await startQuizFromSetup(page);
 
     await answerSeededQuizQuestion(page);
     await expect(page.getByText(/第 2 問/)).toBeVisible();
@@ -840,10 +839,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
-    await page.getByTestId('quiz-setup-primary-cta').click();
-    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
-    await page.getByTestId('quiz-ready-start').click();
-    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+    await startQuizFromSetup(page);
 
     await answerSeededQuizQuestion(page, false);
     await expect(page.getByText(/第 2 問/)).toBeVisible();
@@ -889,10 +885,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
-    await page.getByTestId('quiz-setup-primary-cta').click();
-    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
-    await page.getByTestId('quiz-ready-start').click();
-    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+    await startQuizFromSetup(page);
 
     await answerSeededQuizQuestion(page, false);
     await expect(page.getByText(/第 2 問/)).toBeVisible();
@@ -930,10 +923,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
-    await page.getByTestId('quiz-setup-primary-cta').click();
-    await expect(page.getByTestId('quiz-ready-view')).toBeVisible();
-    await page.getByTestId('quiz-ready-start').click();
-    await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+    await startQuizFromSetup(page);
 
     await page.getByTestId('quiz-back-button').click();
     await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizExitConfirmDialog)).toBeVisible();

@@ -99,9 +99,14 @@ describe('release hygiene contracts', () => {
 
     expect(packageJson.scripts['release:gate:local']).toBe('node scripts/run-release-gate-local.mjs');
     expect(packageJson.scripts['release:gate:local:dry']).toBe('node scripts/run-release-gate-local.mjs --dry-run');
+    expect(packageJson.scripts['content:qa:gate']).toBe('node scripts/check-content-qa-report.mjs');
+    expect(packageJson.scripts['content:source-ledger:d1']).toBe('node scripts/analysis/check-d1-material-source-ledger.mjs');
     expect(localGate).toContain('--dry-run');
     expect(localGate).toContain("'scripts/run-smoke-tests.mjs', '--suite', 'full'");
     expect(localGate).toContain("'scripts/cf-doctor.mjs'");
+    expect(localGate).toContain("'scripts/analysis/run-d1-content-qa.mjs'");
+    expect(localGate).toContain("'scripts/check-content-qa-report.mjs'");
+    expect(localGate).toContain("'scripts/analysis/check-d1-material-source-ledger.mjs'");
     expect(localGate).toContain('Full Playwright smoke suite');
     expectTextInOrder(localGate, [
       'Migration filename check',
@@ -112,6 +117,9 @@ describe('release hygiene contracts', () => {
       'API integration tests',
       'Full Playwright smoke suite',
       'Cloudflare configuration doctor',
+      'Remote D1 content QA report',
+      'Content QA blocking check',
+      'Remote D1 source ledger gate',
       'Build deploy artifact',
     ]);
     const smokeRunner = readText('scripts/run-smoke-tests.mjs');
@@ -137,6 +145,26 @@ describe('release hygiene contracts', () => {
     expectTextInOrder(previewWorkflow, workflowGateOrder);
     expect(productionWorkflow).toContain('local release gate equivalent');
     expect(previewWorkflow).toContain('local release gate equivalent');
+    expectTextInOrder(productionWorkflow, [
+      'name: Apply remote D1 migrations',
+      'name: Generate production content QA report',
+      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact',
+      'name: Enforce production content QA gate',
+      'run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json',
+      'name: Enforce production source ledger gate',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"',
+      'name: Deploy to Cloudflare Pages',
+    ]);
+    expectTextInOrder(previewWorkflow, [
+      'name: Apply remote preview D1 migrations',
+      'name: Generate preview content QA report',
+      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact',
+      'name: Enforce preview content QA gate',
+      'run: npm run content:qa:gate -- --input tmp/content-qa/preview-content-qa.json',
+      'name: Enforce preview source ledger gate',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"',
+      'name: Deploy preview to Cloudflare Pages',
+    ]);
     expect(productionWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
     expect(previewWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
     expect(productionWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
@@ -144,8 +172,12 @@ describe('release hygiene contracts', () => {
 
     expect(readme).toContain('npm run release:gate:local');
     expect(readme).toContain('node scripts/run-smoke-tests.mjs --suite full');
+    expect(readme).toContain('content QA gate');
+    expect(readme).toContain('source ledger gate');
     expect(runbook).toContain('npm run release:gate:local');
     expect(runbook).toContain('node scripts/run-smoke-tests.mjs --suite full');
+    expect(runbook).toContain('content QA gate');
+    expect(runbook).toContain('source ledger gate');
   });
 
   it('keeps release scripts referenced by package.json tracked in git', () => {
