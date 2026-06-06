@@ -46,10 +46,10 @@ function HelpCircleIcon() {
 }
 
 const RATING_OPTIONS = [
-  { id: 0, label: 'もう一度', className: 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
-  { id: 1, label: '難しい', className: 'border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100', icon: <HelpCircleIcon /> },
-  { id: 2, label: '普通', className: 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
-  { id: 3, label: '簡単', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
+  { id: 0, label: 'もう一回', className: 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
+  { id: 1, label: 'あとで復習', className: 'border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100', icon: <HelpCircleIcon /> },
+  { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
+  { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
 ];
 
 const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask }) => {

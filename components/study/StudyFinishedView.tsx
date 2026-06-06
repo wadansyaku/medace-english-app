@@ -55,27 +55,9 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
           </section>
 
           <section className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next Action</div>
-            <div className="mt-3 grid gap-3">
-              <div className="rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
-                <div className="text-sm font-bold text-slate-900">次の復習タイミング</div>
-                <div className="mt-1 text-sm leading-relaxed text-slate-600">{nextReviewMessage}</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-sm font-bold text-slate-900">明日の入り方</div>
-                <div className="mt-1 text-sm leading-relaxed text-slate-600">
-                  最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。
-                </div>
-              </div>
-              <div className="rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4">
-                <div className="text-sm font-bold text-slate-900">今日の弱点フォーカス</div>
-                <div className="mt-1 text-sm leading-relaxed text-slate-600">{weaknessSummary}</div>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[28px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review Preview</div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next</div>
+            <h3 className="mt-1 text-lg font-black text-slate-950">次に見る単語</h3>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500">{nextReviewMessage}</p>
             {reviewPreview.length > 0 ? (
               <div className="mt-3 space-y-3">
                 {reviewPreview.map((word) => (
@@ -93,24 +75,31 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
                 もう一度に回す単語はありません。このまま次の学習に進めます。
               </div>
             )}
+            <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">くわしく見る</summary>
+              <div className="mt-3 grid gap-3 text-sm leading-relaxed text-slate-600">
+                <p>明日は最初の3分だけ、今日の苦手カードから触ると続けやすいです。</p>
+                <p>{weaknessSummary}</p>
+              </div>
+            </details>
           </section>
         </div>
 
         <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur">
           <div className="grid gap-2">
             <button
-              type="button"
-              onClick={onStartSpellingCheck}
-              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
-            >
-              スペルチェックを5問
-            </button>
-            <button
               data-testid="study-finish-exit"
               onClick={onExit}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700 transition-all hover:border-medace-300 hover:text-medace-700"
+              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
             >
               ダッシュボードに戻る
+            </button>
+            <button
+              type="button"
+              onClick={onStartSpellingCheck}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-6 py-3 font-bold text-slate-700 transition-all hover:border-medace-300 hover:text-medace-700"
+            >
+              スペル5問
             </button>
           </div>
         </MobileStickyActionBar>

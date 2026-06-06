@@ -42,14 +42,15 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
         </button>
       }
     >
-      <section className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
+      <section className="grid gap-3 xl:grid-cols-[0.92fr_1.08fr] xl:gap-4">
         <div className="space-y-4">
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-xl md:p-7">
+          <div data-testid="onboarding-result-mobile-hero" className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl md:rounded-[32px] md:p-7">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-bold text-slate-400">診断結果</p>
                 <h2 className="mt-2 text-[1.85rem] font-black tracking-tight text-slate-950 md:text-[2.5rem]">
-                  推定スタート帯は {finalLevel}
+                  <span className="sm:hidden">推定 {finalLevel}</span>
+                  <span className="hidden sm:inline">推定スタート帯は {finalLevel}</span>
                 </h2>
               </div>
               {isRetake && onCancel && (
@@ -63,7 +64,8 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
               )}
             </div>
 
-            <p className="mt-3 text-sm leading-relaxed text-slate-600 md:text-base">{result.summaryBody}</p>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:hidden">今日の1セットから始めます。</p>
+            <p className="mt-3 hidden text-sm leading-relaxed text-slate-600 sm:block md:text-base">{result.summaryBody}</p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <div className={`rounded-[28px] border px-5 py-5 ${LEVEL_BADGE_STYLE[finalLevel]}`}>
@@ -71,7 +73,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
                 <div className="mt-2 text-4xl font-black tracking-tight">{finalLevel}</div>
                 <div className="mt-1 text-sm font-medium">{result.summaryTitle}</div>
               </div>
-              <div className="rounded-[28px] border border-medace-100 bg-medace-50/75 px-5 py-5">
+              <div className="hidden rounded-[28px] border border-medace-100 bg-medace-50/75 px-5 py-5 sm:block">
                 <div className="text-[11px] font-bold text-slate-400">判定の安定度</div>
                 <div className="mt-2 text-2xl font-black text-slate-900">{result.confidence === 'HIGH' ? '高め' : '標準'}</div>
                 <div className="mt-1 text-sm text-slate-600">{result.correctCount} / {result.totalQuestions} 問正解</div>
@@ -79,28 +81,26 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
               </div>
             </div>
 
-            <div className="mt-4 rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-medace-900/80">
+            <div className="mt-4 hidden rounded-[28px] border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-medace-900/80 sm:block">
               {result.alignmentNote}
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-medace-200 bg-medace-50 p-5 text-slate-950 shadow-[0_18px_44px_rgba(255,122,0,0.12)] md:p-7">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700">おすすめペース</div>
+          <div data-testid="onboarding-result-daily-set" className="rounded-[24px] border border-medace-200 bg-medace-50 p-4 text-slate-950 shadow-[0_18px_44px_rgba(255,122,0,0.12)] md:rounded-[32px] md:p-7">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-medace-700">
+              <span className="sm:hidden">今日の1セット</span>
+              <span className="hidden sm:inline">おすすめペース</span>
+            </div>
             <div className="mt-3 text-4xl font-black tracking-tight">
               {result.recommendedDailyGoal}
               <span className="ml-1 text-lg text-slate-600">語 / 日</span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+            <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:hidden">
+              まずはこの量で始めます。
+            </p>
+            <p className="mt-3 hidden text-sm leading-relaxed text-slate-600 sm:block">
               最初の 2 週間は、このペースで復習を崩さず回せるかを優先してください。詰め込みより、翌日も再現できることが重要です。
             </p>
-          </div>
-
-          <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Next Step</div>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">次の一手</h3>
-            <div className="mt-4 rounded-2xl border border-medace-100 bg-[#fff8ef] px-4 py-4 text-sm leading-relaxed text-slate-700">
-              {result.nextFocus[0] || 'まずはこのレベルで 1 日分の学習を始めましょう。'}
-            </div>
           </div>
 
           {isRetake && historySummary && (
@@ -136,7 +136,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
                   <Sparkles className="h-5 w-5 text-medace-600" />
                   <div>
                     <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Breakdown</div>
-                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">診断の内訳を見る</h3>
+                    <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">内訳を見る</h3>
                   </div>
                 </div>
               </summary>
@@ -183,7 +183,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
             <details className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
               <summary className="cursor-pointer list-none">
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Skill Review</div>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">スキル別コメントを見る</h3>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">コメントを見る</h3>
               </summary>
               <div className="mt-5 grid gap-3">
                 {result.skillSummaries.map((summary) => (
@@ -249,7 +249,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
             <details className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:hidden">
               <summary className="cursor-pointer list-none">
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Review</div>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">見直すと効く問題を見る</h3>
+                <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">復習問題を見る</h3>
               </summary>
               <div className="mt-5 space-y-3">
                 {reviewItems.map((item) => (

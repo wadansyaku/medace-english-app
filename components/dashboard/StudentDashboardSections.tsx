@@ -566,20 +566,22 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
 
   const primaryLauncherId = viewModel.primaryTask?.id || 'today';
   const primaryQuickNavId = primaryLauncherId === 'englishPractice' ? 'english-practice' : primaryLauncherId;
-  const mobileLauncherItems: DashboardMobileQuickNavItem[] = [
+  const dedupeLauncherItems = (items: DashboardMobileQuickNavItem[]): DashboardMobileQuickNavItem[] => {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  };
+
+  const mobileLauncherItems: DashboardMobileQuickNavItem[] = dedupeLauncherItems([
     {
       id: primaryQuickNavId,
       label: viewModel.primaryTask?.mobileLabel || '始める',
       kind: viewModel.primaryTask ? getTaskLauncherKind(viewModel.primaryTask.id) : 'today',
       active: navigation.activeQuickNavId === primaryQuickNavId || navigation.activeQuickNavId === 'today',
       onClick: handlePrimaryTaskAction,
-    },
-    viewModel.primaryTask?.id === 'englishPractice' ? null : {
-      id: 'english-practice',
-      label: '演習',
-      kind: 'englishPractice' as const,
-      active: navigation.activeQuickNavId === 'english-practice',
-      onClick: () => onSelectPracticeLane(viewModel.practiceRecommendation.lane),
     },
     contextualMobileAction,
     {
@@ -589,7 +591,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
       active: navigation.activeQuickNavId === 'library',
       onClick: () => navigation.scrollToSection(navigation.librarySectionRef),
     },
-  ].filter((item): item is DashboardMobileQuickNavItem => Boolean(item));
+  ]);
   const heroPrimaryLearningRouteId = viewModel.primaryTask?.id === 'coach'
     ? 'today'
     : viewModel.primaryLearningRouteId;
