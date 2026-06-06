@@ -56,18 +56,18 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
       </div>
     }
   >
-    <section className="grid gap-4 xl:grid-cols-[0.38fr_0.62fr]">
-      <div className="space-y-4">
-        <div className="relative overflow-hidden rounded-[32px] border border-medace-200 bg-medace-50 p-5 text-slate-950 shadow-[0_18px_44px_rgba(255,122,0,0.12)] md:p-6">
+    <section className="grid gap-3 xl:grid-cols-[0.38fr_0.62fr] xl:gap-4">
+      <div className="space-y-3 md:space-y-4">
+        <div className="relative overflow-hidden rounded-[24px] border border-medace-200 bg-medace-50 p-4 text-slate-950 shadow-[0_18px_44px_rgba(255,122,0,0.12)] md:rounded-[32px] md:p-6">
           <div className="relative">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-medace-200 bg-white px-3 py-1 text-[11px] font-bold text-medace-800">
                   {getDiagnosticSkillLabel(currentQuestion.skill)}
                 </div>
-                <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">第 {currentQuestionIndex + 1} 問</h2>
+                <h2 className="mt-2 text-xl font-black tracking-tight text-slate-950 md:mt-3 md:text-2xl">第 {currentQuestionIndex + 1} 問</h2>
               </div>
-              <div className={`rounded-full border px-3 py-1 text-xs font-bold ${LEVEL_BADGE_STYLE[currentQuestion.level]}`}>
+              <div className={`hidden rounded-full border px-3 py-1 text-xs font-bold sm:block ${LEVEL_BADGE_STYLE[currentQuestion.level]}`}>
                 {currentQuestion.level}
               </div>
             </div>
@@ -84,7 +84,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
               </div>
             )}
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2">
               <div className="rounded-2xl border border-medace-200 bg-white px-4 py-3">
                 <div className="text-[11px] font-bold text-slate-500">進捗</div>
                 <div className="mt-2 text-base font-black text-slate-950">
@@ -97,9 +97,10 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
               </div>
             </div>
 
-            <div className="mt-5">
+            <div data-testid="onboarding-test-mobile-progress" className="mt-4 md:mt-5">
               <div className="mb-2 flex justify-between text-[11px] font-bold text-slate-500">
-                <span>全体の進み具合</span>
+                <span className="sm:hidden">{currentQuestionIndex + 1} / {DIAGNOSTIC_QUESTIONS.length}</span>
+                <span className="hidden sm:inline">全体の進み具合</span>
                 <span>{progressPercent}%</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-medace-100">
@@ -107,7 +108,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
               </div>
             </div>
 
-            <div className="mt-5 rounded-[28px] border border-medace-200 bg-white px-4 py-4">
+            <div className="mt-5 hidden rounded-[28px] border border-medace-200 bg-white px-4 py-4 sm:block">
               <div className="text-[11px] font-bold text-slate-500">現在見ている帯</div>
               <div className="mt-2 text-base font-black text-slate-950">
                 {DIAGNOSTIC_PHASE_LABELS[currentQuestion.phase]} · {currentQuestion.level}
@@ -119,7 +120,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
           </div>
         </div>
 
-        <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="hidden rounded-[32px] border border-slate-200 bg-white p-5 shadow-sm md:block">
           <div className="flex items-center gap-2 text-sm font-black text-slate-900">
             <Sparkles className="h-4 w-4 text-medace-600" />
             この問題で見ていること
@@ -140,8 +141,8 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
         </div>
       </div>
 
-      <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-xl md:p-7">
-        <div className="rounded-[28px] border border-medace-100 bg-[#fff8ef] p-5">
+      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl md:rounded-[32px] md:p-7">
+        <div className="rounded-[22px] border border-medace-100 bg-[#fff8ef] p-4 md:rounded-[28px] md:p-5">
           {currentQuestion.prompt && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
               {currentQuestion.prompt}
@@ -161,7 +162,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
                 type="button"
                 data-testid="diagnostic-option"
                 onClick={() => onSelectAnswer(option)}
-                className={`rounded-3xl border px-4 py-4 text-left transition-all ${
+                className={`rounded-2xl border px-4 py-3 text-left transition-all md:rounded-3xl md:py-4 ${
                   isSelected
                     ? 'border-medace-500 bg-medace-50 text-slate-950 shadow-[0_18px_40px_rgba(255,122,0,0.12)]'
                     : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'

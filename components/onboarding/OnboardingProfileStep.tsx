@@ -56,7 +56,10 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
           <h1 className="mt-3 text-[1.45rem] font-black leading-tight tracking-tight text-slate-950 md:mt-4 md:text-[2.35rem]">
             {isRetake ? '学習スタート帯を再診断する' : '最初のスタート帯を、短時間で決める'}
           </h1>
-          <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-slate-600 md:mt-3 md:text-base">
+          <p data-testid="onboarding-profile-mobile-note" className="mt-2 text-[13px] leading-relaxed text-slate-600 sm:hidden">
+            12問で、最初に使うレベルを決めます。
+          </p>
+          <p className="mt-2 hidden max-w-2xl text-[13px] leading-relaxed text-slate-600 sm:block md:mt-3 md:text-base">
             文法・語彙・読解を 12 問で確認し、Steady Study を始めるための推定レベルを出します。
             公式資格の判定ではなく、最初に取り組む内容を揃えるための目安です。
           </p>
@@ -97,9 +100,10 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
           <div>
             <p className="text-xs font-bold text-slate-400">診断準備</p>
             <h2 className="mt-1 text-[1.45rem] font-black tracking-tight text-slate-950 md:mt-2 md:text-3xl">
-              {isRetake ? 'いまの実感を更新する' : '学年と現在地を選ぶ'}
+              <span className="sm:hidden">{isRetake ? '実感を更新する' : '学年と実感を選ぶ'}</span>
+              <span className="hidden sm:inline">{isRetake ? 'いまの実感を更新する' : '学年と現在地を選ぶ'}</span>
             </h2>
-            <p className="mt-1 text-sm leading-relaxed text-slate-500 md:mt-2">
+            <p className="mt-1 hidden text-sm leading-relaxed text-slate-500 sm:block md:mt-2">
               学年と自己認識をそろえてから診断を始めます。入力はここだけです。
             </p>
           </div>
@@ -143,7 +147,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
                 }`}
               >
                 <div className="text-sm font-bold text-slate-900">{grade.label}</div>
-                <div className="mt-1 text-[12px] leading-relaxed text-slate-500">{grade.desc}</div>
+                <div className="mt-1 hidden text-[12px] leading-relaxed text-slate-500 sm:block">{grade.desc}</div>
               </button>
             ))}
           </div>
@@ -172,17 +176,17 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className={`text-sm font-bold ${isSelected ? 'text-medace-900' : 'text-slate-900'}`}>{option.title}</div>
-                      <p className={`mt-1 text-[13px] leading-relaxed ${isSelected ? 'text-slate-700' : 'text-slate-500'}`}>
+                      <p className={`mt-1 hidden text-[13px] leading-relaxed sm:block ${isSelected ? 'text-slate-700' : 'text-slate-500'}`}>
                         {option.description}
                       </p>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                    <span className={`hidden shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold sm:inline-flex ${
                       isSelected ? 'border-medace-200 bg-white text-medace-700' : 'border-slate-200 bg-slate-50 text-slate-500'
                     }`}>
                       {option.estimatedBand}
                     </span>
                   </div>
-                  <div className="mt-2 text-[11px] font-bold text-medace-600">
+                  <div className="mt-2 hidden text-[11px] font-bold text-medace-600 sm:block">
                     {option.helper}
                   </div>
                 </button>
@@ -191,7 +195,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
           </div>
         </div>
 
-        <div className="mt-6 rounded-card border border-slate-200 bg-slate-50 px-4 py-4">
+        <div className="mt-6 hidden rounded-card border border-slate-200 bg-slate-50 px-4 py-4 sm:block">
           <div className="flex items-start gap-3">
             <Target className="mt-0.5 h-4 w-4 shrink-0 text-medace-600" />
             <div>

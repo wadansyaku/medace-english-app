@@ -187,7 +187,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             >
               <Play className="h-4 w-4 fill-current" /> {questButtonLabel}
             </button>
-            {hasStudyBooks && learningPlan ? (
+            {!isMobileCompact && hasStudyBooks && learningPlan ? (
               <button
                 onClick={onOpenPlan}
                 className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 sm:w-auto ${
@@ -196,7 +196,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
               >
                 <BookOpenText className="h-4 w-4" /> 今日のプラン
               </button>
-            ) : hasStudyBooks ? (
+            ) : !isMobileCompact && hasStudyBooks ? (
               <button
                 onClick={onGeneratePlan}
                 disabled={generatingPlan}
@@ -255,40 +255,42 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             )}
           </div>
 
-          <div
-            ref={practiceAnchorRef}
-            data-testid="dashboard-english-practice-entry"
-            style={practiceAnchorStyle}
-            className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 ${isMobileCompact ? 'p-3' : 'p-4'}`}
-          >
-            <div data-testid="dashboard-practice-dock" className="min-w-0">
-              <div className="flex items-start gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
-                  <PracticeIcon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-slate-500">英語演習</p>
-                  <h3 className="mt-1 text-base font-black leading-tight text-slate-950">{practiceRecommendation.title}</h3>
-                  <p className={`mt-1 text-sm font-bold leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>{practiceRecommendation.body}</p>
+          {(!isMobileCompact || isPracticePrimary) && (
+            <div
+              ref={practiceAnchorRef}
+              data-testid="dashboard-english-practice-entry"
+              style={practiceAnchorStyle}
+              className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 ${isMobileCompact ? 'p-3' : 'p-4'}`}
+            >
+              <div data-testid="dashboard-practice-dock" className="min-w-0">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
+                    <PracticeIcon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-slate-500">英語演習</p>
+                    <h3 className="mt-1 text-base font-black leading-tight text-slate-950">{practiceRecommendation.title}</h3>
+                    <p className={`mt-1 text-sm font-bold leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>{practiceRecommendation.body}</p>
+                  </div>
+                </div>
+                {!isPracticePrimary && (
+                  <button
+                    type="button"
+                    data-testid={`dashboard-practice-lane-${practiceRecommendation.lane}`}
+                    onClick={() => onSelectPracticeLane(practiceRecommendation.lane)}
+                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white px-4 py-3 text-sm font-black text-slate-800 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700"
+                  >
+                    {practiceRecommendation.ctaLabel}
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+                <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-black">
+                  <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-700">{practiceRecommendation.metricLabel}</span>
+                  <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-600">{practiceRecommendation.stateLabel}</span>
                 </div>
               </div>
-              {!isPracticePrimary && (
-                <button
-                  type="button"
-                  data-testid={`dashboard-practice-lane-${practiceRecommendation.lane}`}
-                  onClick={() => onSelectPracticeLane(practiceRecommendation.lane)}
-                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white px-4 py-3 text-sm font-black text-slate-800 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700"
-                >
-                  {practiceRecommendation.ctaLabel}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              )}
-              <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-black">
-                <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-700">{practiceRecommendation.metricLabel}</span>
-                <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-600">{practiceRecommendation.stateLabel}</span>
-              </div>
             </div>
-          </div>
+          )}
 
         </aside>
       </div>

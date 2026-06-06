@@ -806,6 +806,158 @@ export const findUnexpectedHorizontalOverflow = async (page: Page) => page.evalu
   return offenders;
 });
 
+type MobileReadableSurfaceContract = {
+  label: string;
+  rootTestId?: string;
+  rootSelector?: string;
+  maxVisibleTextLength: number;
+  maxVisibleButtonCount: number;
+  maxScrollHeight: number;
+};
+
+type MobileReadableSurfaceMetrics = {
+  viewport: { width: number; height: number };
+  visibleTextLength: number;
+  visibleButtonCount: number;
+  visibleButtonLabels: string[];
+  scrollHeight: number;
+  rootFound: boolean;
+  sampleText: string;
+};
+
+export const collectMobileReadableSurfaceMetrics = async (
+  page: Page,
+  options: Pick<MobileReadableSurfaceContract, 'rootSelector' | 'rootTestId'> = {},
+): Promise<MobileReadableSurfaceMetrics> => page.evaluate(({ rootSelector, rootTestId }) => {
+  const testIdSelector = rootTestId
+    ? `[data-testid="${window.CSS?.escape ? CSS.escape(rootTestId) : rootTestId}"]`
+    : '';
+  const roots = rootTestId
+    ? Array.from(document.querySelectorAll(testIdSelector))
+    : rootSelector
+      ? Array.from(document.querySelectorAll(rootSelector))
+      : [document.body];
+  const viewport = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+
+  if (!roots.length) {
+    return {
+      viewport,
+      visibleTextLength: 0,
+      visibleButtonCount: 0,
+      visibleButtonLabels: [],
+      scrollHeight: document.scrollingElement?.scrollHeight || document.body.scrollHeight,
+      rootFound: false,
+      sampleText: '',
+    };
+  }
+
+  const intersectsViewport = (rect: DOMRect) => (
+    rect.width > 0
+      && rect.height > 0
+      && rect.bottom > 0
+      && rect.right > 0
+      && rect.top < viewport.height
+      && rect.left < viewport.width
+  );
+
+  const isHiddenByStyle = (element: Element | null) => {
+    let current = element;
+    while (current && current !== document.documentElement) {
+      const style = window.getComputedStyle(current);
+      if (
+        style.display === 'none'
+        || style.visibility === 'hidden'
+        || style.opacity === '0'
+        || current.getAttribute('aria-hidden') === 'true'
+      ) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
+
+  const isElementVisibleInViewport = (element: Element) => {
+    if (isHiddenByStyle(element)) return false;
+    return Array.from(element.getClientRects()).some(intersectsViewport);
+  };
+
+  const textSnippets: string[] = [];
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let current = walker.nextNode();
+    while (current) {
+      const parent = current.parentElement;
+      const tagName = parent?.tagName.toLowerCase() || '';
+      const text = (current.textContent || '').replace(/\s+/g, ' ').trim();
+      if (
+        text
+        && parent
+        && !['script', 'style', 'noscript', 'svg'].includes(tagName)
+        && !isHiddenByStyle(parent)
+      ) {
+        const range = document.createRange();
+        range.selectNodeContents(current);
+        const isVisible = Array.from(range.getClientRects()).some(intersectsViewport);
+        range.detach();
+        if (isVisible) {
+          textSnippets.push(text);
+        }
+      }
+      current = walker.nextNode();
+    }
+  }
+
+  const visibleControls = Array.from(new Set(roots.flatMap((root) => (
+    Array.from(root.querySelectorAll([
+      'button',
+      '[role="button"]',
+      'a[href]',
+      'input[type="button"]',
+      'input[type="submit"]',
+    ].join(',')))
+  )))).filter(isElementVisibleInViewport);
+  const visibleButtonLabels = visibleControls.map((control) => (
+    control.getAttribute('aria-label')
+      || (control as HTMLInputElement).value
+      || control.textContent
+      || ''
+  ).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 12);
+
+  const normalizedText = textSnippets.join(' ').replace(/\s+/g, ' ').trim();
+
+  return {
+    viewport,
+    visibleTextLength: normalizedText.length,
+    visibleButtonCount: visibleControls.length,
+    visibleButtonLabels,
+    scrollHeight: document.scrollingElement?.scrollHeight || document.body.scrollHeight,
+    rootFound: true,
+    sampleText: normalizedText.slice(0, 180),
+  };
+}, options);
+
+export const expectMobileReadableSurface = async (
+  page: Page,
+  contract: MobileReadableSurfaceContract,
+) => {
+  const metrics = await collectMobileReadableSurfaceMetrics(page, contract);
+  const context = `${contract.label} ${JSON.stringify(metrics)}`;
+
+  expect(metrics.rootFound, `${contract.label} should have a measurable root`).toBe(true);
+  expect(metrics.visibleTextLength, `${contract.label} visible text budget exceeded: ${context}`).toBeLessThanOrEqual(contract.maxVisibleTextLength);
+  expect(metrics.visibleButtonCount, `${contract.label} visible button budget exceeded: ${context}`).toBeLessThanOrEqual(contract.maxVisibleButtonCount);
+  expect(metrics.scrollHeight, `${contract.label} scroll height budget exceeded: ${context}`).toBeLessThanOrEqual(contract.maxScrollHeight);
+
+  const offenders = await findUnexpectedHorizontalOverflow(page);
+  expect(offenders, `${contract.label} should not create horizontal overflow`).toEqual([]);
+
+  return metrics;
+};
+
 export {
   MOBILE_FLOW_BUTTON_LABELS,
   MOBILE_FLOW_TEST_IDS,

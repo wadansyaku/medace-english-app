@@ -6,7 +6,9 @@ import {
   MOBILE_FLOW_TEST_IDS,
   MOBILE_FLOW_WRITING,
   answerSeededQuizQuestion,
+  completeDiagnostic,
   completeSeededStudySession,
+  expectMobileReadableSurface,
   findUnexpectedHorizontalOverflow,
   getCurrentSessionUser,
   getLatestWritingAssignmentForStudentUid,
@@ -175,7 +177,7 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan((launcherBox?.y ?? 844) - 8);
   });
 
-  test('student dashboard action launcher starts practice and keeps library reachable on mobile', async ({ page }) => {
+  test('student dashboard action launcher stays compact and keeps practice and library reachable on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
@@ -187,7 +189,7 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
     await expect(page.getByTestId('dashboard-task-reference-library')).toBeVisible();
     await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
-    await expect(page.getByTestId('dashboard-mobile-quick-nav').locator('button')).toHaveCount(4);
+    await expect(page.getByTestId('dashboard-mobile-quick-nav').locator('button')).toHaveCount(3);
     await expect.poll(async () => (
       page.getByTestId('dashboard-mobile-quick-nav').evaluate((element) => element.scrollWidth <= element.clientWidth)
     )).toBe(true);
@@ -199,7 +201,7 @@ test.describe('student mobile ux', () => {
     }).toBeLessThanOrEqual(220);
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.getByTestId('dashboard-quicknav-english-practice').click();
+    await page.getByTestId('dashboard-task-overview-englishPractice').click();
 
     await expect(page).toHaveURL(/\/english-practice\/grammar$/);
     await expect(page.getByTestId('student-dashboard')).toHaveCount(0);
@@ -287,7 +289,7 @@ test.describe('student mobile ux', () => {
 
       const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
       await expect(quickNav).toBeVisible();
-      await expect(quickNav.locator('button')).toHaveCount(4);
+      await expect(quickNav.locator('button')).toHaveCount(3);
       await expect.poll(async () => (
         quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
       )).toBe(true);
@@ -385,7 +387,7 @@ test.describe('student mobile ux', () => {
 
       const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
       await expect(quickNav).toBeVisible();
-      await expect(quickNav.locator('button')).toHaveCount(4);
+      await expect(quickNav.locator('button')).toHaveCount(3);
       await expect.poll(async () => (
         quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
       )).toBe(true);
@@ -423,6 +425,96 @@ test.describe('student mobile ux', () => {
 
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
+  });
+
+  test('student mobile reading budget covers dashboard quiz setup and study start', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await maybeCompleteOnboarding(page);
+    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+
+    const importResult = await seedLeveledPhrasebooks(page, {
+      levels: [3],
+      wordsPerLevel: 10,
+    });
+    const bookId = importResult.importedBookIds?.[0];
+    expect(bookId).toBeTruthy();
+
+    const viewportContracts = [
+      {
+        width: 390,
+        height: 844,
+        dashboardScrollHeight: 4_400,
+        quizSetupScrollHeight: 3_800,
+        quizRunningScrollHeight: 1_700,
+        studyScrollHeight: 1_500,
+      },
+      {
+        width: 320,
+        height: 844,
+        dashboardScrollHeight: 4_900,
+        quizSetupScrollHeight: 4_200,
+        quizRunningScrollHeight: 1_900,
+        studyScrollHeight: 1_700,
+      },
+    ];
+
+    for (const viewport of viewportContracts) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+      await dismissAnnouncementModalIfPresent(page);
+
+      await expectMobileReadableSurface(page, {
+        label: `dashboard ${viewport.width}px`,
+        rootTestId: MOBILE_FLOW_TEST_IDS.studentDashboard,
+        maxVisibleTextLength: 1_550,
+        maxVisibleButtonCount: 10,
+        maxScrollHeight: viewport.dashboardScrollHeight,
+      });
+
+      await page.getByTestId(`book-quiz-${bookId}`).scrollIntoViewIfNeeded();
+      await page.getByTestId(`book-quiz-${bookId}`).click();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupView)).toBeVisible();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta)).toContainText('5問はじめる');
+
+      await expectMobileReadableSurface(page, {
+        label: `quiz setup ${viewport.width}px`,
+        rootTestId: MOBILE_FLOW_TEST_IDS.quizSetupView,
+        maxVisibleTextLength: 1_050,
+        maxVisibleButtonCount: 6,
+        maxScrollHeight: viewport.quizSetupScrollHeight,
+      });
+
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta)).toBeEnabled();
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupPrimaryCta).click();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizReadyView)).toBeVisible();
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizReadyStart).click();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView)).toBeVisible();
+      await expect(page.getByText(/第 1 問 \/ 5/)).toBeVisible();
+
+      await expectMobileReadableSurface(page, {
+        label: `quiz running ${viewport.width}px`,
+        rootTestId: MOBILE_FLOW_TEST_IDS.quizRunningView,
+        maxVisibleTextLength: 850,
+        maxVisibleButtonCount: 3,
+        maxScrollHeight: viewport.quizRunningScrollHeight,
+      });
+
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+      await page.getByTestId(`book-study-${bookId}`).scrollIntoViewIfNeeded();
+      await page.getByTestId(`book-study-${bookId}`).click();
+      await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+
+      await expectMobileReadableSurface(page, {
+        label: `study ${viewport.width}px`,
+        rootSelector: '.study-card-shell, .mobile-sticky-action-bar',
+        maxVisibleTextLength: 720,
+        maxVisibleButtonCount: 3,
+        maxScrollHeight: viewport.studyScrollHeight,
+      });
+    }
   });
 
   test('student settings keeps the save action reachable on mobile', async ({ page }) => {
@@ -495,9 +587,12 @@ test.describe('student mobile ux', () => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await expect(page.getByTestId('onboarding-profile')).toBeVisible();
+    await expect(page.getByTestId('onboarding-profile-mobile-note')).toBeVisible();
+    await expect(page.getByText('公式資格の判定ではなく')).toBeHidden();
 
     await page.getByRole('button', { name: '中学3年生' }).click();
     await page.getByRole('button', { name: '学校英語はだいたい分かる' }).click();
+    await expect(page.getByText('A2-B1 付近の学習導線に向いています。')).toBeHidden();
 
     const startButton = page.getByTestId('onboarding-start-button');
     await expect(startButton).toBeVisible();
@@ -508,12 +603,29 @@ test.describe('student mobile ux', () => {
     await startButton.click();
     await expect(page.getByTestId('onboarding-test')).toBeVisible();
     await page.getByTestId('diagnostic-option').first().click();
+    await expect(page.getByTestId('onboarding-test-mobile-progress')).toBeVisible();
+    await expect(page.getByText('回答済み')).toBeHidden();
+    await expect(page.getByText('現在見ている帯')).toBeHidden();
+    await expect(page.getByText('この問題で見ていること')).toBeHidden();
 
     const nextButton = page.getByTestId('onboarding-next-button');
     await expect(nextButton).toBeVisible();
     const nextBox = await nextButton.boundingBox();
     expect(nextBox).not.toBeNull();
     expect((nextBox?.y ?? 1000) + (nextBox?.height ?? 0)).toBeLessThanOrEqual(844);
+
+    await completeDiagnostic(page);
+    await expect(page.getByTestId('onboarding-result')).toBeVisible();
+    await expect(page.getByTestId('onboarding-result-mobile-hero')).toBeVisible();
+    await expect(page.getByTestId('onboarding-result-daily-set')).toBeVisible();
+    await expect(page.getByText('重み付きスコア')).toBeHidden();
+    await expect(page.getByText('このスタート帯で意識すること')).toBeHidden();
+
+    const saveButton = page.getByTestId('onboarding-save-button');
+    await expect(saveButton).toBeVisible();
+    const saveBox = await saveButton.boundingBox();
+    expect(saveBox).not.toBeNull();
+    expect((saveBox?.y ?? 1000) + (saveBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student can reach the finish action after a short study session on mobile', async ({ page }) => {
@@ -672,6 +784,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-advanced-settings-toggle').click();
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSelectionLearnedOnly).click();
 
     await expect(page.getByTestId('quiz-empty-state')).toBeVisible();
@@ -695,6 +808,7 @@ test.describe('student mobile ux', () => {
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.getByTestId('quiz-advanced-settings-toggle').click();
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSelectionLearnedOnly).click();
     await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
     await page.getByTestId('quiz-setup-primary-cta').click();

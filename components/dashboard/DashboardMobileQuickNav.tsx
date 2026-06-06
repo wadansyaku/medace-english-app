@@ -36,7 +36,7 @@ interface DashboardMobileQuickNavProps {
 }
 
 const DashboardMobileQuickNav: React.FC<DashboardMobileQuickNavProps> = ({ items }) => {
-  const visibleItems = items.slice(0, 4);
+  const visibleItems = items.slice(0, 3);
 
   const launcher = (
     <div
@@ -47,7 +47,10 @@ const DashboardMobileQuickNav: React.FC<DashboardMobileQuickNavProps> = ({ items
         aria-label="今日の操作"
         className="pointer-events-auto mx-auto max-w-3xl rounded-[24px] border border-slate-200 bg-white/96 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)] backdrop-blur"
       >
-        <div className="grid min-w-0 grid-cols-4 gap-1.5">
+        <div
+          className="grid min-w-0 gap-1.5"
+          style={{ gridTemplateColumns: `repeat(${Math.max(visibleItems.length, 1)}, minmax(0, 1fr))` }}
+        >
           {visibleItems.map((item) => {
             const Icon = ICON_BY_KIND[item.kind];
             return (
