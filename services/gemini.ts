@@ -29,7 +29,7 @@ export type {
   InstructorFollowUpDraft,
 } from '../contracts/ai';
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
-import { buildFallbackLearningPlan } from '../utils/learningPlan';
+import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 import { ApiError, apiPost } from './apiClient';
 
@@ -267,7 +267,15 @@ export const generateLearningPlan = async (
   if (availableBooks.length === 0) return null;
 
   try {
-    return await callAi('generateLearningPlan', {
+    const plan = await callAi('generateLearningPlan', {
+      grade,
+      level,
+      availableBooks,
+      learningPreference,
+    });
+    return normalizeGeneratedLearningPlan({
+      plan,
+      uid: '',
       grade,
       level,
       availableBooks,

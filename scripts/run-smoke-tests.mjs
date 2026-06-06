@@ -37,6 +37,7 @@ const isFilteredRun = extraArgs.some((arg) => (
   || arg.startsWith('--grep=')
   || arg.startsWith('--grep-invert=')
 ));
+const hasWorkerArg = extraArgs.some((arg) => arg === '--workers' || arg.startsWith('--workers='));
 
 const runCommand = (command, args, env) => new Promise((resolve) => {
   const child = spawn(command, args, {
@@ -497,6 +498,7 @@ const suites = suiteMode === 'sentinel'
         name: isExternalTarget ? 'remote-full' : 'full',
         files: cloudflareFiles,
         env: {},
+        workers: '1',
       },
       ...(
         isExternalTarget
@@ -507,6 +509,7 @@ const suites = suiteMode === 'sentinel'
             env: {
               VITE_STORAGE_MODE: 'idb',
             },
+            workers: '1',
           }]
       ),
     ];
@@ -539,27 +542,27 @@ for (const suite of suites) {
 
   console.log(`\n[smoke:${suite.name}] port=${port} output=${outputDir}`);
 
-	  const suiteEnv = {
-	    ...baseEnv,
-	    ...(suite.env || {}),
-	  };
-	  if (isFilteredRun) {
-	    try {
-	      const suiteFilteredTestCount = await getFilteredTestCount(suite, suiteEnv, baseUrl, outputDir, port);
-	      filteredTestCount += suiteFilteredTestCount;
-	      if (suiteFilteredTestCount === 0) {
-	        console.log(`[smoke:${suite.name}] filter matched 0 tests; skipping this suite`);
-	        continue;
-	      }
-	      console.log(`[smoke:${suite.name}] filter matched ${suiteFilteredTestCount} test(s)`);
-	    } catch (error) {
-	      console.error(error instanceof Error ? error.message : error);
-	      exitCode = 1;
-	      continue;
-	    }
-	  }
-	  if (!isExternalTarget) {
-	    const buildKey = suite.env?.VITE_STORAGE_MODE === 'idb' ? 'idb' : 'cloudflare';
+  const suiteEnv = {
+    ...baseEnv,
+    ...(suite.env || {}),
+  };
+  if (isFilteredRun) {
+    try {
+      const suiteFilteredTestCount = await getFilteredTestCount(suite, suiteEnv, baseUrl, outputDir, port);
+      filteredTestCount += suiteFilteredTestCount;
+      if (suiteFilteredTestCount === 0) {
+        console.log(`[smoke:${suite.name}] filter matched 0 tests; skipping this suite`);
+        continue;
+      }
+      console.log(`[smoke:${suite.name}] filter matched ${suiteFilteredTestCount} test(s)`);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error);
+      exitCode = 1;
+      continue;
+    }
+  }
+  if (!isExternalTarget) {
+    const buildKey = suite.env?.VITE_STORAGE_MODE === 'idb' ? 'idb' : 'cloudflare';
     const buildExitCode = await runBuildForEnv(suiteEnv, buildKey);
 
     if (buildExitCode !== 0) {
@@ -588,12 +591,13 @@ for (const suite of suites) {
       await verifyServedAssetReferences(baseUrl);
     }
 
-	    const playwrightCommand = createNodeToolCommand('playwright', [
-	      'test',
-	      '--config=playwright.smoke.config.ts',
-	      ...suite.files,
-	      ...extraArgs,
-	    ]);
+    const playwrightCommand = createNodeToolCommand('playwright', [
+      'test',
+      '--config=playwright.smoke.config.ts',
+      ...(!hasWorkerArg && suite.workers ? [`--workers=${suite.workers}`] : []),
+      ...suite.files,
+      ...extraArgs,
+    ]);
     const suiteExitCode = await runCommand(
       playwrightCommand.command,
       playwrightCommand.args,

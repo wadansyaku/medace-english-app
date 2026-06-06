@@ -44,6 +44,8 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 
 ```bash
 npm install
+npm run release:gate:local:dry
+npm run release:gate:local
 npm run verify:fast
 npm run typecheck
 npm run test:unit
@@ -55,13 +57,19 @@ npm run cf:sync
 npm run cf:preview
 ```
 
+- `npm run release:gate:local` は deploy 前のローカル release gate です。migration filename check / 一時 D1 migration replay / typecheck / unit tests / build / API integration tests / full smoke suite / `cf:doctor` / deploy artifact build を直列で確認します。
+  - `npm run release:gate:local:dry` は実行予定の順序だけを表示します。
+  - `cf:doctor` は GitHub / Cloudflare の read-only inventory を見るため、`gh` 認証と `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要です。
 - 推奨ローカル実行: `npm run cf:preview`
   - `vite build` 後に `wrangler pages dev dist` を起動し、Pages Functions と D1 を含めて確認します。
 - `npm run preview` は静的アセット確認専用です。
   - `/api/session` などの Functions は起動しないため、認証や教材 API の検証には使えません。
 - `npm run test:smoke` は Playwright で `wrangler pages dev dist` を自前起動し、D1 migration 適用後の demo login / onboarding / 組織運用導線まで確認します。
+  - `node scripts/run-smoke-tests.mjs --suite sentinel` は PR の高速回帰用です。
+  - `node scripts/run-smoke-tests.mjs --suite full` は release 必須の full smoke です。
+  - `PLAYWRIGHT_BASE_URL=... node scripts/run-smoke-tests.mjs --suite sentinel --grep "..."` は deploy 後の公開 URL smoke で、公開 asset / PWA 参照も同じ runner で確認します。
 - `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
-  - release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred AI key や外部 inventory の一時問題として扱えますが、`error` が 1 件でも残る場合は deploy しません。
+  - release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred AI key など明示的に延期できる項目に限ります。Cloudflare native Git auto-deploy、`*-git` mirror Pages project、Pages project 設定の検査不能は二重 deploy の原因になるため `error` として扱い、1 件でも残る場合は deploy しません。
 - `npm run cf:sync` は `wrangler.jsonc` を基準に GitHub variables、Cloudflare Pages secrets、R2 バケットを同期します。R2 がアカウントで未有効化の場合はここで停止します。
 
 ## Storage Mode Policy
@@ -197,6 +205,7 @@ deploy workflow は GitHub の `production` / `preview` environment を参照し
 ローカルから接続状態を確認する場合は `npm run cf:doctor` を使ってください。`GEMINI_API_KEY` は未設定でも warning 扱いで、GitHub / Cloudflare の接続と Pages / D1 の疎通を先に確認できます。なお、学習プラン生成は key 未設定時でも標準ロジックで継続でき、AI教材化だけが停止します。
 
 GitHub Actions を正史の配信経路にする前提では、Cloudflare の Git 直接連携や `*-git` の mirror Pages project を併用しないでください。preview / production が二重作成され、PR コメントや確認URLが分岐します。
+`cf:doctor` はこの状態を release-blocking error として検出します。既に Git 連携が残っている場合は `npm run cf:sync` で Cloudflare native Git auto-deploy を無効化し、不要な mirror project は Cloudflare Dashboard 側で削除してください。
 
 設定の反映を自動化したい場合は `npm run cf:sync` を使ってから `npm run cf:doctor` で検証してください。
 
@@ -214,19 +223,14 @@ VITE_ADSENSE_SLOT_DASHBOARD_SECONDARY=1234567890
 ### デプロイ
 
 ```bash
-npm run verify:fast
-npm run test:api
-npm run test:smoke
-npm run cf:doctor
-npm run build
-npx wrangler pages deploy dist --project-name medace-english-app
+npm run release:gate:local
 ```
 
-GitHub Actions では次の流れで確認してから Cloudflare へ流します。
+この local gate は remote D1 migration と Pages deploy を実行しません。Cloudflare への正式 deploy は GitHub Actions を正規経路とし、次の流れで確認してから Cloudflare へ流します。
 
 - `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor` を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / Pages deploy / deployed preview smoke へ進む
-- `deploy-pages.yml`: production deploy 前に `verify:fast` / `test:api` / `test:smoke` / `cf:doctor` を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke へ進む
+- `deploy-pages-preview.yml`: preview deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / Pages deploy / deployed preview smoke へ進む
+- `deploy-pages.yml`: production deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke へ進む
 - `analytics-snapshots.yml`: 毎日 03:40 JST に本番 `/api/internal/analytics-snapshots/run` を叩き、プロダクト KPI の日次 snapshot を保存
 - `word-hint-audit.yml`: 毎日 03:30 JST に本番 `/api/internal/word-hint-audits/run` を叩き、保存済みの例文・画像ヒントを小さなバッチで再監査
 

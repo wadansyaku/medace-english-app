@@ -3,15 +3,17 @@ import type {
   CatalogImportResult,
   PrepareBookExamplesResult,
 } from '../../contracts/storage';
-import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
+import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, LearningTaskIntentType, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
 import { generateMeteredGeminiSentence } from './ai-actions';
 import { normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
 import { HttpError } from './http';
+import { readLearningPlanBookIds } from './learning-plan-books';
 import { readWeaknessProfile } from './weakness-actions';
 import {
   AppEnv,
@@ -31,6 +33,42 @@ import {
   toWordData,
   type DbWordRow,
 } from './storage-support';
+
+const resolvePreferredDailyBookIds = async (
+  env: AppEnv,
+  userId: string,
+  taskIntent?: LearningTaskIntent,
+): Promise<string[]> => {
+  const taskBookIds = normalizeTaskPreferredBookIds(taskIntent?.preferredBookIds);
+  if (taskBookIds.length > 0) return taskBookIds;
+  return normalizeTaskPreferredBookIds(await readLearningPlanBookIds(env, userId));
+};
+
+const filterBookRowsByPreferredIds = <T extends { id: string }>(
+  rows: T[],
+  preferredBookIds: string[],
+): T[] => {
+  if (preferredBookIds.length === 0) return rows;
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  return preferredBookIds
+    .map((bookId) => rowsById.get(bookId))
+    .filter((row): row is T => Boolean(row));
+};
+
+const sortWordRowsByPreferredBookOrder = <T extends { book_id: string; word_number: number; id: string }>(
+  rows: T[],
+  preferredBookIds: string[],
+): T[] => {
+  const bookOrder = new Map(preferredBookIds.map((bookId, index) => [bookId, index]));
+  return [...rows].sort((left, right) => {
+    const leftOrder = bookOrder.get(left.book_id) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = bookOrder.get(right.book_id) ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    if (left.book_id !== right.book_id) return left.book_id.localeCompare(right.book_id);
+    if (left.word_number !== right.word_number) return left.word_number - right.word_number;
+    return left.id.localeCompare(right.id);
+  });
+};
 
 const validateNounWorkbookImportProfile = (
   payload: CatalogImportRequest,
@@ -462,7 +500,14 @@ export const handleGetDailySessionWords = async (
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
-  const visibleBookRows = await readVisibleBookRows(env, user);
+  const allVisibleBookRows = await readVisibleBookRows(env, user);
+  const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const preferredVisibleBookRows = filterBookRowsByPreferredIds(allVisibleBookRows, preferredBookIds);
+  const shouldFallbackToAllVisibleBooks = preferredBookIds.length > 0
+    && preferredVisibleBookRows.length === 0
+    && allVisibleBookRows.length > 0;
+  const effectivePreferredBookIds = shouldFallbackToAllVisibleBooks ? [] : preferredBookIds;
+  const visibleBookRows = shouldFallbackToAllVisibleBooks ? allVisibleBookRows : preferredVisibleBookRows;
   const visibleBookIds = visibleBookRows.map((row) => row.id);
   if (visibleBookIds.length === 0) return [];
 
@@ -483,6 +528,11 @@ export const handleGetDailySessionWords = async (
        ORDER BY w.book_id ASC, w.word_number ASC`,
       ...visibleBookIds,
     );
+    const sortedVisibleRows = sortWordRowsByPreferredBookOrder(allVisibleRows, effectivePreferredBookIds);
+
+    if (effectivePreferredBookIds.length > 0) {
+      return sortedVisibleRows.map(toWordData).slice(0, limit);
+    }
 
     const selection = selectColdStartSessionWords({
       uid: user.id,
@@ -490,7 +540,7 @@ export const handleGetDailySessionWords = async (
       grade: (user.grade as UserGrade | null) || undefined,
       level: (user.english_level as EnglishLevel | null) || undefined,
       books: visibleBookRows.map(toBookMetadata),
-      words: allVisibleRows.map(toWordData),
+      words: sortedVisibleRows.map(toWordData),
     });
 
     if (selection.selectedWords.length >= limit) {
@@ -498,7 +548,7 @@ export const handleGetDailySessionWords = async (
     }
 
     const selectedIds = new Set(selection.selectedWords.map((word) => word.id));
-    const fallbackWords = allVisibleRows
+    const fallbackWords = sortedVisibleRows
       .map(toWordData)
       .filter((word) => !selectedIds.has(word.id))
       .slice(0, Math.max(0, limit - selection.selectedWords.length));
@@ -544,23 +594,28 @@ export const handleGetDailySessionWords = async (
   );
   const weaknessProfile = await readWeaknessProfile(env, user.id);
   const bookBandsById = Object.fromEntries(visibleBookRows.map((row) => [row.id, getBookProgressionIndex(toBookMetadata(row))]));
+  const sortedNewRows = sortWordRowsByPreferredBookOrder(newRows, effectivePreferredBookIds);
   const targetedNewWords = typeof taskIntent?.targetBandIndex === 'number'
-    ? newRows
+    ? sortedNewRows
       .filter((row) => {
         const band = bookBandsById[row.book_id];
         return band === null || band === undefined || band >= taskIntent.targetBandIndex! - 1;
       })
       .map(toWordData)
-    : newRows.map(toWordData);
-  const rankedNewWords = rankWeaknessFocusedWords({
-    uid: user.id,
-    words: targetedNewWords,
-    weaknessProfile,
-    grade: (user.grade as UserGrade | null) || undefined,
-    level: (user.english_level as EnglishLevel | null) || undefined,
-    dateKey: formatDateKey(Date.now()),
-    bookBandsById,
-  });
+    : sortedNewRows.map(toWordData);
+  const shouldUseSequentialNewWords = taskIntent?.intentType === LearningTaskIntentType.TODAY_FOCUS
+    || effectivePreferredBookIds.length > 0;
+  const rankedNewWords = shouldUseSequentialNewWords
+    ? targetedNewWords
+    : rankWeaknessFocusedWords({
+        uid: user.id,
+        words: targetedNewWords,
+        weaknessProfile,
+        grade: (user.grade as UserGrade | null) || undefined,
+        level: (user.english_level as EnglishLevel | null) || undefined,
+        dateKey: formatDateKey(Date.now()),
+        bookBandsById,
+      });
 
   return [...dueRows.map(toWordData), ...rankedNewWords.slice(0, limit - dueRows.length)];
 };

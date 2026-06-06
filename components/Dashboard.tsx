@@ -157,7 +157,14 @@ const Dashboard: React.FC<DashboardProps> = ({
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
 
-  const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
+  const todayPreferredBookIds = React.useMemo(
+    () => viewModel.plannedBooks.map((book) => book.id),
+    [viewModel.plannedBooks],
+  );
+  const todayTaskIntent = React.useMemo(
+    () => createTodayFocusTaskIntent({ preferredBookIds: todayPreferredBookIds }),
+    [todayPreferredBookIds],
+  );
   const weaknessTaskIntent = React.useMemo(
     () => createWeaknessTaskIntent(viewModel.topWeakness),
     [viewModel.topWeakness],

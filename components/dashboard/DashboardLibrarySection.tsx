@@ -45,12 +45,14 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
     <div className="min-h-[200px]">
       <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
         <h3 className="min-w-0 border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
-        <button
-          onClick={onOpenCreateModal}
-          className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
-        >
-          <Plus className="h-4 w-4" /> {isCompact ? '作成' : '新規作成'}
-        </button>
+        {myBooks.length > 0 && (
+          <button
+            onClick={onOpenCreateModal}
+            className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-600 transition-colors hover:bg-medace-50 md:text-sm"
+          >
+            <Plus className="h-4 w-4" /> {isCompact ? '作成' : '新規作成'}
+          </button>
+        )}
       </div>
       {myBooks.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
@@ -71,14 +73,8 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
         <div className={`rounded-3xl border-2 border-dashed border-slate-200 bg-slate-100 text-center ${isCompact ? 'p-5' : 'p-8'}`}>
           <p className="font-bold text-slate-700">まだMy単語帳がありません</p>
           <p className={`mt-2 text-sm leading-relaxed ${isCompact ? 'text-slate-500' : 'text-slate-400'}`}>
-            教科書の写真や PDF を読み込ませて、最初の 1 冊をすぐ作れます。
+            最初の教材を作ると、ここに単語帳と進捗が表示されます。
           </p>
-          <button
-            onClick={onOpenCreateModal}
-            className={`inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 font-bold text-slate-950 transition-colors hover:bg-medace-700 ${isCompact ? 'mt-3 w-full px-4 py-3 text-sm' : 'mt-4 px-4 py-3 text-sm'}`}
-          >
-            今すぐ作成する
-          </button>
         </div>
       )}
     </div>
@@ -155,7 +151,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
             </div>
           ) : (
             <div className="mt-6 animate-in rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 slide-in-from-top-4">
-              公式コースはビジネス本導入プラン向けに限定されています。個人利用では My単語帳 を使って学習を進めてください。
+              公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。
             </div>
           )
         )}

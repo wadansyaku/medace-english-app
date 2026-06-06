@@ -17,9 +17,10 @@ import {
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordClientProductEvent } from './services/productEvents';
-import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
+import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
+const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
 const StudyMode = lazy(() => import('./components/StudyMode'));
 const QuizMode = lazy(() => import('./components/QuizMode'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
@@ -155,15 +156,16 @@ const App: React.FC = () => {
         );
       case 'englishPractice':
         return (
-          <Dashboard
+          <EnglishPracticeHub
             user={user}
-            announcementFeed={announcementFeed}
-            onSelectBook={handleBookSelect}
-            onStartTask={handleTaskSelect}
-            onUserUpdate={setCurrentUser}
-            activePracticeLane={englishPracticeLane && englishPracticeLane !== 'overview' ? englishPracticeLane : null}
-            onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane, historyMode: 'replace' })}
-            onClosePracticeLane={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
+            initialLane={englishPracticeLane && englishPracticeLane !== 'overview' ? englishPracticeLane : 'grammar'}
+            onBack={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
+            onStartVocabulary={() => handleTaskSelect(createTodayFocusTaskIntent())}
+            onActiveLaneChange={(lane) => {
+              if (lane !== 'overview') {
+                dispatchNavigation({ type: 'open-english-practice', lane, historyMode: 'replace' });
+              }
+            }}
           />
         );
       case 'study':

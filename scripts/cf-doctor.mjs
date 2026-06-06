@@ -430,7 +430,7 @@ if (cloudflareReady) {
 
         if (gitProvider?.toLowerCase() === 'yes') {
           pushRecord(
-            isPagesGitAutoDeployDisabled(sourceConfig) ? 'ok' : 'warn',
+            isPagesGitAutoDeployDisabled(sourceConfig) ? 'ok' : 'error',
             `Pages project ${pagesProject} Git auto-deploy`,
             isPagesGitAutoDeployDisabled(sourceConfig)
               ? 'Git integration remains linked, but automatic production/preview deploys are disabled'
@@ -460,7 +460,7 @@ if (cloudflareReady) {
         );
       } catch (error) {
         pushRecord(
-          'warn',
+          'error',
           `Pages project ${pagesProject} API inspection`,
           `project settings could not be verified: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -469,7 +469,7 @@ if (cloudflareReady) {
     const gitMirrorProject = `${pagesProject}-git`;
     if (pagesProjects.stdout.includes(gitMirrorProject)) {
       pushRecord(
-        'warn',
+        'error',
         `Possible duplicate Pages project ${gitMirrorProject}`,
         `present; disable Cloudflare Git auto-deploy or remove the mirror project if GitHub Actions is the canonical deploy path`,
       );

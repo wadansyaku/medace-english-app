@@ -3,6 +3,7 @@ import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
 import { expectEmptyPayload, expectObject } from '../request-validation';
 import {
+  assertCommercialRequestUpdatePayload,
   handleCreateCommercialRequest,
   handleGetCommercialRequestStatus,
   handleListCommercialRequests,
@@ -24,7 +25,7 @@ export const commercialStorageActionDefinitions = {
     execute: ({ env }) => handleListCommercialRequests(env),
   }),
   updateCommercialRequest: defineStorageAction({
-    parse: (payload) => expectObject(payload) as never,
+    parse: (payload) => assertCommercialRequestUpdatePayload(expectObject(payload) as never),
     roles: [UserRole.ADMIN],
     execute: ({ env, user }, payload) => handleUpdateCommercialRequest(env, user, payload),
   }),

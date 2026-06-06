@@ -90,6 +90,9 @@ type CanonicalDashboardTask = {
   title: string;
   body: string;
   ctaLabel: string;
+  group?: string;
+  isPrimary?: boolean;
+  mobileLabel?: string;
 };
 
 type CanonicalDashboardTasks = {
@@ -725,6 +728,18 @@ describe('useStudentDashboardViewModel', () => {
       body: '文法の型を受験答案へ戻す練習が少なめです。',
     });
     expect(viewModel.heroTitle).toBe('和訳を1セット');
+    expect(viewModel.heroCopy).toBe('文法の型を受験答案へ戻す練習が少なめです。');
     expect(viewModel.questButtonLabel).toBe('全文和訳を2問書く');
+    const canonicalTasks = asCanonicalTasks(viewModel);
+    expect(canonicalTasks.primaryTask).toMatchObject({
+      id: 'englishPractice',
+      routeId: 'englishPractice',
+      title: '和訳を1セット',
+      body: '文法の型を受験答案へ戻す練習が少なめです。',
+      ctaLabel: '全文和訳を2問書く',
+      group: 'primary',
+      isPrimary: true,
+      mobileLabel: '演習',
+    });
   });
 });

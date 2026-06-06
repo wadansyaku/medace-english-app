@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { BookCatalogSource, EnglishLevel, LearningPreferenceIntensity, type BookMetadata, type LearningPreference, UserGrade } from '../types';
-import { buildFallbackLearningPlan } from '../utils/learningPlan';
+import { BookAccessScope, BookCatalogSource, EnglishLevel, LearningPreferenceIntensity, type BookMetadata, type LearningPreference, UserGrade } from '../types';
+import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../utils/learningPlan';
 
 const availableBooks: BookMetadata[] = [
   {
@@ -100,5 +100,77 @@ describe('buildFallbackLearningPlan', () => {
     expect(plan.selectedBookIds[0]).toBe('jhs1-core');
     expect(plan.selectedBookIds).toContain('jhs2-school');
     expect(plan.selectedBookIds).not.toContain('b2-logic');
+  });
+
+  it('normalizes generated plans to available book ids only', () => {
+    const businessBooks: BookMetadata[] = [
+      {
+        id: 'system-v5',
+        title: 'システム英単語 5訂版',
+        wordCount: 2027,
+        isPriority: false,
+        catalogSource: BookCatalogSource.LICENSED_PARTNER,
+        accessScope: BookAccessScope.BUSINESS_ONLY,
+      },
+      {
+        id: 'target-1900',
+        title: '英単語ターゲット1900 6訂版',
+        wordCount: 1900,
+        isPriority: false,
+        catalogSource: BookCatalogSource.LICENSED_PARTNER,
+        accessScope: BookAccessScope.BUSINESS_ONLY,
+      },
+    ];
+
+    const plan = normalizeGeneratedLearningPlan({
+      uid: 'student-business',
+      grade: UserGrade.SHS2,
+      level: EnglishLevel.B1,
+      availableBooks: businessBooks,
+      learningPreference: buildPreference({ weakSkillFocus: 'システム英単語を進める' }),
+      now: new Date('2026-06-06T00:00:00+09:00'),
+      plan: {
+        createdAt: 1,
+        targetDate: '2026-07-01',
+        goalDescription: 'AI generated',
+        dailyWordGoal: 999,
+        selectedBookIds: ['missing-book', 'system-v5', 'system-v5', 'target-1900'],
+        status: 'ACTIVE',
+      },
+    });
+
+    expect(plan.uid).toBe('student-business');
+    expect(plan.dailyWordGoal).toBe(36);
+    expect(plan.selectedBookIds).toEqual(['system-v5', 'target-1900']);
+  });
+
+  it('falls back when generated plans do not contain any usable book ids', () => {
+    const plan = normalizeGeneratedLearningPlan({
+      uid: 'student-business',
+      grade: UserGrade.SHS2,
+      level: EnglishLevel.B1,
+      availableBooks: [
+        {
+          id: 'system-v5',
+          title: 'システム英単語 5訂版',
+          wordCount: 2027,
+          isPriority: false,
+          description: '大学受験 語彙',
+          catalogSource: BookCatalogSource.LICENSED_PARTNER,
+          accessScope: BookAccessScope.BUSINESS_ONLY,
+        },
+      ],
+      learningPreference: buildPreference({ weakSkillFocus: '大学受験の語彙を増やす' }),
+      now: new Date('2026-06-06T00:00:00+09:00'),
+      plan: {
+        goalDescription: '',
+        dailyWordGoal: Number.NaN,
+        selectedBookIds: ['not-visible'],
+      },
+    });
+
+    expect(plan.selectedBookIds).toEqual(['system-v5']);
+    expect(plan.goalDescription).toContain('1冊を軸に');
+    expect(plan.status).toBe('ACTIVE');
   });
 });

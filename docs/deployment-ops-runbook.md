@@ -14,10 +14,24 @@
 
 ## Release Flow
 
-1. PR で `CI` と preview deployment を通す。`CI` と deploy workflow は `verify:fast` を先に走らせ、migration filename check / local D1 migration replay / typecheck / unit tests を同じ gate で確認します。
-2. `Deploy Pages Preview` が preview DB migration と deployed smoke まで通ったことを確認する。
-3. `main` へ merge すると `Deploy Pages` が production bookmark を採取し、remote migration と Pages deploy を実行する。
-4. job summary に記録された production bookmark を DB rollback の起点として保存する。
+1. local では `npm run release:gate:local:dry` で順序を確認し、release 前に `npm run release:gate:local` を通す。この gate は migration filename check / local D1 migration replay / typecheck / unit tests / build / API integration tests / full smoke suite / `cf:doctor` / deploy artifact build を直列で確認します。
+2. PR で `CI` と preview deployment を通す。deploy workflow は local gate と同じ意味の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を個別 step で確認します。
+3. `Deploy Pages Preview` が preview DB migration と deployed smoke まで通ったことを確認する。
+4. `main` へ merge すると `Deploy Pages` が production bookmark を採取し、remote migration と Pages deploy を実行する。
+5. job summary に記録された production bookmark を DB rollback の起点として保存する。
+
+## Smoke Suites
+
+- `sentinel`: PR の高速回帰。public / student の代表フローだけを短く確認します。
+- `full`: release 必須。public / student / organization / commercial / writing / mobile と local IDB fallback を確認します。
+- deployed smoke: preview / production の公開 URL に `PLAYWRIGHT_BASE_URL` を向け、`scripts/run-smoke-tests.mjs --suite sentinel --grep ...` 経由で asset / PWA / 公開URLの代表フローを確認します。
+
+## B2B Storage/API Contract Checklist
+
+- `tests/storage-action-contract.test.ts` で storage action の role gate と payload parse を確認します。
+- 生徒は自分の mission を `OPENED` できますが、`MANUAL_COMPLETE` は講師・管理者だけが使います。
+- commercial provision は admin 操作として扱い、status / target plan / organization role / linked user の payload validation を維持します。
+- organization assignment、cohort、mission 作成は Cloudflare/D1 正史で確認します。B2B acceptance は `cf:preview` または full smoke を基準にし、IDB fallback の画面確認だけで release 判定しません。
 
 ## Rollback
 
@@ -40,7 +54,9 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 ## Secrets and Drift
 
 - `npm run cf:doctor` は repo-level fallback に加えて GitHub environment secrets / variables と preview DB binding を検査します。
-- release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred key や一時的な外部 inventory 警告として残せますが、`error` が 1 件でもある場合は preview / production deploy を止めます。
+- release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred key など明示的に延期できる項目として残せますが、`error` が 1 件でもある場合は preview / production deploy を止めます。
+- Cloudflare native Git auto-deploy、`*-git` mirror Pages project、Pages project 設定の検査不能は二重 deploy や migration 前 deploy の原因になるため、通常の `cf:doctor` で release-blocking error として扱います。`npm run cf:sync` で auto-deploy を無効化し、不要な mirror project は Cloudflare Dashboard で削除してください。
+- `npm run cf:doctor:strict` は deferred AI key も release 条件に含める日の診断用です。通常の local release gate と deploy workflow は `cf:doctor` を正本にします。
 - `INTERNAL_JOB_SECRET` は GitHub scheduled workflow の repository secret と、Pages production / preview の runtime secret の両方に必要です。前者が無いと `analytics-snapshots.yml` / `word-hint-audit.yml` が落ち、後者が無いと内部 endpoint が 503 を返します。
 - Pages の required secrets は `ADMIN_DEMO_PASSWORD`, `WRITING_AI_MODE`, `INTERNAL_JOB_SECRET` です。`GEMINI_API_KEY` と `OPENAI_API_KEY` は外部 AI を有効化するまで deferred warning として扱います。
 - `npm run cf:sync` は GitHub environment vars/secrets と preview DB の存在を揃えます。

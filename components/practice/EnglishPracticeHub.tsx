@@ -1704,11 +1704,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <button
                 type="button"
+                data-testid="english-practice-close"
                 onClick={handleBack}
                 className="inline-flex min-h-10 items-center gap-2 rounded-md border border-medace-200 bg-white px-3 py-2 text-sm font-black text-slate-700 transition-colors hover:bg-medace-50 hover:text-medace-700"
               >
                 <ArrowLeft className="h-4 w-4" />
-                戻る
+                演習を閉じる
               </button>
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">

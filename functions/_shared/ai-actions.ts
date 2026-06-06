@@ -38,7 +38,7 @@ import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscrip
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
 import { normalizeAiGrammarQuestionDrafts } from '../../utils/aiGrammarQuestions';
-import { buildFallbackLearningPlan } from '../../utils/learningPlan';
+import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import {
   filterWorksheetQuestionCandidates,
@@ -810,15 +810,22 @@ const generateLearningPlan = async (env: AppEnv, payload: GenerateLearningPlanPa
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + (parsed.targetDays || 30));
 
-    return {
+    return normalizeGeneratedLearningPlan({
+      plan: {
+        uid: '',
+        createdAt: Date.now(),
+        targetDate: formatDateKey(targetDate),
+        goalDescription: parsed.goalDescription,
+        dailyWordGoal: parsed.dailyWordGoal,
+        selectedBookIds: parsed.selectedBookIds,
+        status: 'ACTIVE',
+      },
       uid: '',
-      createdAt: Date.now(),
-      targetDate: formatDateKey(targetDate),
-      goalDescription: parsed.goalDescription,
-      dailyWordGoal: parsed.dailyWordGoal,
-      selectedBookIds: parsed.selectedBookIds,
-      status: 'ACTIVE',
-    };
+      grade,
+      level,
+      availableBooks,
+      learningPreference,
+    });
   } catch (error) {
     handleAiError(error, '学習プラン生成に失敗しました。');
   }

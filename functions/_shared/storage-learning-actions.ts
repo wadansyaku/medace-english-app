@@ -48,6 +48,7 @@ import {
   normalizeHistoryStatus,
   readAll,
   readFirst,
+  readVisibleBookRows,
   type DbHistoryRow,
   type DbLearningPreferenceRow,
 } from './storage-support';
@@ -58,6 +59,64 @@ const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKe
   const organization = await readActiveOrganizationContextForUser(env, userId);
   if (!organization) return;
   await rebuildOrganizationKpiSnapshots(env, organization.organizationId, { dateKeys });
+};
+
+const MAX_SELECTED_PLAN_BOOKS = 5;
+
+const normalizePlanDailyWordGoal = (value: unknown): number => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 12;
+  return Math.min(80, Math.max(1, Math.round(numeric)));
+};
+
+const normalizePlanStatus = (value: unknown): LearningPlan['status'] => (
+  value === 'COMPLETED' || value === 'ABANDONED' ? value : 'ACTIVE'
+);
+
+const normalizePlanTargetDate = (value: unknown): string => {
+  if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 24);
+  return formatDateKey(new Date(Date.now() + DAY_MS * 30));
+};
+
+const normalizePlanGoalDescription = (value: unknown): string => {
+  if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 240);
+  return '学習プランを作成しました。';
+};
+
+const normalizePlanCreatedAt = (value: unknown): number => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : Date.now();
+};
+
+const normalizeSelectedPlanBookIds = async (
+  env: AppEnv,
+  user: DbUserRow,
+  selectedBookIds: unknown,
+): Promise<string[]> => {
+  if (!Array.isArray(selectedBookIds)) {
+    throw new HttpError(400, '学習プランには少なくとも1冊の教材が必要です。');
+  }
+
+  const requestedBookIds = selectedBookIds
+    .map((bookId) => (typeof bookId === 'string' ? bookId.trim() : ''))
+    .filter(Boolean)
+    .filter((bookId, index, array) => array.indexOf(bookId) === index);
+
+  if (requestedBookIds.length === 0) {
+    throw new HttpError(400, '学習プランには少なくとも1冊の教材が必要です。');
+  }
+  if (requestedBookIds.length > MAX_SELECTED_PLAN_BOOKS) {
+    throw new HttpError(400, '学習プランの教材は5冊以内に絞ってください。');
+  }
+
+  const visibleBookRows = await readVisibleBookRows(env, user);
+  const visibleBookIds = new Set(visibleBookRows.map((book) => book.id));
+  const inaccessibleBookIds = requestedBookIds.filter((bookId) => !visibleBookIds.has(bookId));
+  if (inaccessibleBookIds.length > 0) {
+    throw new HttpError(400, 'このプランに含まれる教材を利用できません。');
+  }
+
+  return requestedBookIds;
 };
 
 const ENGLISH_PRACTICE_QUIZ_MODES = [
@@ -707,8 +766,19 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
 };
 
 export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan: LearningPlan): Promise<void> => {
-  const createdAt = plan.createdAt || Date.now();
+  const selectedBookIds = await normalizeSelectedPlanBookIds(env, user, plan.selectedBookIds);
+  const createdAt = normalizePlanCreatedAt(plan.createdAt);
   const updatedAt = Date.now();
+  const normalizedPlan: LearningPlan = {
+    uid: user.id,
+    createdAt,
+    targetDate: normalizePlanTargetDate(plan.targetDate),
+    goalDescription: normalizePlanGoalDescription(plan.goalDescription),
+    dailyWordGoal: normalizePlanDailyWordGoal(plan.dailyWordGoal),
+    selectedBookIds,
+    status: normalizePlanStatus(plan.status),
+  };
+
   await env.DB.prepare(`
     INSERT INTO learning_plans (
       user_id, created_at, target_date, goal_description, daily_word_goal, selected_book_ids, status, updated_at
@@ -723,14 +793,14 @@ export const handleSaveLearningPlan = async (env: AppEnv, user: DbUserRow, plan:
   `).bind(
     user.id,
     createdAt,
-    plan.targetDate,
-    plan.goalDescription,
-    plan.dailyWordGoal,
-    JSON.stringify(plan.selectedBookIds || []),
-    plan.status,
+    normalizedPlan.targetDate,
+    normalizedPlan.goalDescription,
+    normalizedPlan.dailyWordGoal,
+    JSON.stringify(normalizedPlan.selectedBookIds),
+    normalizedPlan.status,
     updatedAt,
   ).run();
-  await syncLearningPlanBooks(env, user.id, plan.selectedBookIds || [], updatedAt, createdAt);
+  await syncLearningPlanBooks(env, user.id, normalizedPlan.selectedBookIds, updatedAt, createdAt);
 
   await rebuildOrganizationKpiForUser(env, user.id, getLastTokyoDateKeys(1));
 };

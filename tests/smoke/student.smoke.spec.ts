@@ -29,7 +29,7 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
 
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  await expect(page.getByText('今日の入口')).toBeVisible();
+  await expect(page.getByText('今日やること')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
@@ -43,8 +43,10 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
 
   await page.getByTestId('dashboard-practice-lane-grammar').click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
-  await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-practice-focus')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-hero-section')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-reference-rail')).toHaveCount(0);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByRole('heading', { name: '参考書型の文法演習' })).toBeVisible();
   await page.goBack();
@@ -55,6 +57,8 @@ test('demo student can complete onboarding and reach the dashboard', async ({ pa
   await page.getByTestId('dashboard-practice-lane-grammar').click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-reference-rail')).toHaveCount(0);
   await page.getByTestId('english-practice-close').click();
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page).toHaveURL(/\/dashboard$/);
@@ -73,7 +77,8 @@ test('desktop student dashboard keeps the command center calm and above the fold
   await expect(commandCenter).toBeVisible();
   await expect(primaryCta).toHaveCount(1);
   await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
-  await expect(page.getByTestId('dashboard-task-overview-today')).toBeVisible();
+  await expect(page.getByTestId('dashboard-task-overview-today')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-task-reference-library')).toBeVisible();
 
   const ctaBox = await primaryCta.boundingBox();
   const commandBox = await commandCenter.boundingBox();
@@ -134,8 +139,8 @@ test('desktop student dashboard keeps the command center calm and above the fold
     }).toBeLessThanOrEqual(260);
   }
 
-  await page.getByTestId('dashboard-task-overview-today').scrollIntoViewIfNeeded();
-  await page.getByTestId('dashboard-task-overview-today').click();
+  await primaryCta.scrollIntoViewIfNeeded();
+  await primaryCta.click();
   const startedStudy = await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront).isVisible({ timeout: 5000 }).catch(() => false);
   if (!startedStudy) {
     await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
@@ -256,7 +261,7 @@ test('study routes survive reload and finish back on the dashboard path', async 
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 });
 
-test('student can open the integrated practice section from a direct route', async ({ page }) => {
+test('student can open the dedicated practice screen from a direct route', async ({ page }) => {
   await page.goto('/');
 
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
@@ -264,9 +269,14 @@ test('student can open the integrated practice section from a direct route', asy
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 
   await page.goto('/english-practice/grammar');
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
-  await expect(page.getByTestId('dashboard-practice-focus')).toBeVisible();
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-practice-focus')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-hero-section')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-reference-rail')).toHaveCount(0);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await expect(page.getByTestId('layout-nav-home')).toBeVisible();
+  await expect(page.getByTestId('layout-nav-english-practice-current')).toBeVisible();
+  await expect(page.getByTestId('layout-nav-english-practice-current')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('english-practice-lane-grammar')).toBeVisible();
   await expect(page.getByTestId('english-practice-lane-overview')).toHaveCount(0);
   await expect(page.getByText('文法範囲を選ぶ')).toBeVisible();
@@ -288,6 +298,7 @@ test('student can open the integrated practice section from a direct route', asy
   await page.getByTestId('english-practice-close').click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 
   await page.goto('/english-practice');
   await expect(page).toHaveURL(/\/dashboard$/);

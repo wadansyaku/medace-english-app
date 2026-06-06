@@ -54,6 +54,10 @@ const OPEN_STATUSES = [
   CommercialRequestStatus.CONTACTED,
   CommercialRequestStatus.APPROVED,
 ] as const;
+const BUSINESS_SUBSCRIPTION_PLANS = [
+  SubscriptionPlan.TOB_FREE,
+  SubscriptionPlan.TOB_PAID,
+] as const;
 
 const createCommercialRequestFromRow = (row: DbCommercialRequestRow): CommercialRequest => ({
   id: Number(row.id),
@@ -124,6 +128,59 @@ const assertCommercialRequestPayload = (payload: CommercialRequestPayload): Comm
     organizationName: organizationName || undefined,
     desiredStartTiming: desiredStartTiming || undefined,
     seatEstimate: seatEstimate || undefined,
+  };
+};
+
+export const assertCommercialRequestUpdatePayload = (
+  payload: CommercialRequestUpdatePayload,
+): CommercialRequestUpdatePayload => {
+  const id = Number(payload.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new HttpError(400, '申請IDが不正です。');
+  }
+  if (!Object.values(CommercialRequestStatus).includes(payload.status)) {
+    throw new HttpError(400, '申請ステータスが不正です。');
+  }
+  if (
+    payload.targetSubscriptionPlan
+    && !Object.values(SubscriptionPlan).includes(payload.targetSubscriptionPlan)
+  ) {
+    throw new HttpError(400, '反映先プランが不正です。');
+  }
+  if (
+    payload.targetOrganizationRole
+    && !Object.values(OrganizationRole).includes(payload.targetOrganizationRole)
+  ) {
+    throw new HttpError(400, '反映先の組織ロールが不正です。');
+  }
+
+  const resolutionNote = String(payload.resolutionNote || '').trim() || undefined;
+  const linkedUserUid = String(payload.linkedUserUid || '').trim() || undefined;
+  const targetOrganizationId = String(payload.targetOrganizationId || '').trim() || undefined;
+  const targetOrganizationName = String(payload.targetOrganizationName || '').trim() || undefined;
+
+  if (payload.status === CommercialRequestStatus.PROVISIONED) {
+    if (!linkedUserUid) {
+      throw new HttpError(400, '反映対象ユーザーを指定してください。');
+    }
+    if (!payload.targetSubscriptionPlan || !(BUSINESS_SUBSCRIPTION_PLANS as readonly SubscriptionPlan[]).includes(payload.targetSubscriptionPlan)) {
+      throw new HttpError(400, 'ビジネスプランを指定してください。');
+    }
+    if (!payload.targetOrganizationRole) {
+      throw new HttpError(400, '反映先の組織ロールを指定してください。');
+    }
+    if (!targetOrganizationId && !targetOrganizationName) {
+      throw new HttpError(400, '反映先の組織を指定してください。');
+    }
+  }
+
+  return {
+    ...payload,
+    id,
+    resolutionNote,
+    linkedUserUid,
+    targetOrganizationId,
+    targetOrganizationName,
   };
 };
 
@@ -351,20 +408,18 @@ export const handleUpdateCommercialRequest = async (
   payload: CommercialRequestUpdatePayload,
 ): Promise<CommercialRequest> => {
   const now = Date.now();
-  if (!Object.values(CommercialRequestStatus).includes(payload.status)) {
-    throw new HttpError(400, '申請ステータスが不正です。');
-  }
+  const input = assertCommercialRequestUpdatePayload(payload);
 
   const current = await readFirst<DbCommercialRequestRow>(
     env,
     `SELECT * FROM commercial_requests WHERE id = ?`,
-    payload.id,
+    input.id,
   );
   if (!current) {
     throw new HttpError(404, '申請が見つかりません。');
   }
 
-  await maybeProvisionLinkedUser(env, user, payload, now);
+  await maybeProvisionLinkedUser(env, user, input, now);
 
   await env.DB.prepare(`
     UPDATE commercial_requests
@@ -378,21 +433,21 @@ export const handleUpdateCommercialRequest = async (
            updated_at = ?
      WHERE id = ?
   `).bind(
-    payload.status,
-    payload.resolutionNote || null,
-    payload.linkedUserUid || null,
-    payload.targetSubscriptionPlan || null,
-    payload.targetOrganizationId || null,
-    payload.targetOrganizationName || null,
-    payload.targetOrganizationRole || null,
+    input.status,
+    input.resolutionNote || null,
+    input.linkedUserUid || null,
+    input.targetSubscriptionPlan || null,
+    input.targetOrganizationId || null,
+    input.targetOrganizationName || null,
+    input.targetOrganizationRole || null,
     now,
-    payload.id,
+    input.id,
   ).run();
 
   const updated = await readFirst<DbCommercialRequestRow>(
     env,
     `SELECT * FROM commercial_requests WHERE id = ?`,
-    payload.id,
+    input.id,
   );
   if (!updated) {
     throw new HttpError(500, '申請更新に失敗しました。');

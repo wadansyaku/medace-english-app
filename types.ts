@@ -627,6 +627,7 @@ export interface LearningTaskIntent {
   selectionPolicy: TaskSelectionPolicy;
   limit: number;
   bookId?: string;
+  preferredBookIds?: string[];
   missionAssignmentId?: string;
   targetQuestionModes?: WorksheetQuestionMode[];
   targetBandIndex?: number;

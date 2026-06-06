@@ -75,7 +75,14 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   const coachActionType = viewModel.coachRecommendedActionType;
   const primaryMission = viewModel.primaryMission;
   const topWeakness = viewModel.weaknessProfile?.topWeaknesses[0] || null;
-  const todayTaskIntent = React.useMemo(() => createTodayFocusTaskIntent(), []);
+  const todayPreferredBookIds = React.useMemo(
+    () => viewModel.plannedBooks.map((book) => book.id),
+    [viewModel.plannedBooks],
+  );
+  const todayTaskIntent = React.useMemo(
+    () => createTodayFocusTaskIntent({ preferredBookIds: todayPreferredBookIds }),
+    [todayPreferredBookIds],
+  );
   const weaknessTaskIntent = React.useMemo(() => createWeaknessTaskIntent(topWeakness), [topWeakness]);
   const missionTaskIntent = React.useMemo(
     () => (primaryMission?.nextTaskIntent || (primaryMission ? createMissionTaskIntent(primaryMission) : null)),
@@ -295,7 +302,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         isCompact={isStudentMobileShell}
         onEditPlan={() => controller.setShowPlanEditModal(true)}
         onGeneratePlan={controller.handleGeneratePlan}
-        onOpenCreateModal={() => controller.setShowCreateModal(true)}
       />
     </div>
   );
@@ -558,16 +564,16 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         onClick: () => navigation.scrollToSection(navigation.weaknessSectionRef),
       };
 
-	  const primaryLauncherId = viewModel.primaryTask?.id || 'today';
-	  const primaryQuickNavId = primaryLauncherId === 'englishPractice' ? 'english-practice' : primaryLauncherId;
-	  const mobileLauncherItems: DashboardMobileQuickNavItem[] = [
-	    {
-	      id: primaryQuickNavId,
-	      label: viewModel.primaryTask?.mobileLabel || '始める',
-	      kind: viewModel.primaryTask ? getTaskLauncherKind(viewModel.primaryTask.id) : 'today',
-	      active: navigation.activeQuickNavId === primaryQuickNavId || navigation.activeQuickNavId === 'today',
-	      onClick: handlePrimaryTaskAction,
-	    },
+  const primaryLauncherId = viewModel.primaryTask?.id || 'today';
+  const primaryQuickNavId = primaryLauncherId === 'englishPractice' ? 'english-practice' : primaryLauncherId;
+  const mobileLauncherItems: DashboardMobileQuickNavItem[] = [
+    {
+      id: primaryQuickNavId,
+      label: viewModel.primaryTask?.mobileLabel || '始める',
+      kind: viewModel.primaryTask ? getTaskLauncherKind(viewModel.primaryTask.id) : 'today',
+      active: navigation.activeQuickNavId === primaryQuickNavId || navigation.activeQuickNavId === 'today',
+      onClick: handlePrimaryTaskAction,
+    },
     viewModel.primaryTask?.id === 'englishPractice' ? null : {
       id: 'english-practice',
       label: '演習',
@@ -588,7 +594,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     ? 'today'
     : viewModel.primaryLearningRouteId;
   const hasPrimarySupportSections = primarySupportSections.length > 0;
-
   return (
     <>
       <div
@@ -658,6 +663,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
             urgentTasks={viewModel.urgentTasks}
             supportingTasks={viewModel.supportingTasks}
             referenceTasks={referenceShortcutTasks}
+            showPrimaryAction={false}
             onSelectTask={runOverviewTaskAction}
             onSelectReferenceTask={scrollToTaskSection}
             onStartPrimary={handlePrimaryTaskAction}
