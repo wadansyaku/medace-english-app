@@ -109,6 +109,21 @@ export const evaluateMaterialQualityGate = (
   };
 };
 
+export const getLearnerMaterialQualityMessage = (gate: MaterialQualityGate | undefined): string => {
+  if (!gate || gate.isApprovedForLearner || gate.status === 'user_generated') {
+    return '学習に使える教材です。';
+  }
+  return 'この教材は確認中です。承認後に学習やテストで使えます。';
+};
+
+export const getOperatorMaterialQualityMessage = (gate: MaterialQualityGate | undefined): string => {
+  if (!gate || gate.isApprovedForLearner || gate.status === 'user_generated') {
+    return '配信可能な教材です。';
+  }
+  const firstReason = gate.blockingReasons[0] || gate.summary;
+  return `${firstReason} 承認済みにするまで生徒の学習・テストには出しません。`;
+};
+
 export const isBookSelectableForToday = (book: BookMetadata): boolean => (
   book.qualityGate ? book.qualityGate.isSelectableForToday : true
 );

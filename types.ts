@@ -1182,6 +1182,15 @@ export interface AdminBookInsight {
   qualityGate?: MaterialQualityGate;
 }
 
+export interface AdminMaterialQualitySummary {
+  officialBookCount: number;
+  approvedBookCount: number;
+  selectableTodayBookCount: number;
+  reviewRequiredBookCount: number;
+  qaBlockedBookCount: number;
+  missingLedgerBookCount: number;
+}
+
 export interface AdminAiActionSummary {
   action: string;
   label: string;
@@ -1544,6 +1553,7 @@ export interface AdminDashboardSnapshot {
   riskBreakdown: AdminRiskBreakdownItem[];
   trend: AdminTrendPoint[];
   topBooks: AdminBookInsight[];
+  materialQuality: AdminMaterialQualitySummary;
   aiActions: AdminAiActionSummary[];
   recentNotifications: InstructorNotification[];
   recentReports: AdminWordReportSummary[];

@@ -1,0 +1,124 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+
+import AdminDashboardView from '../components/admin/AdminDashboardView';
+import {
+  StudentRiskLevel,
+  SubscriptionPlan,
+  type AdminDashboardSnapshot,
+} from '../types';
+
+const snapshot: AdminDashboardSnapshot = {
+  overview: {
+    totalStudents: 0,
+    activeToday: 0,
+    active7d: 0,
+    atRiskCount: 0,
+    studentsWithPlan: 0,
+    averageLearnedWords: 0,
+    averageAccuracyRate: 0,
+    officialBookCount: 3,
+    customBookCount: 0,
+    totalWordCount: 300,
+    reportedWordCount: 0,
+    notifications7d: 0,
+    aiRequestsThisMonth: 0,
+    aiCostThisMonthMilliYen: 0,
+  },
+  planBreakdown: [],
+  riskBreakdown: [
+    { riskLevel: StudentRiskLevel.SAFE, count: 0 },
+    { riskLevel: StudentRiskLevel.WARNING, count: 0 },
+    { riskLevel: StudentRiskLevel.DANGER, count: 0 },
+  ],
+  trend: [],
+  topBooks: [],
+  materialQuality: {
+    officialBookCount: 3,
+    approvedBookCount: 1,
+    selectableTodayBookCount: 1,
+    reviewRequiredBookCount: 1,
+    qaBlockedBookCount: 1,
+    missingLedgerBookCount: 0,
+  },
+  aiActions: [],
+  recentNotifications: [],
+  recentReports: [],
+  organizations: [],
+  atRiskStudents: [],
+  productKpis: {
+    dateKey: '2026-06-07',
+    totalUsers: 0,
+    activeStudents1d: 0,
+    activeStudents7d: 0,
+    activeStudents30d: 0,
+    totalOrganizations: 0,
+    activeOrganizations30d: 0,
+    studySessionsStarted30d: 0,
+    studySessionsFinished30d: 0,
+    quizSessionsStarted30d: 0,
+    spellingChecksStarted30d: 0,
+    commercialFormOpenCount30d: 0,
+    commercialRequestCount30d: 0,
+    organizationsWithCohortCount: 0,
+    organizationsWithAssignmentCount: 0,
+    organizationsWithMissionCount: 0,
+    organizationsWithNotificationCount: 0,
+    writingAssignmentsCreated30d: 0,
+    writingSubmissionsReceived30d: 0,
+    writingReviewsCompleted30d: 0,
+    generationCount30d: 0,
+    cacheHitCount30d: 0,
+    exampleGenerationCount30d: 0,
+    exampleCacheHitCount30d: 0,
+    imageGenerationCount30d: 0,
+    imageCacheHitCount30d: 0,
+    estimatedAiCostMilliYen30d: 0,
+    estimatedProviderAiCostMilliYen30d: 0,
+    estimatedAvoidedCostMilliYen30d: 0,
+    createdAt: 0,
+    updatedAt: 1,
+  },
+  activationFunnel: {
+    totalOrganizations: 0,
+    organizationsWithCohortCount: 0,
+    organizationsWithAssignmentCount: 0,
+    organizationsWithMissionCount: 0,
+    organizationsWithNotificationCount: 0,
+    writingAssignmentsCreated30d: 0,
+    writingSubmissionsReceived30d: 0,
+    writingReviewsCompleted30d: 0,
+    commercialFormOpenCount30d: 0,
+    commercialRequestCount30d: 0,
+  },
+  aiEconomics: {
+    monthKey: '2026-06',
+    generationCount: 0,
+    cacheHitCount: 0,
+    cacheHitRatio: 0,
+    exampleCacheHitRatio: 0,
+    imageCacheHitRatio: 0,
+    estimatedCostMilliYen: 0,
+    estimatedProviderCostMilliYen: 0,
+    avoidedCostMilliYen: 0,
+  },
+};
+
+describe('AdminDashboardView material quality', () => {
+  it('shows the quality queue from the global material summary even when top books are empty', () => {
+    const rendered = renderToStaticMarkup(
+      <AdminDashboardView
+        snapshot={snapshot}
+        loading={false}
+        error={null}
+        headline="運営ダッシュボード"
+        subcopy="教材品質を確認します。"
+      />,
+    );
+
+    expect(rendered).toContain('教材品質キュー');
+    expect(rendered).toContain('承認済み 1 / 3 冊。');
+    expect(rendered).toContain('確認中 1 冊、QA停止 1 冊、台帳なし 0 冊です。');
+  });
+});

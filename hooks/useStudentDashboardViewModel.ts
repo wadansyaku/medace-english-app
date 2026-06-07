@@ -159,6 +159,7 @@ export const useStudentDashboardViewModel = ({
   const planningBooks = [...books, ...myBooks];
   const selectableOfficialBooks = books.filter(isBookSelectableForToday);
   const selectablePlanningBooks = planningBooks.filter(isBookSelectableForToday);
+  const blockedOfficialBookCount = books.length - selectableOfficialBooks.length;
   const hasStudyBooks = selectablePlanningBooks.length > 0;
   const studyMode = user.studyMode || UserStudyMode.FOCUS;
   const isGameMode = studyMode === UserStudyMode.GAME;
@@ -222,13 +223,17 @@ export const useStudentDashboardViewModel = ({
   const secondaryRecommendedBooks = recommendedOfficialBooks.slice(1);
 
   const heroTitle = !hasStudyBooks
-    ? '教材を1冊作る'
+    ? blockedOfficialBookCount > 0
+      ? '配布教材を確認中'
+      : '教材を1冊作る'
     : remainingWords > 0
       ? `あと${remainingWords}語`
       : '今日は完了';
 
   const heroCopy = !hasStudyBooks
-    ? '教科書・PDF・本文から作成。1ページ分で始められます。'
+    ? blockedOfficialBookCount > 0
+      ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
+      : '教科書・PDF・本文から作成。1ページ分で始められます。'
     : remainingWords > 0
       ? dueCount > 0
         ? `まず復習${reviewFirstCount}語。そのあと残りへ。`
@@ -236,7 +241,9 @@ export const useStudentDashboardViewModel = ({
       : '余力があれば、英語演習を1セットだけ追加します。';
 
   const questButtonLabel = !hasStudyBooks
-    ? '教材を作る'
+    ? blockedOfficialBookCount > 0
+      ? 'My単語帳を作る'
+      : '教材を作る'
     : remainingWords > 0
       ? '学習を始める'
       : '復習を足す';
@@ -600,6 +607,7 @@ export const useStudentDashboardViewModel = ({
     accountOverview,
     commercialRequests,
     planningBooks,
+    blockedOfficialBookCount,
     hasStudyBooks,
     isGameMode,
     todayCount,

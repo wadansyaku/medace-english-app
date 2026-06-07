@@ -11,6 +11,8 @@ import {
   getPublicBusinessRolePath,
 } from '../../shared/publicBusinessRoles';
 
+const expectedDeploymentSha = process.env.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA?.trim();
+
 test('public home shows the live motivation board before login', async ({ page }) => {
   await page.goto('/');
 
@@ -22,6 +24,9 @@ test('public home shows the live motivation board before login', async ({ page }
 test('public readonly session endpoint is reachable before login', async ({ page }) => {
   const response = await page.request.get('/api/session');
   expect([200, 204]).toContain(response.status());
+  if (expectedDeploymentSha) {
+    expect(response.headers()['x-deployment-sha']).toBe(expectedDeploymentSha);
+  }
   if (response.status() === 200) {
     await expect(response.json()).resolves.toBeNull();
   } else {

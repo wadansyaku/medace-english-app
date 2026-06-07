@@ -19,6 +19,7 @@ import {
 } from '../../shared/learningHistory';
 import {
   evaluateMaterialQualityGate,
+  isBookSelectableForToday,
   toMaterialLedgerSnapshot,
 } from '../../shared/materialQuality';
 import { formatDateKey, formatMonthKey, getTodayDateKey, shiftDateKey } from '../../utils/date';
@@ -319,6 +320,14 @@ export const readVisibleBookRows = async (env: AppEnv, user: DbUserRow): Promise
   return getVisibleBookRows(user, rows);
 };
 
+export const getLearningSelectableBookRows = (rows: DbBookRow[]): DbBookRow[] => (
+  rows.filter((row) => isBookSelectableForToday(toBookMetadata(row)))
+);
+
+export const readVisibleLearningBookRows = async (env: AppEnv, user: DbUserRow): Promise<DbBookRow[]> => (
+  getLearningSelectableBookRows(await readVisibleBookRows(env, user))
+);
+
 export const buildInClause = (count: number): string => Array.from({ length: count }, () => '?').join(', ');
 
 export const getVisibleBookIds = async (env: AppEnv, user: DbUserRow): Promise<string[]> => {
@@ -326,8 +335,13 @@ export const getVisibleBookIds = async (env: AppEnv, user: DbUserRow): Promise<s
   return rows.map((row) => row.id);
 };
 
+export const getVisibleLearningBookIds = async (env: AppEnv, user: DbUserRow): Promise<string[]> => {
+  const rows = await readVisibleLearningBookRows(env, user);
+  return rows.map((row) => row.id);
+};
+
 export const getVisibleDueCount = async (env: AppEnv, user: DbUserRow): Promise<number> => {
-  const bookIds = await getVisibleBookIds(env, user);
+  const bookIds = await getVisibleLearningBookIds(env, user);
   if (bookIds.length === 0) return 0;
 
   const row = await readFirst<{ count: number }>(
@@ -376,6 +390,24 @@ export const assertBookReadAccess = async (env: AppEnv, user: DbUserRow, bookId:
 
   if (!canAccessOfficialBook(user, toBookMetadata(row))) {
     throw new HttpError(403, 'このプランでは対象教材を利用できません。');
+  }
+};
+
+export const assertBookLearningAccess = async (env: AppEnv, user: DbUserRow, bookId: string): Promise<void> => {
+  const row = await getBookRow(env, bookId);
+  if (!row) throw new HttpError(404, '単語帳が見つかりません。');
+
+  const book = toBookMetadata(row);
+  if (row.created_by !== user.id && user.role !== UserRole.ADMIN && !canAccessOfficialBook(user, book)) {
+    throw new HttpError(403, 'このプランでは対象教材を利用できません。');
+  }
+
+  if (user.role === UserRole.ADMIN) {
+    return;
+  }
+
+  if (!isBookSelectableForToday(book)) {
+    throw new HttpError(403, 'この教材は確認中のため、学習やテストにはまだ使えません。');
   }
 };
 

@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   readAllMock,
   readFirstMock,
-  readVisibleBookRowsMock,
+  readVisibleLearningBookRowsMock,
 } = vi.hoisted(() => ({
   readAllMock: vi.fn(),
   readFirstMock: vi.fn(),
-  readVisibleBookRowsMock: vi.fn(),
+  readVisibleLearningBookRowsMock: vi.fn(),
 }));
 
 vi.mock('../functions/_shared/storage-support', async () => {
@@ -16,7 +16,7 @@ vi.mock('../functions/_shared/storage-support', async () => {
     ...actual,
     readAll: readAllMock,
     readFirst: readFirstMock,
-    readVisibleBookRows: readVisibleBookRowsMock,
+    readVisibleLearningBookRows: readVisibleLearningBookRowsMock,
   };
 });
 
@@ -27,7 +27,7 @@ describe('learning plan storage', () => {
   beforeEach(() => {
     readAllMock.mockReset();
     readFirstMock.mockReset();
-    readVisibleBookRowsMock.mockReset();
+    readVisibleLearningBookRowsMock.mockReset();
   });
 
   it('prefers learning_plan_books over legacy selected_book_ids when both exist', async () => {
@@ -54,7 +54,7 @@ describe('learning plan storage', () => {
   });
 
   it('rejects inaccessible books before writing a learning plan', async () => {
-    readVisibleBookRowsMock.mockResolvedValueOnce([
+    readVisibleLearningBookRowsMock.mockResolvedValueOnce([
       {
         id: 'visible-book',
         title: 'Visible Book',
@@ -84,14 +84,51 @@ describe('learning plan storage', () => {
       status: 'ACTIVE',
     })).rejects.toMatchObject({
       status: 400,
-      message: 'このプランに含まれる教材を利用できません。',
+      message: '学習プランには確認済みの教材だけを選んでください。',
+    });
+
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects review-pending books before writing a learning plan', async () => {
+    readVisibleLearningBookRowsMock.mockResolvedValueOnce([
+      {
+        id: 'approved-book',
+        title: 'Approved Book',
+        word_count: 120,
+        is_priority: 0,
+        description: null,
+        source_context: null,
+        created_by: null,
+        catalog_source: BookCatalogSource.STEADY_STUDY_ORIGINAL,
+        access_scope: BookAccessScope.ALL_PLANS,
+      },
+    ]);
+    const prepare = vi.fn();
+    const env = { DB: { prepare, batch: vi.fn() } } as any;
+
+    await expect(handleSaveLearningPlan(env, {
+      id: 'student-1',
+      subscription_plan: SubscriptionPlan.TOB_PAID,
+      role: UserRole.STUDENT,
+    } as any, {
+      uid: 'student-1',
+      createdAt: 100,
+      targetDate: '2026-04-30',
+      goalDescription: 'goal',
+      dailyWordGoal: 12,
+      selectedBookIds: ['review-pending-book'],
+      status: 'ACTIVE',
+    })).rejects.toMatchObject({
+      status: 400,
+      message: '学習プランには確認済みの教材だけを選んでください。',
     });
 
     expect(prepare).not.toHaveBeenCalled();
   });
 
   it('deduplicates selected books and mirrors them to the join table', async () => {
-    readVisibleBookRowsMock.mockResolvedValueOnce([
+    readVisibleLearningBookRowsMock.mockResolvedValueOnce([
       {
         id: 'visible-book',
         title: 'Visible Book',

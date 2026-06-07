@@ -249,6 +249,25 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.primaryRecommendedBook?.id).toBe('approved-book');
   });
 
+  it('distinguishes review-pending distributed materials from an empty library', () => {
+    const snapshot = buildSnapshot({
+      officialBooks: [
+        withQualityGate(makeBook('pending-book', 'Pending'), false),
+      ],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.hasStudyBooks).toBe(false);
+    expect(viewModel.blockedOfficialBookCount).toBe(1);
+    expect(viewModel.heroTitle).toBe('配布教材を確認中');
+    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今はMy単語帳で始められます。');
+    expect(viewModel.questButtonLabel).toBe('My単語帳を作る');
+  });
+
   it('prioritizes actionable writing when the mission requires a submission', () => {
     const paidOverview = {
       ...buildSnapshot({}).accountOverview!,

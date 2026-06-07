@@ -318,6 +318,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         myBooks={viewModel.myBooks}
         primaryRecommendedBook={viewModel.primaryRecommendedBook}
         secondaryRecommendedBooks={viewModel.secondaryRecommendedBooks}
+        blockedOfficialBookCount={viewModel.blockedOfficialBookCount}
         progressMap={viewModel.progressMap}
         showLibrary={controller.showLibrary}
         isCompact={isStudentMobileShell}

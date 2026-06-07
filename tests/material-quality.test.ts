@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   evaluateMaterialQualityGate,
+  getLearnerMaterialQualityMessage,
   isBookSelectableForToday,
   type MaterialSourceLedgerSnapshot,
 } from '../shared/materialQuality';
@@ -73,5 +74,19 @@ describe('material quality gate', () => {
     expect(gate.status).toBe('user_generated');
     expect(gate.isSelectableForToday).toBe(true);
     expect(isBookSelectableForToday({ ...baseBook, qualityGate: gate })).toBe(true);
+  });
+
+  it('uses learner-facing copy for review-pending material', () => {
+    const gate = evaluateMaterialQualityGate(baseBook, {
+      ...approvedLedger,
+      rightsStatus: 'pending',
+      reviewStatus: 'needs_review',
+    });
+
+    const message = getLearnerMaterialQualityMessage(gate);
+
+    expect(message).toBe('この教材は確認中です。承認後に学習やテストで使えます。');
+    expect(message).not.toContain('source ledger');
+    expect(message).not.toContain('QA');
   });
 });

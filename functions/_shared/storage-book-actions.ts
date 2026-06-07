@@ -21,6 +21,7 @@ import {
   DbUserRow,
 } from './types';
 import {
+  assertBookLearningAccess,
   assertBookReadAccess,
   assertBookWriteAccess,
   buildInClause,
@@ -454,7 +455,7 @@ export const handleDeleteBook = async (env: AppEnv, user: DbUserRow, bookId: str
 };
 
 export const handleGetWordsByBook = async (env: AppEnv, user: DbUserRow, bookId: string): Promise<WordData[]> => {
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   const words = await readAll<DbWordRow>(env, 'SELECT * FROM words WHERE book_id = ? ORDER BY word_number ASC', bookId);
   return words.map(toWordData);
 };
@@ -735,7 +736,7 @@ export const handleGetBookSession = async (
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
 
   if (selectionPolicy === 'BOOK_NEW_ONLY') {

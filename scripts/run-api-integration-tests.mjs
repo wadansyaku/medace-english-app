@@ -623,6 +623,16 @@ const main = async () => {
     assert(orgBookTitles.includes('Starter 120'), 'business student should see ALL_PLANS official books');
     assert(orgBookTitles.includes('Business 500'), 'business student should see BUSINESS_ONLY official books');
     assert(orgBookTitles.includes('Legacy CSV 4-col'), 'business student should see official books imported from positional CSV');
+    const starterBook = orgBooks.find((book) => book.title === 'Starter 120');
+    const pendingBusinessBook = orgBooks.find((book) => book.title === 'Business 500');
+    assert(starterBook, 'business student should receive the approved starter official book');
+    assert(pendingBusinessBook, 'business student should see review-pending licensed partner books in the catalog');
+    const pendingBusinessWords = await orgStudent.storageRaw('getWordsByBook', { bookId: pendingBusinessBook.id });
+    assert(pendingBusinessWords.status === 403, 'business student should not be able to study review-pending licensed partner material');
+    assert(
+      String(pendingBusinessWords.data?.error || '').includes('確認中'),
+      'review-pending licensed partner material should explain that it is still under review',
+    );
 
     const missingProfileNounWorkbookImport = await admin.storageRaw('batchImportWords', {
       defaultBookName: 'noun_workbook_reviewed.csv',
@@ -672,10 +682,16 @@ const main = async () => {
       'imported noun workbook should preserve source context',
     );
 
-    const nounWorkbookWords = await orgStudent.storage('getWordsByBook', { bookId: nounWorkbookBook.id });
+    const blockedNounWorkbookWords = await orgStudent.storageRaw('getWordsByBook', { bookId: nounWorkbookBook.id });
+    assert(blockedNounWorkbookWords.status === 403, 'business student should not be able to study a newly imported review-pending noun workbook');
+    assert(
+      String(blockedNounWorkbookWords.data?.error || '').includes('確認中'),
+      'blocked noun workbook response should explain that the material is under review',
+    );
+    const nounWorkbookWords = await admin.storage('getWordsByBook', { bookId: nounWorkbookBook.id });
     assert(
       nounWorkbookWords.length === nounWorkbookFixtureImportRows.length,
-      'noun workbook words should round-trip through D1 and storage actions',
+      'admin inspection should preserve noun workbook rows while learner study remains gated',
     );
     const goalWord = nounWorkbookWords.find((word) => word.word === 'goal');
     assert(goalWord?.section === '到達', 'noun workbook section metadata should survive round-trip');
@@ -904,18 +920,18 @@ const main = async () => {
         targetDate: '2026-04-15',
         goalDescription: '14日で基礎単語を安定させる',
         dailyWordGoal: 15,
-        selectedBookIds: [orgBooks[0].id],
+        selectedBookIds: [starterBook.id],
         status: 'ACTIVE',
       },
     });
 
     const savedStudentPlan = await orgStudent.storage('getLearningPlan');
-    assert(savedStudentPlan?.selectedBookIds?.[0] === orgBooks[0].id, 'saved learning plan should round-trip selected book ids');
+    assert(savedStudentPlan?.selectedBookIds?.[0] === starterBook.id, 'saved learning plan should round-trip selected approved book ids');
     assert(savedStudentPlan?.dailyWordGoal === 15, 'saved learning plan should round-trip the daily word goal');
 
     const studentDashboardAfterPlan = await orgStudent.storage('getDashboardSnapshot');
     assert(
-      studentDashboardAfterPlan.learningPlan?.selectedBookIds?.[0] === orgBooks[0].id,
+      studentDashboardAfterPlan.learningPlan?.selectedBookIds?.[0] === starterBook.id,
       'student dashboard snapshot should expose the saved learning plan',
     );
 
@@ -970,8 +986,7 @@ const main = async () => {
     assert(orgStudentSummaryAfterNotification?.latestInterventionKind === 'REVIEW_RESTART', 'student summary should retain the latest intervention kind');
     assert(orgStudentSummaryAfterNotification?.latestInterventionOutcome === 'PENDING', 'student summary should mark the latest intervention as pending before reactivation');
 
-    const reviewBook = orgBooks.find((book) => book.title === 'Starter 120') || orgBooks[0];
-    assert(reviewBook, 'business student did not receive any visible books');
+    const reviewBook = starterBook;
     const reviewWords = await orgStudent.storage('getWordsByBook', { bookId: reviewBook.id });
     assert(reviewWords.length > 0, 'imported test catalog should contain at least one word');
 

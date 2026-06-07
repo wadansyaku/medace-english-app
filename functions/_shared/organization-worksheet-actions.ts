@@ -7,10 +7,11 @@ import {
   DAY_MS,
   FALLBACK_WORKSHEET_WORD_LIMIT,
   WORKSHEET_STATUSES,
+  buildInClause,
   getMasteryProgressSql,
   readAll,
   readFirst,
-  readVisibleBookRows,
+  readVisibleLearningBookRows,
   type DbWordRow,
 } from './storage-support';
 
@@ -34,7 +35,11 @@ export const handleGetStudentWorksheetSnapshot = async (
     throw new HttpError(403, '担当範囲の生徒のみ問題印刷できます。');
   }
 
-  const rows = await readAll<{
+  const fullStudent = await readFirst<DbUserRow>(env, 'SELECT * FROM users WHERE id = ?', studentUid);
+  const selectableBooks = fullStudent ? await readVisibleLearningBookRows(env, fullStudent) : [];
+  const selectableBookIds = selectableBooks.map((book) => book.id);
+
+  const rows = selectableBookIds.length > 0 ? await readAll<{
     word_id: string;
     book_id: string;
     book_title: string;
@@ -64,6 +69,7 @@ export const handleGetStudentWorksheetSnapshot = async (
      JOIN words w ON w.id = h.word_id
      JOIN books b ON b.id = h.book_id
      WHERE h.user_id = ?
+       AND h.book_id IN (${buildInClause(selectableBookIds.length)})
        AND ${getMasteryProgressSql('h')}
      ORDER BY
        CASE h.status
@@ -75,13 +81,12 @@ export const handleGetStudentWorksheetSnapshot = async (
        b.title ASC,
        w.word_number ASC`,
     studentUid,
-  );
+    ...selectableBookIds,
+  ) : [];
 
   if (rows.length === 0) {
-    const fullStudent = await readFirst<DbUserRow>(env, 'SELECT * FROM users WHERE id = ?', studentUid);
-    const fallbackBooks = fullStudent ? await readVisibleBookRows(env, fullStudent) : [];
     const fallbackWords: StudentWorksheetSnapshot['words'] = [];
-    const candidateBooks = fallbackBooks.slice(0, Math.min(5, fallbackBooks.length));
+    const candidateBooks = selectableBooks.slice(0, Math.min(5, selectableBooks.length));
     const perBookLimit = Math.max(4, Math.ceil(FALLBACK_WORKSHEET_WORD_LIMIT / Math.max(candidateBooks.length, 1)));
 
     for (const [bookIndex, book] of candidateBooks.entries()) {

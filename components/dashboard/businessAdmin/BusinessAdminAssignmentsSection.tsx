@@ -7,6 +7,7 @@ import {
   RETENTION_CONTINUITY_BAND_LABELS,
   WEAKNESS_DIMENSION_LABELS,
   WEEKLY_MISSION_STATUS_LABELS,
+  BookCatalogSource,
   OrganizationRole,
   type BookMetadata,
   type OrganizationDashboardSnapshot,
@@ -33,6 +34,11 @@ interface BusinessAdminAssignmentsSectionProps {
   writingAssignments: WritingAssignment[];
 }
 
+const isMissionSelectableBook = (book: BookMetadata): boolean => {
+  if (book.catalogSource === BookCatalogSource.USER_GENERATED) return true;
+  return Boolean(book.qualityGate?.isSelectableForToday);
+};
+
 const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionProps> = ({
   controller,
   snapshot,
@@ -41,6 +47,13 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
   writingAssignments,
 }) => {
   const recentEvents = snapshot.assignmentEvents.slice(0, 6);
+  const selectableBookCount = books.filter(isMissionSelectableBook).length;
+  const blockedBookCount = Math.max(books.length - selectableBookCount, 0);
+  const selectedMissionBook = controller.missionBookId
+    ? books.find((book) => book.id === controller.missionBookId) || null
+    : null;
+  const selectedMissionBookBlocked = Boolean(selectedMissionBook && !isMissionSelectableBook(selectedMissionBook));
+  const missionIssueDisabled = controller.missionSavingUid === controller.selectedAssignmentStudent?.uid || selectedMissionBookBlocked;
 
   return (
     <div className="space-y-6">
@@ -371,6 +384,10 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">教材</label>
+                      <div className="mb-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold leading-relaxed text-slate-500">
+                        承認済み教材のみ配布できます。利用可 {selectableBookCount} 冊
+                        {blockedBookCount > 0 ? ` / 確認中 ${blockedBookCount} 冊` : ''}
+                      </div>
                       <select
                         data-testid="weekly-mission-book-select"
                         value={controller.missionBookId}
@@ -378,16 +395,28 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
                       >
                         <option value="">smart-session に任せる</option>
-                        {books.map((book) => (
-                          <option
-                            key={book.id}
-                            value={book.id}
-                            disabled={book.qualityGate ? !book.qualityGate.isSelectableForToday : false}
-                          >
-                            {book.title}{book.qualityGate ? ` / ${book.qualityGate.label}` : ''}
-                          </option>
-                        ))}
+                        {books.map((book) => {
+                          const selectable = isMissionSelectableBook(book);
+                          const qualityLabel = book.qualityGate?.label || (
+                            book.catalogSource === BookCatalogSource.USER_GENERATED ? 'My単語帳' : '台帳確認'
+                          );
+
+                          return (
+                            <option
+                              key={book.id}
+                              value={book.id}
+                              disabled={!selectable}
+                            >
+                              {book.title} / {qualityLabel}
+                            </option>
+                          );
+                        })}
                       </select>
+                      {selectedMissionBookBlocked && (
+                        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">
+                          選択中の教材は確認中です。承認済み教材を選ぶか、smart-session に任せてください。
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">新規語数</label>
@@ -444,7 +473,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                     type="button"
                     data-testid="weekly-mission-issue-submit"
                     onClick={controller.handleIssueMission}
-                    disabled={controller.missionSavingUid === controller.selectedAssignmentStudent.uid}
+                    disabled={missionIssueDisabled}
                     className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
                   >
                     配布する

@@ -180,6 +180,32 @@ describe('release hygiene contracts', () => {
     expect(runbook).toContain('source ledger gate');
   });
 
+  it('keeps production and preview deploys on the protected main path with pre-deploy runtime metadata', () => {
+    const productionWorkflow = readText('.github/workflows/deploy-pages.yml');
+    const previewWorkflow = readText('.github/workflows/deploy-pages-preview.yml');
+
+    expect(productionWorkflow).toMatch(/branches:\n\s+- main\n/);
+    expect(productionWorkflow).not.toMatch(/branches:\n(?:\s+- .+\n)*\s+- master\n/);
+    expect(productionWorkflow).toContain("github.ref_name == 'main'");
+    expect(productionWorkflow).not.toContain("github.ref_name == 'master'");
+    expect(previewWorkflow).toMatch(/pull_request:\n\s+branches:\n\s+- main\n/);
+    expect(previewWorkflow).not.toMatch(/branches:\n(?:\s+- .+\n)*\s+- master\n/);
+
+    expectTextInOrder(productionWorkflow, [
+      'name: Update production deployment runtime metadata',
+      'name: Deploy to Cloudflare Pages',
+      'name: Run deployed production smoke',
+    ]);
+    expectTextInOrder(previewWorkflow, [
+      'name: Update preview deployment runtime metadata',
+      'name: Deploy preview to Cloudflare Pages',
+      'name: Wait for deployed preview readiness',
+      'name: Run deployed preview smoke',
+    ]);
+    expect(productionWorkflow).toContain('PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: ${{ github.sha }}');
+    expect(previewWorkflow).toContain('PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: ${{ github.sha }}');
+  });
+
   it('keeps release scripts referenced by package.json tracked in git', () => {
     const packageJson = readJson<PackageJson>('package.json');
     const localGateScript = packageJson.scripts['release:gate:local'];
