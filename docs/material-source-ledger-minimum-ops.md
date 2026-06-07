@@ -14,11 +14,11 @@
 | `catalog_source` | 必須 | D1 の `books.catalog_source` と同じ分類。公式/ライセンス教材は `STEADY_STUDY_ORIGINAL` または `LICENSED_PARTNER`。個人教材の `USER_GENERATED` は source ledger の公式配信対象にしない。 |
 | `book_title` | 必須 | 学習者または管理画面に出る教材名。D1 の `books.title` と照合できる表記にする。 |
 | `edition` | 必須 | 版、改訂、年度、提供バージョン。未記載の教材でも `unknown` ではなく、確認した範囲を `notes` に残す。 |
-| `rights_status` | 必須 | 表示可否の権利状態。表示可能値は `internal_original`、`licensed`、`public_domain` のみ。`pending`、`blocked`、`unknown` は学習者へ表示しない。 |
+| `rights_status` | 必須 | 表示可否の権利状態。学習者表示は `approved` のみ。`pending`、`blocked`、`unknown` は学習者へ表示しない。 |
 | `source_file` | 必須 | 変換元ファイルの正本パス、ストレージキー、または受領ファイル名。公開URLではなく、運用者が再確認できる正本を指す。 |
 | `extracted_at` | 必須 | 抽出または変換を実行した日時。ISO 8601 形式で timezone 付きにする。 |
 | `transform_log` | 必須 | 変換コマンド、スクリプト名、入力 hash、出力先、手修正の有無、`content:qa` report の場所を短く残す。 |
-| `review_status` | 必須 | レビュー状態。学習者表示は `approved` のみ。`draft`、`qa_ready`、`needs_fix`、`rejected` は管理・検証用に止める。 |
+| `review_status` | 必須 | レビュー状態。学習者表示は `approved` のみ。未承認は `needs_review`、配信停止は `blocked` として止める。 |
 | `notes` | 必須 | 例外、権利確認者、利用範囲、非表示判断、今後の確認事項。空欄にせず `none` と書く。 |
 
 ## 公式/ライセンス教材を表示する条件
@@ -27,7 +27,7 @@
 
 - source ledger に `source_id`、`catalog_source`、`book_title`、`edition`、`rights_status`、`source_file`、`extracted_at`、`transform_log`、`review_status`、`notes` がすべて入っている。
 - `catalog_source` が `STEADY_STUDY_ORIGINAL` または `LICENSED_PARTNER` で、D1 の `books.catalog_source` と一致している。
-- `rights_status` が `internal_original`、`licensed`、`public_domain` のいずれかで、利用範囲が `notes` に明記されている。
+- `rights_status` が `approved` で、利用根拠と範囲が `notes` に明記されている。
 - `review_status` が `approved` である。
 - `transform_log` に再現可能な変換手順と `content:qa` report の参照がある。
 - D1 の `books.access_scope` が配信方針と合っている。`ALL_PLANS` は全プラン向け、`BUSINESS_ONLY` はビジネス有料利用者向けに限定する。
