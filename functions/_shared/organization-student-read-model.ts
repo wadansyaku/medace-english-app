@@ -50,6 +50,37 @@ interface EnglishPracticeLaneStats {
   lastPracticedAt: number;
 }
 
+const buildSelectableBookSql = (bookAlias: string, ledgerAlias: string, ownerAlias: string): string => `(
+  ${bookAlias}.created_by = ${ownerAlias}.id
+  OR (
+    ${bookAlias}.created_by IS NULL
+    AND ${ledgerAlias}.rights_status = 'approved'
+    AND ${ledgerAlias}.review_status = 'approved'
+    AND COALESCE(${bookAlias}.word_count, 0) > 0
+    AND COALESCE(${ledgerAlias}.qa_word_count, 0) > 0
+    AND COALESCE(${ledgerAlias}.qa_required_blank_rows, 0) = 0
+    AND COALESCE(${ledgerAlias}.qa_rows_with_sentinel, 0) = 0
+    AND COALESCE(${ledgerAlias}.qa_sentinel_value_count, 0) = 0
+  )
+)`;
+
+const buildSelectableAttemptBookSql = (attemptAlias: string, bookAlias: string, ledgerAlias: string): string => `(
+  ${attemptAlias}.book_id IS NULL
+  OR (
+    ${bookAlias}.created_by = ${attemptAlias}.user_id
+    OR (
+      ${bookAlias}.created_by IS NULL
+      AND ${ledgerAlias}.rights_status = 'approved'
+      AND ${ledgerAlias}.review_status = 'approved'
+      AND COALESCE(${bookAlias}.word_count, 0) > 0
+      AND COALESCE(${ledgerAlias}.qa_word_count, 0) > 0
+      AND COALESCE(${ledgerAlias}.qa_required_blank_rows, 0) = 0
+      AND COALESCE(${ledgerAlias}.qa_rows_with_sentinel, 0) = 0
+      AND COALESCE(${ledgerAlias}.qa_sentinel_value_count, 0) = 0
+    )
+  )
+)`;
+
 const readEnglishPracticeLaneStatsByUserIds = async (
   env: AppEnv,
   userIds: string[],
@@ -65,15 +96,18 @@ const readEnglishPracticeLaneStatsByUserIds = async (
   }>(
     env,
     `SELECT
-       user_id,
-       lane,
+       e.user_id,
+       e.lane,
        COUNT(*) AS total,
-       COALESCE(SUM(CASE WHEN correct = 1 THEN 1 ELSE 0 END), 0) AS correct_count,
-       MAX(created_at) AS last_practiced_at
-     FROM english_practice_attempts
-     WHERE user_id IN (${buildInClause(userIds.length)})
-       AND created_at >= ?
-     GROUP BY user_id, lane`,
+       COALESCE(SUM(CASE WHEN e.correct = 1 THEN 1 ELSE 0 END), 0) AS correct_count,
+       MAX(e.created_at) AS last_practiced_at
+     FROM english_practice_attempts e
+     LEFT JOIN books b ON b.id = e.book_id
+     LEFT JOIN material_source_ledger m ON m.book_id = b.id
+     WHERE e.user_id IN (${buildInClause(userIds.length)})
+       AND e.created_at >= ?
+       AND ${buildSelectableAttemptBookSql('e', 'b', 'm')}
+     GROUP BY e.user_id, e.lane`,
     ...userIds,
     since,
   );
@@ -146,6 +180,7 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
   const visibleStudentFilter = needsScopedVisibility
     ? buildVisibleStudentFilter(await readVisibleStudentIds(env, currentUser, organization))
     : { sql: '', bindings: [] as string[] };
+  const selectableHistorySql = buildSelectableBookSql('hb', 'hm', 'u');
   const rows = await readAll<{
     uid: string;
     name: string;
@@ -178,12 +213,12 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        COALESCE(org.display_name, u.organization_name) AS organization_name,
        cohort.id AS cohort_id,
        cohort.name AS cohort_name,
-       COALESCE(SUM(CASE WHEN ${getMasteryProgressSql('h')} THEN 1 ELSE 0 END), 0) AS total_learned,
-       COALESCE(SUM(h.correct_count), 0) AS total_correct,
-       COALESCE(SUM(h.attempt_count), 0) AS total_attempts,
-       MAX(CASE WHEN ${getMasterySourceSql('h')} THEN h.last_studied_at ELSE NULL END) AS last_active,
+       COALESCE(SUM(CASE WHEN ${getMasteryProgressSql('h')} AND ${selectableHistorySql} THEN 1 ELSE 0 END), 0) AS total_learned,
+       COALESCE(SUM(CASE WHEN ${selectableHistorySql} THEN h.correct_count ELSE 0 END), 0) AS total_correct,
+       COALESCE(SUM(CASE WHEN ${selectableHistorySql} THEN h.attempt_count ELSE 0 END), 0) AS total_attempts,
+       MAX(CASE WHEN ${getMasterySourceSql('h')} AND ${selectableHistorySql} THEN h.last_studied_at ELSE NULL END) AS last_active,
        COUNT(DISTINCT CASE
-         WHEN ${getMasterySourceSql('h')} AND h.last_studied_at >= ? THEN ${toTokyoDateKeySql('h.last_studied_at')}
+         WHEN ${getMasterySourceSql('h')} AND ${selectableHistorySql} AND h.last_studied_at >= ? THEN ${toTokyoDateKeySql('h.last_studied_at')}
          ELSE NULL
        END) AS active_study_days_7d,
        (
@@ -222,7 +257,10 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
           AND h2.interaction_source = 'STUDY'
           AND h2.last_studied_at >= n.created_at
           AND h2.last_studied_at <= n.created_at + ?
+         JOIN books h2b ON h2b.id = h2.book_id
+         LEFT JOIN material_source_ledger h2m ON h2m.book_id = h2b.id
          WHERE n.student_user_id = u.id
+           AND ${buildSelectableBookSql('h2b', 'h2m', 'u')}
            AND n.created_at = (
              SELECT MAX(n2.created_at)
              FROM instructor_notifications n2
@@ -235,6 +273,8 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        CASE WHEN lp.user_id IS NULL THEN 0 ELSE 1 END AS has_learning_plan
      FROM users u
      LEFT JOIN learning_histories h ON h.user_id = u.id
+     LEFT JOIN books hb ON hb.id = h.book_id
+     LEFT JOIN material_source_ledger hm ON hm.book_id = hb.id
      LEFT JOIN learning_plans lp ON lp.user_id = u.id
      LEFT JOIN student_instructor_assignments assign ON assign.student_user_id = u.id
      LEFT JOIN users assigned ON assigned.id = assign.instructor_user_id

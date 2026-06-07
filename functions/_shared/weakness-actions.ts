@@ -52,6 +52,20 @@ interface DbWeaknessSignalRow {
   updated_at: number;
 }
 
+const buildSelectableBookSql = (bookAlias: string, ledgerAlias: string): string => `(
+  ${bookAlias}.created_by = ?
+  OR (
+    ${bookAlias}.created_by IS NULL
+    AND ${ledgerAlias}.rights_status = 'approved'
+    AND ${ledgerAlias}.review_status = 'approved'
+    AND COALESCE(${bookAlias}.word_count, 0) > 0
+    AND COALESCE(${ledgerAlias}.qa_word_count, 0) > 0
+    AND COALESCE(${ledgerAlias}.qa_required_blank_rows, 0) = 0
+    AND COALESCE(${ledgerAlias}.qa_rows_with_sentinel, 0) = 0
+    AND COALESCE(${ledgerAlias}.qa_sentinel_value_count, 0) = 0
+  )
+)`;
+
 const mapEventRow = (row: DbWeaknessEventRow): WeaknessInteractionEvent => ({
   userId: row.user_id,
   wordId: row.word_id,
@@ -177,18 +191,30 @@ export const rebuildWeaknessSignalsForUser = async (
     resolveUserDifficultyContext(env, userId, user),
     readAll<DbWeaknessEventRow>(
       env,
-      `SELECT *
-       FROM learning_interaction_events
-       WHERE user_id = ?
-         AND created_at >= ?
-       ORDER BY created_at DESC
+      `SELECT e.*
+       FROM learning_interaction_events e
+       JOIN books b ON b.id = e.book_id
+       LEFT JOIN material_source_ledger m ON m.book_id = b.id
+       WHERE e.user_id = ?
+         AND e.created_at >= ?
+         AND ${buildSelectableBookSql('b', 'm')}
+       ORDER BY e.created_at DESC
        LIMIT 120`,
       userId,
       Date.now() - 30 * 86400000,
+      userId,
     ),
     readAll<DbHistoryRow>(
       env,
-      'SELECT * FROM learning_histories WHERE user_id = ? ORDER BY last_studied_at DESC LIMIT 120',
+      `SELECT h.*
+       FROM learning_histories h
+       JOIN books b ON b.id = h.book_id
+       LEFT JOIN material_source_ledger m ON m.book_id = b.id
+       WHERE h.user_id = ?
+         AND ${buildSelectableBookSql('b', 'm')}
+       ORDER BY h.last_studied_at DESC
+       LIMIT 120`,
+      userId,
       userId,
     ),
   ]);
@@ -199,6 +225,8 @@ export const rebuildWeaknessSignalsForUser = async (
     grade: difficultyContext.grade,
     level: difficultyContext.level,
   });
+
+  await env.DB.prepare('DELETE FROM student_weakness_signals WHERE user_id = ?').bind(userId).run();
 
   const statements = signals.map((signal) => env.DB.prepare(`
     INSERT INTO student_weakness_signals (

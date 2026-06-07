@@ -8,6 +8,7 @@ interface DashboardLibrarySectionProps {
   myBooks: BookMetadata[];
   primaryRecommendedBook: BookMetadata | null;
   secondaryRecommendedBooks: BookMetadata[];
+  blockedOfficialBookCount?: number;
   progressMap: Record<string, BookProgress>;
   showLibrary: boolean;
   isCompact?: boolean;
@@ -31,6 +32,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   myBooks,
   primaryRecommendedBook,
   secondaryRecommendedBooks,
+  blockedOfficialBookCount = 0,
   progressMap,
   showLibrary,
   isCompact = false,
@@ -93,13 +95,22 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
             onSelect={onSelect}
           />
         ) : null}
+        {primaryRecommendedBook && blockedOfficialBookCount > 0 && (
+          <div className={`rounded-2xl border border-amber-200 bg-amber-50 text-sm font-bold leading-relaxed text-amber-800 ${isCompact ? 'p-4' : 'p-5'}`}>
+            配布教材 {blockedOfficialBookCount} 冊は確認中です。承認後に学習・テストで使えます。
+          </div>
+        )}
         {books.length === 0 && (
           <div className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm leading-relaxed text-slate-600 ${isCompact ? 'p-4' : 'p-6'}`}>
             現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
           </div>
         )}
         {books.length > 0 && !primaryRecommendedBook && (
-          <p className="text-sm text-slate-400">推奨コースはありません</p>
+          <div className={`rounded-2xl border border-amber-200 bg-amber-50 text-sm font-bold leading-relaxed text-amber-800 ${isCompact ? 'p-4' : 'p-5'}`}>
+            {blockedOfficialBookCount > 0
+              ? `配布教材 ${blockedOfficialBookCount} 冊は確認中です。承認後に学習・テストで使えます。`
+              : '推奨コースはありません'}
+          </div>
         )}
       </div>
 

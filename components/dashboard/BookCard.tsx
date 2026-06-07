@@ -1,6 +1,7 @@
 import React from 'react';
-import { Book, BookOpen, Play, Star, Trash2, Trophy } from 'lucide-react';
+import { AlertTriangle, Book, BookOpen, Play, ShieldCheck, Star, Trash2, Trophy } from 'lucide-react';
 import { BookCatalogSource, type BookMetadata, type BookProgress } from '../../types';
+import { getLearnerMaterialQualityMessage, isBookApprovedForLearner } from '../../shared/materialQuality';
 
 interface BookCardProps {
   book: BookMetadata;
@@ -22,6 +23,12 @@ const BookCard: React.FC<BookCardProps> = ({
   onSelect,
 }) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
+  const qualityGate = book.qualityGate;
+  const canStart = isBookApprovedForLearner(book);
+  const learnerQualityMessage = getLearnerMaterialQualityMessage(qualityGate);
+  const qualityBadgeClass = qualityGate?.isApprovedForLearner
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-amber-200 bg-amber-50 text-amber-800';
 
   return (
     <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
@@ -38,6 +45,15 @@ const BookCard: React.FC<BookCardProps> = ({
             ) : book.isPriority ? (
               <span className="flex items-center gap-1 rounded-full bg-medace-500 px-2 py-1 text-xs font-bold text-slate-950 shadow-sm">
                 <Star className="h-3 w-3 fill-current" /> 推奨
+              </span>
+            ) : null}
+            {!isMine && qualityGate ? (
+              <span
+                className={`flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-bold ${qualityBadgeClass}`}
+                title={qualityGate.summary}
+              >
+                {qualityGate.isApprovedForLearner ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                {qualityGate.label}
               </span>
             ) : null}
             {isMine && (
@@ -61,6 +77,11 @@ const BookCard: React.FC<BookCardProps> = ({
             ? (book.sourceContext ? `取り込みメモ: ${book.sourceContext}` : 'オリジナル単語帳')
             : (book.description || (isLicensed ? 'ビジネス版向けの既存公式教材' : 'ビジネス版向けの公式教材'))}
         </p>
+        {!canStart && !isMine && (
+          <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">
+            {learnerQualityMessage}
+          </p>
+        )}
 
         <div className="mt-3 space-y-2 sm:mt-5">
           <div className="flex justify-between text-[13px] font-bold text-slate-700 sm:text-sm">
@@ -92,16 +113,22 @@ const BookCard: React.FC<BookCardProps> = ({
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <button
-            onClick={() => onSelect(book.id, 'study')}
+            onClick={() => {
+              if (canStart) onSelect(book.id, 'study');
+            }}
+            disabled={!canStart}
             data-testid={`book-study-${book.id}`}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-600"
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
           >
             <BookOpen className="h-4 w-4" /> 学習
           </button>
           <button
-            onClick={() => onSelect(book.id, 'quiz')}
+            onClick={() => {
+              if (canStart) onSelect(book.id, 'quiz');
+            }}
+            disabled={!canStart}
             data-testid={`book-quiz-${book.id}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-700 sm:hover:text-slate-950"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-700 sm:hover:text-slate-950 sm:disabled:bg-slate-100 sm:disabled:text-slate-400"
           >
             <Play className="h-4 w-4 fill-current" /> テスト設定
           </button>

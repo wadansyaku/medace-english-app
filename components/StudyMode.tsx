@@ -385,7 +385,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                     <div className="space-y-3 text-center">
                       <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">画像ヒントはまだありません</div>
                       <p className="text-sm leading-relaxed text-slate-600">
-                        画像はコストが高いので、必要なときだけ自分で作ります。
+                        イメージで覚えたい単語だけ、ここで画像ヒントを作れます。
                       </p>
                       {controller.imageError ? (
                         <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">

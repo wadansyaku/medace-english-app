@@ -39,7 +39,7 @@ import {
 } from './types';
 import {
   DAY_MS,
-  assertBookReadAccess,
+  assertBookLearningAccess,
   defaultLearningPreference,
   getBookProgress,
   getLastTokyoDateKeys,
@@ -48,7 +48,7 @@ import {
   normalizeHistoryStatus,
   readAll,
   readFirst,
-  readVisibleBookRows,
+  readVisibleLearningBookRows,
   type DbHistoryRow,
   type DbLearningPreferenceRow,
 } from './storage-support';
@@ -109,11 +109,11 @@ const normalizeSelectedPlanBookIds = async (
     throw new HttpError(400, '学習プランの教材は5冊以内に絞ってください。');
   }
 
-  const visibleBookRows = await readVisibleBookRows(env, user);
+  const visibleBookRows = await readVisibleLearningBookRows(env, user);
   const visibleBookIds = new Set(visibleBookRows.map((book) => book.id));
   const inaccessibleBookIds = requestedBookIds.filter((bookId) => !visibleBookIds.has(bookId));
   if (inaccessibleBookIds.length > 0) {
-    throw new HttpError(400, 'このプランに含まれる教材を利用できません。');
+    throw new HttpError(400, '学習プランには確認済みの教材だけを選んでください。');
   }
 
   return requestedBookIds;
@@ -276,7 +276,8 @@ export const handleSaveSrsHistory = async (
   grammarScopeId?: GrammarCurriculumScopeId,
   translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
-  await assertBookReadAccess(env, user, word.bookId);
+  await assertBookLearningAccess(env, user, word.bookId);
+  await assertWordBelongsToBook(env, word.id, word.bookId);
   const now = Date.now();
   const existing = await readFirst<DbHistoryRow>(
     env,
@@ -390,7 +391,7 @@ export const handleRecordQuizAttempt = async (
   grammarScopeId?: GrammarCurriculumScopeId,
   translationFeedback?: JapaneseTranslationFeedback,
 ): Promise<void> => {
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   await validateQuizAttemptConsistency(
     env,
     wordId,
@@ -607,7 +608,7 @@ export const handleRecordEnglishPracticeAttempt = async (
   );
 
   if (payload.wordId && payload.bookId) {
-    await assertBookReadAccess(env, user, payload.bookId);
+    await assertBookLearningAccess(env, user, payload.bookId);
     await assertWordBelongsToBook(env, payload.wordId, payload.bookId);
   }
 
@@ -678,7 +679,7 @@ export const handleGetStudiedWordIdsByBook = async (
   user: DbUserRow,
   bookId: string,
 ): Promise<string[]> => {
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   const rows = await readAll<{ word_id: string }>(
     env,
     `SELECT word_id
@@ -690,9 +691,10 @@ export const handleGetStudiedWordIdsByBook = async (
   return Array.from(new Set(rows.map((row) => row.word_id)));
 };
 
-export const handleGetBookProgress = async (env: AppEnv, user: DbUserRow, bookId: string) => (
-  getBookProgress(env, user.id, bookId)
-);
+export const handleGetBookProgress = async (env: AppEnv, user: DbUserRow, bookId: string) => {
+  await assertBookLearningAccess(env, user, bookId);
+  return getBookProgress(env, user.id, bookId);
+};
 
 export const handleResetAllData = async (env: AppEnv): Promise<void> => {
   const [writingAssetRows, wordHintRows] = await Promise.all([

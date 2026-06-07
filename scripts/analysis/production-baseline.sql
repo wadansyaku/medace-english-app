@@ -29,11 +29,42 @@ SELECT
   COUNT(*) AS words,
   SUM(CASE WHEN example_sentence IS NOT NULL AND TRIM(example_sentence) != '' THEN 1 ELSE 0 END) AS words_with_examples,
   SUM(CASE WHEN example_image_key IS NOT NULL AND TRIM(example_image_key) != '' THEN 1 ELSE 0 END) AS words_with_images,
+  SUM(CASE WHEN category IS NOT NULL AND TRIM(category) != '' THEN 1 ELSE 0 END) AS words_with_category,
+  SUM(CASE WHEN source_sheet IS NOT NULL AND TRIM(source_sheet) != '' THEN 1 ELSE 0 END) AS words_with_source_sheet,
+  SUM(CASE WHEN source_entry_id IS NOT NULL THEN 1 ELSE 0 END) AS words_with_source_entry_id,
+  SUM(CASE WHEN word LIKE '%[未抽出]%' OR definition LIKE '%[未抽出]%' THEN 1 ELSE 0 END) AS words_with_blocked_marker,
   SUM(CASE WHEN example_audit_status = 'APPROVED' THEN 1 ELSE 0 END) AS examples_approved,
   SUM(CASE WHEN example_audit_status = 'REVIEW_REQUIRED' THEN 1 ELSE 0 END) AS examples_review_required,
   SUM(CASE WHEN example_image_audit_status = 'APPROVED' THEN 1 ELSE 0 END) AS images_approved,
   SUM(CASE WHEN example_image_audit_status = 'REVIEW_REQUIRED' THEN 1 ELSE 0 END) AS images_review_required
 FROM words;
+
+SELECT
+  b.title,
+  b.catalog_source,
+  COUNT(*) AS actual_words,
+  SUM(CASE WHEN w.word IS NULL OR TRIM(w.word) = '' THEN 1 ELSE 0 END) AS empty_words,
+  SUM(CASE WHEN w.definition IS NULL OR TRIM(w.definition) = '' THEN 1 ELSE 0 END) AS empty_definitions,
+  SUM(CASE WHEN w.word LIKE '%[未抽出]%' OR w.definition LIKE '%[未抽出]%' THEN 1 ELSE 0 END) AS blocked_marker_rows,
+  SUM(CASE WHEN w.example_sentence IS NOT NULL AND TRIM(w.example_sentence) != '' THEN 1 ELSE 0 END) AS words_with_examples,
+  SUM(CASE WHEN w.category IS NOT NULL AND TRIM(w.category) != '' THEN 1 ELSE 0 END) AS words_with_category,
+  SUM(CASE WHEN w.source_sheet IS NOT NULL AND TRIM(w.source_sheet) != '' THEN 1 ELSE 0 END) AS words_with_source_sheet,
+  SUM(CASE WHEN w.source_entry_id IS NOT NULL THEN 1 ELSE 0 END) AS words_with_source_entry_id
+FROM books b
+LEFT JOIN words w ON w.book_id = b.id
+GROUP BY b.id, b.title, b.catalog_source
+ORDER BY blocked_marker_rows DESC, empty_words DESC, empty_definitions DESC, actual_words DESC;
+
+SELECT
+  b.title,
+  lower(w.word) AS normalized_word,
+  COUNT(*) AS duplicates
+FROM words w
+JOIN books b ON b.id = w.book_id
+GROUP BY b.id, b.title, lower(w.word)
+HAVING COUNT(*) > 1
+ORDER BY duplicates DESC, b.title ASC, normalized_word ASC
+LIMIT 100;
 
 SELECT
   SUM(CASE WHEN example_audit_status IS NULL THEN 1 ELSE 0 END) AS example_audit_null,
@@ -195,6 +226,18 @@ LEFT JOIN (
   FROM words
   GROUP BY book_id
 ) AS word_totals ON word_totals.book_id = books.id;
+
+SELECT
+  COUNT(*) AS official_books,
+  SUM(CASE WHEN m.book_id IS NOT NULL THEN 1 ELSE 0 END) AS books_with_source_ledger,
+  SUM(CASE WHEN m.book_id IS NULL THEN 1 ELSE 0 END) AS books_missing_source_ledger,
+  SUM(CASE WHEN m.rights_status = 'approved' AND m.review_status = 'approved' THEN 1 ELSE 0 END) AS source_approved_books,
+  SUM(CASE WHEN m.rights_status != 'approved' OR m.review_status != 'approved' THEN 1 ELSE 0 END) AS source_review_required_books,
+  SUM(CASE WHEN COALESCE(m.qa_required_blank_rows, 0) > 0 OR COALESCE(m.qa_rows_with_sentinel, 0) > 0 THEN 1 ELSE 0 END) AS qa_blocked_books
+FROM books b
+LEFT JOIN material_source_ledger m ON m.book_id = b.id
+WHERE b.created_by IS NULL
+  AND COALESCE(b.catalog_source, '') != 'USER_GENERATED';
 
 SELECT
   COUNT(*) AS plans,

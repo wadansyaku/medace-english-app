@@ -54,12 +54,16 @@ npm run test:api
 npm run test:smoke
 npm run cf:doctor
 npm run cf:sync
+npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json
+npm run content:source-ledger:d1 -- --remote --database medace-db
 npm run cf:preview
 ```
 
-- `npm run release:gate:local` は deploy 前のローカル release gate です。migration filename check / 一時 D1 migration replay / typecheck / unit tests / build / API integration tests / full smoke suite / `cf:doctor` / deploy artifact build を直列で確認します。
+- `npm run release:gate:local` は deploy 前のローカル release gate です。migration filename check / 一時 D1 migration replay / typecheck / unit tests / build / API integration tests / full smoke suite / `cf:doctor` / remote D1 content QA / source ledger gate / deploy artifact build を直列で確認します。
   - `npm run release:gate:local:dry` は実行予定の順序だけを表示します。
   - `cf:doctor` は GitHub / Cloudflare の read-only inventory を見るため、`gh` 認証と `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要です。
+  - content QA gate は remote D1 の公式/配信教材を読み取り、必須語義の空欄、`[未抽出]` などの sentinel、空教材を release-blocking error として扱います。
+  - source ledger gate は公式/配信教材に `material_source_ledger` 行があること、content QA blocker がないこと、Today Focus に使える承認済み教材が最低1冊あることを必須条件にします。
 - 推奨ローカル実行: `npm run cf:preview`
   - `vite build` 後に `wrangler pages dev dist` を起動し、Pages Functions と D1 を含めて確認します。
 - `npm run preview` は静的アセット確認専用です。
@@ -229,8 +233,8 @@ npm run release:gate:local
 この local gate は remote D1 migration と Pages deploy を実行しません。Cloudflare への正式 deploy は GitHub Actions を正規経路とし、次の流れで確認してから Cloudflare へ流します。
 
 - `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / Pages deploy / deployed preview smoke へ進む
-- `deploy-pages.yml`: production deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / Pages deploy / deployed production smoke へ進む
+- `deploy-pages-preview.yml`: preview deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / content QA gate / source ledger gate / Pages deploy / deployed preview smoke へ進む
+- `deploy-pages.yml`: production deploy 前に `npm run release:gate:local` 相当の `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / content QA gate / source ledger gate / Pages deploy / deployed production smoke へ進む
 - `analytics-snapshots.yml`: 毎日 03:40 JST に本番 `/api/internal/analytics-snapshots/run` を叩き、プロダクト KPI の日次 snapshot を保存
 - `word-hint-audit.yml`: 毎日 03:30 JST に本番 `/api/internal/word-hint-audits/run` を叩き、保存済みの例文・画像ヒントを小さなバッチで再監査
 

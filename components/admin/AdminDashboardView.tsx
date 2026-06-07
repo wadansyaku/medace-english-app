@@ -19,6 +19,7 @@ import {
   SUBSCRIPTION_PLAN_LABELS,
   SubscriptionPlan,
 } from '../../types';
+import { getOperatorMaterialQualityMessage } from '../../shared/materialQuality';
 
 const formatCost = (milliYen: number): string => {
   const yen = milliYen / 1000;
@@ -110,6 +111,12 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const planCoverageRate = overview && overview.totalStudents > 0
     ? Math.round((overview.studentsWithPlan / overview.totalStudents) * 100)
     : 0;
+  const materialQualityIssueCount = snapshot
+    ? snapshot.materialQuality.reviewRequiredBookCount + snapshot.materialQuality.qaBlockedBookCount + snapshot.materialQuality.missingLedgerBookCount
+    : 0;
+  const hasMaterialQualityQueue = Boolean(snapshot && (
+    materialQualityIssueCount > 0 || snapshot.topBooks.some((book) => book.qualityGate && !book.qualityGate.isApprovedForLearner)
+  ));
 
   return (
     <>
@@ -424,6 +431,16 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">学習されている教材</h3>
                 </div>
               </div>
+              {hasMaterialQualityQueue && (
+                <div className="mt-5 rounded-3xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-900">
+                  <div className="font-black">教材品質キュー</div>
+                  <div className="mt-2 text-xs font-bold text-amber-800">
+                    承認済み {snapshot.materialQuality.approvedBookCount} / {snapshot.materialQuality.officialBookCount} 冊。
+                    確認中 {snapshot.materialQuality.reviewRequiredBookCount} 冊、QA停止 {snapshot.materialQuality.qaBlockedBookCount} 冊、台帳なし {snapshot.materialQuality.missingLedgerBookCount} 冊です。
+                    生徒の学習・テスト対象から外している教材は、source ledger と content QA を確認してください。
+                  </div>
+                </div>
+              )}
               <div className="mt-5 space-y-3">
                 {snapshot.topBooks.length === 0 ? (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">教材データがまだありません。</div>
@@ -433,7 +450,19 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="font-bold text-slate-900">{book.title}</div>
-                          <div className="mt-1 text-xs text-slate-500">{book.isOfficial ? '公式教材' : '独自教材'} / {book.wordCount.toLocaleString()} 語</div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <span>{book.isOfficial ? '公式教材' : '独自教材'} / {book.wordCount.toLocaleString()} 語</span>
+                            {book.qualityGate ? (
+                              <span className={`rounded-full border px-2 py-0.5 font-bold ${book.qualityGate.isApprovedForLearner ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+                                {book.qualityGate.label}
+                              </span>
+                            ) : null}
+                          </div>
+                          {book.qualityGate && !book.qualityGate.isApprovedForLearner ? (
+                            <div className="mt-2 text-xs font-bold leading-relaxed text-amber-800">
+                              {getOperatorMaterialQualityMessage(book.qualityGate)}
+                            </div>
+                          ) : null}
                         </div>
                         <span className="rounded-full border border-medace-200 bg-white px-2.5 py-1 text-xs font-bold text-medace-800">
                           平均進行 {book.averageProgress.toFixed(0)}%

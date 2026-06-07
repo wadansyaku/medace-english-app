@@ -31,6 +31,19 @@ const makeBook = (id: string, title: string): BookMetadata => ({
   catalogSource: BookCatalogSource.LICENSED_PARTNER,
 });
 
+const withQualityGate = (book: BookMetadata, approved: boolean): BookMetadata => ({
+  ...book,
+  qualityGate: {
+    status: approved ? 'approved' : 'source_review_required',
+    label: approved ? '承認済み' : '出典確認',
+    summary: approved ? 'source ledgerとcontent QAの両方を通過しています。' : 'source ledger確認待ちです。',
+    isApprovedForLearner: approved,
+    isSelectableForToday: approved,
+    blockingReasons: approved ? [] : ['権利確認が pending です。'],
+    warnings: [],
+  },
+});
+
 const baseUser: UserProfile = {
   uid: 'student-1',
   displayName: 'Learner',
@@ -204,6 +217,55 @@ describe('useStudentDashboardViewModel', () => {
 
     expect(viewModel.primaryRecommendedBook?.id).toBe('book-2');
     expect(viewModel.secondaryRecommendedBooks.map((book) => book.id)).toEqual(['book-1', 'book-3']);
+  });
+
+  it('falls back to source-approved material when a saved plan only references review-pending official books', () => {
+    const books = [
+      withQualityGate(makeBook('pending-book', 'Pending'), false),
+      withQualityGate({
+        ...makeBook('approved-book', 'Approved'),
+        catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL,
+      }, true),
+    ];
+    const snapshot = buildSnapshot({
+      officialBooks: books,
+      learningPlan: {
+        uid: 'student-1',
+        createdAt: Date.now(),
+        targetDate: '2026-04-30',
+        goalDescription: 'goal',
+        dailyWordGoal: 12,
+        selectedBookIds: ['pending-book'],
+        status: 'ACTIVE',
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.plannedBooks.map((book) => book.id)).toEqual(['approved-book']);
+    expect(viewModel.primaryRecommendedBook?.id).toBe('approved-book');
+  });
+
+  it('distinguishes review-pending distributed materials from an empty library', () => {
+    const snapshot = buildSnapshot({
+      officialBooks: [
+        withQualityGate(makeBook('pending-book', 'Pending'), false),
+      ],
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.hasStudyBooks).toBe(false);
+    expect(viewModel.blockedOfficialBookCount).toBe(1);
+    expect(viewModel.heroTitle).toBe('配布教材を確認中');
+    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今はMy単語帳で始められます。');
+    expect(viewModel.questButtonLabel).toBe('My単語帳を作る');
   });
 
   it('prioritizes actionable writing when the mission requires a submission', () => {

@@ -3,6 +3,7 @@ import { getTodayDateKey } from '../utils/date';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/weakness';
 import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
+import { isBookSelectableForToday } from '../shared/materialQuality';
 import {
   EnglishLevel,
   INTERVENTION_KIND_LABELS,
@@ -156,7 +157,10 @@ export const useStudentDashboardViewModel = ({
   const commercialRequests = snapshot?.commercialRequests ?? [];
 
   const planningBooks = [...books, ...myBooks];
-  const hasStudyBooks = planningBooks.length > 0;
+  const selectableOfficialBooks = books.filter(isBookSelectableForToday);
+  const selectablePlanningBooks = planningBooks.filter(isBookSelectableForToday);
+  const blockedOfficialBookCount = books.length - selectableOfficialBooks.length;
+  const hasStudyBooks = selectablePlanningBooks.length > 0;
   const studyMode = user.studyMode || UserStudyMode.FOCUS;
   const isGameMode = studyMode === UserStudyMode.GAME;
 
@@ -188,38 +192,48 @@ export const useStudentDashboardViewModel = ({
         uid: user.uid,
         grade: user.grade || UserGrade.ADULT,
         level: user.englishLevel || EnglishLevel.B1,
-        availableBooks: planningBooks,
+        availableBooks: selectablePlanningBooks,
         learningPreference,
       })
     : null;
 
-  const plannedBooks = learningPlan && learningPlan.selectedBookIds.length > 0
-    ? orderBooksByIds(planningBooks, learningPlan.selectedBookIds)
-    : (() => {
-        const prioritized = planningBooks.filter((book) => book.isPriority);
-        return (prioritized.length > 0 ? prioritized : planningBooks).slice(0, 3);
-      })();
+  const fallbackPlannedBooks = (() => {
+    const prioritized = selectablePlanningBooks.filter((book) => book.isPriority);
+    return (prioritized.length > 0 ? prioritized : selectablePlanningBooks).slice(0, 3);
+  })();
+  const plannedBooks = (() => {
+    if (!learningPlan || learningPlan.selectedBookIds.length === 0) return fallbackPlannedBooks;
+    const selected = orderBooksByIds(selectablePlanningBooks, learningPlan.selectedBookIds);
+    return selected.length > 0 ? selected : fallbackPlannedBooks;
+  })();
 
-  const recommendedOfficialBooks = learningPlan && learningPlan.selectedBookIds.length > 0
-    ? orderBooksByIds(books, learningPlan.selectedBookIds)
-    : (() => {
-        const fallbackIds = fallbackPlanSuggestion?.selectedBookIds ?? [];
-        const suggested = orderBooksByIds(books, fallbackIds);
-        if (suggested.length > 0) return suggested;
-        const prioritized = books.filter((book) => book.isPriority);
-        return (prioritized.length > 0 ? prioritized : books).slice(0, 3);
-      })();
+  const fallbackRecommendedOfficialBooks = (() => {
+    const fallbackIds = fallbackPlanSuggestion?.selectedBookIds ?? [];
+    const suggested = orderBooksByIds(selectableOfficialBooks, fallbackIds);
+    if (suggested.length > 0) return suggested;
+    const prioritized = selectableOfficialBooks.filter((book) => book.isPriority);
+    return (prioritized.length > 0 ? prioritized : selectableOfficialBooks).slice(0, 3);
+  })();
+  const recommendedOfficialBooks = (() => {
+    if (!learningPlan || learningPlan.selectedBookIds.length === 0) return fallbackRecommendedOfficialBooks;
+    const selected = orderBooksByIds(selectableOfficialBooks, learningPlan.selectedBookIds);
+    return selected.length > 0 ? selected : fallbackRecommendedOfficialBooks;
+  })();
   const primaryRecommendedBook = recommendedOfficialBooks[0] || null;
   const secondaryRecommendedBooks = recommendedOfficialBooks.slice(1);
 
   const heroTitle = !hasStudyBooks
-    ? '教材を1冊作る'
+    ? blockedOfficialBookCount > 0
+      ? '配布教材を確認中'
+      : '教材を1冊作る'
     : remainingWords > 0
       ? `あと${remainingWords}語`
       : '今日は完了';
 
   const heroCopy = !hasStudyBooks
-    ? '教科書・PDF・本文から作成。1ページ分で始められます。'
+    ? blockedOfficialBookCount > 0
+      ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
+      : '教科書・PDF・本文から作成。1ページ分で始められます。'
     : remainingWords > 0
       ? dueCount > 0
         ? `まず復習${reviewFirstCount}語。そのあと残りへ。`
@@ -227,7 +241,9 @@ export const useStudentDashboardViewModel = ({
       : '余力があれば、英語演習を1セットだけ追加します。';
 
   const questButtonLabel = !hasStudyBooks
-    ? '教材を作る'
+    ? blockedOfficialBookCount > 0
+      ? 'My単語帳を作る'
+      : '教材を作る'
     : remainingWords > 0
       ? '学習を始める'
       : '復習を足す';
@@ -591,6 +607,7 @@ export const useStudentDashboardViewModel = ({
     accountOverview,
     commercialRequests,
     planningBooks,
+    blockedOfficialBookCount,
     hasStudyBooks,
     isGameMode,
     todayCount,

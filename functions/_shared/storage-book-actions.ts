@@ -7,6 +7,7 @@ import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditSt
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
+import { isBookSelectableForToday } from '../../shared/materialQuality';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
@@ -20,6 +21,7 @@ import {
   DbUserRow,
 } from './types';
 import {
+  assertBookLearningAccess,
   assertBookReadAccess,
   assertBookWriteAccess,
   buildInClause,
@@ -154,6 +156,109 @@ const validateNounWorkbookImportProfile = (
   }
 };
 
+const toCoverageRate = (coveredCount: number, totalCount: number): number => (
+  totalCount > 0 ? Math.round((coveredCount / totalCount) * 10000) / 10000 : 0
+);
+
+const countDuplicateHeadwords = (words: WordData[]): number => {
+  const counts = new Map<string, number>();
+  words.forEach((word) => {
+    const key = (word.searchKey || word.word || '').trim().toLowerCase();
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+};
+
+const upsertOfficialMaterialSourceLedger = async (
+  env: AppEnv,
+  meta: BookMetadata & { createdBy: string | null; },
+  words: WordData[],
+  payload: CatalogImportRequest,
+): Promise<void> => {
+  if (meta.createdBy) return;
+
+  const catalogSource = meta.catalogSource || BookCatalogSource.LICENSED_PARTNER;
+  const isApprovedOriginal = catalogSource === BookCatalogSource.STEADY_STUDY_ORIGINAL;
+  const now = Date.now();
+  const sourceKind = typeof payload.source?.kind === 'string' ? payload.source.kind : 'unknown';
+  const sourceCoverageRate = toCoverageRate(
+    words.filter((word) => Boolean(word.sourceSheet) && typeof word.sourceEntryId === 'number').length,
+    words.length,
+  );
+  const examplePairCoverageRate = toCoverageRate(
+    words.filter((word) => Boolean(word.exampleSentence) && Boolean(word.exampleMeaning)).length,
+    words.length,
+  );
+
+  await env.DB.prepare(`
+    INSERT INTO material_source_ledger (
+      source_id,
+      book_id,
+      catalog_source,
+      book_title,
+      edition,
+      rights_status,
+      review_status,
+      source_file,
+      extracted_at,
+      transform_log,
+      content_qa_report,
+      qa_word_count,
+      qa_required_blank_rows,
+      qa_rows_with_sentinel,
+      qa_sentinel_value_count,
+      qa_duplicate_headword_count,
+      qa_source_coverage_rate,
+      qa_example_pair_coverage_rate,
+      notes,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(book_id) DO UPDATE SET
+      source_id = excluded.source_id,
+      catalog_source = excluded.catalog_source,
+      book_title = excluded.book_title,
+      edition = excluded.edition,
+      rights_status = excluded.rights_status,
+      review_status = excluded.review_status,
+      source_file = excluded.source_file,
+      extracted_at = excluded.extracted_at,
+      transform_log = excluded.transform_log,
+      content_qa_report = excluded.content_qa_report,
+      qa_word_count = excluded.qa_word_count,
+      qa_required_blank_rows = excluded.qa_required_blank_rows,
+      qa_rows_with_sentinel = excluded.qa_rows_with_sentinel,
+      qa_sentinel_value_count = excluded.qa_sentinel_value_count,
+      qa_duplicate_headword_count = excluded.qa_duplicate_headword_count,
+      qa_source_coverage_rate = excluded.qa_source_coverage_rate,
+      qa_example_pair_coverage_rate = excluded.qa_example_pair_coverage_rate,
+      notes = excluded.notes,
+      updated_at = excluded.updated_at
+  `).bind(
+    `ledger-${meta.id}`,
+    meta.id,
+    catalogSource,
+    meta.title,
+    'api-import',
+    isApprovedOriginal ? 'approved' : 'pending',
+    isApprovedOriginal ? 'approved' : 'needs_review',
+    `api-import/${sourceKind}`,
+    new Date(now).toISOString(),
+    'normalizeCatalogImport + handleBatchImportWords',
+    'api-import-inline-content-qa',
+    words.length,
+    countDuplicateHeadwords(words),
+    sourceCoverageRate,
+    examplePairCoverageRate,
+    isApprovedOriginal
+      ? 'Steady Study original import. Required fields were normalized and blocked markers were rejected before storage.'
+      : 'Official import registered for review. Rights evidence and source granularity must be approved before Today Focus selection.',
+    now,
+    now,
+  ).run();
+};
+
 export const handleGetBooks = async (env: AppEnv, user: DbUserRow): Promise<BookMetadata[]> => {
   const rows = await readVisibleBookRows(env, user);
   return rows.map(toBookMetadata);
@@ -285,6 +390,8 @@ export const handleBatchImportWords = async (
       Date.now(),
     ).run();
 
+    await upsertOfficialMaterialSourceLedger(env, meta, words, payload);
+
     const statements = words.map((word) => env.DB.prepare(`
       INSERT INTO words (
         id, book_id, word_number, word, definition, search_key, category, subcategory, section, source_sheet, source_entry_id, example_sentence, example_meaning, is_reported, created_at, updated_at
@@ -348,7 +455,7 @@ export const handleDeleteBook = async (env: AppEnv, user: DbUserRow, bookId: str
 };
 
 export const handleGetWordsByBook = async (env: AppEnv, user: DbUserRow, bookId: string): Promise<WordData[]> => {
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   const words = await readAll<DbWordRow>(env, 'SELECT * FROM words WHERE book_id = ? ORDER BY word_number ASC', bookId);
   return words.map(toWordData);
 };
@@ -500,7 +607,8 @@ export const handleGetDailySessionWords = async (
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
-  const allVisibleBookRows = await readVisibleBookRows(env, user);
+  const allVisibleBookRows = (await readVisibleBookRows(env, user))
+    .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
   const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
   const preferredVisibleBookRows = filterBookRowsByPreferredIds(allVisibleBookRows, preferredBookIds);
   const shouldFallbackToAllVisibleBooks = preferredBookIds.length > 0
@@ -628,7 +736,7 @@ export const handleGetBookSession = async (
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
   const limit = ensurePositiveLimit(limitInput, 20);
-  await assertBookReadAccess(env, user, bookId);
+  await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
 
   if (selectionPolicy === 'BOOK_NEW_ONLY') {

@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - master
 
 concurrency:
   group: pages-production
@@ -13,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.repository == 'wadansyaku/medace-english-app' && (github.ref_name == 'main' || github.ref_name == 'master')
+    if: github.repository == 'wadansyaku/medace-english-app' && github.ref_name == 'main'
     environment:
       name: production
       url: ${{ steps.deploy.outputs['project-url'] }}
@@ -64,13 +63,6 @@ jobs:
       - name: Build deploy artifact
         run: npm run build
 
-      - name: Update production deployment runtime metadata
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          printf '%s\n' "${GITHUB_SHA}" | node node_modules/wrangler/bin/wrangler.js pages secret put DEPLOYMENT_SHA --project-name "$CF_PAGES_PROJECT"
-
       - name: Capture production D1 recovery bookmark
         id: d1-bookmark
         env:
@@ -92,6 +84,28 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node node_modules/wrangler/bin/wrangler.js d1 migrations apply "$CF_D1_DATABASE" --remote
+
+      - name: Generate production content QA report
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact
+
+      - name: Enforce production content QA gate
+        run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json
+
+      - name: Enforce production source ledger gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"
+
+      - name: Update production deployment runtime metadata
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          printf '%s\n' "${GITHUB_SHA}" | node node_modules/wrangler/bin/wrangler.js pages secret put DEPLOYMENT_SHA --project-name "$CF_PAGES_PROJECT"
 
       - name: Deploy to Cloudflare Pages
         id: deploy
@@ -115,6 +129,7 @@ jobs:
       - name: Run deployed production smoke
         env:
           PLAYWRIGHT_BASE_URL: ${{ steps.deploy.outputs['project-url'] }}
+          PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: ${{ github.sha }}
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
@@ -166,7 +181,9 @@ jobs:
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Recovery Bookmark: \`${{ steps.d1-bookmark.outputs.bookmark }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + build)"
+            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + build)"
+            echo "- Content QA Gate: \`passed\`"
+            echo "- Source Ledger Gate: \`passed\`"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Production Secrets: \`${{ steps.production-secrets.outputs.names }}\`"
             echo "- Missing Required Production Secrets: \`${{ steps.production-secrets.outputs['missing-required'] }}\`"

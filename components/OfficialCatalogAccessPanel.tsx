@@ -5,7 +5,8 @@ import {
   UserProfile,
 } from '../types';
 import { dashboardService } from '../services/dashboard';
-import { AlertCircle, BookOpen, Library, Loader2, Play } from 'lucide-react';
+import { AlertCircle, AlertTriangle, BookOpen, Library, Loader2, Play, ShieldCheck } from 'lucide-react';
+import { getLearnerMaterialQualityMessage, isBookApprovedForLearner } from '../shared/materialQuality';
 
 interface OfficialCatalogAccessPanelProps {
   user: UserProfile;
@@ -26,8 +27,8 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
   user,
   onSelectBook,
   eyebrow = '教材カタログ',
-  title = '既存単語帳にそのままアクセスする',
-  description = 'ビジネス体験アカウントでは、既存の公式単語帳をそのまま開けます。テストでは英日・日英・スペルチェックを切り替えて確認できます。',
+  title = '承認済み公式コースを開く',
+  description = '承認済み教材は学習・テストで使えます。確認中の教材は承認後に利用できます。',
 }) => {
   const [books, setBooks] = useState<BookMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +63,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
         }),
     [books],
   );
+  const approvedOfficialBookCount = officialBooks.filter(isBookApprovedForLearner).length;
 
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -77,7 +79,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
           </div>
         </div>
         <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
-          {officialBooks.length} 冊
+          {approvedOfficialBookCount} / {officialBooks.length} 冊 利用可
         </div>
       </div>
 
@@ -97,8 +99,10 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {officialBooks.map((book) => {
+            const canStart = isBookApprovedForLearner(book);
+            const qualityMessage = getLearnerMaterialQualityMessage(book.qualityGate);
             const fallbackDescription = book.catalogSource === BookCatalogSource.LICENSED_PARTNER
-              ? '既存の公式単語帳をそのまま確認できます。'
+              ? '承認済みの公式教材は学習・テストで使えます。'
               : 'スターター導線で使うオリジナル単語データベース教材です。';
 
             return (
@@ -107,6 +111,17 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                   {book.isPriority && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800">
                       推奨
+                    </span>
+                  )}
+                  {book.qualityGate && (
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                      canStart
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-amber-200 bg-amber-50 text-amber-800'
+                    }`}
+                    >
+                      {canStart ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                      {book.qualityGate.label}
                     </span>
                   )}
                 </div>
@@ -120,20 +135,31 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                   <AlertCircle className="h-3.5 w-3.5" />
                   {book.wordCount} 語を収録
                 </div>
+                {!canStart && (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">
+                    {qualityMessage}
+                  </div>
+                )}
 
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => onSelectBook(book.id, 'study')}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700"
+                    onClick={() => {
+                      if (canStart) onSelectBook(book.id, 'study');
+                    }}
+                    disabled={!canStart}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   >
                     <BookOpen className="h-4 w-4" />
                     学習
                   </button>
                   <button
                     type="button"
-                    onClick={() => onSelectBook(book.id, 'quiz')}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+                    onClick={() => {
+                      if (canStart) onSelectBook(book.id, 'quiz');
+                    }}
+                    disabled={!canStart}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                   >
                     <Play className="h-4 w-4 fill-current" />
                     テスト

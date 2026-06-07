@@ -157,6 +157,26 @@ export enum BookAccessScope {
   BUSINESS_ONLY = 'BUSINESS_ONLY',
 }
 
+export type MaterialRightsStatus = 'approved' | 'pending' | 'unknown' | 'blocked';
+
+export type MaterialReviewStatus = 'approved' | 'needs_review' | 'blocked';
+
+export type MaterialQualityGateStatus = 'approved' | 'source_review_required' | 'qa_blocked' | 'missing_ledger' | 'user_generated';
+
+export interface MaterialQualityGate {
+  status: MaterialQualityGateStatus;
+  label: string;
+  summary: string;
+  isApprovedForLearner: boolean;
+  isSelectableForToday: boolean;
+  sourceId?: string;
+  rightsStatus?: MaterialRightsStatus;
+  reviewStatus?: MaterialReviewStatus;
+  contentQaReport?: string;
+  blockingReasons: string[];
+  warnings: string[];
+}
+
 export const BOOK_CATALOG_SOURCE_LABELS: Record<BookCatalogSource, string> = {
   [BookCatalogSource.STEADY_STUDY_ORIGINAL]: 'オリジナル単語データベース',
   [BookCatalogSource.LICENSED_PARTNER]: '公式教材',
@@ -468,6 +488,7 @@ export interface BookMetadata {
   sourceContext?: string;
   catalogSource?: BookCatalogSource;
   accessScope?: BookAccessScope;
+  qualityGate?: MaterialQualityGate;
 }
 
 export interface LearningHistory {
@@ -1158,6 +1179,16 @@ export interface AdminBookInsight {
   learnedEntries: number;
   averageProgress: number;
   isOfficial: boolean;
+  qualityGate?: MaterialQualityGate;
+}
+
+export interface AdminMaterialQualitySummary {
+  officialBookCount: number;
+  approvedBookCount: number;
+  selectableTodayBookCount: number;
+  reviewRequiredBookCount: number;
+  qaBlockedBookCount: number;
+  missingLedgerBookCount: number;
 }
 
 export interface AdminAiActionSummary {
@@ -1522,6 +1553,7 @@ export interface AdminDashboardSnapshot {
   riskBreakdown: AdminRiskBreakdownItem[];
   trend: AdminTrendPoint[];
   topBooks: AdminBookInsight[];
+  materialQuality: AdminMaterialQualitySummary;
   aiActions: AdminAiActionSummary[];
   recentNotifications: InstructorNotification[];
   recentReports: AdminWordReportSummary[];
