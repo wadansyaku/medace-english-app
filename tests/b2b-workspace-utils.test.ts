@@ -489,6 +489,15 @@ describe('b2b workspace helpers', () => {
     });
     expect(runbookSummary.detail).toContain('学習履歴由来ではありません');
     expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['導入ランブック', '57%']);
+    expect(decision).toMatchObject({
+      title: 'PDF問題で停止',
+      primaryAction: {
+        kind: 'OPEN_VIEW',
+        label: '履歴ベースのPDF問題を作る',
+        targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      },
+    });
+    expect(decision.body).toContain('履歴ベース 0名 / fallback候補 2名');
     expect(decision.focusItems.find((item) => item.label === '導入ランブック')).toMatchObject({
       value: 'PDF問題で停止',
       tone: 'warning',

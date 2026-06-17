@@ -69,6 +69,11 @@ const createSteps = (d1PersistDir, contentQaReportPath) => {
       args: migrationReplay.args,
     },
     {
+      label: 'npm security audit',
+      command: process.execPath,
+      args: ['scripts/check-npm-audit.mjs'],
+    },
+    {
       label: 'TypeScript typecheck',
       command: process.execPath,
       args: ['node_modules/typescript/bin/tsc', '--noEmit'],

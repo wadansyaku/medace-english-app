@@ -16,6 +16,7 @@ import {
 import { BRAND } from '../../config/brand';
 import { GRADE_LABELS, type LearningPlan, type UserGrade } from '../../types';
 import type {
+  StudentDashboardHeroMetric,
   StudentDashboardLearningRouteId,
   StudentDashboardPracticeRecommendation,
 } from '../../hooks/useStudentDashboardViewModel';
@@ -27,6 +28,8 @@ interface DashboardHeroSectionProps {
   englishLevel?: string;
   heroTitle: string;
   heroCopy: string;
+  heroEyebrow?: string;
+  heroMetrics?: StudentDashboardHeroMetric[];
   primaryRecommendedBookTitle?: string | null;
   primaryRecommendedBookWordCount?: number;
   preferenceSummary: string;
@@ -61,6 +64,14 @@ const PRACTICE_LANE_ICON: Record<FocusedPracticeLane, LucideIcon> = {
   writing: NotebookPen,
 };
 
+const HERO_METRIC_ICON: Record<StudentDashboardHeroMetric['icon'], LucideIcon> = {
+  target: Target,
+  check: CheckCircle2,
+  clock: Clock3,
+  mission: BookOpenText,
+  writing: NotebookPen,
+};
+
 const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
 
 const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
@@ -68,6 +79,8 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   englishLevel,
   heroTitle,
   heroCopy,
+  heroEyebrow = '今日やること',
+  heroMetrics,
   primaryRecommendedBookTitle,
   primaryRecommendedBookWordCount,
   preferenceSummary,
@@ -97,29 +110,30 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   const PracticeIcon = PRACTICE_LANE_ICON[practiceRecommendation.lane] || Brain;
   const safeProgressPercent = clampPercent(todayProgressPercent);
   const isPracticePrimary = primaryLearningRouteId === 'englishPractice';
-  const compactMetrics = [
+  const fallbackMetrics: StudentDashboardHeroMetric[] = [
     {
       id: 'remaining',
       label: '残り',
       value: `${remainingWords}語`,
       helper: remainingWords > 0 ? '今日進める' : '完了',
-      icon: Target,
+      icon: 'target',
     },
     {
       id: 'due',
       label: '復習',
       value: `${dueCount}語`,
       helper: dueCount > 0 ? '先に復習' : 'なし',
-      icon: CheckCircle2,
+      icon: 'check',
     },
     {
       id: 'minutes',
       label: '時間',
       value: `${estimatedMinutes}分`,
       helper: '目安',
-      icon: Clock3,
+      icon: 'clock',
     },
   ];
+  const compactMetrics = (heroMetrics && heroMetrics.length > 0 ? heroMetrics : fallbackMetrics).slice(0, 3);
 
   return (
     <section
@@ -168,7 +182,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       <div className={`grid min-w-0 gap-4 ${isMobileCompact ? 'mt-4' : 'mt-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start'}`}>
         <div className="min-w-0">
           <div className="min-w-0 border-l-4 border-medace-500 pl-4">
-            <p className="text-xs font-black text-medace-700">今日やること</p>
+            <p className="text-xs font-black text-medace-700">{heroEyebrow}</p>
             <h2 className={`mt-2 font-black leading-tight text-slate-950 ${isMobileCompact ? 'text-[1.55rem] min-[360px]:text-[1.85rem]' : 'text-3xl md:text-4xl'}`}>
               {heroTitle}
             </h2>
@@ -211,7 +225,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
 
           <div data-testid="dashboard-command-metrics" className={`mt-5 min-w-0 gap-2 ${isMobileCompact ? 'hidden' : 'grid sm:grid-cols-3'}`}>
             {compactMetrics.map((metric, index) => {
-              const MetricIcon = metric.icon;
+              const MetricIcon = HERO_METRIC_ICON[metric.icon] || Target;
               return (
                 <div
                   key={metric.id}

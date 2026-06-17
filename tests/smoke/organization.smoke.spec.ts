@@ -91,6 +91,11 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   const snapshot = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
   expect(['SEND_FIRST_NOTIFICATION', 'ISSUE_FIRST_WRITING_ASSIGNMENT', 'ACTIVE']).toContain(snapshot.activationState);
   expect(snapshot.assignmentCoverageRate).toBeGreaterThan(0);
+  const currentRunbookStage = snapshot.activationRunbook?.currentStage || null;
+  if (currentRunbookStage) {
+    await expect(page.getByTestId('business-admin-runbook-summary')).toContainText(currentRunbookStage.actionLabel);
+    await expect(page.getByTestId('business-admin-runbook-summary')).toContainText(currentRunbookStage.evidenceLabel);
+  }
   expect(
     snapshot.studentAssignments.some((student: {
       uid: string;
@@ -145,12 +150,26 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
   } else if (snapshot.activationState === 'ISSUE_FIRST_WRITING_ASSIGNMENT') {
-    await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '初回作文を配布する' })).toBeVisible();
-    await page.getByTestId('workspace-tab-writing').click();
-    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
-    await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+    if (currentRunbookStage && currentRunbookStage.id !== 'writing') {
+      await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: `${currentRunbookStage.label}で停止` })).toBeVisible();
+      await expect(page.getByTestId('business-admin-primary-decision-action')).toContainText(currentRunbookStage.actionLabel);
+      if (currentRunbookStage.target?.targetView === 'WORKSHEETS') {
+        await page.getByTestId('workspace-tab-worksheets').click();
+        await expect(page.getByText('配布用PDF問題を独立して作る')).toBeVisible();
+      }
+    } else {
+      await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '初回作文を配布する' })).toBeVisible();
+      await page.getByTestId('workspace-tab-writing').click();
+      await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+      await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+    }
   } else {
-    await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '導入完了' })).toBeVisible();
+    if (currentRunbookStage) {
+      await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: `${currentRunbookStage.label}で停止` })).toBeVisible();
+      await expect(page.getByTestId('business-admin-primary-decision-action')).toContainText(currentRunbookStage.actionLabel);
+    } else {
+      await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '導入完了' })).toBeVisible();
+    }
   }
 
   await page.getByTestId('workspace-tab-assignments').click();
@@ -466,55 +485,66 @@ test('group admin can issue a weekly mission and student can restart it from the
   attachSmokeDiagnostics(adminPage, test.info(), 'organization-admin');
   attachSmokeDiagnostics(studentPage, test.info(), 'organization-student');
 
-  await loginGroupAdminDemo(adminPage);
-  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+  try {
+    await loginGroupAdminDemo(adminPage);
+    await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
 
-  await loginBusinessStudentDemo(studentPage);
-  await maybeCompleteOnboarding(studentPage);
-  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+    await loginBusinessStudentDemo(studentPage);
+    await maybeCompleteOnboarding(studentPage);
+    await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
-  const businessStudent = await getCurrentSessionUser(studentPage);
-  expect(businessStudent?.uid).toBeTruthy();
-  const importResult = await seedPhrasebook(studentPage, 'Smoke Mission Drill');
-  expect(importResult.importedBookIds?.[0]).toBeTruthy();
-  if (!importResult.importedBookIds?.[0]) {
-    throw new Error('Smoke Mission Drill did not return an imported book id.');
+    const businessStudent = await getCurrentSessionUser(studentPage);
+    expect(businessStudent?.uid).toBeTruthy();
+    const importResult = await seedPhrasebook(studentPage, 'Smoke Mission Drill');
+    expect(importResult.importedBookIds?.[0]).toBeTruthy();
+    if (!importResult.importedBookIds?.[0]) {
+      throw new Error('Smoke Mission Drill did not return an imported book id.');
+    }
+
+    const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+    const weeklyMission = await storageAction<any>(adminPage, 'createWeeklyMission', {
+      learningTrack: 'EIKEN_2',
+      title: 'Smoke Weekly Mission',
+      rationale: 'smoke mission distribution',
+      bookId: importResult.importedBookIds[0],
+      bookTitle: 'Smoke Mission Drill',
+      newWordsTarget: 8,
+      reviewWordsTarget: 4,
+      quizTargetCount: 1,
+    });
+    await storageAction(adminPage, 'assignWeeklyMission', {
+      missionId: weeklyMission.id,
+      studentUid: businessStudent?.uid,
+    });
+
+    await studentPage.reload();
+    await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+    await expect(
+      studentPage.getByTestId('dashboard-hero-section').getByRole('heading', {
+        name: '今週のミッション: Smoke Weekly Mission',
+      }),
+    ).toBeVisible();
+    await expect(studentPage.getByTestId('dashboard-mission-section')).toBeVisible();
+    await expect(
+      studentPage.getByTestId('dashboard-mission-section').getByRole('heading', {
+        name: 'Smoke Weekly Mission',
+      }),
+    ).toBeVisible();
+
+    await completeMissionCtaStudySession(studentPage);
+
+    await adminPage.reload();
+    await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
+    const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
+    const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string; primaryMissionStatus?: string; primaryMissionCompletionRate?: number }) => (
+      student.uid === businessStudent?.uid
+    ));
+
+    expect(afterSnapshot.missionStartedRate).toBeGreaterThanOrEqual(beforeSnapshot.missionStartedRate);
+    expect(studentAfter?.primaryMissionStatus).not.toBe('ASSIGNED');
+    expect(studentAfter?.primaryMissionCompletionRate || 0).toBeGreaterThan(0);
+  } finally {
+    await adminContext.close();
+    await studentContext.close();
   }
-
-  const beforeSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
-  const weeklyMission = await storageAction<any>(adminPage, 'createWeeklyMission', {
-    learningTrack: 'EIKEN_2',
-    title: 'Smoke Weekly Mission',
-    rationale: 'smoke mission distribution',
-    bookId: importResult.importedBookIds[0],
-    bookTitle: 'Smoke Mission Drill',
-    newWordsTarget: 8,
-    reviewWordsTarget: 4,
-    quizTargetCount: 1,
-  });
-  await storageAction(adminPage, 'assignWeeklyMission', {
-    missionId: weeklyMission.id,
-    studentUid: businessStudent?.uid,
-  });
-
-  await studentPage.reload();
-  await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
-  await expect(studentPage.getByTestId('dashboard-mission-section')).toBeVisible();
-  await expect(studentPage.getByText('Smoke Weekly Mission')).toBeVisible();
-
-  await completeMissionCtaStudySession(studentPage);
-
-  await adminPage.reload();
-  await expect(adminPage.getByTestId('business-admin-dashboard')).toBeVisible();
-  const afterSnapshot = await storageAction<any>(adminPage, 'getOrganizationDashboardSnapshot');
-  const studentAfter = afterSnapshot.studentAssignments.find((student: { uid: string; primaryMissionStatus?: string; primaryMissionCompletionRate?: number }) => (
-    student.uid === businessStudent?.uid
-  ));
-
-  expect(afterSnapshot.missionStartedRate).toBeGreaterThanOrEqual(beforeSnapshot.missionStartedRate);
-  expect(studentAfter?.primaryMissionStatus).not.toBe('ASSIGNED');
-  expect(studentAfter?.primaryMissionCompletionRate || 0).toBeGreaterThan(0);
-
-  await adminContext.close();
-  await studentContext.close();
 });

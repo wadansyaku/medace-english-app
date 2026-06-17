@@ -75,6 +75,10 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
   const latestTrendPoint = snapshot.trend[snapshot.trend.length - 1];
   const canSendActivationNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
+  const shouldFollowRunbookStage = runbookSummary.hasCurrentStage && !canSendActivationNotification;
+  const nextActionTitle = shouldFollowRunbookStage ? runbookSummary.title : snapshot.nextRequiredActionLabel;
+  const nextActionDescription = shouldFollowRunbookStage ? runbookSummary.detail : snapshot.nextRequiredActionDescription;
+  const nextActionButtonLabel = shouldFollowRunbookStage ? runbookSummary.actionLabel : '次の一手へ進む';
   const runbookStageClass = {
     complete: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     stalled: 'border-amber-300 bg-amber-50 text-amber-900',
@@ -109,8 +113,13 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-bold text-medace-700/70">次の一手</p>
-            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{snapshot.nextRequiredActionLabel}</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-700">{snapshot.nextRequiredActionDescription}</p>
+            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">{nextActionTitle}</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-700">{nextActionDescription}</p>
+            {shouldFollowRunbookStage && (
+              <p className="mt-2 text-xs font-bold text-medace-800/80">
+                証跡: {runbookSummary.evidenceLabel}
+              </p>
+            )}
             {canBootstrap && (
               <p className="mt-3 text-xs font-medium text-medace-800/80">
                 体験用の組織では導入セットを自動投入して、クラス作成から初回通知までをまとめて確認できます。
@@ -135,7 +144,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
                 onClick={() => onChangeView(nextActionView)}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
               >
-                次の一手へ進む <ArrowRight className="h-4 w-4" />
+                {nextActionButtonLabel} <ArrowRight className="h-4 w-4" />
               </button>
             )}
             {canBootstrap && (
@@ -160,6 +169,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             <p className="text-xs font-bold text-slate-400">導入ランブック</p>
             <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">{runbookSummary.title}</h3>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">{runbookSummary.detail}</p>
+            <p className="mt-2 text-xs font-bold text-slate-500">証跡: {runbookSummary.evidenceLabel}</p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
             <div className="rounded-2xl border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-black text-medace-900">
@@ -170,7 +180,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
               onClick={() => onChangeView(runbookSummary.targetView)}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
             >
-              停止箇所を開く <ArrowRight className="h-4 w-4" />
+              {runbookSummary.actionLabel} <ArrowRight className="h-4 w-4" />
             </button>
           </div>
         </div>
