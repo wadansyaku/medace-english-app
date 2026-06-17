@@ -297,6 +297,31 @@ describe('useStudentDashboardViewModel', () => {
 
     expect(viewModel.hasActionableWriting).toBe(true);
     expect(viewModel.primaryLearningRouteId).toBe('writing');
+    expect(viewModel.heroTitle).toBe('英作文: スマホ学習の意見文');
+    expect(viewModel.heroEyebrow).toBe('先生からの英作文課題');
+    expect(viewModel.heroMetrics).toEqual([
+      {
+        id: 'writing-status',
+        label: '英作文',
+        value: '未提出',
+        helper: '作文を提出する',
+        icon: 'writing',
+      },
+      {
+        id: 'writing-prompt',
+        label: '課題',
+        value: 'スマホ学習の意見文',
+        helper: 'Core 1',
+        icon: 'mission',
+      },
+      {
+        id: 'writing-due',
+        label: '期限',
+        value: '2026-05-14',
+        helper: '進行中',
+        icon: 'clock',
+      },
+    ]);
     expect(asCanonicalTasks(viewModel).primaryTask).toMatchObject({ id: 'writing' });
     expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'mission', 'weakness', 'englishPractice', 'writing']);
     expect(viewModel.learningRouteCards.find((card) => card.id === 'writing')).toMatchObject({
@@ -336,6 +361,31 @@ describe('useStudentDashboardViewModel', () => {
     });
 
     expect(viewModel.primaryLearningRouteId).toBe('mission');
+    expect(viewModel.heroTitle).toBe('今週のミッション: 英検2級の語彙を進める');
+    expect(viewModel.heroEyebrow).toBe('先生からの今週ミッション');
+    expect(viewModel.heroMetrics).toEqual([
+      {
+        id: 'mission-progress',
+        label: '課題',
+        value: '35%',
+        helper: '進行中',
+        icon: 'mission',
+      },
+      {
+        id: 'mission-blockers',
+        label: '残り',
+        value: '3件',
+        helper: '新出語',
+        icon: 'target',
+      },
+      {
+        id: 'mission-due',
+        label: '期限',
+        value: '2026-05-14',
+        helper: '今週',
+        icon: 'clock',
+      },
+    ]);
     expect(viewModel.learningRouteCards.find((card) => card.id === 'mission')).toMatchObject({
       ctaLabel: 'ミッションの語彙を進める',
       isPrimary: true,

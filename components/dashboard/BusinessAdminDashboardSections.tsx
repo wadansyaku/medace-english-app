@@ -22,6 +22,7 @@ import BusinessAdminOverviewSection from './businessAdmin/BusinessAdminOverviewS
 import BusinessAdminSettingsSection from './businessAdmin/BusinessAdminSettingsSection';
 import BusinessAdminWorksheetsSection from './businessAdmin/BusinessAdminWorksheetsSection';
 import BusinessAdminWritingSection from './businessAdmin/BusinessAdminWritingSection';
+import { resolveBusinessAdminNextActionView } from '../../utils/businessAdminDashboard';
 
 interface BusinessAdminDashboardSectionsProps {
   user: UserProfile;
@@ -45,17 +46,6 @@ interface ActivationGateDefinition {
   targetView: BusinessAdminWorkspaceView;
   allowBootstrap?: boolean;
 }
-
-const resolveNextActionView = (
-  snapshot: OrganizationDashboardSnapshot,
-): BusinessAdminWorkspaceView => {
-  if (snapshot.nextRequiredActionTarget?.targetView) return snapshot.nextRequiredActionTarget.targetView;
-  const activationState = snapshot.nextRequiredAction;
-  if (activationState === 'CREATE_COHORT') return BusinessAdminWorkspaceView.SETTINGS;
-  if (activationState === 'SEND_FIRST_NOTIFICATION') return BusinessAdminWorkspaceView.ASSIGNMENTS;
-  if (activationState === 'ISSUE_FIRST_WRITING_ASSIGNMENT') return BusinessAdminWorkspaceView.WRITING;
-  return BusinessAdminWorkspaceView.ASSIGNMENTS;
-};
 
 const resolveViewGate = (
   activeView: BusinessAdminWorkspaceView,
@@ -222,7 +212,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
 }) => {
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
   const runtimeFlags = getClientRuntimeFlags();
-  const nextActionView = resolveNextActionView(snapshot);
+  const nextActionView = resolveBusinessAdminNextActionView(snapshot);
   const gate = resolveViewGate(activeView, snapshot.activationState);
   const canBootstrap = !runtimeFlags.deployment.isProductionLike
     && snapshot.activationState !== 'ACTIVE'

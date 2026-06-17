@@ -429,7 +429,7 @@ describe('b2b workspace helpers', () => {
               targetView: BusinessAdminWorkspaceView.WORKSHEETS,
               organizationId: 'org-1',
             },
-            evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+            evidenceLabel: '履歴ベース 0名 / 代替候補 2名',
           },
         ],
         currentStage: {
@@ -438,14 +438,14 @@ describe('b2b workspace helpers', () => {
           detail: 'sample',
           done: false,
           status: 'stalled',
-          stalledReason: 'PDF問題は fallback 候補のみです。学習履歴由来ではありません。',
+          stalledReason: 'PDF問題は代替候補のみです。学習履歴由来ではありません。',
           actionLabel: '履歴ベースのPDF問題を作る',
           target: {
             kind: 'WORKSHEET',
             targetView: BusinessAdminWorkspaceView.WORKSHEETS,
             organizationId: 'org-1',
           },
-          evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+          evidenceLabel: '履歴ベース 0名 / 代替候補 2名',
         },
         stalledStage: {
           id: 'worksheet',
@@ -453,14 +453,14 @@ describe('b2b workspace helpers', () => {
           detail: 'sample',
           done: false,
           status: 'stalled',
-          stalledReason: 'PDF問題は fallback 候補のみです。学習履歴由来ではありません。',
+          stalledReason: 'PDF問題は代替候補のみです。学習履歴由来ではありません。',
           actionLabel: '履歴ベースのPDF問題を作る',
           target: {
             kind: 'WORKSHEET',
             targetView: BusinessAdminWorkspaceView.WORKSHEETS,
             organizationId: 'org-1',
           },
-          evidenceLabel: '履歴ベース 0名 / fallback候補 2名',
+          evidenceLabel: '履歴ベース 0名 / 代替候補 2名',
         },
         completedStageCount: 4,
         totalStageCount: 7,
@@ -468,7 +468,7 @@ describe('b2b workspace helpers', () => {
         worksheet: {
           historyBasedStudentCount: 0,
           fallbackStudentCount: 2,
-          sourceLabel: '履歴ベース 0名 / fallback候補 2名',
+          sourceLabel: '履歴ベース 0名 / 代替候補 2名',
           hasOnlyFallback: true,
         },
       },
@@ -489,6 +489,15 @@ describe('b2b workspace helpers', () => {
     });
     expect(runbookSummary.detail).toContain('学習履歴由来ではありません');
     expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['導入ランブック', '57%']);
+    expect(decision).toMatchObject({
+      title: 'PDF問題で停止',
+      primaryAction: {
+        kind: 'OPEN_VIEW',
+        label: '履歴ベースのPDF問題を作る',
+        targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      },
+    });
+    expect(decision.body).toContain('履歴ベース 0名 / 代替候補 2名');
     expect(decision.focusItems.find((item) => item.label === '導入ランブック')).toMatchObject({
       value: 'PDF問題で停止',
       tone: 'warning',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildOrganizationActivationRunbook } from '../functions/_shared/organization-activation-runbook';
-import { buildOrganizationDashboardSnapshot } from '../functions/_shared/organization-dashboard';
+import { buildOrganizationActivationRunbook } from '../shared/organizationActivationRunbook';
+import { buildOrganizationDashboardSnapshot } from '../shared/organizationDashboard';
 import {
   BusinessAdminWorkspaceView,
   InterventionOutcome,

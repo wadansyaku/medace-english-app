@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "engines": {
-    "node": "20.x"
+    "node": ">=22.12 <23"
   },
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js",
@@ -12,6 +12,7 @@
     "preview": "node node_modules/vite/bin/vite.js preview",
     "release:gate:local": "node scripts/run-release-gate-local.mjs",
     "release:gate:local:dry": "node scripts/run-release-gate-local.mjs --dry-run",
+    "security:audit": "node scripts/check-npm-audit.mjs",
     "verify:fast": "npm run db:migrations:check-names && npm run db:migrate:verify && npm run typecheck && npm run test:unit",
     "test": "npm run verify:fast && npm run build && npm run test:api",
     "test:unit": "node node_modules/vitest/vitest.mjs run",
@@ -45,18 +46,20 @@
   "devDependencies": {
     "@playwright/test": "^1.54.2",
     "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
+    "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0",
-    "vitest": "^3.2.4",
-    "wrangler": "^4.72.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8",
+    "wrangler": "^4.100.0",
     "xlsx": "^0.18.5"
   },
   "overrides": {
     "brace-expansion": "^2.0.3",
-    "protobufjs": "^7.5.5"
+    "esbuild": "0.28.1",
+    "protobufjs": "^7.6.4",
+    "ws": "^8.21.0"
   }
 }

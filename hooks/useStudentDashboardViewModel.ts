@@ -79,6 +79,16 @@ export interface StudentDashboardPracticeRecommendation {
   stateLabel: string;
 }
 
+export type StudentDashboardHeroMetricIcon = 'target' | 'check' | 'clock' | 'mission' | 'writing';
+
+export interface StudentDashboardHeroMetric {
+  id: string;
+  label: string;
+  value: string;
+  helper: string;
+  icon: StudentDashboardHeroMetricIcon;
+}
+
 const getLeague = (level: number) => {
   if (level >= 20) return { name: 'ゴールド', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' };
   if (level >= 10) return { name: 'シルバー', color: 'bg-slate-100 text-slate-700 border-slate-200' };
@@ -445,7 +455,9 @@ export const useStudentDashboardViewModel = ({
     const isPrimary = card.id === primaryTaskId;
     const taskTitle = card.id === 'englishPractice'
       ? practiceRecommendation.title
-      : (card.id === 'mission' || card.id === 'writing') && isPrimary
+      : card.id === 'mission' && isPrimary && primaryMission
+        ? `今週のミッション: ${primaryMission.title}`
+      : card.id === 'writing' && isPrimary
         ? `${card.title}: ${card.metricLabel}`
         : card.title;
 
@@ -589,6 +601,126 @@ export const useStudentDashboardViewModel = ({
     ? heroCopy
     : primaryLearningRouteCard.body;
   const heroRouteButtonLabel = primaryTask?.ctaLabel || primaryLearningRouteCard?.ctaLabel || questButtonLabel;
+  const defaultHeroMetrics: StudentDashboardHeroMetric[] = [
+    {
+      id: 'remaining',
+      label: '残り',
+      value: `${remainingWords}語`,
+      helper: remainingWords > 0 ? '今日進める' : '完了',
+      icon: 'target',
+    },
+    {
+      id: 'due',
+      label: '復習',
+      value: `${dueCount}語`,
+      helper: dueCount > 0 ? '先に復習' : 'なし',
+      icon: 'check',
+    },
+    {
+      id: 'minutes',
+      label: '時間',
+      value: `${estimatedMinutes}分`,
+      helper: '目安',
+      icon: 'clock',
+    },
+  ];
+  const heroEyebrow = primaryTask?.id === 'mission'
+    ? '先生からの今週ミッション'
+    : primaryTask?.id === 'writing'
+      ? hasActionableWriting
+        ? '先生からの英作文課題'
+        : '英作文'
+      : primaryTask?.id === 'coach'
+        ? '講師からの次の一手'
+        : primaryTask?.id === 'englishPractice'
+          ? '英語演習'
+          : '今日やること';
+  const heroMetrics: StudentDashboardHeroMetric[] = (() => {
+    if (primaryTask?.id === 'mission' && primaryMission) {
+      const blockerCount = primaryMission.blockers.length;
+      return [
+        {
+          id: 'mission-progress',
+          label: '課題',
+          value: `${primaryMission.completionRate}%`,
+          helper: WEEKLY_MISSION_STATUS_LABELS[primaryMission.status],
+          icon: 'mission',
+        },
+        {
+          id: 'mission-blockers',
+          label: '残り',
+          value: blockerCount > 0 ? `${blockerCount}件` : 'なし',
+          helper: blockerCount > 0 ? primaryMission.blockers[0] : '完了',
+          icon: 'target',
+        },
+        {
+          id: 'mission-due',
+          label: '期限',
+          value: primaryMission.dueDate,
+          helper: primaryMission.overdue ? '期限超過' : '今週',
+          icon: 'clock',
+        },
+      ];
+    }
+
+    if (primaryTask?.id === 'writing') {
+      return [
+        {
+          id: 'writing-status',
+          label: '英作文',
+          value: hasActionableWriting ? '未提出' : '確認',
+          helper: primaryMission?.nextActionLabel || '講師課題',
+          icon: 'writing',
+        },
+        {
+          id: 'writing-prompt',
+          label: '課題',
+          value: primaryMission?.writingPromptTitle || '配布待ち',
+          helper: primaryMission?.sourceBookTitle || 'B2B',
+          icon: 'mission',
+        },
+        {
+          id: 'writing-due',
+          label: '期限',
+          value: primaryMission?.dueDate || '未設定',
+          helper: primaryMission?.overdue
+            ? '期限超過'
+            : primaryMission
+              ? WEEKLY_MISSION_STATUS_LABELS[primaryMission.status]
+              : '必要なときだけ',
+          icon: 'clock',
+        },
+      ];
+    }
+
+    if (primaryTask?.id === 'coach' && latestActionableCoachNotification) {
+      return [
+        {
+          id: 'coach-instructor',
+          label: '講師',
+          value: latestActionableCoachNotification.instructorName,
+          helper: INTERVENTION_KIND_LABELS[latestActionableCoachNotification.interventionKind],
+          icon: 'mission',
+        },
+        {
+          id: 'coach-action',
+          label: '対応',
+          value: primaryTask.ctaLabel,
+          helper: '今やること',
+          icon: 'target',
+        },
+        {
+          id: 'minutes',
+          label: '時間',
+          value: `${estimatedMinutes}分`,
+          helper: '目安',
+          icon: 'clock',
+        },
+      ];
+    }
+
+    return defaultHeroMetrics;
+  })();
 
   return {
     dueCount,
@@ -631,6 +763,8 @@ export const useStudentDashboardViewModel = ({
     secondaryRecommendedBooks,
     heroTitle: heroRouteTitle,
     heroCopy: heroRouteCopy,
+    heroEyebrow,
+    heroMetrics,
     questButtonLabel: heroRouteButtonLabel,
     aiBudgetPercent,
     aiUsageLabel,

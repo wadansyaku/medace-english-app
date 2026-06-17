@@ -64,6 +64,9 @@ export interface BusinessAdminRunbookSummaryModel {
   detail: string;
   progressLabel: string;
   worksheetSourceLabel: string;
+  actionLabel: string;
+  evidenceLabel: string;
+  hasCurrentStage: boolean;
   tone: BusinessAdminDecisionTone;
   targetView: BusinessAdminWorkspaceView;
 }
@@ -150,14 +153,19 @@ export const getBusinessAdminWritingCounts = (
   revisionRequestedCount: assignments.filter((assignment) => assignment.status === 'REVISION_REQUESTED').length,
 });
 
-const resolveNextRequiredActionView = (
+export const resolveBusinessAdminNextActionView = (
   snapshot: OrganizationDashboardSnapshot,
 ): BusinessAdminWorkspaceView => {
+  if (snapshot.activationRunbook?.currentStage?.target?.targetView) {
+    return snapshot.activationRunbook.currentStage.target.targetView;
+  }
   if (snapshot.nextRequiredActionTarget?.targetView) return snapshot.nextRequiredActionTarget.targetView;
   if (snapshot.nextRequiredAction === 'CREATE_COHORT') return BusinessAdminWorkspaceView.SETTINGS;
   if (snapshot.nextRequiredAction === 'ISSUE_FIRST_WRITING_ASSIGNMENT') return BusinessAdminWorkspaceView.WRITING;
   return BusinessAdminWorkspaceView.ASSIGNMENTS;
 };
+
+const resolveNextRequiredActionView = resolveBusinessAdminNextActionView;
 
 const formatCount = (value: number, unit: string): string => `${value}${unit}`;
 
@@ -198,6 +206,10 @@ export const getBusinessAdminRunbookSummary = (
       || 'クラス作成から返却レビューまでの初回導入ランブックは完了しています。',
     progressLabel: `${completedCount}/${totalCount} 完了 (${progressPercent}%)`,
     worksheetSourceLabel: runbook?.worksheet.sourceLabel || 'PDF問題ソース未計測',
+    actionLabel: currentStage?.actionLabel
+      || (snapshot.nextRequiredAction === 'ACTIVE' ? '割当状況を確認する' : '次の一手へ進む'),
+    evidenceLabel: currentStage?.evidenceLabel || stalledStage?.evidenceLabel || runbook?.worksheet.sourceLabel || '証跡なし',
+    hasCurrentStage: Boolean(currentStage),
     tone: runbook?.worksheet.hasOnlyFallback
       ? 'warning'
       : progressPercent >= 100
@@ -278,12 +290,19 @@ const buildOverviewDecision = (
   const runbookSummary = getBusinessAdminRunbookSummary(snapshot);
   const shouldSendNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
+  const shouldFollowRunbookStage = runbookSummary.hasCurrentStage && !shouldSendNotification;
 
   return {
     eyebrow: '判断メモ',
-    title: snapshot.nextRequiredActionLabel,
-    body: snapshot.nextRequiredActionDescription,
-    tone: snapshot.nextRequiredAction === 'ACTIVE' ? 'success' : 'accent',
+    title: shouldFollowRunbookStage ? runbookSummary.title : snapshot.nextRequiredActionLabel,
+    body: shouldFollowRunbookStage
+      ? `${runbookSummary.detail} ${runbookSummary.evidenceLabel}`
+      : snapshot.nextRequiredActionDescription,
+    tone: shouldFollowRunbookStage
+      ? runbookSummary.tone
+      : snapshot.nextRequiredAction === 'ACTIVE'
+        ? 'success'
+        : 'accent',
     primaryAction: shouldSendNotification
       ? {
         kind: 'SEND_FIRST_NOTIFICATION',
@@ -292,7 +311,11 @@ const buildOverviewDecision = (
       }
       : {
         kind: 'OPEN_VIEW',
-        label: snapshot.nextRequiredAction === 'ACTIVE' ? '割当状況を確認する' : '次の一手へ進む',
+        label: shouldFollowRunbookStage
+          ? runbookSummary.actionLabel
+          : snapshot.nextRequiredAction === 'ACTIVE'
+            ? '割当状況を確認する'
+            : '次の一手へ進む',
         targetView: nextActionView,
       },
     secondaryAction: {

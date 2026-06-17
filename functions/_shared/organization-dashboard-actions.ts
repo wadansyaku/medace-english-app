@@ -5,7 +5,7 @@ import {
   OrganizationRole,
   UserRole,
 } from '../../types';
-import { buildOrganizationDashboardSnapshot } from './organization-dashboard';
+import { buildOrganizationDashboardSnapshot } from '../../shared/organizationDashboard';
 import {
   readOrganizationKpiSeriesFromSnapshots,
   toOrganizationKpiTrendPoints,

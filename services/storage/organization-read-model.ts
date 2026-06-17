@@ -24,7 +24,7 @@ import {
   resolveNeedsFollowUpNow,
   resolveRecommendedActionType,
 } from '../../shared/retention';
-import { buildOrganizationDashboardSnapshot } from '../../functions/_shared/organization-dashboard';
+import { buildOrganizationDashboardSnapshot } from '../../shared/organizationDashboard';
 import { isDemoEmail } from '../../utils/demo';
 import {
   FALLBACK_WORKSHEET_WORD_LIMIT,
