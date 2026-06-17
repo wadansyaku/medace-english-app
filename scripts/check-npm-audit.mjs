@@ -24,6 +24,23 @@ const allowedVulnerabilities = new Map([
 
 const rank = (severity) => severityRank[severity] ?? -1;
 
+const failInvalidAuditReport = (message) => {
+  console.error(`[security:audit] ${message}`);
+  if (typeof audit.status === 'number' && audit.status !== 0) {
+    console.error(`[security:audit] npm audit exited with status ${audit.status}.`);
+  }
+  if (audit.signal) {
+    console.error(`[security:audit] npm audit was terminated by signal ${audit.signal}.`);
+  }
+  if (audit.stdout) {
+    console.error(audit.stdout);
+  }
+  if (audit.stderr) {
+    console.error(audit.stderr);
+  }
+  process.exit(1);
+};
+
 const audit = spawnSync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
   ['audit', `--audit-level=${minimumSeverity}`, '--json'],
@@ -47,6 +64,23 @@ try {
   if (audit.stdout) console.error(audit.stdout);
   if (audit.stderr) console.error(audit.stderr);
   process.exit(1);
+}
+
+if (report.error) {
+  const summary = report.error.summary
+    || report.error.message
+    || report.message
+    || report.error.code
+    || 'unknown npm audit error';
+  failInvalidAuditReport(`npm audit returned an error report: ${summary}`);
+}
+
+if (
+  !report.vulnerabilities
+  || typeof report.vulnerabilities !== 'object'
+  || Array.isArray(report.vulnerabilities)
+) {
+  failInvalidAuditReport('npm audit did not return a vulnerabilities map.');
 }
 
 const vulnerabilities = Object.values(report.vulnerabilities || {})
