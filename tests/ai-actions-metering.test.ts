@@ -5,11 +5,13 @@ const {
   assertBudgetAvailableMock,
   generateContentMock,
   recordAiUsageEventMock,
+  runCloudflareAiMock,
 } = vi.hoisted(() => ({
   assertAiActionAllowedMock: vi.fn(),
   assertBudgetAvailableMock: vi.fn(),
   generateContentMock: vi.fn(),
   recordAiUsageEventMock: vi.fn(),
+  runCloudflareAiMock: vi.fn(),
 }));
 
 vi.mock('../functions/_shared/ai-metering', () => ({
@@ -62,6 +64,7 @@ describe('handleAiAction metering integration', () => {
     assertBudgetAvailableMock.mockReset();
     recordAiUsageEventMock.mockReset();
     generateContentMock.mockReset();
+    runCloudflareAiMock.mockReset();
   });
 
   it('uses shared metering helpers for metered actions', async () => {
@@ -162,6 +165,7 @@ describe('handleAiAction metering integration', () => {
     expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, {
       action: 'generateGrammarPracticeQuestions',
       usedAi: true,
+      provider: 'GEMINI',
       model: 'gemini-3-flash-preview',
       estimatedCostMilliYen: 340,
       estimatedProviderCostMilliYen: 340,
@@ -169,6 +173,385 @@ describe('handleAiAction metering integration', () => {
       providerInputUnits: 1,
       providerOutputUnits: 1,
     });
+  });
+
+  it('uses Cloudflare Workers AI for grammar practice when the binding is available', async () => {
+    runCloudflareAiMock.mockResolvedValueOnce({
+      response: {
+        questions: [
+          {
+            wordId: 'word-1',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Doctors ____ the patient before surgery.',
+            sourceSentence: 'Doctors stabilize the patient before surgery.',
+            sourceTranslation: '',
+            answer: 'stabilize',
+            options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+        ],
+      },
+    });
+
+    const env = {
+      AI: { run: runCloudflareAiMock },
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 1,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        mode: 'GRAMMAR_CLOZE',
+        promptText: 'Doctors ____ the patient before surgery.',
+        answer: 'stabilize',
+      }),
+    ]);
+    expect(runCloudflareAiMock).toHaveBeenCalledWith(
+      '@cf/meta/llama-3.1-8b-instruct',
+      expect.objectContaining({
+        messages: expect.any(Array),
+        response_format: expect.objectContaining({ type: 'json_schema' }),
+      }),
+      undefined,
+    );
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(assertAiActionAllowedMock).toHaveBeenCalledWith(user, 'generateGrammarPracticeQuestions');
+    expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: true,
+      provider: 'CLOUDFLARE',
+      model: 'cloudflare:@cf/meta/llama-3.1-8b-instruct',
+      estimatedCostMilliYen: 0,
+      estimatedProviderCostMilliYen: 0,
+      requestUnits: 1,
+      providerInputUnits: 1,
+      providerOutputUnits: 1,
+    });
+  });
+
+  it('falls back to Gemini when Cloudflare grammar output fails validation', async () => {
+    runCloudflareAiMock.mockResolvedValueOnce({
+      response: {
+        questions: [
+          {
+            wordId: 'word-1',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Choose the word stabilize.',
+            sourceSentence: 'The word stabilize is useful.',
+            sourceTranslation: '',
+            answer: 'stabilize',
+            options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+        ],
+      },
+    });
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify([
+        {
+          wordId: 'word-1',
+          mode: 'GRAMMAR_CLOZE',
+          promptText: 'Doctors ____ the patient before surgery.',
+          sourceSentence: 'Doctors stabilize the patient before surgery.',
+          sourceTranslation: '',
+          answer: 'stabilize',
+          options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+          orderedTokens: [],
+          grammarFocus: '現在形',
+          instruction: '空所に入る語形を選びます。',
+        },
+      ]),
+    });
+
+    const env = {
+      AI: { run: runCloudflareAiMock },
+      GEMINI_API_KEY: 'test-key',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 1,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        promptText: 'Doctors ____ the patient before surgery.',
+        answer: 'stabilize',
+      }),
+    ]);
+    expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: true,
+      provider: 'GEMINI',
+      model: 'gemini-3-flash-preview',
+      estimatedCostMilliYen: 340,
+      estimatedProviderCostMilliYen: 340,
+      requestUnits: 1,
+      providerInputUnits: 1,
+      providerOutputUnits: 1,
+    }));
+  });
+
+  it('does not fall back to Gemini when Cloudflare is explicitly selected', async () => {
+    runCloudflareAiMock.mockResolvedValueOnce({
+      response: {
+        questions: [
+          {
+            wordId: 'word-1',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Choose the word stabilize.',
+            sourceSentence: 'The word stabilize is useful.',
+            sourceTranslation: '',
+            answer: 'stabilize',
+            options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+        ],
+      },
+    });
+
+    const env = {
+      AI: { run: runCloudflareAiMock },
+      GEMINI_API_KEY: 'test-key',
+      AI_GRAMMAR_PROVIDER: 'CLOUDFLARE',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 1,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual([]);
+    expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: false,
+      provider: 'CLOUDFLARE',
+      model: 'cloudflare:@cf/meta/llama-3.1-8b-instruct',
+      estimatedCostMilliYen: 0,
+      estimatedProviderCostMilliYen: 0,
+      requestUnits: 1,
+      providerInputUnits: 0,
+      providerOutputUnits: 0,
+    }));
+  });
+
+  it('records mixed grammar providers when Auto uses Cloudflare and Gemini fallback', async () => {
+    runCloudflareAiMock.mockResolvedValueOnce({
+      response: {
+        questions: [
+          {
+            wordId: 'word-1',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Doctors ____ the patient before surgery.',
+            sourceSentence: 'Doctors stabilize the patient before surgery.',
+            sourceTranslation: '',
+            answer: 'stabilize',
+            options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+          {
+            wordId: 'word-2',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Choose the word monitor.',
+            sourceSentence: 'The word monitor is useful.',
+            sourceTranslation: '',
+            answer: 'monitor',
+            options: ['monitor', 'monitored', 'monitors', 'monitoring'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+        ],
+      },
+    });
+    generateContentMock.mockResolvedValueOnce({
+      text: JSON.stringify([
+        {
+          wordId: 'word-2',
+          mode: 'GRAMMAR_CLOZE',
+          promptText: 'Nurses ____ the patient after admission.',
+          sourceSentence: 'Nurses monitor the patient after admission.',
+          sourceTranslation: '',
+          answer: 'monitor',
+          options: ['monitor', 'monitored', 'monitors', 'monitoring'],
+          orderedTokens: [],
+          grammarFocus: '現在形',
+          instruction: '空所に入る語形を選びます。',
+        },
+      ]),
+    });
+
+    const env = {
+      AI: { run: runCloudflareAiMock },
+      GEMINI_API_KEY: 'test-key',
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 2,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+          {
+            id: 'word-2',
+            bookId: 'book-1',
+            number: 2,
+            word: 'monitor',
+            definition: '観察する',
+          },
+        ],
+      },
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result).toEqual([
+      expect.objectContaining({
+        wordId: 'word-1',
+        promptText: 'Doctors ____ the patient before surgery.',
+      }),
+      expect.objectContaining({
+        wordId: 'word-2',
+        promptText: 'Nurses ____ the patient after admission.',
+      }),
+    ]);
+    expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: true,
+      provider: 'MIXED',
+      model: 'cloudflare:@cf/meta/llama-3.1-8b-instruct+gemini-3-flash-preview',
+      estimatedCostMilliYen: 340,
+      estimatedProviderCostMilliYen: 340,
+      requestUnits: 2,
+      providerInputUnits: 2,
+      providerOutputUnits: 2,
+    }));
+  });
+
+  it('keeps rejected Cloudflare grammar output from consuming Gemini budget when no fallback key exists', async () => {
+    runCloudflareAiMock.mockResolvedValueOnce({
+      response: {
+        questions: [
+          {
+            wordId: 'word-1',
+            mode: 'GRAMMAR_CLOZE',
+            promptText: 'Choose the word stabilize.',
+            sourceSentence: 'The word stabilize is useful.',
+            sourceTranslation: '',
+            answer: 'stabilize',
+            options: ['stabilize', 'stabilized', 'stabilizes', 'stabilizing'],
+            orderedTokens: [],
+            grammarFocus: '現在形',
+            instruction: '空所に入る語形を選びます。',
+          },
+        ],
+      },
+    });
+
+    const env = {
+      AI: { run: runCloudflareAiMock },
+    } as any;
+    const user = createUser() as any;
+
+    const result = await handleAiAction(env, user, {
+      action: 'generateGrammarPracticeQuestions',
+      payload: {
+        mode: 'GRAMMAR_CLOZE',
+        questionCount: 1,
+        targetWords: [
+          {
+            id: 'word-1',
+            bookId: 'book-1',
+            number: 1,
+            word: 'stabilize',
+            definition: '安定させる',
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual([]);
+    expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
+      action: 'generateGrammarPracticeQuestions',
+      usedAi: false,
+      provider: 'CLOUDFLARE',
+      model: 'cloudflare:@cf/meta/llama-3.1-8b-instruct',
+      estimatedCostMilliYen: 0,
+      estimatedProviderCostMilliYen: 0,
+      requestUnits: 1,
+      providerInputUnits: 0,
+      providerOutputUnits: 0,
+    }));
   });
 
   it('scales grammar practice budget to generated AI misses and keeps the result when usage logging fails', async () => {
@@ -236,6 +619,7 @@ describe('handleAiAction metering integration', () => {
     expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
       action: 'generateGrammarPracticeQuestions',
       usedAi: true,
+      provider: 'GEMINI',
       estimatedCostMilliYen: 680,
       estimatedProviderCostMilliYen: 680,
       requestUnits: 5,

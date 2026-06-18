@@ -8,6 +8,9 @@
   "placement": {
     "mode": "smart"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -37,7 +40,10 @@
           "binding": "WRITING_ASSETS",
           "bucket_name": "medace-writing-assets-preview"
         }
-      ]
+      ],
+      "ai": {
+        "binding": "AI"
+      }
     }
   }
 }

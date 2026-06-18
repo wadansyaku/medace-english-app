@@ -61,6 +61,17 @@ const hasUniqueOrderingTokens = (tokens: string[]): boolean => {
 
 const toWordId = (word: AiGrammarSourceWord): string => word.wordId || word.id || `${word.bookId}:${word.word}`;
 
+const hasMetaSourceWordReference = (value: string, learnedWord: string): boolean => {
+  const escaped = normalizeWhitespace(learnedWord).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return new RegExp(`\\b(?:the\\s+)?(?:word|term)\\s+${escaped}\\b`, 'i').test(value);
+};
+
+const hasMetaJapaneseWordReference = (value: string, learnedWord: string): boolean => {
+  const compact = value.normalize('NFKC').replace(/\s+/g, '');
+  const escaped = normalizeWhitespace(learnedWord).normalize('NFKC').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '');
+  return new RegExp(`${escaped}(?:という)?(?:語|単語)`, 'i').test(compact);
+};
+
 const stableHash = (value: string): number => {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -194,6 +205,7 @@ const normalizeClozeDraft = (
   const answer = normalizeWhitespace(draft.answer || sourceWord.word);
   const promptText = normalizeWhitespace(draft.promptText || '');
   if (!answer || !promptText.includes('____')) return null;
+  if (hasMetaSourceWordReference(promptText, sourceWord.word)) return null;
 
   const options = shuffleOptions(
     ensureOptions(draft.options, answer, sourceWord.word),
@@ -205,6 +217,7 @@ const normalizeClozeDraft = (
   const sourceSentence = normalizeWhitespace(
     draft.sourceSentence || promptText.replace('____', answer),
   );
+  if (hasMetaSourceWordReference(sourceSentence, sourceWord.word)) return null;
   const grammarScope = resolveGrammarScopeSelection({
     mode: 'GRAMMAR_CLOZE',
     requestedScopeId,
@@ -238,6 +251,7 @@ const normalizeEnglishOrderDraft = (
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(sourceWord);
   const sourceSentence = normalizeWhitespace(draft.sourceSentence || '');
+  if (hasMetaSourceWordReference(sourceSentence, sourceWord.word)) return null;
   const orderedTokens = cleanTokens(draft.orderedTokens && draft.orderedTokens.length > 0
     ? draft.orderedTokens
     : tokenizeEnglish(sourceSentence), normalizeEnglishOrderToken);
@@ -278,7 +292,9 @@ const normalizeJapaneseOrderDraft = (
 ): GeneratedWorksheetQuestion | null => {
   const wordId = toWordId(sourceWord);
   const sourceSentence = normalizeWhitespace(draft.sourceSentence || '');
+  if (hasMetaSourceWordReference(sourceSentence, sourceWord.word)) return null;
   const sourceTranslation = normalizeJapanese(draft.sourceTranslation || draft.answer || '');
+  if (hasMetaJapaneseWordReference(sourceTranslation, sourceWord.word)) return null;
   const orderedTokens = cleanTokens(draft.orderedTokens && draft.orderedTokens.length > 0
     ? draft.orderedTokens
     : tokenizeJapanese(sourceTranslation), normalizeJapaneseOrderToken);
@@ -321,7 +337,9 @@ const normalizeJapaneseInputDraft = (
   const wordId = toWordId(sourceWord);
   const sourceSentence = normalizeWhitespace(draft.sourceSentence || draft.promptText || '');
   const sourceTranslation = normalizeJapanese(draft.sourceTranslation || draft.answer || '');
+  if (hasMetaSourceWordReference(sourceSentence, sourceWord.word)) return null;
   if (!sourceSentence || !sourceTranslation) return null;
+  if (hasMetaJapaneseWordReference(sourceTranslation, sourceWord.word)) return null;
 
   const grammarScope = resolveGrammarScopeSelection({
     mode: 'JA_TRANSLATION_INPUT',

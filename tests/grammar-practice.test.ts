@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { GRAMMAR_CURRICULUM_SCOPES } from '../config/grammarCurriculum';
 import { EnglishLevel, type WordData } from '../types';
 import {
   buildGrammarPracticeItems,
@@ -110,6 +111,51 @@ describe('grammar practice helpers', () => {
     expect([...generatedSentences].every((sentence) => sentence?.includes('monitor'))).toBe(true);
   });
 
+  it('does not wrap studied items as words or terms in fallback grammar sentences', () => {
+    const sampleWords = [
+      createWord({
+        id: 'word-monitor',
+        word: 'monitor',
+        definition: '観察する',
+        exampleSentence: null,
+        exampleMeaning: null,
+      }),
+      createWord({
+        id: 'word-acute',
+        word: 'acute',
+        definition: '鋭い',
+        exampleSentence: null,
+        exampleMeaning: null,
+      }),
+      createWord({
+        id: 'word-protocol',
+        word: 'protocol',
+        definition: '手順',
+        exampleSentence: null,
+        exampleMeaning: null,
+      }),
+    ];
+
+    sampleWords.forEach((word) => {
+      GRAMMAR_CURRICULUM_SCOPES.forEach((scope) => {
+        const items = buildGrammarPracticeItemsForWord(word, {
+          seed: `no-meta-${word.id}-${scope.id}`,
+          requestedScopeId: scope.id,
+          userLevel: EnglishLevel.C1,
+        });
+
+        items.forEach((item) => {
+          if ('sourceSentence' in item) {
+            expect(item.sourceSentence).not.toMatch(/\b(?:word|term)\b/i);
+          }
+          if (item.kind === 'GRAMMAR_CLOZE') {
+            expect(item.clozeSentence).not.toMatch(/\b(?:word|term)\b/i);
+          }
+        });
+      });
+    });
+  });
+
   it('uses lower-level sentence templates when the learner level is lower than the scope range', () => {
     const lowLevelItems = buildGrammarPracticeItemsForWord(createWord({
       id: 'word-monitor',
@@ -125,7 +171,8 @@ describe('grammar practice helpers', () => {
 
     const english = lowLevelItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
 
-    expect(english?.sourceSentence).toBe('Teachers ask learners to use the word monitor.');
+    expect(english?.sourceSentence).toBe('Teachers ask learners to monitor the process.');
+    expect(english?.sourceSentence).not.toMatch(/\b(?:word|term)\s+monitor\b/i);
     expect(english?.grammarScope).toMatchObject({
       scopeId: 'verb-patterns',
       curriculumCategoryLabelJa: '動詞語法',
@@ -165,21 +212,22 @@ describe('grammar practice helpers', () => {
       source: 'EXPLICIT',
       labelJa: '受け身',
     });
-    expect(english?.sourceSentence).toBe('The word monitor is introduced by teachers today.');
+    expect(english?.sourceSentence).toBe('monitoring the process is checked by teachers today.');
+    expect(english?.sourceSentence).not.toMatch(/\b(?:word|term)\s+monitor\b/i);
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
+      'monitoring',
       'the',
-      'word',
-      'monitor',
+      'process',
       'is',
-      'introduced',
+      'checked',
       'by',
       'teachers',
       'today',
     ]);
-    expect(japanese?.answerText).toBe('観察する という語は 今日 先生に 紹介される');
+    expect(japanese?.answerText).toBe('観察する は 今日 先生に 確認される');
     expect(cloze?.grammarFocus).toBe('受け身');
-    expect(cloze?.clozeSentence).toBe('The word monitor ____ by teachers today.');
-    expect(cloze?.answer).toBe('is introduced');
+    expect(cloze?.clozeSentence).toBe('monitoring the process ____ by teachers today.');
+    expect(cloze?.answer).toBe('is checked');
   });
 
   it('does not create Japanese order items for an explicit scope that does not support ordering', () => {

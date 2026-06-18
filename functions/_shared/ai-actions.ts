@@ -10,6 +10,7 @@ import {
   type GrammarCurriculumScopeId,
   type JapaneseTranslationFeedback,
   type TranslationExamTarget,
+  type WritingAiProvider,
 } from '../../types';
 import {
   AiActionValidationError,
@@ -69,15 +70,58 @@ const getAiClient = (env: AppEnv): GoogleGenAI => {
 };
 
 const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_CLOUDFLARE_GRAMMAR_PRACTICE_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const GRAMMAR_PRACTICE_PROMPT_VERSION = 'grammar-practice-v2';
 const DEFAULT_TRANSLATION_FEEDBACK_MODEL = 'gemini-3-flash-preview';
+
+type GrammarPracticeProviderPreference = 'AUTO' | 'GEMINI' | 'CLOUDFLARE';
+type GrammarPracticeLiveProvider = Extract<WritingAiProvider, 'GEMINI' | 'CLOUDFLARE'>;
+type GrammarPracticeUsageProvider = GrammarPracticeLiveProvider | 'MIXED';
+
+interface GrammarPracticeGenerationBatch {
+  questions: GeneratedWorksheetQuestion[];
+  provider: GrammarPracticeLiveProvider;
+  model: string;
+}
+
+interface GrammarPracticeGenerationResult {
+  questions: GeneratedWorksheetQuestion[];
+  usedAi: boolean;
+  generatedCount: number;
+  billableGeneratedCount: number;
+  provider: GrammarPracticeUsageProvider;
+  model: string;
+}
+
+interface PersistedGrammarPracticeEntry {
+  question: GeneratedWorksheetQuestion;
+  provider: GrammarPracticeLiveProvider;
+  model: string;
+}
 
 const resolveGrammarPracticeModel = (env: AppEnv): string => (
   String(env.AI_GRAMMAR_MODEL || '').trim() || DEFAULT_GRAMMAR_PRACTICE_MODEL
 );
 
+const resolveGrammarPracticeProviderPreference = (env: AppEnv): GrammarPracticeProviderPreference => {
+  const raw = String(env.AI_GRAMMAR_PROVIDER || '').trim().toUpperCase();
+  if (raw === 'GEMINI' || raw === 'CLOUDFLARE') return raw;
+  return 'AUTO';
+};
+
+const resolveCloudflareGrammarPracticeModel = (env: AppEnv): string => (
+  String(env.CLOUDFLARE_AI_GRAMMAR_MODEL || '').trim() || DEFAULT_CLOUDFLARE_GRAMMAR_PRACTICE_MODEL
+);
+
 const resolveTranslationFeedbackModel = (env: AppEnv): string => (
   String(env.AI_TRANSLATION_FEEDBACK_MODEL || '').trim() || DEFAULT_TRANSLATION_FEEDBACK_MODEL
+);
+
+const cacheModelForGrammarProvider = (
+  provider: GrammarPracticeLiveProvider,
+  model: string,
+): string => (
+  provider === 'CLOUDFLARE' ? `cloudflare:${model}` : model
 );
 
 const handleAiError = (error: unknown, fallbackMessage: string): never => {
@@ -331,6 +375,8 @@ ${grammarScope ? `Grammar range: ${grammarScope.labelJa} (${grammarScope.labelEn
 Use only the provided wordId values. Generate at most one question per word.
 Prefer the provided example sentence/meaning when it is natural; otherwise write a new short sentence.
 Keep the sentence at i+1 difficulty: use the learned word plus mostly high-frequency A1-B1 words, and avoid long clauses unless the requested grammar range requires them.
+Use the learned word inside a real sentence. Do not write meta phrases like "the word stabilize", "the term stabilize", or Japanese translations like "stabilizeという語".
+Design distractors around common grammar mistakes: tense, voice, agreement, part of speech, verb pattern, and connector choice.
 For Japanese learners, preserve the English word-order pattern clearly enough to support the "主語 / 動詞 / 目的語" habit.
 Keep content school-safe, non-political, and non-medical-advice. Do not include explanations outside JSON.
 All Japanese text must be natural for a learner-facing app.
@@ -356,20 +402,246 @@ ${JSON.stringify(inputWords)}
   `.trim();
 };
 
+const CLOUDFLARE_GRAMMAR_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          wordId: { type: 'string' },
+          mode: { type: 'string' },
+          promptText: { type: 'string' },
+          sourceSentence: { type: 'string' },
+          sourceTranslation: { type: 'string' },
+          answer: { type: 'string' },
+          options: { type: 'array', items: { type: 'string' } },
+          orderedTokens: { type: 'array', items: { type: 'string' } },
+          grammarFocus: { type: 'string' },
+          instruction: { type: 'string' },
+        },
+        required: [
+          'wordId',
+          'mode',
+          'promptText',
+          'sourceSentence',
+          'sourceTranslation',
+          'answer',
+          'options',
+          'orderedTokens',
+          'grammarFocus',
+          'instruction',
+        ],
+      },
+    },
+  },
+  required: ['questions'],
+};
+
+const buildCloudflareGrammarPracticePrompt = (
+  words: WordData[],
+  mode: GrammarQuestionMode,
+  questionCount: number,
+  userLevel: EnglishLevel,
+  grammarScopeId?: GrammarCurriculumScopeId | null,
+): string => [
+  buildGrammarPracticePrompt(words, mode, questionCount, userLevel, grammarScopeId),
+  'Return only a JSON object shaped as {"questions":[...]}. Do not return Markdown, comments, or extra keys.',
+].join('\n\n');
+
+const stripJsonFence = (value: string): string => (
+  value
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+);
+
+const parseJsonFromText = (value: string): unknown | null => {
+  const text = stripJsonFence(value);
+  try {
+    return JSON.parse(text);
+  } catch {
+    const firstObject = text.indexOf('{');
+    const firstArray = text.indexOf('[');
+    const start = firstObject === -1
+      ? firstArray
+      : firstArray === -1
+        ? firstObject
+        : Math.min(firstObject, firstArray);
+    if (start === -1) return null;
+    const end = text[start] === '[' ? text.lastIndexOf(']') : text.lastIndexOf('}');
+    if (end <= start) return null;
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+      return null;
+    }
+  }
+};
+
+const unwrapCloudflareAiResponse = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  const directKeys = ['response', 'result', 'output', 'text'];
+  for (const key of directKeys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return unwrapCloudflareAiResponse(record[key]);
+    }
+  }
+  const choices = record.choices;
+  if (Array.isArray(choices) && choices.length > 0) {
+    const firstChoice = choices[0] as Record<string, unknown>;
+    const message = firstChoice.message as Record<string, unknown> | undefined;
+    return unwrapCloudflareAiResponse(message?.content ?? firstChoice.text ?? firstChoice.content);
+  }
+  return value;
+};
+
+const extractAiGrammarQuestionDrafts = (value: unknown): AiGrammarQuestionDraft[] => {
+  const unwrapped = unwrapCloudflareAiResponse(value);
+  const parsed = typeof unwrapped === 'string' ? parseJsonFromText(unwrapped) : unwrapped;
+  if (Array.isArray(parsed)) return parsed as AiGrammarQuestionDraft[];
+  if (parsed && typeof parsed === 'object') {
+    const record = parsed as Record<string, unknown>;
+    if (Array.isArray(record.questions)) return record.questions as AiGrammarQuestionDraft[];
+    if (Array.isArray(record.items)) return record.items as AiGrammarQuestionDraft[];
+  }
+  return [];
+};
+
+const buildCloudflareAiGatewayOptions = (env: AppEnv): unknown | undefined => {
+  const gatewayId = String(env.CLOUDFLARE_AI_GATEWAY_ID || '').trim();
+  return gatewayId ? { gateway: { id: gatewayId } } : undefined;
+};
+
+const generateGrammarPracticeWithGemini = async (
+  env: AppEnv,
+  words: WordData[],
+  mode: GrammarQuestionMode,
+  questionCount: number,
+  userLevel: EnglishLevel,
+  grammarScopeId: GrammarCurriculumScopeId | null,
+  model: string,
+): Promise<GrammarPracticeGenerationBatch> => {
+  const ai = getAiClient(env);
+  const response = await ai.models.generateContent({
+    model,
+    contents: buildGrammarPracticePrompt(words, mode, questionCount, userLevel, grammarScopeId),
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            wordId: { type: Type.STRING },
+            mode: { type: Type.STRING, enum: [mode] },
+            promptText: { type: Type.STRING },
+            sourceSentence: { type: Type.STRING },
+            sourceTranslation: { type: Type.STRING },
+            answer: { type: Type.STRING },
+            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+            orderedTokens: { type: Type.ARRAY, items: { type: Type.STRING } },
+            grammarFocus: { type: Type.STRING },
+            instruction: { type: Type.STRING },
+          },
+          required: [
+            'wordId',
+            'mode',
+            'promptText',
+            'sourceSentence',
+            'sourceTranslation',
+            'answer',
+            'options',
+            'orderedTokens',
+            'grammarFocus',
+            'instruction',
+          ],
+        },
+      },
+    },
+  });
+
+  const drafts = response.text ? extractAiGrammarQuestionDrafts(response.text) : [];
+  return {
+    provider: 'GEMINI',
+    model,
+    questions: normalizeAiGrammarQuestionDrafts(
+      drafts,
+      toWorksheetSourceWords(words),
+      mode,
+      questionCount,
+      grammarScopeId,
+    ),
+  };
+};
+
+const generateGrammarPracticeWithCloudflare = async (
+  env: AppEnv,
+  words: WordData[],
+  mode: GrammarQuestionMode,
+  questionCount: number,
+  userLevel: EnglishLevel,
+  grammarScopeId: GrammarCurriculumScopeId | null,
+): Promise<GrammarPracticeGenerationBatch> => {
+  if (!env.AI) throw new HttpError(503, 'Cloudflare Workers AI binding が未設定です。');
+  const model = resolveCloudflareGrammarPracticeModel(env);
+  const response = await env.AI.run(
+    model,
+    {
+      messages: [
+        {
+          role: 'system',
+          content: 'You write validated JSON for an English learning app. Follow the schema exactly.',
+        },
+        {
+          role: 'user',
+          content: buildCloudflareGrammarPracticePrompt(words, mode, questionCount, userLevel, grammarScopeId),
+        },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: CLOUDFLARE_GRAMMAR_RESPONSE_SCHEMA,
+      },
+    },
+    buildCloudflareAiGatewayOptions(env),
+  );
+
+  return {
+    provider: 'CLOUDFLARE',
+    model,
+    questions: normalizeAiGrammarQuestionDrafts(
+      extractAiGrammarQuestionDrafts(response),
+      toWorksheetSourceWords(words),
+      mode,
+      questionCount,
+      grammarScopeId,
+    ),
+  };
+};
+
 const generateGrammarPracticeQuestions = async (
   env: AppEnv,
   payload: GenerateGrammarPracticeQuestionsPayload,
   model = resolveGrammarPracticeModel(env),
   beforeAiGenerate?: (requestUnits: number) => Promise<void>,
   userId?: string,
-): Promise<{
-  questions: GeneratedWorksheetQuestion[];
-  usedAi: boolean;
-  generatedCount: number;
-}> => {
+): Promise<GrammarPracticeGenerationResult> => {
+  const emptyResult = (): GrammarPracticeGenerationResult => ({
+    questions: [],
+    usedAi: false,
+    generatedCount: 0,
+    billableGeneratedCount: 0,
+    provider: 'GEMINI',
+    model,
+  });
+
   const mode = isGrammarQuestionMode(payload?.mode) ? payload.mode : null;
   const targetWords = (Array.isArray(payload?.targetWords) ? payload.targetWords : []) as WordData[];
-  if (!mode || targetWords.length === 0) return { questions: [], usedAi: false, generatedCount: 0 };
+  if (!mode || targetWords.length === 0) return emptyResult();
 
   const requestedCount = Math.max(1, Math.min(10, Math.trunc(Number(payload?.questionCount || 5))));
   const userLevel = Object.values(EnglishLevel).includes(payload?.userLevel)
@@ -379,7 +651,7 @@ const generateGrammarPracticeQuestions = async (
     ? payload.grammarScopeId as GrammarCurriculumScopeId
     : null;
   const candidateWords = filterWorksheetQuestionCandidates(targetWords, mode).slice(0, requestedCount);
-  if (candidateWords.length === 0) return { questions: [], usedAi: false, generatedCount: 0 };
+  if (candidateWords.length === 0) return emptyResult();
 
   try {
     if (grammarScopeId) getGrammarCurriculumScope(grammarScopeId);
@@ -413,84 +685,118 @@ const generateGrammarPracticeQuestions = async (
         questions: cachedQuestions.slice(0, requestedCount),
         usedAi: false,
         generatedCount: 0,
+        billableGeneratedCount: 0,
+        provider: 'GEMINI',
+        model,
       };
     }
 
     const aiRequestCount = Math.min(remainingCount, missingWords.length);
-    await beforeAiGenerate?.(aiRequestCount);
-    const ai = getAiClient(env);
-    const response = await ai.models.generateContent({
-      model,
-      contents: buildGrammarPracticePrompt(missingWords, mode, aiRequestCount, userLevel, grammarScopeId),
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              wordId: { type: Type.STRING },
-              mode: { type: Type.STRING, enum: [mode] },
-              promptText: { type: Type.STRING },
-              sourceSentence: { type: Type.STRING },
-              sourceTranslation: { type: Type.STRING },
-              answer: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              orderedTokens: { type: Type.ARRAY, items: { type: Type.STRING } },
-              grammarFocus: { type: Type.STRING },
-              instruction: { type: Type.STRING },
-            },
-            required: [
-              'wordId',
-              'mode',
-              'promptText',
-              'sourceSentence',
-              'sourceTranslation',
-              'answer',
-              'options',
-              'orderedTokens',
-              'grammarFocus',
-              'instruction',
-            ],
-          },
-        },
-      },
-    });
+    const providerPreference = resolveGrammarPracticeProviderPreference(env);
+    const generatedBatches: GrammarPracticeGenerationBatch[] = [];
+    let remainingWordsForAi = missingWords.slice(0, aiRequestCount);
+    let attemptedProvider: GrammarPracticeLiveProvider | null = null;
 
-    if (!response.text) return { questions: cachedQuestions, usedAi: false, generatedCount: 0 };
-    const parsed = JSON.parse(response.text) as unknown;
-    if (!Array.isArray(parsed)) return { questions: cachedQuestions, usedAi: false, generatedCount: 0 };
-    const generatedQuestions = normalizeAiGrammarQuestionDrafts(
-      parsed as AiGrammarQuestionDraft[],
-      toWorksheetSourceWords(missingWords),
-      mode,
-      remainingCount,
-      grammarScopeId,
-    );
-    const persistedGeneratedQuestions = env.DB
-      ? await Promise.all(generatedQuestions.map(async (question) => {
+    const refreshRemainingWords = () => {
+      const generatedWordIds = new Set(
+        generatedBatches.flatMap((batch) => batch.questions.map((question) => question.wordId)),
+      );
+      remainingWordsForAi = missingWords
+        .filter((word) => !generatedWordIds.has(word.id))
+        .slice(0, Math.max(0, aiRequestCount - generatedWordIds.size));
+    };
+
+    if (providerPreference !== 'GEMINI' && env.AI && remainingWordsForAi.length > 0) {
+      try {
+        attemptedProvider = 'CLOUDFLARE';
+        const cloudflareBatch = await generateGrammarPracticeWithCloudflare(
+          env,
+          remainingWordsForAi,
+          mode,
+          remainingWordsForAi.length,
+          userLevel,
+          grammarScopeId,
+        );
+        if (cloudflareBatch.questions.length > 0) {
+          generatedBatches.push(cloudflareBatch);
+          refreshRemainingWords();
+        }
+      } catch (error) {
+        console.warn('Cloudflare grammar generation skipped; falling back when available:', error);
+      }
+    }
+
+    const shouldTryGemini = providerPreference === 'GEMINI'
+      || (providerPreference === 'AUTO' && (Boolean(env.GEMINI_API_KEY) || !env.AI));
+    if (shouldTryGemini && remainingWordsForAi.length > 0) {
+      await beforeAiGenerate?.(remainingWordsForAi.length);
+      attemptedProvider = 'GEMINI';
+      const geminiBatch = await generateGrammarPracticeWithGemini(
+        env,
+        remainingWordsForAi,
+        mode,
+        remainingWordsForAi.length,
+        userLevel,
+        grammarScopeId,
+        model,
+      );
+      if (geminiBatch.questions.length > 0) {
+        generatedBatches.push(geminiBatch);
+        refreshRemainingWords();
+      }
+    }
+
+    const generatedEntries: PersistedGrammarPracticeEntry[] = generatedBatches.flatMap((batch) => (
+      batch.questions.map((question) => ({ question, provider: batch.provider, model: batch.model }))
+    ));
+    const persistedEntries: PersistedGrammarPracticeEntry[] = env.DB
+      ? await Promise.all(generatedEntries.map(async ({ question, provider, model: generatedModel }) => {
         try {
           const row = await recordAiGeneratedProblem(env, {
             question,
-            model,
+            model: cacheModelForGrammarProvider(provider, generatedModel),
+            provider: provider.toLowerCase(),
             promptVersion: GRAMMAR_PRACTICE_PROMPT_VERSION,
             sourceText: `${question.wordId}:${question.mode}:${question.grammarScope?.scopeId || grammarScopeId || 'auto'}:${question.promptText}:${question.answer}`,
           });
           return {
-            ...question,
-            generatedProblemId: row.id,
-            aiContentId: row.content_id,
+            provider,
+            model: generatedModel,
+            question: {
+              ...question,
+              generatedProblemId: row.id,
+              aiContentId: row.content_id,
+            },
           };
         } catch (cacheError) {
           console.warn('AI grammar cache write skipped:', cacheError);
-          return question;
+          return { question, provider, model: generatedModel };
         }
       }))
-      : generatedQuestions;
+      : generatedEntries;
+    const persistedGeneratedQuestions = persistedEntries.map((entry) => entry.question);
+    const billableGeneratedCount = persistedEntries.filter((entry) => entry.provider === 'GEMINI').length;
+    const usedProviders = new Set(generatedBatches.map((batch) => batch.provider));
+    const usageProvider: GrammarPracticeUsageProvider = usedProviders.has('CLOUDFLARE') && usedProviders.has('GEMINI')
+      ? 'MIXED'
+      : usedProviders.has('CLOUDFLARE')
+        ? 'CLOUDFLARE'
+        : usedProviders.has('GEMINI')
+          ? 'GEMINI'
+          : attemptedProvider || 'GEMINI';
+    const usageModel = generatedBatches.length > 0
+      ? Array.from(new Set(generatedBatches.map((batch) => cacheModelForGrammarProvider(batch.provider, batch.model)))).join('+')
+      : usageProvider === 'CLOUDFLARE'
+        ? cacheModelForGrammarProvider('CLOUDFLARE', resolveCloudflareGrammarPracticeModel(env))
+      : model;
+
     return {
       questions: [...cachedQuestions, ...persistedGeneratedQuestions].slice(0, requestedCount),
       usedAi: persistedGeneratedQuestions.length > 0,
       generatedCount: persistedGeneratedQuestions.length,
+      billableGeneratedCount,
+      provider: usageProvider,
+      model: usageModel,
     };
   } catch (error) {
     handleAiError(error, 'AI文法問題生成に失敗しました。');
@@ -1052,9 +1358,14 @@ export const handleAiAction = async (
       await Promise.resolve(recordAiUsageEvent(env, user, {
         action: 'generateGrammarPracticeQuestions',
         usedAi: result.usedAi,
-        model,
-        estimatedCostMilliYen: result.usedAi ? unitEstimate * Math.max(1, result.generatedCount) : 0,
-        estimatedProviderCostMilliYen: result.usedAi ? unitEstimate * Math.max(1, result.generatedCount) : 0,
+        provider: result.provider,
+        model: result.model,
+        estimatedCostMilliYen: result.billableGeneratedCount > 0
+          ? unitEstimate * Math.max(1, result.billableGeneratedCount)
+          : 0,
+        estimatedProviderCostMilliYen: result.billableGeneratedCount > 0
+          ? unitEstimate * Math.max(1, result.billableGeneratedCount)
+          : 0,
         requestUnits,
         providerInputUnits: result.usedAi ? Math.max(1, result.generatedCount) : 0,
         providerOutputUnits: result.usedAi ? Math.max(1, result.generatedCount) : 0,

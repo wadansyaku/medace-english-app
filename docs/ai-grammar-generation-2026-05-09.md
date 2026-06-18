@@ -4,16 +4,16 @@ Date: 2026-05-09
 
 ## Decision
 
-Use `gemini-3-flash-preview` as the default model for AI-generated grammar practice questions, backed by a D1 reusable problem cache.
+Use Cloudflare Workers AI as the first provider for AI-generated grammar practice questions, backed by a D1 reusable problem cache. Keep `gemini-3-flash-preview` as the quality fallback when Cloudflare is unavailable or the generated draft fails validation.
 
 Reasons:
 
-- The app already uses `@google/genai`, `GEMINI_API_KEY`, structured JSON output, and AI usage metering for Gemini-backed actions.
-- `gemini-2.5-flash` is cheap, but grammar questions need stricter control over scope, distractors, Japanese translation quality, and unique word-order answers. The default should favor quality because successful generations are now cached and reused.
-- Google currently lists Gemini 3 Flash Preview at $0.50 input / $3.00 output per 1M text tokens. That is moderately above Gemini 2.5 Flash ($0.30 / $2.50), below Claude Haiku/Sonnet output pricing, and close enough to OpenAI `gpt-5.4-mini` that provider integration overhead matters more than the raw token delta for this first release.
-- Staying on Gemini avoids adding a second live provider path, extra secrets, provider-specific error handling, and a new privacy/compliance surface.
+- Cloudflare Workers AI can be invoked through the `env.AI` binding without a provider API key in the request path, which lets the app use Cloudflare's included/free usage before paying for external providers. As of 2026-06-18, Cloudflare documents a free allocation of 10,000 Neurons per day.
+- Grammar questions already pass through strict normalization, D1 caching, and review-oriented quality gates. That makes this action a good first target for a lower-cost provider.
+- Gemini remains the fallback because grammar questions need strict control over scope, distractors, Japanese translation quality, and unique word-order answers.
+- Cloudflare output is accepted only after the same validation as Gemini output. If only part of a request passes validation, Gemini is called only for the remaining words.
 
-The implementation keeps `AI_GRAMMAR_MODEL` as an optional environment override. This allows rapid fallback to `gemini-2.5-flash`, or an A/B test against OpenAI/Claude later, without changing application code.
+The implementation keeps `AI_GRAMMAR_PROVIDER` as an environment switch (`AUTO`, `CLOUDFLARE`, or `GEMINI`). It also keeps `AI_GRAMMAR_MODEL` for Gemini fallback and adds `CLOUDFLARE_AI_GRAMMAR_MODEL` for the Workers AI model.
 
 ## Model Comparison
 
@@ -25,6 +25,7 @@ The implementation keeps `AI_GRAMMAR_MODEL` as an optional environment override.
 | `gpt-5.4-mini` | Strong alternate for structured text | $0.375 input / $2.25 output per 1M tokens | Consider after adding a second-provider adapter and live A/B quality gate |
 | Claude Haiku 4.5 | Fast, capable, but costlier output | $1 input / $5 output per 1M tokens | Not first choice for this app |
 | Claude Sonnet 4.6 | Better intelligence, much higher cost | $3 input / $15 output per 1M tokens | Reserve for offline content QA, not per-session quiz generation |
+| `@cf/meta/llama-3.1-8b-instruct` | Lower-cost first pass through Workers AI binding | Included/free tier first, then Workers AI usage | Default first-pass provider with Gemini fallback |
 
 ## Cost Simulation
 
@@ -47,7 +48,7 @@ Cloudflare D1 currently includes 25B rows read/month, 50M rows written/month, an
 ## Product Guardrails
 
 - AI is attempted for the four grammar practice modes: `GRAMMAR_CLOZE`, `EN_WORD_ORDER`, `JA_TRANSLATION_ORDER`, and `JA_TRANSLATION_INPUT`. If the AI route is unavailable or invalid, each mode falls back to the deterministic grammar generator.
-- If AI is unavailable, budget-limited, access-denied, or returns invalid output, the app falls back to the existing deterministic generator.
+- If Cloudflare AI is unavailable or returns invalid output, the app attempts Gemini for the missing words before falling back to the existing deterministic generator.
 - AI output is normalized into the same `GeneratedWorksheetQuestion` shape as existing questions.
 - Invalid drafts are dropped instead of trusted:
   - Cloze questions must include `____`.
@@ -57,7 +58,7 @@ Cloudflare D1 currently includes 25B rows read/month, 50M rows written/month, an
   - The returned mode and word id must match the requested mode and source words.
   - The answer must be present in cloze options.
 - Usage is metered under `generateGrammarPracticeQuestions`.
-- D1 cache hits do not consume AI budget. Only generated cache misses are charged to the monthly AI budget.
+- D1 cache hits do not consume AI budget. Cloudflare-generated misses are logged with zero estimated app cost while using the included/free tier assumption; Gemini fallback misses consume the existing monthly AI budget estimate.
 
 ## CBT Direction
 
@@ -77,3 +78,7 @@ The first CBT slice stores learner-level ability, generated-problem difficulty, 
 - Claude pricing: https://platform.claude.com/docs/en/about-claude/pricing
 - Cloudflare D1 pricing: https://developers.cloudflare.com/d1/platform/pricing/
 - Cloudflare Workers pricing: https://developers.cloudflare.com/workers/platform/pricing/
+- Cloudflare Workers AI pricing: https://developers.cloudflare.com/workers-ai/platform/pricing/
+- Cloudflare Workers AI bindings: https://developers.cloudflare.com/workers-ai/configuration/bindings/
+- Cloudflare Workers AI JSON Mode: https://developers.cloudflare.com/workers-ai/features/json-mode/
+- Cloudflare AI Gateway Worker binding methods: https://developers.cloudflare.com/ai-gateway/integrations/worker-binding-methods/

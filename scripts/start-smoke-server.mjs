@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
+import { createLocalWranglerProject } from './_shared/local-wrangler-project.mjs';
 
 const cwd = process.cwd();
 const args = process.argv.slice(2);
@@ -36,6 +37,7 @@ const runCommand = (command, commandArgs, env = baseEnv, stdio = 'inherit') => n
 });
 
 let server;
+let localWranglerProject;
 
 const signalProcessTree = (child, signal) => {
   if (!child?.pid) return;
@@ -88,6 +90,7 @@ const stopServerProcess = async (child, graceMs = 2_000) => {
 
 const cleanup = async () => {
   await stopServerProcess(server);
+  await localWranglerProject?.cleanup();
   await rm(persistDir, { recursive: true, force: true });
 };
 
@@ -120,7 +123,10 @@ try {
   }, ['ignore', 'ignore', 'ignore']);
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
+  localWranglerProject = await createLocalWranglerProject();
   const wranglerPagesDev = createNodeToolCommand('wrangler', [
+    '--cwd',
+    localWranglerProject.cwd,
     'pages',
     'dev',
     'dist',
@@ -149,7 +155,8 @@ try {
   });
 
   server.on('close', async (code) => {
-    await rm(persistDir, { recursive: true, force: true });
+    server = undefined;
+    await cleanup();
     process.exit(code ?? 0);
   });
 } catch (error) {

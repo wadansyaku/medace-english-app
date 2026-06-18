@@ -1,2 +1,5 @@
 GEMINI_API_KEY="your-gemini-api-key"
+AI_GRAMMAR_PROVIDER="AUTO"
+CLOUDFLARE_AI_GRAMMAR_MODEL="@cf/meta/llama-3.1-8b-instruct"
+# CLOUDFLARE_AI_GATEWAY_ID="default"
 ADMIN_DEMO_PASSWORD="replace-this-in-production"
