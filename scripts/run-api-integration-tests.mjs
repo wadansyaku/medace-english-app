@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
+import { createLocalWranglerProject } from './_shared/local-wrangler-project.mjs';
 import {
   nounWorkbookFixtureBookDescription,
   nounWorkbookFixtureBookTitle,
@@ -248,9 +249,11 @@ const getAvailablePort = () => new Promise((resolve, reject) => {
   });
 });
 
-const startServer = (persistDir, port, bindings = {}) => {
+const startServer = (persistDir, port, bindings = {}, wranglerCwd = cwd) => {
   const logs = [];
   const wranglerPagesDev = createNodeToolCommand('wrangler', [
+    '--cwd',
+    wranglerCwd,
     'pages',
     'dev',
     'dist',
@@ -404,6 +407,7 @@ const main = async () => {
   const baseUrl = `http://127.0.0.1:${port}`;
   const internalJobSecret = 'integration-internal-job-secret';
   let server;
+  let localWranglerProject;
 
   try {
     console.log('Applying local D1 migrations...');
@@ -419,9 +423,10 @@ const main = async () => {
     await runCommand(wranglerMigrate.command, wranglerMigrate.args);
 
     console.log('Starting local Pages Functions server...');
+    localWranglerProject = await createLocalWranglerProject();
     server = startServer(persistDir, port, {
       INTERNAL_JOB_SECRET: internalJobSecret,
-    });
+    }, localWranglerProject.cwd);
     await waitForServer(baseUrl, server.logs);
 
     const publicMotivationResponse = await fetch(`${baseUrl}/api/public/motivation`);
@@ -1529,6 +1534,7 @@ const main = async () => {
     if (server?.child) {
       await stopChildProcess(server.child);
     }
+    await localWranglerProject?.cleanup();
     await rm(persistDir, { recursive: true, force: true });
   }
 };

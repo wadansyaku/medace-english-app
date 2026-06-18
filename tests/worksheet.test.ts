@@ -159,14 +159,15 @@ describe('generateWorksheetQuestions', () => {
         definition: '繰り返す',
         bookId: 'book-1',
         bookTitle: 'Book',
-        exampleSentence: 'Students repeat the word after class.',
+        exampleSentence: 'Students repeat the drill after the class.',
         exampleMeaning: '生徒は 生徒は 授業後に 語を 繰り返す。',
       },
     ], 'JA_TRANSLATION_ORDER', 1, {
       grammarScopeId: 'basic-svo',
     });
 
-    expect(questions[0]?.answer).toBe('生徒は 今日 繰り返す という語を 学ぶ');
+    expect(questions[0]?.answer).toContain('繰り返す');
+    expect(questions[0]?.answer).not.toContain('という語');
     expect(questions[0]?.tokens?.map((token) => token.text)).not.toContain('生徒は 生徒は');
   });
 
@@ -191,8 +192,8 @@ describe('generateWorksheetQuestions', () => {
 
     expect(stabilizeQuestion).toMatchObject({
       interactionType: 'TEXT_INPUT',
-      promptText: 'The word stabilize is useful today.',
-      answer: '安定させる という語は 今日 役に立つ',
+      promptText: 'Doctors stabilize the patient before surgery.',
+      answer: '医師は 手術前に 患者を 安定させる',
       grammarScope: {
         scopeId: 'be-verb',
         labelJa: 'be動詞を使った文',

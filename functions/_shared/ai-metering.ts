@@ -51,7 +51,7 @@ export const assertBudgetAvailable = async (
 
 export interface AiUsageEventInput {
   action: MeteredAiAction;
-  provider?: WritingAiProvider;
+  provider?: WritingAiProvider | 'MIXED';
   model?: string;
   usedAi: boolean;
   estimatedCostMilliYen?: number;

@@ -52,12 +52,20 @@ export interface R2Bucket {
   delete(key: string): Promise<void>;
 }
 
+export interface WorkersAiBinding {
+  run(model: string, input: unknown, options?: unknown): Promise<unknown>;
+}
+
 export interface AppEnv {
   DB: D1Database;
+  AI?: WorkersAiBinding;
   WRITING_ASSETS?: R2Bucket;
   WRITING_AI_MODE?: string;
   GEMINI_API_KEY?: string;
+  AI_GRAMMAR_PROVIDER?: string;
   AI_GRAMMAR_MODEL?: string;
+  CLOUDFLARE_AI_GRAMMAR_MODEL?: string;
+  CLOUDFLARE_AI_GATEWAY_ID?: string;
   AI_TRANSLATION_FEEDBACK_MODEL?: string;
   OPENAI_API_KEY?: string;
   OPENAI_OCR_MODEL?: string;

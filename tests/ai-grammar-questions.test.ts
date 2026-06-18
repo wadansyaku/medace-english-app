@@ -157,10 +157,10 @@ describe('AI grammar question normalization', () => {
       {
         wordId: 'w1',
         mode: 'JA_TRANSLATION_INPUT',
-        promptText: 'The term stabilize is useful today.',
-        sourceSentence: 'The term stabilize is useful today.',
-        sourceTranslation: 'stabilizeという語は今日役に立つ。',
-        answer: 'stabilizeという語は今日役に立つ。',
+        promptText: 'Doctors stabilize the patient before surgery.',
+        sourceSentence: 'Doctors stabilize the patient before surgery.',
+        sourceTranslation: '医師は手術前に患者を安定させる。',
+        answer: '医師は手術前に患者を安定させる。',
       },
     ];
 
@@ -176,5 +176,28 @@ describe('AI grammar question normalization', () => {
       groupLabelJa: '動詞まわり',
       curriculumCategoryLabelJa: '動詞語法',
     });
+  });
+
+  it('rejects AI drafts that mention the studied item as a word or term', () => {
+    const drafts: AiGrammarQuestionDraft[] = [
+      {
+        wordId: 'w1',
+        mode: 'JA_TRANSLATION_INPUT',
+        promptText: 'The term stabilize is useful today.',
+        sourceSentence: 'The term stabilize is useful today.',
+        sourceTranslation: 'stabilizeという語は今日役に立つ。',
+        answer: 'stabilizeという語は今日役に立つ。',
+      },
+      {
+        wordId: 'w1',
+        mode: 'JA_TRANSLATION_INPUT',
+        promptText: 'Doctors stabilize the patient before surgery.',
+        sourceSentence: 'Doctors stabilize the patient before surgery.',
+        sourceTranslation: 'stabilizeという語は今日役に立つ。',
+        answer: 'stabilizeという語は今日役に立つ。',
+      },
+    ];
+
+    expect(normalizeAiGrammarQuestionDrafts(drafts, sourceWords, 'JA_TRANSLATION_INPUT', 1, 'be-verb')).toEqual([]);
   });
 });
