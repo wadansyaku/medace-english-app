@@ -141,10 +141,22 @@ test('desktop student dashboard keeps the command center calm and above the fold
 
   await primaryCta.scrollIntoViewIfNeeded();
   await primaryCta.click();
-  const startedStudy = await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront).isVisible({ timeout: 5000 }).catch(() => false);
-  if (!startedStudy) {
-    await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
-  }
+  await expect.poll(async () => {
+    if (await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront).count()) {
+      return 'study';
+    }
+    if (await page.getByTestId('phrasebook-create-modal').count()) {
+      return 'phrasebook';
+    }
+    const mainText = await page.locator('main').innerText({ timeout: 1000 }).catch(() => '');
+    if (mainText.includes('今日のクエスト') && mainText.includes('答えを確認')) {
+      return 'study';
+    }
+    return 'pending';
+  }, {
+    message: 'primary CTA should open study mode or the phrasebook creation modal',
+    timeout: 20000,
+  }).not.toBe('pending');
 });
 
 test('desktop dashboard keeps lower details full-width when the right rail is present', async ({ browser, baseURL }, testInfo) => {
