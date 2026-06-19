@@ -17,6 +17,7 @@ import {
   UserRole,
 } from '../../types';
 import { getSubscriptionPolicy } from '../../config/subscription';
+import { buildActivationFunnel } from '../../shared/adminActivationFunnel';
 import { formatDateKey, formatMonthKey } from '../../utils/date';
 import { canAccessOfficialBook } from '../../utils/bookAccess';
 import {
@@ -37,6 +38,7 @@ import {
   getWeaknessProfile,
   getUserLearningHistories,
 } from './learning-history';
+import { getLocalPrimaryMissionSnapshot } from './missions';
 
 export interface DashboardReadModelContext {
   getStore: GetStore;
@@ -226,6 +228,14 @@ export const getDashboardSnapshot = async (
     getMotivationSnapshot(context, uid),
     context.getCoachNotifications(uid, sessionUser),
   ]);
+  const primaryMission = sessionUser
+    ? getLocalPrimaryMissionSnapshot({
+        user: sessionUser,
+        books: [...accessibleOfficial, ...myBooks],
+        learningPlan,
+        learningPreference,
+      })
+    : null;
 
   return {
     dueCount,
@@ -240,7 +250,7 @@ export const getDashboardSnapshot = async (
     activityLogs,
     motivationSnapshot,
     coachNotifications,
-    primaryMission: null,
+    primaryMission,
     accountOverview: {
       subscriptionPlan: sessionUser?.subscriptionPlan || SubscriptionPlan.TOC_FREE,
       organizationRole: sessionUser?.organizationRole,
@@ -274,6 +284,47 @@ export const getAdminDashboardSnapshot = async (
     .filter((student) => student.riskLevel !== StudentRiskLevel.SAFE)
     .sort((left, right) => left.lastActive - right.lastActive)
     .slice(0, 6);
+  const productKpis = {
+    dateKey: formatDateKey(new Date()),
+    totalUsers: totalStudents,
+    activeStudents1d: 0,
+    activeStudents7d: 0,
+    activeStudents30d: 0,
+    totalOrganizations: 0,
+    activeOrganizations30d: 0,
+    studySessionsStarted30d: 0,
+    studySessionsFinished30d: 0,
+    quizSessionsStarted30d: 0,
+    spellingChecksStarted30d: 0,
+    commercialFormOpenCount30d: 0,
+    commercialRequestCount30d: 0,
+    organizationsWithCohortCount: 0,
+    organizationsWithAssignmentCount: 0,
+    organizationsWithMissionCount: 0,
+    organizationsWithNotificationCount: 0,
+    organizationsWithWritingAssignmentCount: 0,
+    organizationsCreatedCohort30d: 0,
+    organizationsAssignedStudent30d: 0,
+    organizationsCreatedFirstMission30d: 0,
+    organizationsSentNotification30d: 0,
+    organizationsWithWritingAssignment30d: 0,
+    organizationsWithWritingSubmission30d: 0,
+    organizationsWithWritingReview30d: 0,
+    writingAssignmentsCreated30d: 0,
+    writingSubmissionsReceived30d: 0,
+    writingReviewsCompleted30d: 0,
+    generationCount30d: 0,
+    cacheHitCount30d: 0,
+    exampleGenerationCount30d: 0,
+    exampleCacheHitCount30d: 0,
+    imageGenerationCount30d: 0,
+    imageCacheHitCount30d: 0,
+    estimatedAiCostMilliYen30d: 0,
+    estimatedProviderAiCostMilliYen30d: 0,
+    estimatedAvoidedCostMilliYen30d: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  };
 
   return {
     overview: {
@@ -307,6 +358,7 @@ export const getAdminDashboardSnapshot = async (
       officialBookCount: 0,
       approvedBookCount: 0,
       selectableTodayBookCount: 0,
+      warningBookCount: 0,
       reviewRequiredBookCount: 0,
       qaBlockedBookCount: 0,
       missingLedgerBookCount: 0,
@@ -316,51 +368,8 @@ export const getAdminDashboardSnapshot = async (
     recentReports: [],
     organizations: [],
     atRiskStudents,
-    productKpis: {
-      dateKey: formatDateKey(new Date()),
-      totalUsers: totalStudents,
-      activeStudents1d: 0,
-      activeStudents7d: 0,
-      activeStudents30d: 0,
-      totalOrganizations: 0,
-      activeOrganizations30d: 0,
-      studySessionsStarted30d: 0,
-      studySessionsFinished30d: 0,
-      quizSessionsStarted30d: 0,
-      spellingChecksStarted30d: 0,
-      commercialFormOpenCount30d: 0,
-      commercialRequestCount30d: 0,
-      organizationsWithCohortCount: 0,
-      organizationsWithAssignmentCount: 0,
-      organizationsWithMissionCount: 0,
-      organizationsWithNotificationCount: 0,
-      writingAssignmentsCreated30d: 0,
-      writingSubmissionsReceived30d: 0,
-      writingReviewsCompleted30d: 0,
-      generationCount30d: 0,
-      cacheHitCount30d: 0,
-      exampleGenerationCount30d: 0,
-      exampleCacheHitCount30d: 0,
-      imageGenerationCount30d: 0,
-      imageCacheHitCount30d: 0,
-      estimatedAiCostMilliYen30d: 0,
-      estimatedProviderAiCostMilliYen30d: 0,
-      estimatedAvoidedCostMilliYen30d: 0,
-      createdAt: 0,
-      updatedAt: 0,
-    },
-    activationFunnel: {
-      totalOrganizations: 0,
-      organizationsWithCohortCount: 0,
-      organizationsWithAssignmentCount: 0,
-      organizationsWithMissionCount: 0,
-      organizationsWithNotificationCount: 0,
-      writingAssignmentsCreated30d: 0,
-      writingSubmissionsReceived30d: 0,
-      writingReviewsCompleted30d: 0,
-      commercialFormOpenCount30d: 0,
-      commercialRequestCount30d: 0,
-    },
+    productKpis,
+    activationFunnel: buildActivationFunnel(productKpis),
     aiEconomics: {
       monthKey: formatMonthKey(new Date()),
       generationCount: 0,

@@ -309,6 +309,18 @@ export const handleIssueWritingAssignment = async (
     now,
     assignmentId,
   ).run();
+  if (row.status === AssignmentStatus.DRAFT || !row.issued_at) {
+    await recordProductEventForUser(env, user, {
+      eventName: 'writing_assignment_issued',
+      subjectType: 'writing_assignment',
+      subjectId: assignmentId,
+      status: AssignmentStatus.ISSUED,
+      metadata: {
+        studentUid: row.student_user_id,
+        templateId: row.template_id,
+      },
+    });
+  }
 
   return readAssignmentResponse(env, assignmentId);
 };

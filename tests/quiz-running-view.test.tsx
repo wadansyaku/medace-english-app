@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import QuizRunningView from '../components/quiz/QuizRunningView';
+import { getLearnerAiQuestionQualityState } from '../shared/aiCacheCbt';
 import { EnglishLevel } from '../types';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 
@@ -75,6 +76,49 @@ describe('QuizRunningView answer-bearing context', () => {
     });
 
     expect(afterAnswer).toContain('Doctors stabilize the patient before surgery.');
+  });
+
+  it('shows learner-safe quality state for approved AI questions without revealing the source early', () => {
+    const beforeAnswer = renderQuiz({
+      currentQuestion: {
+        ...baseQuestion,
+        generatedProblemId: 'ai-problem-1',
+        aiContentId: 'ai-content-1',
+        qualityState: getLearnerAiQuestionQualityState('APPROVED_REUSE'),
+      },
+    });
+
+    expect(beforeAnswer).toContain('data-testid="quiz-question-quality-state"');
+    expect(beforeAnswer).toContain('レビュー済み問題');
+    expect(beforeAnswer).toContain('内容確認済みの生成問題です。');
+    expect(beforeAnswer).toContain('元の英文は、判定後に表示します。');
+    expect(beforeAnswer).not.toContain('Doctors stabilize the patient before surgery.');
+  });
+
+  it('shows learner-safe quality state for curated static fallback questions', () => {
+    const beforeAnswer = renderQuiz({
+      currentQuestion: {
+        ...baseQuestion,
+        qualityState: getLearnerAiQuestionQualityState('CURATED_STATIC'),
+      },
+    });
+
+    expect(beforeAnswer).toContain('data-testid="quiz-question-quality-state"');
+    expect(beforeAnswer).toContain('教材問題');
+    expect(beforeAnswer).toContain('教材データから作成した問題です。');
+    expect(beforeAnswer).toContain('元の英文は、判定後に表示します。');
+    expect(beforeAnswer).not.toContain('Doctors stabilize the patient before surgery.');
+  });
+
+  it('renders the AI source notice separately from hidden answer context', () => {
+    const beforeAnswer = renderQuiz({
+      questionSourceNotice: '確認済みのAI問題が足りないため、例文ベースの問題も使います。',
+    });
+
+    expect(beforeAnswer).toContain('data-testid="quiz-question-source-notice"');
+    expect(beforeAnswer).toContain('確認済みのAI問題が足りないため、例文ベースの問題も使います。');
+    expect(beforeAnswer).toContain('元の英文は、判定後に表示します。');
+    expect(beforeAnswer).not.toContain('Doctors stabilize the patient before surgery.');
   });
 
   it('hides the full English sentence for English word-order questions until scoring', () => {

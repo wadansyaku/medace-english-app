@@ -50,6 +50,15 @@ const makeApprovedOfficialBook = (): BookMetadata => ({
   },
 });
 
+const makeUngatedOfficialBook = (): BookMetadata => ({
+  id: 'ungated-1',
+  title: '台帳未確認教材',
+  wordCount: 100,
+  isPriority: false,
+  catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL,
+  accessScope: BookAccessScope.ALL_PLANS,
+});
+
 describe('DashboardLibrarySection', () => {
   it('keeps the first material creation action out of the library empty state', () => {
     const rendered = renderToStaticMarkup(
@@ -114,6 +123,31 @@ describe('DashboardLibrarySection', () => {
     );
 
     expect(rendered).toContain('配布教材 1 冊は確認中です。承認後に学習・テストで使えます。');
+    expect(rendered).toContain('この教材は確認中です。承認後に学習やテストで使えます。');
+    expect(rendered).toContain('disabled=""');
+  });
+
+  it('treats official books without quality gates as confirmation-pending material', () => {
+    const ungatedBook = makeUngatedOfficialBook();
+    const rendered = renderToStaticMarkup(
+      <DashboardLibrarySection
+        books={[ungatedBook]}
+        myBooks={[]}
+        primaryRecommendedBook={null}
+        secondaryRecommendedBooks={[]}
+        blockedOfficialBookCount={1}
+        progressMap={{}}
+        showLibrary
+        onToggleLibrary={() => undefined}
+        onOpenCreateModal={() => undefined}
+        onDelete={() => undefined}
+        onPrepareExamples={() => undefined}
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(rendered).toContain('台帳未確認教材');
+    expect(rendered).toContain('確認中');
     expect(rendered).toContain('この教材は確認中です。承認後に学習やテストで使えます。');
     expect(rendered).toContain('disabled=""');
   });

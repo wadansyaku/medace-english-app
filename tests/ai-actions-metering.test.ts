@@ -113,7 +113,7 @@ describe('handleAiAction metering integration', () => {
     });
   });
 
-  it('generates grammar practice questions through the metered AI route', async () => {
+  it('records live grammar drafts for review without returning unapproved questions to learners', async () => {
     generateContentMock.mockResolvedValueOnce({
       text: JSON.stringify([
         {
@@ -153,13 +153,7 @@ describe('handleAiAction metering integration', () => {
       },
     });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        mode: 'GRAMMAR_CLOZE',
-        promptText: 'Doctors ____ the patient before surgery.',
-        answer: 'stabilize',
-      }),
-    ]);
+    expect(result).toEqual([]);
     expect(assertAiActionAllowedMock).toHaveBeenCalledWith(user, 'generateGrammarPracticeQuestions');
     expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
     expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, {
@@ -175,7 +169,7 @@ describe('handleAiAction metering integration', () => {
     });
   });
 
-  it('uses Cloudflare Workers AI for grammar practice when the binding is available', async () => {
+  it('uses Cloudflare Workers AI for grammar practice without surfacing unapproved drafts', async () => {
     runCloudflareAiMock.mockResolvedValueOnce({
       response: {
         questions: [
@@ -217,13 +211,7 @@ describe('handleAiAction metering integration', () => {
       },
     });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        mode: 'GRAMMAR_CLOZE',
-        promptText: 'Doctors ____ the patient before surgery.',
-        answer: 'stabilize',
-      }),
-    ]);
+    expect(result).toEqual([]);
     expect(runCloudflareAiMock).toHaveBeenCalledWith(
       '@cf/meta/llama-3.1-8b-instruct',
       expect.objectContaining({
@@ -307,12 +295,7 @@ describe('handleAiAction metering integration', () => {
       },
     });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        promptText: 'Doctors ____ the patient before surgery.',
-        answer: 'stabilize',
-      }),
-    ]);
+    expect(result).toEqual([]);
     expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
     expect(generateContentMock).toHaveBeenCalledTimes(1);
     expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
@@ -468,17 +451,7 @@ describe('handleAiAction metering integration', () => {
       },
     });
 
-    expect(result).toHaveLength(2);
-    expect(result).toEqual([
-      expect.objectContaining({
-        wordId: 'word-1',
-        promptText: 'Doctors ____ the patient before surgery.',
-      }),
-      expect.objectContaining({
-        wordId: 'word-2',
-        promptText: 'Nurses ____ the patient after admission.',
-      }),
-    ]);
+    expect(result).toEqual([]);
     expect(runCloudflareAiMock).toHaveBeenCalledTimes(1);
     expect(generateContentMock).toHaveBeenCalledTimes(1);
     expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 340);
@@ -614,7 +587,7 @@ describe('handleAiAction metering integration', () => {
       },
     });
 
-    expect(result).toHaveLength(2);
+    expect(result).toEqual([]);
     expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGrammarPracticeQuestions', 680);
     expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({
       action: 'generateGrammarPracticeQuestions',

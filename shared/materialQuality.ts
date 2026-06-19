@@ -24,11 +24,33 @@ const toNumber = (value: unknown): number => (
   typeof value === 'number' && Number.isFinite(value) ? value : 0
 );
 
+const isUserGeneratedBook = (book: Pick<BookMetadata, 'catalogSource'>): boolean => (
+  book.catalogSource === BookCatalogSource.USER_GENERATED
+);
+
+export const buildMissingMaterialQualityGate = (): MaterialQualityGate => ({
+  status: 'missing_ledger',
+  label: '確認中',
+  summary: 'source ledgerが未登録のため、今日の自動学習候補から外します。',
+  isApprovedForLearner: false,
+  isSelectableForToday: false,
+  blockingReasons: ['source ledgerが未登録です。'],
+  warnings: [],
+});
+
+export const resolveLearnerMaterialQualityGate = (
+  book: Pick<BookMetadata, 'catalogSource' | 'qualityGate'>,
+): MaterialQualityGate | undefined => {
+  if (book.qualityGate) return book.qualityGate;
+  if (isUserGeneratedBook(book)) return undefined;
+  return buildMissingMaterialQualityGate();
+};
+
 export const evaluateMaterialQualityGate = (
   book: Pick<BookMetadata, 'id' | 'title' | 'wordCount' | 'catalogSource'>,
   ledger: MaterialSourceLedgerSnapshot | null | undefined,
 ): MaterialQualityGate => {
-  if (book.catalogSource === BookCatalogSource.USER_GENERATED) {
+  if (isUserGeneratedBook(book)) {
     return {
       status: 'user_generated',
       label: 'My単語帳',
@@ -117,19 +139,25 @@ export const getLearnerMaterialQualityMessage = (gate: MaterialQualityGate | und
 };
 
 export const getOperatorMaterialQualityMessage = (gate: MaterialQualityGate | undefined): string => {
-  if (!gate || gate.isApprovedForLearner || gate.status === 'user_generated') {
+  if (!gate || gate.status === 'user_generated') {
     return '配信可能な教材です。';
+  }
+  if (gate.isApprovedForLearner) {
+    const firstWarning = gate.warnings[0];
+    return firstWarning
+      ? `${firstWarning} 学習には使えますが、次回教材更新までに確認してください。`
+      : '配信可能な教材です。';
   }
   const firstReason = gate.blockingReasons[0] || gate.summary;
   return `${firstReason} 承認済みにするまで生徒の学習・テストには出しません。`;
 };
 
 export const isBookSelectableForToday = (book: BookMetadata): boolean => (
-  book.qualityGate ? book.qualityGate.isSelectableForToday : true
+  resolveLearnerMaterialQualityGate(book)?.isSelectableForToday ?? true
 );
 
 export const isBookApprovedForLearner = (book: BookMetadata): boolean => (
-  book.qualityGate ? book.qualityGate.isApprovedForLearner : true
+  resolveLearnerMaterialQualityGate(book)?.isApprovedForLearner ?? true
 );
 
 export const toMaterialLedgerSnapshot = (row: {

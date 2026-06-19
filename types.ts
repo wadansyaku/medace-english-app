@@ -215,6 +215,15 @@ export type AiGeneratedProblemReviewQueueStatus = 'PENDING' | 'APPROVED' | 'REJE
 
 export type AiGeneratedProblemReusableBucket = 'APPROVED' | 'LEGACY_READY' | 'BLOCKED';
 
+export type AiGeneratedProblemReusePolicyReason =
+  | 'APPROVED_FOR_REUSE'
+  | 'LEGACY_READY_REQUIRES_REVIEW'
+  | 'CONTENT_NEEDS_REVIEW'
+  | 'CONTENT_REJECTED'
+  | 'ASSESSMENT_PENDING'
+  | 'ASSESSMENT_NEEDS_REVIEW'
+  | 'ASSESSMENT_REJECTED';
+
 export interface AiGeneratedProblemReviewQueueItem {
   problemId: string;
   contentId: string;
@@ -250,6 +259,9 @@ export interface AiGeneratedProblemReviewQueueItem {
   isLegacyReady: boolean;
   reusableBucket: AiGeneratedProblemReusableBucket;
   isReusable: boolean;
+  reusePolicyReason: AiGeneratedProblemReusePolicyReason;
+  reusePolicyLabel: string;
+  reusePolicyMessage: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -984,6 +996,7 @@ export type ProductEventName =
   | 'group_admin_created_first_mission'
   | 'instructor_notification_sent'
   | 'writing_assignment_created'
+  | 'writing_assignment_issued'
   | 'writing_submission_received'
   | 'writing_review_completed';
 
@@ -1022,6 +1035,14 @@ export interface ProductKpiDailySnapshot {
   organizationsWithAssignmentCount: number;
   organizationsWithMissionCount: number;
   organizationsWithNotificationCount: number;
+  organizationsWithWritingAssignmentCount: number;
+  organizationsCreatedCohort30d: number;
+  organizationsAssignedStudent30d: number;
+  organizationsCreatedFirstMission30d: number;
+  organizationsSentNotification30d: number;
+  organizationsWithWritingAssignment30d: number;
+  organizationsWithWritingSubmission30d: number;
+  organizationsWithWritingReview30d: number;
   writingAssignmentsCreated30d: number;
   writingSubmissionsReceived30d: number;
   writingReviewsCompleted30d: number;
@@ -1186,6 +1207,7 @@ export interface AdminMaterialQualitySummary {
   officialBookCount: number;
   approvedBookCount: number;
   selectableTodayBookCount: number;
+  warningBookCount: number;
   reviewRequiredBookCount: number;
   qaBlockedBookCount: number;
   missingLedgerBookCount: number;
@@ -1528,11 +1550,54 @@ export interface AdminActivationFunnel {
   organizationsWithAssignmentCount: number;
   organizationsWithMissionCount: number;
   organizationsWithNotificationCount: number;
+  organizationsWithWritingAssignmentCount: number;
+  activationVelocity30d: AdminActivationVelocity30d;
   writingAssignmentsCreated30d: number;
   writingSubmissionsReceived30d: number;
   writingReviewsCompleted30d: number;
   commercialFormOpenCount30d: number;
   commercialRequestCount30d: number;
+  completionRate: number;
+  weakestGap: AdminActivationFunnelGap | null;
+  steps: AdminActivationFunnelStep[];
+  gaps: AdminActivationFunnelGap[];
+}
+
+export interface AdminActivationVelocity30d {
+  organizationsCreatedCohort: number;
+  organizationsAssignedStudent: number;
+  organizationsCreatedFirstMission: number;
+  organizationsSentNotification: number;
+  organizationsWithWritingAssignment: number;
+  organizationsWithWritingSubmission: number;
+  organizationsWithWritingReview: number;
+}
+
+export type AdminActivationFunnelStepId =
+  | 'organization'
+  | 'cohort'
+  | 'assignment'
+  | 'mission'
+  | 'notification'
+  | 'writing';
+
+export interface AdminActivationFunnelStep {
+  id: AdminActivationFunnelStepId;
+  label: string;
+  count: number;
+  baseCount: number;
+  conversionRate: number;
+  dropOffCount: number;
+  dropOffRate: number;
+}
+
+export interface AdminActivationFunnelGap {
+  fromStepId: AdminActivationFunnelStepId;
+  toStepId: AdminActivationFunnelStepId;
+  label: string;
+  dropOffCount: number;
+  dropOffRate: number;
+  severity: 'ok' | 'watch' | 'blocked';
 }
 
 export interface AdminAiEconomicsSummary {

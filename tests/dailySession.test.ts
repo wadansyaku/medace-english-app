@@ -106,6 +106,15 @@ const makeBook = (id: string): BookMetadata => ({
   isPriority: false,
   catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL,
   accessScope: BookAccessScope.ALL_PLANS,
+  qualityGate: {
+    status: 'approved',
+    label: '承認済み',
+    summary: 'source ledgerとcontent QAの両方を通過しています。',
+    isApprovedForLearner: true,
+    isSelectableForToday: true,
+    blockingReasons: [],
+    warnings: [],
+  },
 });
 
 const makeWord = (bookId: string, number: number): WordData => ({

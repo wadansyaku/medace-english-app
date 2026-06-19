@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { useStudentDashboardViewModel } from '../hooks/useStudentDashboardViewModel';
+import {
+  resolveStudentDashboardPrimaryLearningRouteId,
+  resolveStudentDashboardPrimaryTaskId,
+  type StudentDashboardPrimaryTaskDecisionInput,
+  useStudentDashboardViewModel,
+} from '../hooks/useStudentDashboardViewModel';
 import { getTodayDateKey } from '../utils/date';
 import {
   BookCatalogSource,
@@ -29,6 +34,15 @@ const makeBook = (id: string, title: string): BookMetadata => ({
   wordCount: 120,
   isPriority: false,
   catalogSource: BookCatalogSource.LICENSED_PARTNER,
+  qualityGate: {
+    status: 'approved',
+    label: '承認済み',
+    summary: 'source ledgerとcontent QAの両方を通過しています。',
+    isApprovedForLearner: true,
+    isSelectableForToday: true,
+    blockingReasons: [],
+    warnings: [],
+  },
 });
 
 const withQualityGate = (book: BookMetadata, approved: boolean): BookMetadata => ({
@@ -191,6 +205,87 @@ const makeCoachNotification = (overrides: Partial<InstructorNotification> = {}):
 });
 
 describe('useStudentDashboardViewModel', () => {
+  it.each([
+    {
+      label: 'no study books',
+      input: { hasStudyBooks: false, remainingWords: 12 },
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
+    },
+    {
+      label: 'actionable writing',
+      input: { hasActionableWriting: true, hasActiveMission: true },
+      primaryTaskId: 'writing',
+      primaryLearningRouteId: 'writing',
+    },
+    {
+      label: 'active mission',
+      input: { hasActiveMission: true, hasActionableCoachNotification: true },
+      primaryTaskId: 'mission',
+      primaryLearningRouteId: 'mission',
+    },
+    {
+      label: 'actionable coach',
+      input: { hasActionableCoachNotification: true },
+      primaryTaskId: 'coach',
+      primaryLearningRouteId: 'today',
+    },
+    {
+      label: 'english practice priority',
+      input: { shouldPrioritizePractice: true, remainingWords: 8 },
+      primaryTaskId: 'englishPractice',
+      primaryLearningRouteId: 'englishPractice',
+    },
+    {
+      label: 'remaining daily words',
+      input: { remainingWords: 8, hasWeaknessSignals: true },
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
+    },
+    {
+      label: 'weakness signals after daily work',
+      input: { hasWeaknessSignals: true },
+      primaryTaskId: 'weakness',
+      primaryLearningRouteId: 'weakness',
+    },
+    {
+      label: 'B2B writing section without an urgent submission',
+      input: { canShowWritingSection: true },
+      primaryTaskId: 'writing',
+      primaryLearningRouteId: 'writing',
+    },
+    {
+      label: 'fallback today',
+      input: {},
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
+    },
+  ] satisfies Array<{
+    label: string;
+    input: Partial<StudentDashboardPrimaryTaskDecisionInput>;
+    primaryTaskId: ReturnType<typeof resolveStudentDashboardPrimaryTaskId>;
+    primaryLearningRouteId: ReturnType<typeof resolveStudentDashboardPrimaryLearningRouteId>;
+  }>)('keeps the primary task priority matrix explicit: $label', ({
+    input,
+    primaryTaskId,
+    primaryLearningRouteId,
+  }) => {
+    const baseline: StudentDashboardPrimaryTaskDecisionInput = {
+      hasStudyBooks: true,
+      hasActionableWriting: false,
+      hasActiveMission: false,
+      hasActionableCoachNotification: false,
+      shouldPrioritizePractice: false,
+      remainingWords: 0,
+      hasWeaknessSignals: false,
+      canShowWritingSection: false,
+    };
+    const decisionInput = { ...baseline, ...input };
+
+    expect(resolveStudentDashboardPrimaryTaskId(decisionInput)).toBe(primaryTaskId);
+    expect(resolveStudentDashboardPrimaryLearningRouteId(decisionInput)).toBe(primaryLearningRouteId);
+  });
+
   it('surfaces a single primary recommended book and keeps the rest secondary', () => {
     const books = [
       makeBook('book-1', 'Core 1'),
@@ -263,9 +358,45 @@ describe('useStudentDashboardViewModel', () => {
 
     expect(viewModel.hasStudyBooks).toBe(false);
     expect(viewModel.blockedOfficialBookCount).toBe(1);
+    expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.heroTitle).toBe('配布教材を確認中');
     expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今はMy単語帳で始められます。');
     expect(viewModel.questButtonLabel).toBe('My単語帳を作る');
+    expect(asCanonicalTasks(viewModel).primaryTask).toMatchObject({
+      id: 'today',
+      routeId: 'today',
+      ctaLabel: 'My単語帳を作る',
+    });
+  });
+
+  it('keeps official books without quality gates out of learner planning', () => {
+    const snapshot = buildSnapshot({
+      officialBooks: [
+        {
+          ...makeBook('ungated-book', 'Ungated'),
+          qualityGate: undefined,
+        },
+        makeBook('approved-book', 'Approved'),
+      ],
+      learningPlan: {
+        uid: 'student-1',
+        createdAt: Date.now(),
+        targetDate: '2026-04-30',
+        goalDescription: 'goal',
+        dailyWordGoal: 12,
+        selectedBookIds: ['ungated-book'],
+        status: 'ACTIVE',
+      },
+    });
+
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot,
+    });
+
+    expect(viewModel.blockedOfficialBookCount).toBe(1);
+    expect(viewModel.plannedBooks.map((book) => book.id)).toEqual(['approved-book']);
+    expect(viewModel.primaryRecommendedBook?.id).toBe('approved-book');
   });
 
   it('prioritizes actionable writing when the mission requires a submission', () => {

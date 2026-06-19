@@ -1,6 +1,6 @@
 -- Production baseline query pack for medace-db.
 -- Run with:
--- node node_modules/wrangler/bin/wrangler.js d1 execute medace-db --remote --file=./scripts/analysis/production-baseline.sql --json
+-- npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json
 
 -- User and organization mix
 SELECT role, subscription_plan, COUNT(*) AS users

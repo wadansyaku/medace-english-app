@@ -1,69 +1,116 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import process from 'node:process';
+
+import { extractWranglerJson } from './run-d1-content-qa.mjs';
 
 const DEFAULT_DATABASE = 'medace-db';
 const WRANGLER_PATH = 'node_modules/wrangler/bin/wrangler.js';
 
-const parseArgs = (argv) => {
+export const parseCliArgs = (argv) => {
   const options = {
     database: DEFAULT_DATABASE,
+    mode: null,
+    outputPath: null,
+    persistTo: null,
+    compact: false,
+    help: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === '--database') {
-      options.database = argv[index + 1] || DEFAULT_DATABASE;
+    const nextValue = () => {
       index += 1;
+      if (index >= argv.length) throw new Error(`${arg} requires a value.`);
+      return argv[index];
+    };
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+    } else if (arg === '--database') {
+      options.database = nextValue();
+    } else if (arg === '--remote' || arg === '--local') {
+      const mode = arg.slice(2);
+      if (options.mode && options.mode !== mode) throw new Error('Pass only one of --remote or --local.');
+      options.mode = mode;
+    } else if (arg === '--output' || arg === '-o') {
+      options.outputPath = nextValue();
+    } else if (arg === '--persist-to') {
+      options.persistTo = nextValue();
+    } else if (arg === '--compact') {
+      options.compact = true;
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
     }
+  }
+
+  if (options.help) return options;
+  if (!options.database) throw new Error('--database must not be empty.');
+  if (!options.mode) throw new Error('Pass either --remote or --local explicitly.');
+  if (options.mode === 'remote' && options.persistTo) {
+    throw new Error('--persist-to can only be used with --local.');
   }
 
   return options;
 };
 
-const extractJson = (raw) => {
-  const arrayIndex = raw.indexOf('[');
-  const objectIndex = raw.indexOf('{');
-  const start = [arrayIndex, objectIndex]
-    .filter((value) => value >= 0)
-    .sort((left, right) => left - right)[0];
-
-  if (start === undefined) {
-    throw new Error(`Failed to parse Wrangler JSON output.\n${raw}`);
-  }
-
-  return JSON.parse(raw.slice(start));
+export const normalizeD1StatementResults = (payload) => {
+  const entries = Array.isArray(payload) ? payload : [payload];
+  return entries.flatMap((entry) => {
+    if (Array.isArray(entry?.result)) return entry.result;
+    return [entry];
+  }).map((entry) => ({
+    success: entry?.success !== false,
+    results: Array.isArray(entry?.results) ? entry.results : [],
+    meta: entry?.meta || null,
+    error: entry?.error || entry?.errors || null,
+  }));
 };
 
-const runQuery = (database, sql) => {
-  const raw = execFileSync(
-    'node',
-    [
-      WRANGLER_PATH,
-      'd1',
-      'execute',
-      database,
-      '--remote',
-      '--command',
-      sql,
-      '--json',
-    ],
-    {
+const runWranglerQuery = (options, sql) => {
+  const args = [
+    WRANGLER_PATH,
+    'd1',
+    'execute',
+    options.database,
+    '--command',
+    sql,
+    '--json',
+  ];
+  if (options.mode === 'remote') args.splice(4, 0, '--remote');
+  if (options.mode === 'local') args.splice(4, 0, '--local');
+  if (options.mode === 'local' && options.persistTo) {
+    args.push('--persist-to', options.persistTo);
+  }
+
+  let raw;
+  try {
+    raw = execFileSync(process.execPath, args, {
       cwd: process.cwd(),
       encoding: 'utf8',
       env: {
         ...process.env,
         CI: '1',
+        FORCE_COLOR: '0',
       },
-      maxBuffer: 16 * 1024 * 1024,
-    },
-  );
+      maxBuffer: 128 * 1024 * 1024,
+    });
+  } catch (error) {
+    const details = [
+      error?.message,
+      error?.stdout,
+      error?.stderr,
+    ].filter(Boolean).join('\n');
+    throw new Error(details || 'Failed to query D1 production baseline.');
+  }
 
-  return extractJson(raw);
+  return normalizeD1StatementResults(extractWranglerJson(raw));
 };
 
-const querySections = [
+export const querySections = [
   {
     name: 'user_mix',
     sql: "SELECT role, subscription_plan, COUNT(*) AS users FROM users GROUP BY role, subscription_plan ORDER BY role, subscription_plan;",
@@ -142,22 +189,100 @@ const querySections = [
   },
 ];
 
-const main = () => {
-  const options = parseArgs(process.argv.slice(2));
-  const report = {
-    generatedAt: new Date().toISOString(),
-    database: options.database,
-    sections: querySections.map((section) => ({
-      name: section.name,
-      queryResults: runQuery(options.database, section.sql).map((result) => ({
-        success: result.success,
-        results: result.results,
-        meta: result.meta,
-      })),
-    })),
-  };
+const errorMessage = (error) => error?.message || String(error);
 
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+export const generateProductionBaselineReport = (
+  options,
+  runQuery = runWranglerQuery,
+  generatedAt = new Date(),
+) => ({
+  generatedAt: generatedAt.toISOString(),
+  database: options.database,
+  mode: options.mode,
+  sections: querySections.map((section) => {
+    try {
+      return {
+        name: section.name,
+        queryResults: runQuery(options, section.sql),
+      };
+    } catch (error) {
+      return {
+        name: section.name,
+        queryResults: [],
+        error: errorMessage(error),
+      };
+    }
+  }),
+});
+
+export const evaluateProductionBaselineReport = (report) => {
+  const errors = [];
+
+  report.sections.forEach((section) => {
+    if (section.error) {
+      errors.push(`${section.name}: ${section.error}`);
+      return;
+    }
+    section.queryResults.forEach((result, index) => {
+      if (result.success === false) {
+        errors.push(`${section.name}[${index}]: ${JSON.stringify(result.error || result.meta || 'query failed')}`);
+      }
+    });
+  });
+
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
 };
 
-main();
+const usage = () => `Usage: node scripts/analysis/run-production-baseline.mjs --remote|--local [--database medace-db]
+
+Generates a JSON production baseline report from read-only D1 queries and exits non-zero when any query section fails.
+Options:
+  --database <name>   D1 database name. Default: medace-db.
+  --remote            Query remote D1. Must be explicit.
+  --local             Query local D1. Must be explicit.
+  -o, --output <path> Write JSON report to file.
+  --persist-to <dir>  Local D1 persist directory. Only with --local.
+  --compact           Print compact JSON.
+  --help              Show this help.
+`;
+
+export const runCli = async (argv = process.argv.slice(2), runQuery = runWranglerQuery) => {
+  const options = parseCliArgs(argv);
+  if (options.help) {
+    process.stdout.write(usage());
+    return 0;
+  }
+
+  const report = generateProductionBaselineReport(options, runQuery);
+  const evaluation = evaluateProductionBaselineReport(report);
+  const payload = {
+    ...report,
+    ok: evaluation.ok,
+    errors: evaluation.errors,
+  };
+  const json = JSON.stringify(payload, null, options.compact ? 0 : 2);
+
+  if (options.outputPath) {
+    await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
+    await fs.writeFile(options.outputPath, `${json}\n`, 'utf8');
+  } else {
+    process.stdout.write(`${json}\n`);
+  }
+
+  return evaluation.ok ? 0 : 1;
+};
+
+const isMain = process.argv[1]?.endsWith('/run-production-baseline.mjs')
+  || process.argv[1]?.endsWith('\\run-production-baseline.mjs');
+
+if (isMain) {
+  runCli().then((exitCode) => {
+    process.exitCode = exitCode;
+  }).catch((error) => {
+    process.stderr.write(`${error?.message || error}\n`);
+    process.exitCode = 1;
+  });
+}

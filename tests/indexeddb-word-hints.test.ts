@@ -46,6 +46,20 @@ const createRequest = <T>(result?: T, error?: Error) => {
   return request as IDBRequest<T>;
 };
 
+const createCompletingTransaction = () => {
+  let oncomplete: ((event: Event) => void) | null = null;
+  return {
+    error: null,
+    get oncomplete() {
+      return oncomplete;
+    },
+    set oncomplete(handler) {
+      oncomplete = handler;
+      queueMicrotask(() => handler?.(new Event('complete')));
+    },
+  } as unknown as IDBTransaction;
+};
+
 const createWord = (): WordData => ({
   id: 'word-1',
   bookId: 'book-1',
@@ -69,6 +83,7 @@ describe('IndexedDBStorageService word hints', () => {
     } as unknown as IDBObjectStore;
     const writeStore = {
       put: putMock,
+      transaction: createCompletingTransaction(),
     } as unknown as IDBObjectStore;
     const getStoreMock = vi.fn(async (_storeName: string, mode: IDBTransactionMode = 'readonly') => (
       mode === 'readwrite' ? writeStore : readStore

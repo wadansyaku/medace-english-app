@@ -22,6 +22,7 @@ interface QuizRunningViewProps {
   currentQIndex: number;
   questionsLength: number;
   score: number;
+  questionSourceNotice?: string | null;
   isHintMode: boolean;
   showSpellingHint: boolean;
   showOptions: boolean;
@@ -52,6 +53,14 @@ interface QuizRunningViewProps {
   onAdvanceAfterTranslationFeedback: () => void;
 }
 
+type QuestionQualityTone = NonNullable<GeneratedWorksheetQuestion['qualityState']>['tone'];
+
+const QUESTION_QUALITY_BADGE_CLASSES: Record<QuestionQualityTone, string> = {
+  approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  pending: 'border-amber-200 bg-amber-50 text-amber-800',
+  curated: 'border-slate-200 bg-slate-50 text-slate-600',
+};
+
 const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   currentQuestion,
   currentModeLabel,
@@ -59,6 +68,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   currentQIndex,
   questionsLength,
   score,
+  questionSourceNotice,
   isHintMode,
   showSpellingHint,
   showOptions,
@@ -133,6 +143,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   const translationAdvanceLabel = currentQIndex < questionsLength - 1
     ? 'フィードバックを読んだので次へ'
     : 'フィードバックを読んだので結果を見る';
+  const questionQualityState = currentQuestion.qualityState;
 
   return (
   <div data-testid="quiz-running-view" className="space-y-4">
@@ -157,10 +168,31 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       </div>
     </section>
 
+    {questionSourceNotice && (
+      <div
+        className="flex items-start gap-2 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold leading-relaxed text-medace-900"
+        data-testid="quiz-question-source-notice"
+      >
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-medace-700" />
+        <span>{questionSourceNotice}</span>
+      </div>
+    )}
+
     <section data-testid="quiz-question-card" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-      <span className="block text-xs font-bold uppercase tracking-widest text-slate-400">
-        {currentQuestion.promptLabel}
-      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+          {currentQuestion.promptLabel}
+        </span>
+        {questionQualityState && (
+          <span
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-black ${QUESTION_QUALITY_BADGE_CLASSES[questionQualityState.tone]}`}
+            data-testid="quiz-question-quality-state"
+            title={questionQualityState.messageJa}
+          >
+            {questionQualityState.labelJa}
+          </span>
+        )}
+      </div>
       <h2 className="mt-3 text-3xl font-black leading-tight text-slate-800 sm:text-4xl">
         {currentQuestion.promptText}
       </h2>

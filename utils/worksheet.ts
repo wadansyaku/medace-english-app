@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { GRAMMAR_WORKSHEET_MODES } from '../config/grammarCurriculum';
 import { getBookProgressionIndex } from '../shared/bookProgression';
+import type { LearnerAiQuestionQualityState } from '../shared/aiCacheCbt';
 import { buildGrammarScopeExplanation } from './grammarScope';
 import {
   buildGrammarPracticeItemsForWord,
@@ -54,6 +55,7 @@ export interface GeneratedWorksheetQuestion {
   showGrammarScopeHint?: boolean;
   generatedProblemId?: string;
   aiContentId?: string;
+  qualityState?: LearnerAiQuestionQualityState;
   instruction?: string;
   hintPrefix?: string;
   maskedAnswer?: string;
