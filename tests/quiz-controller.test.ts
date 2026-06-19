@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyCuratedStaticQualityState,
+  buildAiGrammarQuestionSourceNotice,
+  createInitialQuizAttemptState,
   createPendingQuizAttempt,
+  quizAttemptReducer,
   resolveQuizAdvanceTarget,
   shouldAutoAdvanceQuizAttempt,
   upsertQuestionFeedbackById,
 } from '../hooks/useQuizModeController';
+import { getLearnerAiQuestionQualityState } from '../shared/aiCacheCbt';
 import type { JapaneseTranslationFeedback } from '../types';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 
@@ -54,6 +59,37 @@ describe('quiz controller translation advance policy', () => {
     expect(resolveQuizAdvanceTarget(1, 2)).toBe('RESULT');
   });
 
+  it('describes approved-AI shortage without exposing review internals', () => {
+    expect(buildAiGrammarQuestionSourceNotice(2, 1)).toBe('確認済みのAI問題が足りないため、例文ベースの問題も使います。');
+    expect(buildAiGrammarQuestionSourceNotice(0, 3)).toBe('確認済みのAI問題がまだないため、今回は例文ベースの問題を使います。');
+    expect(buildAiGrammarQuestionSourceNotice(3, 0)).toBeNull();
+  });
+
+  it('marks static grammar fallbacks as curated without overwriting existing quality state', () => {
+    const approvedState = getLearnerAiQuestionQualityState('APPROVED_REUSE');
+    const questions = applyCuratedStaticQualityState([
+      {
+        ...translationQuestion,
+        id: 'static-fallback-1',
+        qualityState: undefined,
+      },
+      {
+        ...translationQuestion,
+        id: 'approved-reuse-1',
+        qualityState: approvedState,
+      },
+    ]);
+
+    expect(questions[0].qualityState).toMatchObject({
+      status: 'CURATED_STATIC',
+      labelJa: '教材問題',
+      tone: 'curated',
+      isLearnerApproved: true,
+      isReusable: true,
+    });
+    expect(questions[1].qualityState).toBe(approvedState);
+  });
+
   it('preserves explicit advance behavior when retrying a saved translation attempt', () => {
     const feedback = buildFeedback();
     const pendingAttempt = createPendingQuizAttempt({
@@ -98,6 +134,186 @@ describe('quiz controller translation advance policy', () => {
       isCorrect: false,
       score: 5,
       verdictLabel: '要復習',
+    });
+  });
+});
+
+describe('quiz attempt reducer', () => {
+  it('resets the full attempt state for a new session', () => {
+    const feedback = buildFeedback();
+    const pendingAttempt = createPendingQuizAttempt({
+      mode: 'JA_TRANSLATION_INPUT',
+      correct: false,
+      responseTimeMs: 1400,
+      feedback,
+      advanceAutomatically: false,
+    });
+    let state = createInitialQuizAttemptState();
+    state = quizAttemptReducer(state, { type: 'SET_SHOW_OPTIONS', value: true });
+    state = quizAttemptReducer(state, { type: 'SELECT_OPTION', option: 'choice-a' });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'token-1', answerTokenCount: 2 });
+    state = quizAttemptReducer(state, { type: 'SET_ORDER_FEEDBACK', value: 'incorrect' });
+    state = quizAttemptReducer(state, { type: 'SET_ANSWER_INPUT', value: 'その語は復習される' });
+    state = quizAttemptReducer(state, {
+      type: 'SET_INPUT_FEEDBACK',
+      result: 'incorrect',
+      tone: 'incorrect',
+      message: '不正解です。',
+    });
+    state = quizAttemptReducer(state, { type: 'SHOW_SPELLING_HINT', message: 'ヒントを表示しました。' });
+    state = quizAttemptReducer(state, {
+      type: 'SET_CHECKING_TRANSLATION_FEEDBACK',
+      value: true,
+      message: '受験答案として採点中です...',
+    });
+    state = quizAttemptReducer(state, {
+      type: 'SET_TRANSLATION_RESULT',
+      feedback,
+      result: 'incorrect',
+      message: '部分点: 受け身を補います。',
+    });
+    state = quizAttemptReducer(state, { type: 'PERSIST_STARTED', attempt: pendingAttempt });
+    state = quizAttemptReducer(state, { type: 'PERSIST_FAILED', message: '保存できませんでした。' });
+    state = quizAttemptReducer(state, { type: 'SET_TRANSLATION_AWAITING_ADVANCE', value: true });
+
+    expect(quizAttemptReducer(state, { type: 'RESET_FOR_SESSION' })).toEqual(createInitialQuizAttemptState());
+  });
+
+  it('resets question UI state while preserving retryable save state between questions', () => {
+    const pendingAttempt = createPendingQuizAttempt({
+      mode: 'JA_TRANSLATION_ORDER',
+      correct: false,
+      responseTimeMs: 900,
+    });
+    let state = createInitialQuizAttemptState();
+    state = quizAttemptReducer(state, { type: 'SET_SHOW_OPTIONS', value: true });
+    state = quizAttemptReducer(state, { type: 'SELECT_OPTION', option: 'choice-a' });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'token-1', answerTokenCount: 2 });
+    state = quizAttemptReducer(state, { type: 'SET_ORDER_FEEDBACK', value: 'incorrect' });
+    state = quizAttemptReducer(state, { type: 'SET_ANSWER_INPUT', value: 'wrong answer' });
+    state = quizAttemptReducer(state, { type: 'SHOW_SPELLING_HINT', message: 'hint' });
+    state = quizAttemptReducer(state, { type: 'PERSIST_STARTED', attempt: pendingAttempt });
+    state = { ...state, saveError: '保存できませんでした。' };
+
+    const nextState = quizAttemptReducer(state, { type: 'RESET_FOR_NEXT_QUESTION' });
+
+    expect(nextState).toMatchObject({
+      showOptions: false,
+      selectedOption: null,
+      orderedTokenIds: [],
+      orderFeedback: null,
+      answerInput: '',
+      inputResult: null,
+      showSpellingHint: false,
+      spellingFeedbackTone: null,
+      spellingFeedbackMessage: null,
+      translationFeedback: null,
+      checkingTranslationFeedback: false,
+      translationAwaitingAdvance: false,
+      saveError: null,
+      pendingAttempt,
+      persistingAttempt: true,
+    });
+    expect(nextState.pendingAttempt).toBe(pendingAttempt);
+  });
+
+  it('updates ordering tokens with duplicate, limit, movement, removal, and clear guards', () => {
+    let state = createInitialQuizAttemptState();
+
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'a', answerTokenCount: 3 });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'b', answerTokenCount: 3 });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'b', answerTokenCount: 3 });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'c', answerTokenCount: 3 });
+    state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId: 'd', answerTokenCount: 3 });
+    expect(state.orderedTokenIds).toEqual(['a', 'b', 'c']);
+
+    state = quizAttemptReducer(state, { type: 'MOVE_ORDER_TOKEN', tokenId: 'c', direction: -1 });
+    expect(state.orderedTokenIds).toEqual(['a', 'c', 'b']);
+
+    state = quizAttemptReducer(state, { type: 'MOVE_ORDER_TOKEN', tokenId: 'a', direction: -1 });
+    expect(state.orderedTokenIds).toEqual(['a', 'c', 'b']);
+
+    state = quizAttemptReducer(state, { type: 'REMOVE_ORDER_TOKEN', tokenId: 'c' });
+    expect(state.orderedTokenIds).toEqual(['a', 'b']);
+
+    state = quizAttemptReducer(state, { type: 'CLEAR_ORDER_TOKENS' });
+    expect(state.orderedTokenIds).toEqual([]);
+  });
+
+  it('keeps translation scoring state compatible with explicit advance and retry metadata', () => {
+    const feedback = buildFeedback({
+      isCorrect: false,
+      score: 7,
+      verdictLabel: '惜しい',
+      summaryJa: '意味は近いですが、受け身の訳出が不足しています。',
+    });
+    const pendingAttempt = createPendingQuizAttempt({
+      mode: 'JA_TRANSLATION_INPUT',
+      correct: false,
+      responseTimeMs: 1600,
+      feedback,
+      advanceAutomatically: false,
+    });
+    let state = createInitialQuizAttemptState();
+    state = {
+      ...state,
+      pendingAttempt,
+      saveError: '保存できませんでした。',
+      persistingAttempt: false,
+    };
+
+    state = quizAttemptReducer(state, {
+      type: 'SET_CHECKING_TRANSLATION_FEEDBACK',
+      value: true,
+      message: '受験答案として採点中です...',
+    });
+    expect(state).toMatchObject({
+      checkingTranslationFeedback: true,
+      spellingFeedbackTone: 'info',
+      spellingFeedbackMessage: '受験答案として採点中です...',
+      saveError: '保存できませんでした。',
+      persistingAttempt: false,
+    });
+    expect(state.pendingAttempt).toBe(pendingAttempt);
+
+    state = quizAttemptReducer(state, { type: 'SET_CHECKING_TRANSLATION_FEEDBACK', value: false });
+    state = quizAttemptReducer(state, {
+      type: 'SET_TRANSLATION_RESULT',
+      feedback,
+      result: 'incorrect',
+      message: '惜しい: 意味は近いですが、受け身の訳出が不足しています。',
+    });
+    state = quizAttemptReducer(state, { type: 'SET_TRANSLATION_AWAITING_ADVANCE', value: true });
+
+    expect(state).toMatchObject({
+      checkingTranslationFeedback: false,
+      translationFeedback: feedback,
+      inputResult: 'incorrect',
+      spellingFeedbackTone: 'incorrect',
+      spellingFeedbackMessage: '惜しい: 意味は近いですが、受け身の訳出が不足しています。',
+      translationAwaitingAdvance: true,
+      pendingAttempt,
+      persistingAttempt: false,
+      saveError: '保存できませんでした。',
+    });
+    expect(state.pendingAttempt).toBe(pendingAttempt);
+  });
+
+  it('keeps a pending attempt available when persistence fails', () => {
+    const pendingAttempt = createPendingQuizAttempt({
+      mode: 'SPELLING_HINT',
+      correct: false,
+      responseTimeMs: 700,
+    });
+    let state = createInitialQuizAttemptState();
+
+    state = quizAttemptReducer(state, { type: 'PERSIST_STARTED', attempt: pendingAttempt });
+    state = quizAttemptReducer(state, { type: 'PERSIST_FAILED', message: '保存できませんでした。' });
+
+    expect(state).toMatchObject({
+      pendingAttempt,
+      persistingAttempt: false,
+      saveError: '保存できませんでした。',
     });
   });
 });

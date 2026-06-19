@@ -6,14 +6,78 @@ export type AssessmentItemReviewStatus = 'PENDING' | 'APPROVED' | 'NEEDS_REVIEW'
 
 export type ReusableAiProblemReviewBucket = 'APPROVED' | 'LEGACY_READY' | 'BLOCKED';
 
+export type LearnerAiQuestionQualityStatus =
+  | 'APPROVED_REUSE'
+  | 'LIVE_DRAFT_REVIEW_REQUIRED'
+  | 'CURATED_STATIC';
+
+export type ReusableAiProblemReviewReason =
+  | 'APPROVED_FOR_REUSE'
+  | 'LEGACY_READY_REQUIRES_REVIEW'
+  | 'CONTENT_NEEDS_REVIEW'
+  | 'CONTENT_REJECTED'
+  | 'ASSESSMENT_PENDING'
+  | 'ASSESSMENT_NEEDS_REVIEW'
+  | 'ASSESSMENT_REJECTED';
+
 export const DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS: AiGeneratedContentQualityStatus = 'NEEDS_REVIEW';
 
 export const DEFAULT_ASSESSMENT_ITEM_REVIEW_STATUS: AssessmentItemReviewStatus = 'PENDING';
+
+export interface LearnerAiQuestionQualityState {
+  status: LearnerAiQuestionQualityStatus;
+  labelJa: string;
+  messageJa: string;
+  tone: 'approved' | 'pending' | 'curated';
+  isLearnerApproved: boolean;
+  isReusable: boolean;
+}
+
+export const LEARNER_AI_QUESTION_QUALITY_STATES: Record<LearnerAiQuestionQualityStatus, LearnerAiQuestionQualityState> = {
+  APPROVED_REUSE: {
+    status: 'APPROVED_REUSE',
+    labelJa: 'レビュー済み問題',
+    messageJa: '内容確認済みの生成問題です。',
+    tone: 'approved',
+    isLearnerApproved: true,
+    isReusable: true,
+  },
+  LIVE_DRAFT_REVIEW_REQUIRED: {
+    status: 'LIVE_DRAFT_REVIEW_REQUIRED',
+    labelJa: '確認待ち',
+    messageJa: 'この生成問題は再利用前に確認されます。',
+    tone: 'pending',
+    isLearnerApproved: false,
+    isReusable: false,
+  },
+  CURATED_STATIC: {
+    status: 'CURATED_STATIC',
+    labelJa: '教材問題',
+    messageJa: '教材データから作成した問題です。',
+    tone: 'curated',
+    isLearnerApproved: true,
+    isReusable: true,
+  },
+};
+
+export const getLearnerAiQuestionQualityState = (
+  status: LearnerAiQuestionQualityStatus,
+): LearnerAiQuestionQualityState => ({
+  ...LEARNER_AI_QUESTION_QUALITY_STATES[status],
+});
 
 export interface AiProblemReviewStateInput {
   contentQualityStatus: AiGeneratedContentQualityStatus | null;
   assessmentReviewStatus?: AssessmentItemReviewStatus | null;
   hasAssessmentMetadata: boolean;
+}
+
+export interface ReusableAiProblemReviewDecision {
+  bucket: ReusableAiProblemReviewBucket;
+  isReusable: boolean;
+  reason: ReusableAiProblemReviewReason;
+  labelJa: string;
+  operatorMessageJa: string;
 }
 
 export interface AiCacheKeyInput {
@@ -46,15 +110,84 @@ export interface CbtDifficultyBand {
 export const classifyReusableAiProblemReviewState = (
   input: AiProblemReviewStateInput,
 ): ReusableAiProblemReviewBucket => {
-  if (input.contentQualityStatus !== 'READY') return 'BLOCKED';
-  if (input.assessmentReviewStatus === 'APPROVED') return 'APPROVED';
-  if (!input.hasAssessmentMetadata) return 'LEGACY_READY';
-  return 'BLOCKED';
+  return describeReusableAiProblemReviewState(input).bucket;
 };
 
 export const isReusableAiProblemReviewState = (input: AiProblemReviewStateInput): boolean => (
-  classifyReusableAiProblemReviewState(input) === 'APPROVED'
+  describeReusableAiProblemReviewState(input).isReusable
 );
+
+export const describeReusableAiProblemReviewState = (
+  input: AiProblemReviewStateInput,
+): ReusableAiProblemReviewDecision => {
+  if (input.contentQualityStatus === 'REJECTED') {
+    return {
+      bucket: 'BLOCKED',
+      isReusable: false,
+      reason: 'CONTENT_REJECTED',
+      labelJa: '再利用停止',
+      operatorMessageJa: 'AI生成内容が却下済みです。学習者には再利用しません。',
+    };
+  }
+
+  if (input.contentQualityStatus !== 'READY') {
+    return {
+      bucket: 'BLOCKED',
+      isReusable: false,
+      reason: 'CONTENT_NEEDS_REVIEW',
+      labelJa: '内容レビュー待ち',
+      operatorMessageJa: 'AI生成内容の品質レビューが未完了です。承認まで再利用しません。',
+    };
+  }
+
+  if (input.assessmentReviewStatus === 'APPROVED') {
+    return {
+      bucket: 'APPROVED',
+      isReusable: true,
+      reason: 'APPROVED_FOR_REUSE',
+      labelJa: '再利用可',
+      operatorMessageJa: '内容レビューと assessment item metadata の承認が完了しています。',
+    };
+  }
+
+  if (!input.hasAssessmentMetadata) {
+    return {
+      bucket: 'LEGACY_READY',
+      isReusable: false,
+      reason: 'LEGACY_READY_REQUIRES_REVIEW',
+      labelJa: '旧READY確認待ち',
+      operatorMessageJa: '旧形式のREADY問題です。metadata 承認を作るまで新規出題には再利用しません。',
+    };
+  }
+
+  if (input.assessmentReviewStatus === 'REJECTED') {
+    return {
+      bucket: 'BLOCKED',
+      isReusable: false,
+      reason: 'ASSESSMENT_REJECTED',
+      labelJa: '問題レビュー却下',
+      operatorMessageJa: 'assessment item metadata が却下済みです。学習者には再利用しません。',
+    };
+  }
+
+  if (input.assessmentReviewStatus === 'NEEDS_REVIEW') {
+    return {
+      bucket: 'BLOCKED',
+      isReusable: false,
+      reason: 'ASSESSMENT_NEEDS_REVIEW',
+      labelJa: '問題レビュー要確認',
+      operatorMessageJa: 'assessment item metadata が要確認です。承認まで再利用しません。',
+    };
+  }
+
+  return {
+    bucket: 'BLOCKED',
+    isReusable: false,
+    reason: 'ASSESSMENT_PENDING',
+    labelJa: '問題レビュー待ち',
+    operatorMessageJa: 'assessment item metadata のレビューが未完了です。承認まで再利用しません。',
+  };
+};
 
 export const clampCbtLevel = (value: number): number => {
   if (!Number.isFinite(value)) return 0.5;

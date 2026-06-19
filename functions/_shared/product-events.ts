@@ -26,6 +26,7 @@ export const PRODUCT_EVENT_FEATURE_AREAS: Record<ProductEventName, string> = {
   group_admin_created_first_mission: 'organization_activation',
   instructor_notification_sent: 'organization_activation',
   writing_assignment_created: 'writing',
+  writing_assignment_issued: 'writing',
   writing_submission_received: 'writing',
   writing_review_completed: 'writing',
 };

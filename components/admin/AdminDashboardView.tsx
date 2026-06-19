@@ -69,6 +69,12 @@ const getAnalyticsStatus = (updatedAt: number) => {
   };
 };
 
+const funnelSeverityTone = (severity: 'ok' | 'watch' | 'blocked'): string => {
+  if (severity === 'blocked') return 'border-red-200 bg-red-50 text-red-800';
+  if (severity === 'watch') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+};
+
 const MetricCard: React.FC<{
   label: string;
   value: string;
@@ -112,10 +118,15 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     ? Math.round((overview.studentsWithPlan / overview.totalStudents) * 100)
     : 0;
   const materialQualityIssueCount = snapshot
-    ? snapshot.materialQuality.reviewRequiredBookCount + snapshot.materialQuality.qaBlockedBookCount + snapshot.materialQuality.missingLedgerBookCount
+    ? snapshot.materialQuality.warningBookCount
+      + snapshot.materialQuality.reviewRequiredBookCount
+      + snapshot.materialQuality.qaBlockedBookCount
+      + snapshot.materialQuality.missingLedgerBookCount
     : 0;
   const hasMaterialQualityQueue = Boolean(snapshot && (
-    materialQualityIssueCount > 0 || snapshot.topBooks.some((book) => book.qualityGate && !book.qualityGate.isApprovedForLearner)
+    materialQualityIssueCount > 0 || snapshot.topBooks.some((book) => book.qualityGate && (
+      !book.qualityGate.isApprovedForLearner || book.qualityGate.warnings.length > 0
+    ))
   ));
 
   return (
@@ -253,23 +264,40 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 </div>
               )}
               <div className="mt-5 space-y-3">
-                {[
-                  ['組織数', snapshot.activationFunnel.totalOrganizations],
-                  ['クラス作成', snapshot.activationFunnel.organizationsWithCohortCount],
-                  ['担当割当', snapshot.activationFunnel.organizationsWithAssignmentCount],
-                  ['初回ミッション', snapshot.activationFunnel.organizationsWithMissionCount],
-                  ['初回通知', snapshot.activationFunnel.organizationsWithNotificationCount],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <span className="text-sm font-bold text-slate-700">{label}</span>
-                    <span className="text-lg font-black text-slate-950">{value}</span>
+                <div className={`rounded-2xl border px-4 py-4 text-sm ${funnelSeverityTone(snapshot.activationFunnel.weakestGap?.severity || 'ok')}`}>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em]">最大の欠測</div>
+                  <div className="mt-1 text-base font-black">
+                    {snapshot.activationFunnel.weakestGap
+                      ? `${snapshot.activationFunnel.weakestGap.label}で ${snapshot.activationFunnel.weakestGap.dropOffCount} 組織`
+                      : '導入ファネルの欠測なし'}
+                  </div>
+                  <div className="mt-1 text-xs opacity-90">
+                    初回作文配布までの到達率 {snapshot.activationFunnel.completionRate}%。
+                  </div>
+                </div>
+                {snapshot.activationFunnel.steps.map((step) => (
+                  <div key={step.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-slate-700">{step.label}</span>
+                      <span className="text-lg font-black text-slate-950">{step.count}</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+                      <div className="h-full rounded-full bg-medace-500" style={{ width: `${step.conversionRate}%` }}></div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+                      <span>前段階から {step.conversionRate}%</span>
+                      <span>欠測 {step.dropOffCount}</span>
+                    </div>
                   </div>
                 ))}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
                   フォーム open {snapshot.activationFunnel.commercialFormOpenCount30d} 件 / 相談送信 {snapshot.activationFunnel.commercialRequestCount30d} 件
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                  作成 {snapshot.activationFunnel.writingAssignmentsCreated30d} 件 / 提出 {snapshot.activationFunnel.writingSubmissionsReceived30d} 件 / 返却 {snapshot.activationFunnel.writingReviewsCompleted30d} 件
+                  30日内の進行: クラス {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedCohort} / 担当 {snapshot.activationFunnel.activationVelocity30d.organizationsAssignedStudent} / ミッション {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedFirstMission} / 通知 {snapshot.activationFunnel.activationVelocity30d.organizationsSentNotification} / 作文 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingAssignment} 組織
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  作文配布済み {snapshot.activationFunnel.organizationsWithWritingAssignmentCount} 組織 / 作成 {snapshot.activationFunnel.writingAssignmentsCreated30d} 件 / 提出 {snapshot.activationFunnel.writingSubmissionsReceived30d} 件 / 返却 {snapshot.activationFunnel.writingReviewsCompleted30d} 件
                 </div>
               </div>
             </section>
@@ -436,8 +464,8 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <div className="font-black">教材品質キュー</div>
                   <div className="mt-2 text-xs font-bold text-amber-800">
                     承認済み {snapshot.materialQuality.approvedBookCount} / {snapshot.materialQuality.officialBookCount} 冊。
-                    確認中 {snapshot.materialQuality.reviewRequiredBookCount} 冊、QA停止 {snapshot.materialQuality.qaBlockedBookCount} 冊、台帳なし {snapshot.materialQuality.missingLedgerBookCount} 冊です。
-                    生徒の学習・テスト対象から外している教材は、source ledger と content QA を確認してください。
+                    運用警告 {snapshot.materialQuality.warningBookCount} 冊、確認中 {snapshot.materialQuality.reviewRequiredBookCount} 冊、QA停止 {snapshot.materialQuality.qaBlockedBookCount} 冊、台帳なし {snapshot.materialQuality.missingLedgerBookCount} 冊です。
+                    学習対象から外している教材と運用警告のある教材は、source ledger と content QA を確認してください。
                   </div>
                 </div>
               )}
@@ -458,7 +486,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                               </span>
                             ) : null}
                           </div>
-                          {book.qualityGate && !book.qualityGate.isApprovedForLearner ? (
+                          {book.qualityGate && (!book.qualityGate.isApprovedForLearner || book.qualityGate.warnings.length > 0) ? (
                             <div className="mt-2 text-xs font-bold leading-relaxed text-amber-800">
                               {getOperatorMaterialQualityMessage(book.qualityGate)}
                             </div>

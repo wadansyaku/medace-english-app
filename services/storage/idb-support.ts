@@ -127,11 +127,19 @@ export const readAllStoreRecords = async <T>(store: IDBObjectStore): Promise<T[]
 };
 
 export const putStoreRecord = async (store: IDBObjectStore, value: unknown): Promise<void> => {
-  await requestToPromise(store.put(value));
+  const transactionComplete = waitForTransaction(store.transaction);
+  await Promise.all([
+    requestToPromise(store.put(value)),
+    transactionComplete,
+  ]);
 };
 
 export const deleteStoreRecord = async (store: IDBObjectStore, key: IDBValidKey): Promise<void> => {
-  await requestToPromise(store.delete(key));
+  const transactionComplete = waitForTransaction(store.transaction);
+  await Promise.all([
+    requestToPromise(store.delete(key)),
+    transactionComplete,
+  ]);
 };
 
 export const iterateStore = async <T>(

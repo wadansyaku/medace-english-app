@@ -44,7 +44,7 @@ const runCommand = (command, commandArgs) => new Promise((resolve) => {
   });
 });
 
-const createSteps = (d1PersistDir, contentQaReportPath) => {
+const createSteps = (d1PersistDir, contentQaReportPath, sourceLedgerReportPath, b2bActivationReportPath) => {
   const migrationReplay = createNodeToolCommand('wrangler', [
     'd1',
     'migrations',
@@ -129,6 +129,22 @@ const createSteps = (d1PersistDir, contentQaReportPath) => {
         '--remote',
         '--database',
         d1Database,
+        '--output',
+        sourceLedgerReportPath,
+        '--compact',
+      ],
+    },
+    {
+      label: 'Remote D1 B2B activation integrity gate',
+      command: process.execPath,
+      args: [
+        'scripts/analysis/check-d1-b2b-activation.mjs',
+        '--remote',
+        '--database',
+        d1Database,
+        '--output',
+        b2bActivationReportPath,
+        '--compact',
       ],
     },
     {
@@ -141,6 +157,8 @@ const createSteps = (d1PersistDir, contentQaReportPath) => {
 
 let persistDir;
 let contentQaReportPath;
+let sourceLedgerReportPath;
+let b2bActivationReportPath;
 
 try {
   persistDir = dryRun
@@ -149,8 +167,19 @@ try {
   contentQaReportPath = persistDir === '<temp-d1-persist-dir>'
     ? '<temp-content-qa-report>'
     : path.join(persistDir, 'content-qa-report.json');
+  sourceLedgerReportPath = persistDir === '<temp-d1-persist-dir>'
+    ? '<temp-source-ledger-report>'
+    : path.join(persistDir, 'source-ledger-report.json');
+  b2bActivationReportPath = persistDir === '<temp-d1-persist-dir>'
+    ? '<temp-b2b-activation-report>'
+    : path.join(persistDir, 'b2b-activation-report.json');
 
-  const steps = createSteps(persistDir, contentQaReportPath);
+  const steps = createSteps(
+    persistDir,
+    contentQaReportPath,
+    sourceLedgerReportPath,
+    b2bActivationReportPath,
+  );
 
   console.log(dryRun ? 'Local release gate dry run:' : 'Local release gate:');
   steps.forEach((step, index) => {

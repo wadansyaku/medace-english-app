@@ -10,7 +10,7 @@
 ## How To Re-run
 
 ```bash
-node ./scripts/analysis/run-production-baseline.mjs --database medace-db
+npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json
 ```
 
 Reference query pack:

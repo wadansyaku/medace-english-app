@@ -113,6 +113,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           currentQIndex={controller.currentQIndex}
           questionsLength={controller.questions.length}
           score={controller.score}
+          questionSourceNotice={controller.questionSourceNotice}
           isHintMode={controller.isHintMode}
           showSpellingHint={controller.showSpellingHint}
           showOptions={controller.showOptions}

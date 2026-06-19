@@ -2,10 +2,10 @@ import {
   AI_ACTION_ESTIMATES,
 } from '../../config/subscription';
 import type {
-  AdminActivationFunnel,
   AdminAiEconomicsSummary,
   ProductKpiDailySnapshot,
 } from '../../types';
+export { buildActivationFunnel } from '../../shared/adminActivationFunnel';
 import { formatDateKey, formatMonthKey, getTokyoMonthRange } from '../../utils/date';
 import { rebuildOrganizationKpiSnapshots } from './organization-kpi';
 import { readAll, readFirst, DAY_MS } from './storage-support';
@@ -31,6 +31,14 @@ interface DbProductKpiDailySnapshotRow {
   organizations_with_assignment_count: number;
   organizations_with_mission_count: number;
   organizations_with_notification_count: number;
+  organizations_with_writing_assignment_count: number;
+  organizations_created_cohort_30d: number;
+  organizations_assigned_student_30d: number;
+  organizations_created_first_mission_30d: number;
+  organizations_sent_notification_30d: number;
+  organizations_with_writing_assignment_30d: number;
+  organizations_with_writing_submission_30d: number;
+  organizations_with_writing_review_30d: number;
   writing_assignments_created_30d: number;
   writing_submissions_received_30d: number;
   writing_reviews_completed_30d: number;
@@ -71,6 +79,14 @@ const toProductKpiDailySnapshot = (row?: Partial<DbProductKpiDailySnapshotRow> |
   organizationsWithAssignmentCount: Number(row?.organizations_with_assignment_count || 0),
   organizationsWithMissionCount: Number(row?.organizations_with_mission_count || 0),
   organizationsWithNotificationCount: Number(row?.organizations_with_notification_count || 0),
+  organizationsWithWritingAssignmentCount: Number(row?.organizations_with_writing_assignment_count || 0),
+  organizationsCreatedCohort30d: Number(row?.organizations_created_cohort_30d || 0),
+  organizationsAssignedStudent30d: Number(row?.organizations_assigned_student_30d || 0),
+  organizationsCreatedFirstMission30d: Number(row?.organizations_created_first_mission_30d || 0),
+  organizationsSentNotification30d: Number(row?.organizations_sent_notification_30d || 0),
+  organizationsWithWritingAssignment30d: Number(row?.organizations_with_writing_assignment_30d || 0),
+  organizationsWithWritingSubmission30d: Number(row?.organizations_with_writing_submission_30d || 0),
+  organizationsWithWritingReview30d: Number(row?.organizations_with_writing_review_30d || 0),
   writingAssignmentsCreated30d: Number(row?.writing_assignments_created_30d || 0),
   writingSubmissionsReceived30d: Number(row?.writing_submissions_received_30d || 0),
   writingReviewsCompleted30d: Number(row?.writing_reviews_completed_30d || 0),
@@ -95,19 +111,6 @@ const readCount = async (env: AppEnv, sql: string, ...bindings: unknown[]): Prom
 const calculateRatio = (numerator: number, denominator: number): number => (
   denominator > 0 ? Math.round((numerator / denominator) * 100) : 0
 );
-
-export const buildActivationFunnel = (snapshot: ProductKpiDailySnapshot): AdminActivationFunnel => ({
-  totalOrganizations: snapshot.totalOrganizations,
-  organizationsWithCohortCount: snapshot.organizationsWithCohortCount,
-  organizationsWithAssignmentCount: snapshot.organizationsWithAssignmentCount,
-  organizationsWithMissionCount: snapshot.organizationsWithMissionCount,
-  organizationsWithNotificationCount: snapshot.organizationsWithNotificationCount,
-  writingAssignmentsCreated30d: snapshot.writingAssignmentsCreated30d,
-  writingSubmissionsReceived30d: snapshot.writingSubmissionsReceived30d,
-  writingReviewsCompleted30d: snapshot.writingReviewsCompleted30d,
-  commercialFormOpenCount30d: snapshot.commercialFormOpenCount30d,
-  commercialRequestCount30d: snapshot.commercialRequestCount30d,
-});
 
 export const buildAdminAiEconomicsSummary = (
   monthKey: string,
@@ -234,6 +237,14 @@ export const runProductAnalyticsSnapshotJob = async (
     organizationsWithAssignmentCount,
     organizationsWithMissionCount,
     organizationsWithNotificationCount,
+    organizationsWithWritingAssignmentCount,
+    organizationsCreatedCohort30d,
+    organizationsAssignedStudent30d,
+    organizationsCreatedFirstMission30d,
+    organizationsSentNotification30d,
+    organizationsWithWritingAssignment30d,
+    organizationsWithWritingSubmission30d,
+    organizationsWithWritingReview30d,
     writingAssignmentsCreated30d,
     writingSubmissionsReceived30d,
     writingReviewsCompleted30d,
@@ -330,7 +341,48 @@ export const runProductAnalyticsSnapshotJob = async (
          ON membership.user_id = n.student_user_id
         AND membership.status = 'ACTIVE'`,
     ),
-    readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'writing_assignment_created' AND created_at >= ?`, active30dSince),
+    readCount(
+      env,
+      `SELECT COUNT(DISTINCT resolved_organization_id) AS count
+       FROM (
+         SELECT COALESCE(w.organization_id, o.id) AS resolved_organization_id
+         FROM writing_assignments w
+         LEFT JOIN organizations o
+           ON w.organization_id IS NULL
+          AND LOWER(TRIM(w.organization_name)) = o.name_key
+         WHERE w.status != 'DRAFT'
+       )
+       WHERE resolved_organization_id IS NOT NULL`,
+    ),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_created_cohort' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_assigned_student' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_created_first_mission' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'instructor_notification_sent' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(
+      env,
+      `SELECT COUNT(DISTINCT resolved_organization_id) AS count
+       FROM (
+         SELECT COALESCE(w.organization_id, o.id) AS resolved_organization_id
+         FROM writing_assignments w
+         LEFT JOIN organizations o
+           ON w.organization_id IS NULL
+          AND LOWER(TRIM(w.organization_name)) = o.name_key
+         WHERE w.status != 'DRAFT'
+           AND COALESCE(w.issued_at, w.updated_at) >= ?
+       )
+       WHERE resolved_organization_id IS NOT NULL`,
+      active30dSince,
+    ),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'writing_submission_received' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'writing_review_completed' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
+    readCount(
+      env,
+      `SELECT COUNT(*) AS count
+       FROM writing_assignments
+       WHERE status != 'DRAFT'
+         AND COALESCE(issued_at, updated_at) >= ?`,
+      active30dSince,
+    ),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'writing_submission_received' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'writing_review_completed' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'study_session_started' AND created_at >= ?`, active30dSince),
@@ -392,6 +444,14 @@ export const runProductAnalyticsSnapshotJob = async (
       organizations_with_assignment_count,
       organizations_with_mission_count,
       organizations_with_notification_count,
+      organizations_with_writing_assignment_count,
+      organizations_created_cohort_30d,
+      organizations_assigned_student_30d,
+      organizations_created_first_mission_30d,
+      organizations_sent_notification_30d,
+      organizations_with_writing_assignment_30d,
+      organizations_with_writing_submission_30d,
+      organizations_with_writing_review_30d,
       writing_assignments_created_30d,
       writing_submissions_received_30d,
       writing_reviews_completed_30d,
@@ -407,7 +467,7 @@ export const runProductAnalyticsSnapshotJob = async (
       created_at,
       updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(date_key) DO UPDATE SET
       total_users = excluded.total_users,
@@ -426,6 +486,14 @@ export const runProductAnalyticsSnapshotJob = async (
       organizations_with_assignment_count = excluded.organizations_with_assignment_count,
       organizations_with_mission_count = excluded.organizations_with_mission_count,
       organizations_with_notification_count = excluded.organizations_with_notification_count,
+      organizations_with_writing_assignment_count = excluded.organizations_with_writing_assignment_count,
+      organizations_created_cohort_30d = excluded.organizations_created_cohort_30d,
+      organizations_assigned_student_30d = excluded.organizations_assigned_student_30d,
+      organizations_created_first_mission_30d = excluded.organizations_created_first_mission_30d,
+      organizations_sent_notification_30d = excluded.organizations_sent_notification_30d,
+      organizations_with_writing_assignment_30d = excluded.organizations_with_writing_assignment_30d,
+      organizations_with_writing_submission_30d = excluded.organizations_with_writing_submission_30d,
+      organizations_with_writing_review_30d = excluded.organizations_with_writing_review_30d,
       writing_assignments_created_30d = excluded.writing_assignments_created_30d,
       writing_submissions_received_30d = excluded.writing_submissions_received_30d,
       writing_reviews_completed_30d = excluded.writing_reviews_completed_30d,
@@ -457,6 +525,14 @@ export const runProductAnalyticsSnapshotJob = async (
     organizationsWithAssignmentCount,
     organizationsWithMissionCount,
     organizationsWithNotificationCount,
+    organizationsWithWritingAssignmentCount,
+    organizationsCreatedCohort30d,
+    organizationsAssignedStudent30d,
+    organizationsCreatedFirstMission30d,
+    organizationsSentNotification30d,
+    organizationsWithWritingAssignment30d,
+    organizationsWithWritingSubmission30d,
+    organizationsWithWritingReview30d,
     writingAssignmentsCreated30d,
     writingSubmissionsReceived30d,
     writingReviewsCompleted30d,
@@ -491,6 +567,14 @@ export const runProductAnalyticsSnapshotJob = async (
     organizations_with_assignment_count: organizationsWithAssignmentCount,
     organizations_with_mission_count: organizationsWithMissionCount,
     organizations_with_notification_count: organizationsWithNotificationCount,
+    organizations_with_writing_assignment_count: organizationsWithWritingAssignmentCount,
+    organizations_created_cohort_30d: organizationsCreatedCohort30d,
+    organizations_assigned_student_30d: organizationsAssignedStudent30d,
+    organizations_created_first_mission_30d: organizationsCreatedFirstMission30d,
+    organizations_sent_notification_30d: organizationsSentNotification30d,
+    organizations_with_writing_assignment_30d: organizationsWithWritingAssignment30d,
+    organizations_with_writing_submission_30d: organizationsWithWritingSubmission30d,
+    organizations_with_writing_review_30d: organizationsWithWritingReview30d,
     writing_assignments_created_30d: writingAssignmentsCreated30d,
     writing_submissions_received_30d: writingSubmissionsReceived30d,
     writing_reviews_completed_30d: writingReviewsCompleted30d,

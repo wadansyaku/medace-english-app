@@ -6,7 +6,11 @@ import {
 } from '../types';
 import { dashboardService } from '../services/dashboard';
 import { AlertCircle, AlertTriangle, BookOpen, Library, Loader2, Play, ShieldCheck } from 'lucide-react';
-import { getLearnerMaterialQualityMessage, isBookApprovedForLearner } from '../shared/materialQuality';
+import {
+  getLearnerMaterialQualityMessage,
+  isBookApprovedForLearner,
+  resolveLearnerMaterialQualityGate,
+} from '../shared/materialQuality';
 
 interface OfficialCatalogAccessPanelProps {
   user: UserProfile;
@@ -100,7 +104,8 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
         <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {officialBooks.map((book) => {
             const canStart = isBookApprovedForLearner(book);
-            const qualityMessage = getLearnerMaterialQualityMessage(book.qualityGate);
+            const qualityGate = resolveLearnerMaterialQualityGate(book);
+            const qualityMessage = getLearnerMaterialQualityMessage(qualityGate);
             const fallbackDescription = book.catalogSource === BookCatalogSource.LICENSED_PARTNER
               ? '承認済みの公式教材は学習・テストで使えます。'
               : 'スターター導線で使うオリジナル単語データベース教材です。';
@@ -113,7 +118,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                       推奨
                     </span>
                   )}
-                  {book.qualityGate && (
+                  {qualityGate && (
                     <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold ${
                       canStart
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -121,7 +126,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                     }`}
                     >
                       {canStart ? <ShieldCheck className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
-                      {book.qualityGate.label}
+                      {qualityGate.label}
                     </span>
                   )}
                 </div>

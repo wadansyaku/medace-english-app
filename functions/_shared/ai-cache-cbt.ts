@@ -4,7 +4,8 @@ import {
   createAiCacheKey,
   DEFAULT_AI_GENERATED_PROBLEM_QUALITY_STATUS,
   DEFAULT_ASSESSMENT_ITEM_REVIEW_STATUS,
-  classifyReusableAiProblemReviewState,
+  describeReusableAiProblemReviewState,
+  getLearnerAiQuestionQualityState,
   getInitialCbtState,
   inferProblemDifficultyFromStats,
   selectCbtDifficultyBand,
@@ -226,7 +227,7 @@ const toReviewQueueItem = (row: AiGeneratedProblemReviewQueueRow): AiGeneratedPr
   const hasAssessmentMetadata = Boolean(row.metadata_problem_id);
   const reviewStatus = row.review_status || LEGACY_READY_REVIEW_STATUS;
   const contentQualityStatus = row.quality_status;
-  const reviewBucket = classifyReusableAiProblemReviewState({
+  const reviewDecision = describeReusableAiProblemReviewState({
     contentQualityStatus,
     assessmentReviewStatus: reviewStatus,
     hasAssessmentMetadata,
@@ -263,9 +264,12 @@ const toReviewQueueItem = (row: AiGeneratedProblemReviewQueueRow): AiGeneratedPr
     version: Number(row.version || 1),
     isActive: Boolean(row.active),
     hasAssessmentMetadata,
-    isLegacyReady: reviewBucket === 'LEGACY_READY',
-    reusableBucket: reviewBucket,
-    isReusable: reviewBucket === 'APPROVED',
+    isLegacyReady: reviewDecision.bucket === 'LEGACY_READY',
+    reusableBucket: reviewDecision.bucket,
+    isReusable: reviewDecision.isReusable,
+    reusePolicyReason: reviewDecision.reason,
+    reusePolicyLabel: reviewDecision.labelJa,
+    reusePolicyMessage: reviewDecision.operatorMessageJa,
     createdAt: Number(row.created_at || 0),
     updatedAt: Number(row.updated_at || 0),
   };
@@ -864,6 +868,7 @@ export const readReusableAiGrammarQuestions = async (
           grammarExplanation: parsed.grammarExplanation || buildGrammarScopeExplanation(parsed.grammarScope),
           generatedProblemId: row.id,
           aiContentId: row.content_id,
+          qualityState: getLearnerAiQuestionQualityState('APPROVED_REUSE'),
         });
         contentIds.push(row.content_id);
       }

@@ -6,8 +6,6 @@ import {
   AiGeneratedProblemReviewQueueResponse,
   CommercialRequest,
   CommercialRequestStatus,
-  BookAccessScope,
-  BookCatalogSource,
   BookMetadata,
   BookProgress,
   ClassroomWorksheetLifecycleEventResult,
@@ -38,8 +36,6 @@ import {
   WeeklyMissionBoard,
   WorksheetQuestionMode,
   WordData,
-  WordHintAssetType,
-  GeneratedAssetAuditStatus,
 } from '../types';
 import {
   CatalogImportRequest,
@@ -55,11 +51,25 @@ import {
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
-import { generateGeminiSentence, generateWordImage } from './gemini';
 import {
-  createLocalExampleHint,
-  createWordImagePlaceholderDataUrl,
-} from '../shared/wordHintAssets';
+  batchImportWordsLocal,
+  deleteBookLocal,
+  generateWordHintAssetLocal,
+  getBooksLocal,
+  getWordsByBookLocal,
+  prepareBookExamplesLocal,
+  reportWordLocal,
+  updateWordCacheLocal,
+  updateWordLocal,
+  type LocalCatalogStorageContext,
+} from './storage/catalog-local';
+import {
+  getLearningPlanLocal,
+  getLearningPreferenceLocal,
+  saveLearningPlanLocal,
+  saveLearningPreferenceLocal,
+  type LocalLearningPlanStorageContext,
+} from './storage/learning-plan-local';
 import type {
   AdminStorageService,
   AnnouncementStorageService,
@@ -73,11 +83,6 @@ import type {
   SessionStorageService,
   StorageClientMap,
 } from './storage/types';
-import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../utils/bookAccess';
-import {
-  defaultLearningPreference,
-  isBookOwnedByUser,
-} from './storage/mockData';
 import {
   addXP as addXpWithAuthSession,
   authenticate as authenticateWithAuthSession,
@@ -99,7 +104,6 @@ import {
 import {
   getObjectStore,
   initStorageDb,
-  requestToPromise,
   STORES,
   type GetStore,
   waitForTransaction,
@@ -151,7 +155,6 @@ import {
 import { getCoachNotifications } from './storage/writing-read-model';
 import { resolveStorageMode } from '../shared/storageMode';
 import { isWorksheetQuestionMode } from '../shared/worksheetQuestionMode';
-import { createImportedBookId, normalizeCatalogImportRows } from './storage/catalog-import';
 
 interface IndexedDBStorageServiceOptions {
   db?: IDBDatabase;
@@ -183,6 +186,20 @@ export class IndexedDBStorageService implements IStorageService {
   }
 
   private getAuthSessionContext(): AuthSessionContext {
+    return {
+      getStore: this.getStore.bind(this),
+    };
+  }
+
+  private getLocalCatalogStorageContext(): LocalCatalogStorageContext {
+    return {
+      getDb: () => this.dbPromise,
+      getStore: this.getStore.bind(this),
+      getSession: this.getSession.bind(this),
+    };
+  }
+
+  private getLocalLearningPlanStorageContext(): LocalLearningPlanStorageContext {
     return {
       getStore: this.getStore.bind(this),
     };
@@ -268,293 +285,39 @@ export class IndexedDBStorageService implements IStorageService {
     request: CatalogImportRequest,
     onProgress?: (progress: number) => void,
   ): Promise<CatalogImportResult> {
-    const db = await this.dbPromise;
-    const bookGroups = new Map<string, { meta: BookMetadata, words: WordData[] }>();
-    const { rows, warnings } = normalizeCatalogImportRows(request);
-    const total = rows.length;
-    const issues = [...warnings];
-    let skippedRowCount = 0;
-
-    onProgress?.(5);
-
-    for (let i = 0; i < total; i++) {
-      const row = rows[i];
-      const bookName = (row.bookName || request.defaultBookName || 'Imported').trim();
-      const groupKey = `${request.createdByUid || 'official'}:${bookName}`;
-      const word = row.word.trim();
-      const definition = row.definition.trim();
-      const parsedNumber = Number.parseInt(String(row.number || i + 1), 10);
-      const number = Number.isFinite(parsedNumber) && parsedNumber > 0 ? parsedNumber : i + 1;
-
-      if (!word) {
-        skippedRowCount += 1;
-        issues.push({ code: 'EMPTY_WORD', message: '単語が空の行をスキップしました。', rowNumber: i + 2 });
-        continue;
-      }
-      if (!definition) {
-        skippedRowCount += 1;
-        issues.push({ code: 'EMPTY_DEFINITION', message: '訳が空の行をスキップしました。', rowNumber: i + 2 });
-        continue;
-      }
-
-      if (!bookGroups.has(groupKey)) {
-        const bookId = createImportedBookId(
-          bookName,
-          request.createdByUid,
-          request.createdByUid ? String(Date.now()) : undefined,
-        );
-        const description = request.createdByUid
-          ? JSON.stringify({ createdBy: request.createdByUid, type: 'USER_GENERATED' })
-          : (request.bookDescription || 'Imported');
-
-        bookGroups.set(groupKey, {
-          meta: {
-            id: bookId,
-            title: bookName,
-            wordCount: 0,
-            isPriority: !request.createdByUid && bookName.includes('DUO'),
-            description,
-            sourceContext: request.contextSummary,
-            catalogSource: request.createdByUid
-              ? BookCatalogSource.USER_GENERATED
-              : (request.options?.catalogSource || BookCatalogSource.LICENSED_PARTNER),
-            accessScope: request.createdByUid
-              ? BookAccessScope.ALL_PLANS
-              : (request.options?.accessScope || BookAccessScope.BUSINESS_ONLY),
-          },
-          words: [],
-        });
-      }
-
-      const bookGroup = bookGroups.get(groupKey);
-      if (!bookGroup) continue;
-
-      const duplicate = bookGroup.words.some((candidate) => candidate.word === word && candidate.definition === definition);
-      if (duplicate) {
-        skippedRowCount += 1;
-        issues.push({ code: 'DUPLICATE_ROW', message: '重複行をスキップしました。', rowNumber: i + 2 });
-        continue;
-      }
-
-      bookGroup.words.push({
-        id: `${bookGroup.meta.id}_${number}_${i}`,
-        bookId: bookGroup.meta.id,
-        number,
-        word,
-        definition,
-        searchKey: word.toLowerCase(),
-        ...(row.category?.trim() ? { category: row.category.trim() } : {}),
-        ...(row.subcategory?.trim() ? { subcategory: row.subcategory.trim() } : {}),
-        ...(row.section?.trim() ? { section: row.section.trim() } : {}),
-        ...(row.sourceSheet?.trim() ? { sourceSheet: row.sourceSheet.trim() } : {}),
-        ...(Number.isFinite(Number.parseInt(String(row.sourceEntryId || '').trim(), 10))
-          ? { sourceEntryId: Number.parseInt(String(row.sourceEntryId).trim(), 10) }
-          : {}),
-        ...(row.exampleSentence?.trim() ? { exampleSentence: row.exampleSentence.trim() } : {}),
-        ...(row.exampleMeaning?.trim() ? { exampleMeaning: row.exampleMeaning.trim() } : {}),
-      });
-
-      if (i % 250 === 0) {
-        onProgress?.(Math.round((i / Math.max(total, 1)) * 90));
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    }
-
-    const tx = db.transaction([STORES.BOOKS, STORES.WORDS], 'readwrite');
-    const importedBookIds: string[] = [];
-    let importedWordCount = 0;
-
-    for (const [, data] of bookGroups) {
-      data.meta.wordCount = data.words.length;
-      importedBookIds.push(data.meta.id);
-      importedWordCount += data.words.length;
-      tx.objectStore(STORES.BOOKS).put(data.meta);
-      data.words.forEach((word) => tx.objectStore(STORES.WORDS).put(word));
-    }
-
-    return new Promise((resolve) => {
-      tx.oncomplete = () => {
-        onProgress?.(100);
-        resolve({
-          importedBookIds,
-          importedBookCount: importedBookIds.length,
-          importedWordCount,
-          skippedRowCount,
-          warnings: issues,
-        });
-      };
-    });
+    return batchImportWordsLocal(this.getLocalCatalogStorageContext(), request, onProgress);
   }
 
   async getBooks(): Promise<BookMetadata[]> {
-    const sessionUser = await this.getSession();
-    const store = await this.getStore(STORES.BOOKS);
-    return new Promise((resolve) => {
-      const request = store.getAll();
-      request.onsuccess = () => {
-        const books = ((request.result || []) as BookMetadata[]).map(normalizeBookVisibilityPolicy);
-        resolve(
-          books.filter((book) =>
-            isBookOwnedByUser(book, sessionUser?.uid) ||
-            canAccessOfficialBook(sessionUser?.subscriptionPlan, book)
-          )
-        );
-      };
-    });
+    return getBooksLocal(this.getLocalCatalogStorageContext());
   }
   
   async deleteBook(bookId: string): Promise<void> {
-    const db = await this.dbPromise;
-    const tx = db.transaction([STORES.BOOKS, STORES.WORDS, STORES.HISTORY], 'readwrite');
-    
-    tx.objectStore(STORES.BOOKS).delete(bookId);
-    const wordsStore = tx.objectStore(STORES.WORDS);
-    const index = wordsStore.index('bookId');
-    const wordReq = index.getAllKeys(bookId);
-    
-    wordReq.onsuccess = () => {
-        const keys = wordReq.result;
-        keys.forEach(k => wordsStore.delete(k));
-    };
-    return new Promise(r => { tx.oncomplete = () => r(); });
+    return deleteBookLocal(this.getLocalCatalogStorageContext(), bookId);
   }
 
   async getWordsByBook(bookId: string): Promise<WordData[]> {
-    const store = await this.getStore(STORES.WORDS);
-    const index = store.index('bookId');
-    return new Promise((resolve) => {
-      const request = index.getAll(bookId);
-      request.onsuccess = () => resolve((request.result || []).sort((a:any, b:any) => a.number - b.number));
-    });
+    return getWordsByBookLocal(this.getLocalCatalogStorageContext(), bookId);
   }
   
   async updateWord(word: WordData): Promise<void> {
-    const store = await this.getStore(STORES.WORDS, 'readwrite');
-    return new Promise((resolve) => {
-        store.put(word);
-        resolve();
-    });
+    return updateWordLocal(this.getLocalCatalogStorageContext(), word);
   }
 
   async reportWord(wordId: string, reason: string): Promise<void> {
-      const store = await this.getStore(STORES.WORDS, 'readwrite');
-      return new Promise((resolve) => {
-          const req = store.get(wordId);
-          req.onsuccess = () => {
-              const word = req.result;
-              if (word) {
-                  word.isReported = true;
-                  // In real app, would save 'reason' to a reports table
-                  store.put(word);
-              }
-              resolve();
-          }
-      });
+    return reportWordLocal(this.getLocalCatalogStorageContext(), wordId, reason);
   }
 
   async updateWordCache(wordId: string, sentence: string, translation: string): Promise<void> {
-    const store = await this.getStore(STORES.WORDS, 'readwrite');
-    return new Promise((resolve) => {
-      const req = store.get(wordId);
-      req.onsuccess = () => {
-        const word = req.result;
-        if (word) {
-          word.exampleSentence = sentence;
-          word.exampleMeaning = translation;
-          word.exampleGeneratedAt = Date.now();
-          word.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
-          store.put(word);
-        }
-        resolve();
-      };
-      req.onerror = () => resolve();
-    });
-  }
-
-  private async readWordRecord(wordId: string): Promise<WordData | undefined> {
-    const store = await this.getStore(STORES.WORDS, 'readonly');
-    return new Promise((resolve, reject) => {
-      const req = store.get(wordId);
-      req.onsuccess = () => resolve(req.result as WordData | undefined);
-      req.onerror = () => reject(req.error || new Error('単語キャッシュの読み込みに失敗しました。'));
-    });
-  }
-
-  private async writeWordRecord(word: WordData): Promise<void> {
-    const store = await this.getStore(STORES.WORDS, 'readwrite');
-    return new Promise((resolve, reject) => {
-      const req = store.put(word);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error || new Error('単語キャッシュの保存に失敗しました。'));
-    });
+    return updateWordCacheLocal(this.getLocalCatalogStorageContext(), wordId, sentence, translation);
   }
 
   async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
-    const word = await this.readWordRecord(payload.wordId);
-    if (!word) {
-      throw new Error('対象の単語が見つかりません。');
-    }
-
-    const nextWord: WordData = { ...word };
-    if (payload.assetType === WordHintAssetType.EXAMPLE) {
-      if (!payload.forceRefresh && nextWord.exampleSentence?.trim()) {
-        return nextWord;
-      }
-
-      const generatedAt = Date.now();
-      const context = await generateGeminiSentence(nextWord.word, nextWord.definition)
-        || createLocalExampleHint(nextWord.word, nextWord.definition, generatedAt);
-      const nextSentence = 'english' in context ? context.english : context.sentence;
-      const nextTranslation = 'japanese' in context ? context.japanese : context.translation;
-
-      nextWord.exampleSentence = nextSentence;
-      nextWord.exampleMeaning = nextTranslation;
-      nextWord.exampleGeneratedAt = generatedAt;
-      nextWord.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
-    } else {
-      if (!payload.forceRefresh && nextWord.exampleImageUrl?.trim()) {
-        return nextWord;
-      }
-
-      const generatedAt = Date.now();
-      const imageUrl = await generateWordImage(nextWord.word, nextWord.definition)
-        || createWordImagePlaceholderDataUrl(nextWord.word, nextWord.definition);
-
-      nextWord.exampleImageUrl = imageUrl;
-      nextWord.exampleImageGeneratedAt = generatedAt;
-      nextWord.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
-    }
-
-    await this.writeWordRecord(nextWord);
-    return nextWord;
+    return generateWordHintAssetLocal(this.getLocalCatalogStorageContext(), payload);
   }
 
   async prepareBookExamples(bookId: string): Promise<import('../contracts/storage').PrepareBookExamplesResult> {
-    const store = await this.getStore(STORES.WORDS, 'readwrite');
-    const words = await this.getWordsByBook(bookId);
-    const targetWords = words.filter((word) => !word.exampleSentence?.trim());
-
-    await Promise.all(targetWords.map((word) => new Promise<void>((resolve) => {
-      const req = store.get(word.id);
-      req.onsuccess = () => {
-        const current = req.result as WordData | undefined;
-        if (current) {
-          current.exampleSentence = current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`;
-          current.exampleMeaning = current.exampleMeaning?.trim() || `語義: ${current.definition}`;
-          current.exampleGeneratedAt = Date.now();
-          current.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
-          store.put(current);
-        }
-        resolve();
-      };
-      req.onerror = () => resolve();
-    })));
-
-    return {
-      bookId,
-      preparedCount: targetWords.length,
-      remainingCount: 0,
-    };
+    return prepareBookExamplesLocal(this.getLocalCatalogStorageContext(), bookId);
   }
 
   async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
@@ -745,31 +508,19 @@ export class IndexedDBStorageService implements IStorageService {
   }
 
   async saveLearningPlan(plan: LearningPlan): Promise<void> {
-      const store = await this.getStore(STORES.PLANS, 'readwrite');
-      store.put(plan);
+    return saveLearningPlanLocal(this.getLocalLearningPlanStorageContext(), plan);
   }
 
   async getLearningPlan(uid: string): Promise<LearningPlan | null> {
-      const store = await this.getStore(STORES.PLANS);
-      return new Promise((resolve) => {
-          const req = store.get(uid);
-          req.onsuccess = () => resolve(req.result || null);
-          req.onerror = () => resolve(null);
-      });
+    return getLearningPlanLocal(this.getLocalLearningPlanStorageContext(), uid);
   }
 
   async saveLearningPreference(preference: LearningPreference): Promise<void> {
-      const store = await this.getStore(STORES.PREFERENCES, 'readwrite');
-      store.put({ ...preference, updatedAt: Date.now() });
+    return saveLearningPreferenceLocal(this.getLocalLearningPlanStorageContext(), preference);
   }
 
   async getLearningPreference(uid: string): Promise<LearningPreference | null> {
-      const store = await this.getStore(STORES.PREFERENCES);
-      return new Promise((resolve) => {
-          const req = store.get(uid);
-          req.onsuccess = () => resolve(req.result || defaultLearningPreference(uid));
-          req.onerror = () => resolve(defaultLearningPreference(uid));
-      });
+    return getLearningPreferenceLocal(this.getLocalLearningPlanStorageContext(), uid);
   }
 
   async assignStudentInstructor(studentUid: string, instructorUid: string | null): Promise<void> {

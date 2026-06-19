@@ -4,6 +4,8 @@ import {
   advanceCbtState,
   classifyReusableAiProblemReviewState,
   createAiCacheKey,
+  describeReusableAiProblemReviewState,
+  getLearnerAiQuestionQualityState,
   inferProblemDifficultyFromStats,
   isReusableAiProblemReviewState,
   selectCbtDifficultyBand,
@@ -131,6 +133,39 @@ describe('AI cache and CBT helpers', () => {
       assessmentReviewStatus: 'PENDING',
       hasAssessmentMetadata: true,
     })).toBe(false);
+    expect(describeReusableAiProblemReviewState({
+      contentQualityStatus: 'READY',
+      hasAssessmentMetadata: false,
+    })).toMatchObject({
+      bucket: 'LEGACY_READY',
+      isReusable: false,
+      reason: 'LEGACY_READY_REQUIRES_REVIEW',
+      labelJa: '旧READY確認待ち',
+    });
+    expect(describeReusableAiProblemReviewState({
+      contentQualityStatus: 'READY',
+      assessmentReviewStatus: 'NEEDS_REVIEW',
+      hasAssessmentMetadata: true,
+    })).toMatchObject({
+      bucket: 'BLOCKED',
+      reason: 'ASSESSMENT_NEEDS_REVIEW',
+    });
+  });
+
+  it('exposes learner-safe quality state copy for reusable AI questions', () => {
+    expect(getLearnerAiQuestionQualityState('APPROVED_REUSE')).toMatchObject({
+      status: 'APPROVED_REUSE',
+      labelJa: 'レビュー済み問題',
+      isLearnerApproved: true,
+      isReusable: true,
+      tone: 'approved',
+    });
+    expect(getLearnerAiQuestionQualityState('LIVE_DRAFT_REVIEW_REQUIRED')).toMatchObject({
+      status: 'LIVE_DRAFT_REVIEW_REQUIRED',
+      isLearnerApproved: false,
+      isReusable: false,
+      tone: 'pending',
+    });
   });
 
   it('records CBT scope attempts separately from the global learner profile', async () => {
@@ -291,6 +326,12 @@ describe('AI cache and CBT helpers', () => {
     expect(rows[0]).toMatchObject({
       generatedProblemId: 'ai-problem-1',
       aiContentId: 'ai-content-1',
+      qualityState: {
+        status: 'APPROVED_REUSE',
+        labelJa: 'レビュー済み問題',
+        isLearnerApproved: true,
+        isReusable: true,
+      },
     });
     expect(db.queries[0]).toContain('LEFT JOIN assessment_item_metadata');
     expect(db.queries[0]).toContain("m.review_status = 'APPROVED'");
@@ -352,6 +393,8 @@ describe('AI cache and CBT helpers', () => {
       isLegacyReady: true,
       reusableBucket: 'LEGACY_READY',
       isReusable: false,
+      reusePolicyReason: 'LEGACY_READY_REQUIRES_REVIEW',
+      reusePolicyLabel: '旧READY確認待ち',
       options: question.options,
     });
     expect(db.queries[0]).toContain('LEFT JOIN assessment_item_metadata');
@@ -410,6 +453,8 @@ describe('AI cache and CBT helpers', () => {
       reviewStatus: 'APPROVED',
       reusableBucket: 'APPROVED',
       isReusable: true,
+      reusePolicyReason: 'APPROVED_FOR_REUSE',
+      reusePolicyLabel: '再利用可',
     });
     expect(db.batch.mock.calls[0]?.[0]).toHaveLength(3);
     expect(db.binds.find(({ query: queryText }) => queryText.includes('UPDATE ai_generated_contents'))?.values)

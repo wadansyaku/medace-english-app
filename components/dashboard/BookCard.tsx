@@ -1,7 +1,11 @@
 import React from 'react';
 import { AlertTriangle, Book, BookOpen, Play, ShieldCheck, Star, Trash2, Trophy } from 'lucide-react';
 import { BookCatalogSource, type BookMetadata, type BookProgress } from '../../types';
-import { getLearnerMaterialQualityMessage, isBookApprovedForLearner } from '../../shared/materialQuality';
+import {
+  getLearnerMaterialQualityMessage,
+  isBookApprovedForLearner,
+  resolveLearnerMaterialQualityGate,
+} from '../../shared/materialQuality';
 
 interface BookCardProps {
   book: BookMetadata;
@@ -23,7 +27,7 @@ const BookCard: React.FC<BookCardProps> = ({
   onSelect,
 }) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
-  const qualityGate = book.qualityGate;
+  const qualityGate = resolveLearnerMaterialQualityGate(book);
   const canStart = isBookApprovedForLearner(book);
   const learnerQualityMessage = getLearnerMaterialQualityMessage(qualityGate);
   const qualityBadgeClass = qualityGate?.isApprovedForLearner

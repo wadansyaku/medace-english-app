@@ -89,6 +89,19 @@ describe('release hygiene contracts', () => {
     expect(previewWorkflow).toMatch(/run: npm run cf:doctor/);
   });
 
+  it('keeps CI verify from skipping the npm security audit gate', () => {
+    const ciWorkflow = readText('.github/workflows/ci.yml');
+
+    expectTextInOrder(ciWorkflow, [
+      'name: Install dependencies',
+      'run: npm ci',
+      'name: Security audit',
+      'run: npm run security:audit',
+      'name: Fast verification gate',
+      'run: npm run verify:fast',
+    ]);
+  });
+
   it('keeps the local release gate aligned with deploy workflow verification', () => {
     const packageJson = readJson<PackageJson>('package.json');
     const localGate = readText('scripts/run-release-gate-local.mjs');
@@ -99,18 +112,26 @@ describe('release hygiene contracts', () => {
 
     expect(packageJson.scripts['release:gate:local']).toBe('node scripts/run-release-gate-local.mjs');
     expect(packageJson.scripts['release:gate:local:dry']).toBe('node scripts/run-release-gate-local.mjs --dry-run');
+    expect(packageJson.scripts['security:audit']).toBe('node scripts/check-npm-audit.mjs');
     expect(packageJson.scripts['content:qa:gate']).toBe('node scripts/check-content-qa-report.mjs');
     expect(packageJson.scripts['content:source-ledger:d1']).toBe('node scripts/analysis/check-d1-material-source-ledger.mjs');
+    expect(packageJson.scripts['ops:b2b-activation:d1']).toBe('node scripts/analysis/check-d1-b2b-activation.mjs');
+    expect(packageJson.scripts['ops:production-baseline:d1']).toBe('node scripts/analysis/run-production-baseline.mjs');
     expect(localGate).toContain('--dry-run');
+    expect(localGate).toContain("'scripts/check-npm-audit.mjs'");
     expect(localGate).toContain("'scripts/run-smoke-tests.mjs', '--suite', 'full'");
     expect(localGate).toContain("'scripts/cf-doctor.mjs'");
     expect(localGate).toContain("'scripts/analysis/run-d1-content-qa.mjs'");
     expect(localGate).toContain("'scripts/check-content-qa-report.mjs'");
     expect(localGate).toContain("'scripts/analysis/check-d1-material-source-ledger.mjs'");
+    expect(localGate).toContain("'scripts/analysis/check-d1-b2b-activation.mjs'");
+    expect(localGate).toContain('source-ledger-report.json');
+    expect(localGate).toContain('b2b-activation-report.json');
     expect(localGate).toContain('Full Playwright smoke suite');
     expectTextInOrder(localGate, [
       'Migration filename check',
       'Local D1 migration replay',
+      'npm security audit',
       'TypeScript typecheck',
       'Vitest unit suite',
       'Build app for API integration tests',
@@ -120,6 +141,7 @@ describe('release hygiene contracts', () => {
       'Remote D1 content QA report',
       'Content QA blocking check',
       'Remote D1 source ledger gate',
+      'Remote D1 B2B activation integrity gate',
       'Build deploy artifact',
     ]);
     const smokeRunner = readText('scripts/run-smoke-tests.mjs');
@@ -127,6 +149,11 @@ describe('release hygiene contracts', () => {
     expect(smokeRunner).toContain('`--workers=${suite.workers}`');
 
     const workflowGateOrder = [
+      'name: Install dependencies',
+      'run: npm ci',
+      'name: Security audit',
+      'run: npm run security:audit',
+      'name: Install Playwright browser',
       'name: Fast verification gate',
       'run: npm run verify:fast',
       'name: Build app for local integration tests',
@@ -145,6 +172,9 @@ describe('release hygiene contracts', () => {
     expectTextInOrder(previewWorkflow, workflowGateOrder);
     expect(productionWorkflow).toContain('local release gate equivalent');
     expect(previewWorkflow).toContain('local release gate equivalent');
+    expect(productionWorkflow).toContain('B2B Activation Integrity Gate: \\`passed\\`');
+    expect(previewWorkflow).toContain('B2B Activation Integrity Gate: \\`passed\\`');
+    expect(previewWorkflow).toContain('B2B Activation Integrity Gate: `passed`');
     expectTextInOrder(productionWorkflow, [
       'name: Apply remote D1 migrations',
       'name: Generate production content QA report',
@@ -152,7 +182,11 @@ describe('release hygiene contracts', () => {
       'name: Enforce production content QA gate',
       'run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json',
       'name: Enforce production source ledger gate',
-      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact',
+      'name: Enforce production B2B activation integrity gate',
+      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact',
+      'name: Upload production release gate evidence',
+      'name: Summarize production release gate evidence',
       'name: Deploy to Cloudflare Pages',
     ]);
     expectTextInOrder(previewWorkflow, [
@@ -162,22 +196,46 @@ describe('release hygiene contracts', () => {
       'name: Enforce preview content QA gate',
       'run: npm run content:qa:gate -- --input tmp/content-qa/preview-content-qa.json',
       'name: Enforce preview source ledger gate',
-      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-source-ledger.json --compact',
+      'name: Enforce preview B2B activation integrity gate',
+      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-b2b-activation.json --compact',
+      'name: Upload preview release gate evidence',
+      'name: Summarize preview release gate evidence',
       'name: Deploy preview to Cloudflare Pages',
     ]);
+    expect(productionWorkflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+    expect(productionWorkflow).toContain('name: production-release-gate-evidence');
+    expect(productionWorkflow).toContain('## Production Release Gate Evidence');
+    expect(previewWorkflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+    expect(previewWorkflow).toContain('name: preview-release-gate-evidence');
+    expect(previewWorkflow).toContain('## Preview Release Gate Evidence');
     expect(productionWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
+    expect(productionWorkflow).toContain('public guide keeps the business role previews visible');
+    expect(productionWorkflow).toContain('public role pages always emit a noindex robots tag and service admin action stays safe');
+    expect(productionWorkflow).toContain('name: Upload production deployed smoke artifacts');
+    expect(productionWorkflow).toContain('name: production-deployed-smoke-artifacts');
     expect(previewWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
+    expect(previewWorkflow).toContain('name: Upload preview deployed smoke artifacts');
+    expect(previewWorkflow).toContain('name: preview-deployed-smoke-artifacts');
     expect(productionWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
     expect(previewWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
 
     expect(readme).toContain('npm run release:gate:local');
+    expect(readme).toContain('npm security audit');
+    expect(readme).toContain('`security:audit`');
     expect(readme).toContain('node scripts/run-smoke-tests.mjs --suite full');
     expect(readme).toContain('content QA gate');
     expect(readme).toContain('source ledger gate');
+    expect(readme).toContain('B2B activation integrity gate');
+    expect(readme).toContain('ops:production-baseline:d1');
     expect(runbook).toContain('npm run release:gate:local');
+    expect(runbook).toContain('npm security audit');
+    expect(runbook).toContain('`security:audit`');
     expect(runbook).toContain('node scripts/run-smoke-tests.mjs --suite full');
     expect(runbook).toContain('content QA gate');
     expect(runbook).toContain('source ledger gate');
+    expect(runbook).toContain('B2B activation integrity gate');
+    expect(runbook).toContain('ops:production-baseline:d1');
   });
 
   it('keeps production and preview deploys on the protected main path with pre-deploy runtime metadata', () => {

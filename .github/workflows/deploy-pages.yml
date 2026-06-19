@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Security audit
+        run: npm run security:audit
+
       - name: Install Playwright browser
         run: node node_modules/playwright/cli.js install --with-deps chromium
 
@@ -104,7 +107,36 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE"
+        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact
+
+      - name: Enforce production B2B activation integrity gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact
+
+      - name: Upload production release gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-release-gate-evidence
+          path: |
+            tmp/content-qa/production-content-qa.json
+            tmp/release-gates/production-source-ledger.json
+            tmp/release-gates/production-b2b-activation.json
+          if-no-files-found: ignore
+
+      - name: Summarize production release gate evidence
+        if: always()
+        run: |
+          {
+            echo "## Production Release Gate Evidence"
+            echo
+            echo "- Content QA report: \`tmp/content-qa/production-content-qa.json\`"
+            echo "- Source ledger report: \`tmp/release-gates/production-source-ledger.json\`"
+            echo "- B2B activation report: \`tmp/release-gates/production-b2b-activation.json\`"
+            echo "- Artifact: \`production-release-gate-evidence\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update production deployment runtime metadata
         env:
@@ -139,7 +171,17 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|public guide keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe"
+
+      - name: Upload production deployed smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-deployed-smoke-artifacts
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
 
       - name: Inspect production Pages secrets
         id: production-secrets
@@ -187,9 +229,10 @@ jobs:
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Recovery Bookmark: \`${{ steps.d1-bookmark.outputs.bookmark }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
-            echo "- Verification: local release gate equivalent (verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + build)"
+            echo "- Verification: local release gate equivalent (security:audit + verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + B2B activation integrity gate + build)"
             echo "- Content QA Gate: \`passed\`"
             echo "- Source Ledger Gate: \`passed\`"
+            echo "- B2B Activation Integrity Gate: \`passed\`"
             echo "- Post-deploy Smoke: \`passed\`"
             echo "- Production Secrets: \`${{ steps.production-secrets.outputs.names }}\`"
             echo "- Missing Required Production Secrets: \`${{ steps.production-secrets.outputs['missing-required'] }}\`"

@@ -20,6 +20,7 @@ export const parseCliArgs = (argv) => {
     outputPath: null,
     persistTo: null,
     minTodaySelectableBooks: 1,
+    maxWarningBooks: null,
     compact: false,
     help: false,
   };
@@ -46,6 +47,8 @@ export const parseCliArgs = (argv) => {
       options.persistTo = nextValue();
     } else if (arg === '--min-today-selectable-books') {
       options.minTodaySelectableBooks = Number.parseInt(nextValue(), 10);
+    } else if (arg === '--max-warning-books') {
+      options.maxWarningBooks = Number.parseInt(nextValue(), 10);
     } else if (arg === '--compact') {
       options.compact = true;
     } else {
@@ -61,6 +64,9 @@ export const parseCliArgs = (argv) => {
   if (!Number.isFinite(options.minTodaySelectableBooks) || options.minTodaySelectableBooks < 0) {
     throw new Error('--min-today-selectable-books must be a non-negative number.');
   }
+  if (options.maxWarningBooks !== null && (!Number.isFinite(options.maxWarningBooks) || options.maxWarningBooks < 0)) {
+    throw new Error('--max-warning-books must be a non-negative number.');
+  }
 
   return options;
 };
@@ -73,6 +79,7 @@ SELECT
   COALESCE(SUM(CASE WHEN m.rights_status = 'approved' AND m.review_status = 'approved' THEN 1 ELSE 0 END), 0) AS source_approved_books,
   COALESCE(SUM(CASE WHEN m.book_id IS NOT NULL AND (m.rights_status != 'approved' OR m.review_status != 'approved') THEN 1 ELSE 0 END), 0) AS source_review_required_books,
   COALESCE(SUM(CASE WHEN COALESCE(m.qa_word_count, 0) <= 0 OR COALESCE(m.qa_required_blank_rows, 0) > 0 OR COALESCE(m.qa_rows_with_sentinel, 0) > 0 OR COALESCE(m.qa_sentinel_value_count, 0) > 0 THEN 1 ELSE 0 END), 0) AS qa_blocked_books,
+  COALESCE(SUM(CASE WHEN m.book_id IS NOT NULL AND (COALESCE(m.qa_duplicate_headword_count, 0) > 0 OR COALESCE(m.qa_source_coverage_rate, 0) < 1 OR COALESCE(m.qa_example_pair_coverage_rate, 0) < 1) THEN 1 ELSE 0 END), 0) AS warning_books,
   COALESCE(SUM(CASE WHEN m.rights_status = 'approved' AND m.review_status = 'approved' AND COALESCE(m.qa_word_count, 0) > 0 AND COALESCE(m.qa_required_blank_rows, 0) = 0 AND COALESCE(m.qa_rows_with_sentinel, 0) = 0 AND COALESCE(m.qa_sentinel_value_count, 0) = 0 THEN 1 ELSE 0 END), 0) AS today_selectable_books
 FROM books b
 LEFT JOIN material_source_ledger m ON m.book_id = b.id
@@ -111,7 +118,9 @@ const runWranglerQuery = (options, sql) => {
 
 export const evaluateMaterialSourceLedgerSummary = (summary, thresholds = {}) => {
   const minTodaySelectableBooks = thresholds.minTodaySelectableBooks ?? 1;
+  const maxWarningBooks = thresholds.maxWarningBooks;
   const errors = [];
+  const warnings = [];
   if (Number(summary.official_books || 0) < 1) {
     errors.push('No official books were found.');
   }
@@ -124,10 +133,17 @@ export const evaluateMaterialSourceLedgerSummary = (summary, thresholds = {}) =>
   if (Number(summary.today_selectable_books || 0) < minTodaySelectableBooks) {
     errors.push(`Today-selectable approved books ${summary.today_selectable_books || 0} is below minimum ${minTodaySelectableBooks}.`);
   }
+  if (Number(summary.warning_books || 0) > 0) {
+    warnings.push(`${summary.warning_books} official book(s) have source ledger warning metrics.`);
+  }
+  if (maxWarningBooks !== undefined && maxWarningBooks !== null && Number(summary.warning_books || 0) > maxWarningBooks) {
+    errors.push(`Source ledger warning books ${summary.warning_books || 0} exceeds maximum ${maxWarningBooks}.`);
+  }
 
   return {
     ok: errors.length === 0,
     errors,
+    warnings,
     summary,
   };
 };
@@ -142,6 +158,7 @@ Options:
   -o, --output <path>                  Write JSON result to file.
   --persist-to <dir>                   Local D1 persist directory. Only with --local.
   --min-today-selectable-books <num>   Default: 1.
+  --max-warning-books <num>            Fail if source-ledger warning books exceed this value. Default: report only.
   --compact                            Print compact JSON.
   --help                               Show this help.
 `;
@@ -156,6 +173,7 @@ export const runCli = async (argv = process.argv.slice(2), runQuery = runWrangle
   const [summary = {}] = runQuery(options, buildMaterialSourceLedgerSql());
   const evaluation = evaluateMaterialSourceLedgerSummary(summary, {
     minTodaySelectableBooks: options.minTodaySelectableBooks,
+    maxWarningBooks: options.maxWarningBooks,
   });
   const json = JSON.stringify(evaluation, null, options.compact ? 0 : 2);
 

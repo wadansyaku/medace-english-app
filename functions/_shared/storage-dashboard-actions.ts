@@ -3,10 +3,8 @@ import { getTokyoMonthRange } from '../../utils/date';
 import { buildMasteryDistribution } from '../../shared/learningHistory';
 import {
   evaluateMaterialQualityGate,
-  isBookSelectableForToday,
   toMaterialLedgerSnapshot,
 } from '../../shared/materialQuality';
-import { toPrimaryMissionSnapshot } from '../../shared/missions';
 import {
   AccountOverview,
   AdminAiActionSummary,
@@ -24,6 +22,7 @@ import {
   InterventionKind,
   LeaderboardEntry,
   MasteryDistribution,
+  MissionAssignment,
   MotivationScopeStats,
   MotivationSnapshot,
   PublicMotivationSnapshot,
@@ -34,16 +33,17 @@ import {
 } from '../../types';
 import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
+import { buildDashboardPrimaryMission } from './dashboard-primary-mission';
+import { buildDashboardBookCollections, buildDashboardSnapshotModel } from './dashboard-snapshot-model';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
 import { handleGetCoachNotifications } from './organization-notification-actions';
 import { buildActivationFunnel, readCurrentMonthAiEconomics, readLatestProductKpiSnapshot } from './product-kpi';
 import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
-import { buildSuggestedPrimaryMission, readMissionAssignmentsByStudent } from './storage-mission-actions';
+import { readMissionAssignmentsByStudent } from './storage-mission-actions';
 import { readWeaknessProfile } from './weakness-actions';
 import type { AppEnv, DbUserRow } from './types';
 import {
-  canAccessOfficialBook,
   currentMonthKey,
   getBookProgress,
   getLastTokyoDateKeys,
@@ -57,7 +57,6 @@ import {
   readFirst,
   readVisibleBookRows,
   toLearningHistory,
-  toBookMetadata,
   toTokyoDateKey,
   type DbHistoryRow,
 } from './storage-support';
@@ -448,6 +447,7 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     officialBookCount: materialQualityRows.length,
     approvedBookCount: materialQualityGates.filter((gate) => gate.isApprovedForLearner).length,
     selectableTodayBookCount: materialQualityGates.filter((gate) => gate.isSelectableForToday).length,
+    warningBookCount: materialQualityGates.filter((gate) => gate.warnings.length > 0).length,
     reviewRequiredBookCount: materialQualityGates.filter((gate) => gate.status === 'source_review_required').length,
     qaBlockedBookCount: materialQualityGates.filter((gate) => gate.status === 'qa_blocked').length,
     missingLedgerBookCount: materialQualityGates.filter((gate) => gate.status === 'missing_ledger').length,
@@ -836,24 +836,52 @@ export const handleGetPublicMotivationSnapshot = async (env: AppEnv): Promise<Pu
   });
 };
 
-export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise<DashboardSnapshot> => {
-  const allBooks = await readVisibleBookRows(env, user);
-  const todaySelectableBooks = allBooks.filter((row) => isBookSelectableForToday(toBookMetadata(row)));
+interface DashboardSnapshotReadParts {
+  progressResults: BookProgress[];
+  dueCount: DashboardSnapshot['dueCount'];
+  learningPlan: DashboardSnapshot['learningPlan'];
+  learningPreference: DashboardSnapshot['learningPreference'];
+  weaknessProfile: DashboardSnapshot['weaknessProfile'];
+  leaderboard: DashboardSnapshot['leaderboard'];
+  masteryDist: DashboardSnapshot['masteryDist'];
+  activityLogs: DashboardSnapshot['activityLogs'];
+  motivationSnapshot: DashboardSnapshot['motivationSnapshot'];
+  coachNotifications: DashboardSnapshot['coachNotifications'];
+  accountOverview: DashboardSnapshot['accountOverview'];
+  commercialRequests: DashboardSnapshot['commercialRequests'];
+  missionAssignments: Map<string, MissionAssignment>;
+}
 
-  const officialBooks: BookMetadata[] = [];
-  const myBooks: BookMetadata[] = [];
+const readDashboardMissionAssignmentsForSnapshot = async (
+  env: AppEnv,
+  user: DbUserRow,
+): Promise<Map<string, MissionAssignment>> => (
+  user.role === UserRole.STUDENT
+    ? readMissionAssignmentsByStudent(env, [user.id])
+    : Promise.resolve(new Map<string, MissionAssignment>())
+);
 
-  allBooks.forEach((row) => {
-    const mapped = toBookMetadata(row);
-    if (row.created_by === user.id) myBooks.push(mapped);
-    else if (canAccessOfficialBook(user, mapped)) officialBooks.push(mapped);
-  });
-
-  officialBooks.sort((left, right) => (left.isPriority === right.isPriority ? left.title.localeCompare(right.title) : left.isPriority ? -1 : 1));
-  myBooks.sort((left, right) => right.id.localeCompare(left.id));
-
-  const [progressResults, dueCount, learningPlan, learningPreference, weaknessProfile, leaderboard, masteryDist, activityLogs, motivationSnapshot, coachNotifications, accountOverview, commercialRequests, missionAssignments] = await Promise.all([
-    Promise.all([...officialBooks, ...myBooks].map((book) => getBookProgress(env, user.id, book.id))),
+const readDashboardSnapshotParts = async (
+  env: AppEnv,
+  user: DbUserRow,
+  progressBooks: BookMetadata[],
+): Promise<DashboardSnapshotReadParts> => {
+  const [
+    progressResults,
+    dueCount,
+    learningPlan,
+    learningPreference,
+    weaknessProfile,
+    leaderboard,
+    masteryDist,
+    activityLogs,
+    motivationSnapshot,
+    coachNotifications,
+    accountOverview,
+    commercialRequests,
+    missionAssignments,
+  ] = await Promise.all([
+    Promise.all(progressBooks.map((book) => getBookProgress(env, user.id, book.id))),
     getVisibleDueCount(env, user),
     handleGetLearningPlan(env, user),
     handleGetLearningPreference(env, user),
@@ -865,60 +893,60 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     handleGetCoachNotifications(env, user.id),
     handleGetAccountOverview(env, user),
     handleGetCommercialRequestStatus(env, user),
-    user.role === UserRole.STUDENT
-      ? readMissionAssignmentsByStudent(env, [user.id])
-      : Promise.resolve(new Map()),
+    readDashboardMissionAssignmentsForSnapshot(env, user),
   ]);
 
-  const progressMap: Record<string, BookProgress> = {};
-  progressResults.forEach((progress) => {
-    progressMap[progress.bookId] = progress;
-  });
+  return {
+    progressResults,
+    dueCount,
+    learningPlan,
+    learningPreference,
+    weaknessProfile,
+    leaderboard,
+    masteryDist,
+    activityLogs,
+    motivationSnapshot,
+    coachNotifications,
+    accountOverview,
+    commercialRequests,
+    missionAssignments,
+  };
+};
+
+export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): Promise<DashboardSnapshot> => {
+  const allBooks = await readVisibleBookRows(env, user);
+  const { todaySelectableBooks, officialBooks, myBooks } = buildDashboardBookCollections(allBooks, user);
+
+  const {
+    progressResults,
+    dueCount,
+    learningPlan,
+    learningPreference,
+    weaknessProfile,
+    leaderboard,
+    masteryDist,
+    activityLogs,
+    motivationSnapshot,
+    coachNotifications,
+    accountOverview,
+    commercialRequests,
+    missionAssignments,
+  } = await readDashboardSnapshotParts(env, user, [...officialBooks, ...myBooks]);
 
   const assignedMission = missionAssignments.get(user.id);
-  const primaryMission = assignedMission
-    ? toPrimaryMissionSnapshot({
-        assignmentId: assignedMission.id,
-        track: assignedMission.mission.learningTrack,
-        title: assignedMission.mission.title,
-        rationale: assignedMission.mission.rationale,
-        dueAt: assignedMission.mission.dueAt,
-        sourceBookId: assignedMission.mission.bookId,
-        sourceBookTitle: assignedMission.mission.bookTitle,
-        writingAssignmentId: assignedMission.mission.writingAssignmentId,
-        writingPromptTitle: assignedMission.mission.writingPromptTitle,
-        isSuggested: false,
-        progress: assignedMission.progress,
-      })
-    : (user.role === UserRole.STUDENT
-      ? buildSuggestedPrimaryMission({
-          user,
-          books: todaySelectableBooks,
-          learningPlan: learningPlan
-            ? {
-                dailyWordGoal: learningPlan.dailyWordGoal,
-                selectedBookIds: learningPlan.selectedBookIds,
-              }
-            : null,
-          learningPreference: learningPreference
-            ? {
-                targetExam: learningPreference.targetExam,
-                targetScore: learningPreference.targetScore,
-                weeklyStudyDays: learningPreference.weeklyStudyDays,
-                dailyStudyMinutes: learningPreference.dailyStudyMinutes,
-                weakSkillFocus: learningPreference.weakSkillFocus,
-                examDate: learningPreference.examDate,
-                intensity: learningPreference.intensity,
-              }
-            : null,
-        })
-      : null);
+  const primaryMission = buildDashboardPrimaryMission({
+    user,
+    todaySelectableBooks,
+    learningPlan,
+    learningPreference,
+    assignedMission,
+  });
 
-  return {
+  return buildDashboardSnapshotModel({
     dueCount,
     officialBooks,
     myBooks,
-    progressMap,
+    progressResults,
     learningPlan,
     learningPreference,
     weaknessProfile,
@@ -930,5 +958,5 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
     primaryMission,
     accountOverview,
     commercialRequests,
-  };
+  });
 };

@@ -1,8 +1,10 @@
 import {
+  type EnglishLevel,
   LearningTrack,
   MissionProgressEventType,
   type MissionAssignment,
   type PrimaryMissionSnapshot,
+  type UserGrade,
   type UserProfile,
   UserRole,
   WeeklyMissionStatus,
@@ -14,9 +16,9 @@ import {
 } from '../../types';
 import {
   buildMissionProgress,
-  buildSuggestedMissionDraft,
-  toPrimaryMissionSnapshot,
 } from '../../shared/missions';
+import { isBookSelectableForToday } from '../../shared/materialQuality';
+import { buildDashboardPrimaryMission } from '../../functions/_shared/dashboard-primary-mission';
 import { IDB_MOCK_ORGANIZATION_IDS } from './mockData';
 
 const now = Date.now();
@@ -200,65 +202,40 @@ export const getLocalPrimaryMissionSnapshot = ({
   books,
   learningPlan,
   learningPreference,
-  nowValue = Date.now(),
 }: {
   user: UserProfile;
   books: BookMetadata[];
   learningPlan?: LearningPlan | null;
   learningPreference?: LearningPreference | null;
-  nowValue?: number;
 }): PrimaryMissionSnapshot | null => {
   const assignment = getLocalMissionAssignmentByStudent(user.uid);
-  if (assignment) {
-    return toPrimaryMissionSnapshot({
-      assignmentId: assignment.id,
-      track: assignment.mission.learningTrack,
-      title: assignment.mission.title,
-      rationale: assignment.mission.rationale,
-      dueAt: assignment.mission.dueAt,
-      sourceBookId: assignment.mission.bookId,
-      sourceBookTitle: assignment.mission.bookTitle,
-      writingAssignmentId: assignment.mission.writingAssignmentId,
-      writingPromptTitle: assignment.mission.writingPromptTitle,
-      isSuggested: false,
-      progress: assignment.progress,
-    });
-  }
+  const todaySelectableBooks = books
+    .filter(isBookSelectableForToday)
+    .map((book) => ({
+      id: book.id,
+      title: book.title,
+      description: book.description || null,
+      source_context: book.sourceContext || null,
+      word_count: book.wordCount,
+      is_priority: book.isPriority ? 1 : 0,
+    }));
 
-  if (user.role !== UserRole.STUDENT) return null;
-  const draft = buildSuggestedMissionDraft({
-    grade: user.grade,
-    level: user.englishLevel,
-    learningPlan,
-    learningPreference,
-    books,
-    now: nowValue,
-  });
-
-  const progress = buildMissionProgress({
-    dueAt: draft.dueAt,
-    newWordsCompleted: 0,
-    newWordsTarget: draft.newWordsTarget,
-    reviewWordsCompleted: 0,
-    reviewWordsTarget: draft.reviewWordsTarget,
-    quizCompletedCount: 0,
-    quizTargetCount: draft.quizTargetCount,
-    writingRequired: Boolean(draft.writingAssignmentId),
-    writingCompleted: false,
-    now: nowValue,
-  });
-
-  return toPrimaryMissionSnapshot({
-    track: draft.learningTrack,
-    title: draft.title,
-    rationale: draft.rationale,
-    dueAt: draft.dueAt,
-    sourceBookId: draft.bookId,
-    sourceBookTitle: draft.bookTitle,
-    writingAssignmentId: draft.writingAssignmentId,
-    writingPromptTitle: draft.writingPromptTitle,
-    isSuggested: true,
-    progress,
+  return buildDashboardPrimaryMission({
+    user: {
+      id: user.uid,
+      role: user.role,
+      grade: user.grade || null,
+      english_level: user.englishLevel || null,
+    } satisfies {
+      id: string;
+      role: UserRole;
+      grade: UserGrade | null;
+      english_level: EnglishLevel | null;
+    },
+    todaySelectableBooks,
+    learningPlan: learningPlan || null,
+    learningPreference: learningPreference || null,
+    assignedMission: assignment,
   });
 };
 

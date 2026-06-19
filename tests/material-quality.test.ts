@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   evaluateMaterialQualityGate,
   getLearnerMaterialQualityMessage,
+  getOperatorMaterialQualityMessage,
+  isBookApprovedForLearner,
   isBookSelectableForToday,
+  resolveLearnerMaterialQualityGate,
   type MaterialSourceLedgerSnapshot,
 } from '../shared/materialQuality';
 import { BookCatalogSource, type BookMetadata } from '../types';
@@ -65,6 +68,20 @@ describe('material quality gate', () => {
     expect(gate.isApprovedForLearner).toBe(false);
   });
 
+  it('escalates approved material warnings to operators without blocking learners', () => {
+    const gate = evaluateMaterialQualityGate(baseBook, {
+      ...approvedLedger,
+      qaDuplicateHeadwordCount: 2,
+      qaSourceCoverageRate: 0.95,
+    });
+
+    expect(gate.status).toBe('approved');
+    expect(gate.isSelectableForToday).toBe(true);
+    expect(getLearnerMaterialQualityMessage(gate)).toBe('学習に使える教材です。');
+    expect(getOperatorMaterialQualityMessage(gate)).toContain('重複headword');
+    expect(getOperatorMaterialQualityMessage(gate)).toContain('次回教材更新までに確認');
+  });
+
   it('treats user-generated books as selectable personal material', () => {
     const gate = evaluateMaterialQualityGate({
       ...baseBook,
@@ -74,6 +91,25 @@ describe('material quality gate', () => {
     expect(gate.status).toBe('user_generated');
     expect(gate.isSelectableForToday).toBe(true);
     expect(isBookSelectableForToday({ ...baseBook, qualityGate: gate })).toBe(true);
+  });
+
+  it('fails closed when an official book is missing its quality gate', () => {
+    const bookWithoutGate: BookMetadata = {
+      ...baseBook,
+      qualityGate: undefined,
+    };
+
+    const gate = resolveLearnerMaterialQualityGate(bookWithoutGate);
+
+    expect(gate).toMatchObject({
+      status: 'missing_ledger',
+      label: '確認中',
+      isApprovedForLearner: false,
+      isSelectableForToday: false,
+    });
+    expect(isBookSelectableForToday(bookWithoutGate)).toBe(false);
+    expect(isBookApprovedForLearner(bookWithoutGate)).toBe(false);
+    expect(getLearnerMaterialQualityMessage(gate)).toBe('この教材は確認中です。承認後に学習やテストで使えます。');
   });
 
   it('uses learner-facing copy for review-pending material', () => {

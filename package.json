@@ -29,6 +29,8 @@
     "content:qa:gate": "node scripts/check-content-qa-report.mjs",
     "content:qa:d1": "node scripts/analysis/run-d1-content-qa.mjs",
     "content:source-ledger:d1": "node scripts/analysis/check-d1-material-source-ledger.mjs",
+    "ops:b2b-activation:d1": "node scripts/analysis/check-d1-b2b-activation.mjs",
+    "ops:production-baseline:d1": "node scripts/analysis/run-production-baseline.mjs",
     "content:remediate-blocked": "node scripts/analysis/remediate-blocked-content-markers.mjs",
     "noun:analyze": "node scripts/analyze-noun-workbook.mjs",
     "db:migrations:check-names": "node scripts/check-migration-filenames.mjs",
@@ -53,7 +55,7 @@
     "typescript": "~5.8.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.8",
-    "wrangler": "^4.100.0",
+    "wrangler": "^4.102.0",
     "xlsx": "^0.18.5"
   },
   "overrides": {

@@ -45,6 +45,57 @@ export type StudentDashboardTaskId =
   | 'account';
 export type StudentDashboardTaskGroup = 'primary' | 'urgent' | 'supporting' | 'reference';
 
+export interface StudentDashboardPrimaryTaskDecisionInput {
+  hasStudyBooks: boolean;
+  hasActionableWriting: boolean;
+  hasActiveMission: boolean;
+  hasActionableCoachNotification: boolean;
+  shouldPrioritizePractice: boolean;
+  remainingWords: number;
+  hasWeaknessSignals: boolean;
+  canShowWritingSection: boolean;
+}
+
+export const resolveStudentDashboardPrimaryLearningRouteId = ({
+  hasStudyBooks,
+  hasActionableWriting,
+  hasActiveMission,
+  shouldPrioritizePractice,
+  remainingWords,
+  hasWeaknessSignals,
+  canShowWritingSection,
+}: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardLearningRouteId => {
+  if (!hasStudyBooks) return 'today';
+  if (hasActionableWriting) return 'writing';
+  if (hasActiveMission) return 'mission';
+  if (shouldPrioritizePractice) return 'englishPractice';
+  if (remainingWords > 0) return 'today';
+  if (hasWeaknessSignals) return 'weakness';
+  if (canShowWritingSection) return 'writing';
+  return 'today';
+};
+
+export const resolveStudentDashboardPrimaryTaskId = ({
+  hasStudyBooks,
+  hasActionableWriting,
+  hasActiveMission,
+  hasActionableCoachNotification,
+  shouldPrioritizePractice,
+  remainingWords,
+  hasWeaknessSignals,
+  canShowWritingSection,
+}: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardTaskId => {
+  if (!hasStudyBooks) return 'today';
+  if (hasActionableWriting) return 'writing';
+  if (hasActiveMission) return 'mission';
+  if (hasActionableCoachNotification) return 'coach';
+  if (shouldPrioritizePractice) return 'englishPractice';
+  if (remainingWords > 0) return 'today';
+  if (hasWeaknessSignals) return 'weakness';
+  if (canShowWritingSection) return 'writing';
+  return 'today';
+};
+
 export interface StudentDashboardLearningRouteCard {
   id: StudentDashboardLearningRouteId;
   title: string;
@@ -328,21 +379,17 @@ export const useStudentDashboardViewModel = ({
       && !hasActiveMission
       && (hasEnglishPracticeWeakness || (!hasWeaknessSignals && remainingWords <= 0)),
   );
-  const primaryLearningRouteId: StudentDashboardLearningRouteId = !hasStudyBooks
-    ? 'today'
-    : hasActionableWriting
-      ? 'writing'
-      : hasActiveMission
-        ? 'mission'
-        : shouldPrioritizePractice
-          ? 'englishPractice'
-        : remainingWords > 0
-          ? 'today'
-          : hasWeaknessSignals
-            ? 'weakness'
-            : canShowWritingSection
-              ? 'writing'
-              : 'today';
+  const primaryTaskDecisionInput: StudentDashboardPrimaryTaskDecisionInput = {
+    hasStudyBooks,
+    hasActionableWriting,
+    hasActiveMission,
+    hasActionableCoachNotification: Boolean(latestActionableCoachNotification),
+    shouldPrioritizePractice,
+    remainingWords,
+    hasWeaknessSignals,
+    canShowWritingSection,
+  };
+  const primaryLearningRouteId = resolveStudentDashboardPrimaryLearningRouteId(primaryTaskDecisionInput);
 
   const learningRouteCardDrafts: Array<Omit<StudentDashboardLearningRouteCard, 'isPrimary'> | null> = [
     {
@@ -423,23 +470,7 @@ export const useStudentDashboardViewModel = ({
       )
     : null;
 
-  const primaryTaskId: StudentDashboardTaskId = !hasStudyBooks
-    ? 'today'
-    : hasActionableWriting
-      ? 'writing'
-      : hasActiveMission
-        ? 'mission'
-        : latestActionableCoachNotification
-          ? 'coach'
-          : shouldPrioritizePractice
-            ? 'englishPractice'
-            : remainingWords > 0
-              ? 'today'
-              : hasWeaknessSignals
-                ? 'weakness'
-                : canShowWritingSection
-                  ? 'writing'
-                  : 'today';
+  const primaryTaskId = resolveStudentDashboardPrimaryTaskId(primaryTaskDecisionInput);
 
   const resolveRouteTaskGroup = (routeId: StudentDashboardLearningRouteId): StudentDashboardTaskGroup => {
     if (routeId === primaryTaskId) return 'primary';

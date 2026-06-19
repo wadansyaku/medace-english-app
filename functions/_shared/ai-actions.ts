@@ -791,7 +791,7 @@ const generateGrammarPracticeQuestions = async (
       : model;
 
     return {
-      questions: [...cachedQuestions, ...persistedGeneratedQuestions].slice(0, requestedCount),
+      questions: cachedQuestions.slice(0, requestedCount),
       usedAi: persistedGeneratedQuestions.length > 0,
       generatedCount: persistedGeneratedQuestions.length,
       billableGeneratedCount,

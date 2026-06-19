@@ -13,12 +13,17 @@ describe('check-d1-material-source-ledger', () => {
       database: 'medace-db',
       mode: 'remote',
       minTodaySelectableBooks: 1,
+      maxWarningBooks: null,
+    }));
+    expect(parseCliArgs(['--remote', '--max-warning-books', '0'])).toEqual(expect.objectContaining({
+      maxWarningBooks: 0,
     }));
     expect(parseCliArgs(['--local', '--persist-to', '/tmp/d1'])).toEqual(expect.objectContaining({
       mode: 'local',
       persistTo: '/tmp/d1',
     }));
     expect(() => parseCliArgs(['--remote', '--persist-to', '/tmp/d1'])).toThrow('--persist-to');
+    expect(() => parseCliArgs(['--remote', '--max-warning-books', '-1'])).toThrow('--max-warning-books');
   });
 
   it('builds a SELECT-only source ledger summary query', () => {
@@ -26,10 +31,11 @@ describe('check-d1-material-source-ledger', () => {
 
     expect(sql).toContain('material_source_ledger');
     expect(sql).toContain('today_selectable_books');
+    expect(sql).toContain('warning_books');
     expect(sql).not.toMatch(/\b(UPDATE|INSERT|DELETE|DROP|ALTER)\b/i);
   });
 
-  it('passes complete ledger coverage while allowing review-pending licensed material', () => {
+  it('passes complete ledger coverage while escalating warning metrics as non-blocking by default', () => {
     const result = evaluateMaterialSourceLedgerSummary({
       official_books: 45,
       books_with_source_ledger: 45,
@@ -37,10 +43,30 @@ describe('check-d1-material-source-ledger', () => {
       source_approved_books: 6,
       source_review_required_books: 39,
       qa_blocked_books: 0,
+      warning_books: 2,
       today_selectable_books: 6,
     });
 
     expect(result.ok).toBe(true);
+    expect(result.warnings.join('\n')).toContain('source ledger warning metrics');
+  });
+
+  it('can harden source ledger warnings when an explicit maximum is provided', () => {
+    const result = evaluateMaterialSourceLedgerSummary({
+      official_books: 45,
+      books_with_source_ledger: 45,
+      books_missing_source_ledger: 0,
+      source_approved_books: 6,
+      source_review_required_books: 39,
+      qa_blocked_books: 0,
+      warning_books: 2,
+      today_selectable_books: 6,
+    }, {
+      maxWarningBooks: 0,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toContain('warning books');
   });
 
   it('fails missing ledger rows, QA blockers, and no approved Today material', () => {
@@ -51,6 +77,7 @@ describe('check-d1-material-source-ledger', () => {
       source_approved_books: 0,
       source_review_required_books: 44,
       qa_blocked_books: 1,
+      warning_books: 0,
       today_selectable_books: 0,
     });
 
