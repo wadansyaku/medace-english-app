@@ -16,10 +16,11 @@ export const mobileViewport = { width: 390, height: 844 };
 export const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 export const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW === '1';
 const expectIdbStorageMode = process.env.VITE_STORAGE_MODE === 'idb';
+const demoLoginSessionTimeoutMs = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1' ? 45_000 : 15_000;
 
 export const toUploadBuffer = (value: string): Buffer => Buffer.from(value);
 
-const finishStudySession = async (page: Page, maxCards = 12) => {
+export const finishStudySession = async (page: Page, maxCards = 12) => {
   const finishButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit);
   const dashboardReturnButton = page.getByRole('button', { name: 'ダッシュボードに戻る' });
   const flipButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton);
@@ -341,7 +342,12 @@ export const getCurrentSessionUser = async (page: Page, timeoutMs = 10_000) => {
         } | null,
         empty: false,
       } as const;
-    });
+    }).catch(() => null);
+
+    if (!result) {
+      await page.waitForTimeout(500);
+      continue;
+    }
 
     if (!result.ok) {
       throw new Error(`session fetch failed with status ${result.status}`);
@@ -475,19 +481,19 @@ const waitForAuthenticatedSession = async (
 export const loginBusinessStudentDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'student');
   await page.getByTestId(role.primaryActionTestId).click();
-  await waitForAuthenticatedSession(page, 15_000, MOBILE_FLOW_TEST_IDS.studentDashboard);
+  await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, MOBILE_FLOW_TEST_IDS.studentDashboard);
 };
 
 export const loginInstructorDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'instructor');
   await page.getByTestId(role.primaryActionTestId).click();
-  await waitForAuthenticatedSession(page, 15_000, 'instructor-dashboard');
+  await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'instructor-dashboard');
 };
 
 export const loginGroupAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'group-admin');
   await page.getByTestId(role.primaryActionTestId).click();
-  await waitForAuthenticatedSession(page, 15_000, 'business-admin-dashboard');
+  await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'business-admin-dashboard');
 };
 
 export const loginAdminDemo = async (page: Page) => {

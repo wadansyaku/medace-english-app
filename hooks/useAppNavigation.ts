@@ -5,6 +5,7 @@ import { UserRole, type LearningTaskIntent, type UserProfile } from '../types';
 import {
   getPublicBusinessRolePath,
   parsePublicBusinessRoleKey,
+  SERVICE_ADMIN_ACCESS_PATH,
   type PublicBusinessRoleKey,
 } from '../shared/publicBusinessRoles';
 import {
@@ -129,6 +130,14 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
     return {
       ...initialNavigationState,
       currentView: 'publicInfo',
+    };
+  }
+
+  if (normalizedPath === SERVICE_ADMIN_ACCESS_PATH) {
+    return {
+      ...initialNavigationState,
+      currentView: 'publicRole',
+      publicRole: 'service-admin',
     };
   }
 

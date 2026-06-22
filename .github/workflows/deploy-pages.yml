@@ -22,6 +22,7 @@ jobs:
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
       WRITING_AI_MODE: ${{ vars.WRITING_AI_MODE || 'hybrid' }}
+      VITE_ENABLE_ADMIN_DEMO: ${{ vars.VITE_ENABLE_ADMIN_DEMO || 'false' }}
     permissions:
       contents: read
       deployments: write
@@ -68,6 +69,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run cf:doctor
+
+      - name: Sync production admin demo runtime flag
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          printf '%s\n' "$VITE_ENABLE_ADMIN_DEMO" | node node_modules/wrangler/bin/wrangler.js pages secret put ENABLE_ADMIN_DEMO --project-name "$CF_PAGES_PROJECT"
 
       - name: Build deploy artifact
         run: npm run build
@@ -171,7 +179,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|public guide keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|public guide keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe|service admin dedicated access link resolves to the protected admin entrypoint"
 
       - name: Upload production deployed smoke artifacts
         if: failure()
@@ -229,6 +237,7 @@ jobs:
             echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
             echo "- Recovery Bookmark: \`${{ steps.d1-bookmark.outputs.bookmark }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
+            echo "- Admin Demo Enabled: \`${{ env.VITE_ENABLE_ADMIN_DEMO }}\`"
             echo "- Verification: local release gate equivalent (security:audit + verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + B2B activation integrity gate + build)"
             echo "- Content QA Gate: \`passed\`"
             echo "- Source Ledger Gate: \`passed\`"

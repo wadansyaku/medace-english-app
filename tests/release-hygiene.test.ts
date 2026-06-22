@@ -170,6 +170,13 @@ describe('release hygiene contracts', () => {
 
     expectTextInOrder(productionWorkflow, workflowGateOrder);
     expectTextInOrder(previewWorkflow, workflowGateOrder);
+    expectTextInOrder(productionWorkflow, [
+      'name: Verify GitHub and Cloudflare configuration',
+      'name: Sync production admin demo runtime flag',
+      'run: |',
+      'pages secret put ENABLE_ADMIN_DEMO --project-name "$CF_PAGES_PROJECT"',
+      'name: Build deploy artifact',
+    ]);
     expect(productionWorkflow).toContain('local release gate equivalent');
     expect(previewWorkflow).toContain('local release gate equivalent');
     expect(productionWorkflow).toContain('B2B Activation Integrity Gate: \\`passed\\`');
@@ -212,6 +219,7 @@ describe('release hygiene contracts', () => {
     expect(productionWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
     expect(productionWorkflow).toContain('public guide keeps the business role previews visible');
     expect(productionWorkflow).toContain('public role pages always emit a noindex robots tag and service admin action stays safe');
+    expect(productionWorkflow).toContain('service admin dedicated access link resolves to the protected admin entrypoint');
     expect(productionWorkflow).toContain('name: Upload production deployed smoke artifacts');
     expect(productionWorkflow).toContain('name: production-deployed-smoke-artifacts');
     expect(previewWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
