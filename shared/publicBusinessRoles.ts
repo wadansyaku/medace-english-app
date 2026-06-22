@@ -7,6 +7,8 @@ export type PublicBusinessRoleKey =
   | 'group-admin'
   | 'service-admin';
 
+export const SERVICE_ADMIN_ACCESS_PATH = '/admin-access';
+
 type PublicBusinessRoleIcon = 'student' | 'instructor' | 'group-admin' | 'service-admin';
 
 export interface PublicBusinessRoleHighlight {

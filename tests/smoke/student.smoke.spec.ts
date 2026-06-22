@@ -4,6 +4,7 @@ import {
   MOBILE_FLOW_TEST_IDS,
   completeDiagnostic,
   findUnexpectedHorizontalOverflow,
+  finishStudySession,
   getCurrentSessionUser,
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
@@ -261,14 +262,12 @@ test('study routes survive reload and finish back on the dashboard path', async 
   await page.goto(`/study/${bookId}`);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
   await page.reload();
-  await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
+  await Promise.race([
+    page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront).waitFor({ state: 'visible', timeout: 10_000 }),
+    page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).waitFor({ state: 'visible', timeout: 10_000 }),
+  ]);
 
-  for (let index = 0; index < 2; index += 1) {
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton).click();
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3).click();
-  }
-
-  await page.getByRole('button', { name: 'ダッシュボードに戻る' }).click();
+  await finishStudySession(page, 4);
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 });

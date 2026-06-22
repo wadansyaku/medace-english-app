@@ -95,6 +95,14 @@ test('public role pages always emit a noindex robots tag and service admin actio
   ).toBeLessThan(160);
 });
 
+test('service admin dedicated access link resolves to the protected admin entrypoint', async ({ page }) => {
+  await page.goto('/admin-access');
+
+  await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
+  await expect(page.getByTestId('demo-login-admin')).toBeVisible();
+});
+
 test('preview deployment surfaces a visible preview banner and noindex marker', async ({ page }) => {
   test.skip(!expectPreviewDeployment, 'preview-only deployment validation');
 

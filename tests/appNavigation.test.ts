@@ -8,7 +8,11 @@ import {
   createTodayFocusTaskIntent,
   getTaskRouteBookId,
 } from '../shared/learningTask';
-import { PUBLIC_BUSINESS_ROLE_KEYS, getPublicBusinessRolePath } from '../shared/publicBusinessRoles';
+import {
+  PUBLIC_BUSINESS_ROLE_KEYS,
+  SERVICE_ADMIN_ACCESS_PATH,
+  getPublicBusinessRolePath,
+} from '../shared/publicBusinessRoles';
 import { UserRole, type UserProfile } from '../types';
 
 const createUser = (role: UserRole): UserProfile => ({
@@ -174,5 +178,15 @@ describe('app navigation paths', () => {
         englishPracticeLane: null,
       })).toBe(path);
     }
+  });
+
+  it('parses the dedicated service admin access link into the protected role page', () => {
+    expect(parseNavigationPath(SERVICE_ADMIN_ACCESS_PATH)).toEqual({
+      currentView: 'publicRole',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: 'service-admin',
+      englishPracticeLane: null,
+    });
   });
 });
