@@ -86,11 +86,16 @@ describe('release hygiene contracts', () => {
     expect(doctor).toMatch(/isPagesGitAutoDeployDisabled\(sourceConfig\) \? 'ok' : 'error'/);
     expect(doctor).toContain('`Possible duplicate Pages project ${gitMirrorProject}`');
     expect(doctor).toContain('project settings could not be verified');
+    expect(doctor).toContain('Cloudflare dashboard may show "Deployments paused"');
     expect(readme).toContain('cf:doctor` の `Summary` が `error=0`');
     expect(readme).toContain('Cloudflare native Git auto-deploy');
+    expect(readme).toContain('Deployments paused');
+    expect(readme).toContain('Resume deployments');
     expect(readme).toContain('release-blocking error');
     expect(runbook).toContain('cf:doctor` の `Summary` が `error=0`');
     expect(runbook).toContain('Cloudflare native Git auto-deploy');
+    expect(runbook).toContain('Deployments paused');
+    expect(runbook).toContain('Resume deployments');
     expect(runbook).toContain('release-blocking error');
     expect(productionWorkflow).toMatch(/run: npm run cf:doctor/);
     expect(previewWorkflow).toMatch(/run: npm run cf:doctor/);

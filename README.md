@@ -221,6 +221,7 @@ deploy workflow は GitHub の `production` / `preview` environment を参照し
 
 GitHub Actions を正史の配信経路にする前提では、Cloudflare の Git 直接連携や `*-git` の mirror Pages project を併用しないでください。preview / production が二重作成され、PR コメントや確認URLが分岐します。
 `cf:doctor` はこの状態を release-blocking error として検出します。既に Git 連携が残っている場合は `npm run cf:sync` で Cloudflare native Git auto-deploy を無効化し、不要な mirror project は Cloudflare Dashboard 側で削除してください。
+Cloudflare Dashboard で `Deployments paused` / `デプロイを一時停止` と表示される場合は、GitHub Actions 以外の native Git auto-deploy だけが停止していることを確認してください。このプロジェクトではその表示が期待状態です。`Resume deployments` を押すと migration / release gate より前に Cloudflare が直接 deploy する可能性があるため、`npm run cf:doctor` が `error=0` で live `/api/session` の `x-deployment-sha` が最新なら解除しないでください。
 
 設定の反映を自動化したい場合は `npm run cf:sync` を使ってから `npm run cf:doctor` で検証してください。
 
