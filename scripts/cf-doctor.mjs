@@ -433,7 +433,7 @@ if (cloudflareReady) {
             isPagesGitAutoDeployDisabled(sourceConfig) ? 'ok' : 'error',
             `Pages project ${pagesProject} Git auto-deploy`,
             isPagesGitAutoDeployDisabled(sourceConfig)
-              ? 'Git integration remains linked, but automatic production/preview deploys are disabled'
+              ? 'Cloudflare dashboard may show "Deployments paused"; this is expected for Git auto-deploy only because GitHub Actions deploys with Wrangler after release gates'
               : 'native Git auto-deploy is still enabled; disable Cloudflare Git auto-deploy if GitHub Actions is the canonical deploy path',
           );
         }
