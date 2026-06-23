@@ -74,6 +74,8 @@ export const buildActivationFunnel = (snapshot: ProductKpiDailySnapshot): AdminA
     buildFunnelStep('mission', 'ミッション配布', snapshot.organizationsWithMissionCount, snapshot.organizationsWithAssignmentCount),
     buildFunnelStep('notification', '初回通知', snapshot.organizationsWithNotificationCount, snapshot.organizationsWithMissionCount),
     buildFunnelStep('writing', '作文配布', snapshot.organizationsWithWritingAssignmentCount, snapshot.organizationsWithNotificationCount),
+    buildFunnelStep('submission', '作文提出', snapshot.organizationsWithWritingSubmissionCount, snapshot.organizationsWithWritingAssignmentCount),
+    buildFunnelStep('review', '講師返却', snapshot.organizationsWithWritingReviewCount, snapshot.organizationsWithWritingSubmissionCount),
   ];
   const gaps = steps.slice(1).map((step, index) => buildFunnelGap(steps[index], step));
 
@@ -84,6 +86,8 @@ export const buildActivationFunnel = (snapshot: ProductKpiDailySnapshot): AdminA
     organizationsWithMissionCount: snapshot.organizationsWithMissionCount,
     organizationsWithNotificationCount: snapshot.organizationsWithNotificationCount,
     organizationsWithWritingAssignmentCount: snapshot.organizationsWithWritingAssignmentCount,
+    organizationsWithWritingSubmissionCount: snapshot.organizationsWithWritingSubmissionCount,
+    organizationsWithWritingReviewCount: snapshot.organizationsWithWritingReviewCount,
     activationVelocity30d: {
       organizationsCreatedCohort: snapshot.organizationsCreatedCohort30d,
       organizationsAssignedStudent: snapshot.organizationsAssignedStudent30d,
@@ -98,7 +102,7 @@ export const buildActivationFunnel = (snapshot: ProductKpiDailySnapshot): AdminA
     writingReviewsCompleted30d: snapshot.writingReviewsCompleted30d,
     commercialFormOpenCount30d: snapshot.commercialFormOpenCount30d,
     commercialRequestCount30d: snapshot.commercialRequestCount30d,
-    completionRate: boundedRatio(snapshot.organizationsWithWritingAssignmentCount, snapshot.totalOrganizations),
+    completionRate: boundedRatio(snapshot.organizationsWithWritingReviewCount, snapshot.totalOrganizations),
     weakestGap: resolveWeakestGap(gaps),
     steps,
     gaps,

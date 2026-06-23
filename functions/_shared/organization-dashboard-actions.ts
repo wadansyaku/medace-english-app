@@ -114,14 +114,18 @@ export const handleGetOrganizationDashboardSnapshot = async (
     }>(
       env,
       `SELECT
-         COUNT(*) AS total_count,
-         COALESCE(SUM(CASE WHEN status != 'DRAFT' THEN 1 ELSE 0 END), 0) AS issued_count,
-         COALESCE(SUM(CASE WHEN status IN ('SUBMITTED', 'REVIEW_READY') THEN 1 ELSE 0 END), 0) AS submitted_count,
-         COALESCE(SUM(CASE WHEN status = 'REVIEW_READY' THEN 1 ELSE 0 END), 0) AS review_ready_count,
-         COALESCE(SUM(CASE WHEN status IN ('RETURNED', 'REVISION_REQUESTED', 'COMPLETED') THEN 1 ELSE 0 END), 0) AS reviewed_count
-       FROM writing_assignments
-       WHERE organization_id = ?
-          OR (organization_id IS NULL AND organization_name = ?)`,
+         COUNT(DISTINCT a.id) AS total_count,
+         COUNT(DISTINCT CASE WHEN a.status != 'DRAFT' THEN a.id END) AS issued_count,
+         COUNT(DISTINCT s.assignment_id) AS submitted_count,
+         COUNT(DISTINCT CASE WHEN a.status = 'REVIEW_READY' THEN a.id END) AS review_ready_count,
+         COUNT(DISTINCT CASE WHEN r.id IS NOT NULL THEN a.id END) AS reviewed_count
+       FROM writing_assignments a
+       LEFT JOIN writing_submissions s
+         ON s.assignment_id = a.id
+       LEFT JOIN writing_teacher_reviews r
+         ON r.submission_id = s.id
+       WHERE a.organization_id = ?
+          OR (a.organization_id IS NULL AND a.organization_name = ?)`,
       organization.organizationId,
       organization.organizationName,
     ),

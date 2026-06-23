@@ -25,6 +25,8 @@ const makeSnapshot = (overrides: Partial<ProductKpiDailySnapshot> = {}): Product
   organizationsWithMissionCount: 0,
   organizationsWithNotificationCount: 0,
   organizationsWithWritingAssignmentCount: 0,
+  organizationsWithWritingSubmissionCount: 0,
+  organizationsWithWritingReviewCount: 0,
   organizationsCreatedCohort30d: 0,
   organizationsAssignedStudent30d: 0,
   organizationsCreatedFirstMission30d: 0,
@@ -58,6 +60,8 @@ describe('buildActivationFunnel', () => {
       organizationsWithMissionCount: 2,
       organizationsWithNotificationCount: 1,
       organizationsWithWritingAssignmentCount: 0,
+      organizationsWithWritingSubmissionCount: 0,
+      organizationsWithWritingReviewCount: 0,
       organizationsCreatedCohort30d: 3,
       organizationsAssignedStudent30d: 2,
       organizationsCreatedFirstMission30d: 2,
@@ -78,6 +82,8 @@ describe('buildActivationFunnel', () => {
       ['mission', 2, 2, 50],
       ['notification', 1, 1, 50],
       ['writing', 0, 1, 100],
+      ['submission', 0, 0, 0],
+      ['review', 0, 0, 0],
     ]);
     expect(funnel.weakestGap).toMatchObject({
       fromStepId: 'notification',
@@ -100,7 +106,7 @@ describe('buildActivationFunnel', () => {
 
     expect(funnel.completionRate).toBe(0);
     expect(funnel.weakestGap).toBeNull();
-    expect(funnel.steps).toHaveLength(6);
+    expect(funnel.steps).toHaveLength(8);
     expect(funnel.gaps.every((gap) => gap.severity === 'ok')).toBe(true);
   });
 });
@@ -111,6 +117,18 @@ describe('runProductAnalyticsSnapshotJob', () => {
     const resolveCount = (sql: string): number => {
       if (sql.includes("event_name = 'writing_assignment_created'")) {
         return 99;
+      }
+      if (
+        sql.includes('COUNT(DISTINCT resolved_organization_id) AS count')
+        && sql.includes('FROM writing_teacher_reviews r')
+      ) {
+        return 1;
+      }
+      if (
+        sql.includes('COUNT(DISTINCT resolved_organization_id) AS count')
+        && sql.includes('FROM writing_submissions s')
+      ) {
+        return 2;
       }
       if (
         sql.includes('COUNT(DISTINCT resolved_organization_id) AS count')
@@ -164,6 +182,8 @@ describe('runProductAnalyticsSnapshotJob', () => {
 
     expect(result.snapshot.totalOrganizations).toBe(3);
     expect(result.snapshot.organizationsWithWritingAssignmentCount).toBe(2);
+    expect(result.snapshot.organizationsWithWritingSubmissionCount).toBe(2);
+    expect(result.snapshot.organizationsWithWritingReviewCount).toBe(1);
     expect(result.snapshot.organizationsWithWritingAssignment30d).toBe(1);
     expect(result.snapshot.writingAssignmentsCreated30d).toBe(1);
     expect(result.snapshot.writingAssignmentsCreated30d).not.toBe(99);

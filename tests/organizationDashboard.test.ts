@@ -201,6 +201,9 @@ describe('buildOrganizationDashboardSnapshot', () => {
       totalNotificationCount: 2,
       writingAssignmentCount: 1,
       issuedWritingAssignmentCount: 1,
+      submittedWritingAssignmentCount: 1,
+      reviewReadyWritingAssignmentCount: 0,
+      reviewedWritingAssignmentCount: 1,
       instructors,
       students,
       missionAssignments,
@@ -237,6 +240,8 @@ describe('buildOrganizationDashboardSnapshot', () => {
       ['CREATE_FIRST_MISSION', true],
       ['SEND_FIRST_NOTIFICATION', true],
       ['ISSUE_FIRST_WRITING_ASSIGNMENT', true],
+      ['WAIT_FOR_FIRST_WRITING_SUBMISSION', true],
+      ['REVIEW_FIRST_WRITING_SUBMISSION', true],
     ]);
     expect(snapshot.instructorBacklog[0]).toMatchObject({
       immediateCount: 1,
@@ -352,6 +357,68 @@ describe('buildOrganizationDashboardSnapshot', () => {
       done: false,
       label: '初回作文を配布する',
     });
+  });
+
+  it('keeps B2B activation open until the first writing submission is returned', () => {
+    const issuedSnapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
+      notifications7d: 1,
+      totalNotificationCount: 1,
+      writingAssignmentCount: 1,
+      issuedWritingAssignmentCount: 1,
+      submittedWritingAssignmentCount: 0,
+      reviewReadyWritingAssignmentCount: 0,
+      reviewedWritingAssignmentCount: 0,
+      instructors,
+      students,
+      missionAssignments,
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(issuedSnapshot.activationState).toBe('WAIT_FOR_FIRST_WRITING_SUBMISSION');
+    expect(issuedSnapshot.nextRequiredActionLabel).toBe('初回作文の提出を受ける');
+
+    const submittedSnapshot = buildOrganizationDashboardSnapshot({
+      organizationId: 'org_demo_academy',
+      organizationName: 'Steady Study Demo Academy',
+      subscriptionPlan: SubscriptionPlan.TOB_PAID,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
+      notifications7d: 1,
+      totalNotificationCount: 1,
+      writingAssignmentCount: 1,
+      issuedWritingAssignmentCount: 1,
+      submittedWritingAssignmentCount: 1,
+      reviewReadyWritingAssignmentCount: 1,
+      reviewedWritingAssignmentCount: 0,
+      instructors,
+      students,
+      missionAssignments,
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    });
+
+    expect(submittedSnapshot.activationState).toBe('REVIEW_FIRST_WRITING_SUBMISSION');
+    expect(submittedSnapshot.nextRequiredActionDescription).toContain('添削待ち');
   });
 
   it('does not advance to notification when missions are not assigned to instructor-owned students', () => {
@@ -485,6 +552,7 @@ describe('buildOrganizationDashboardSnapshot', () => {
       'notification',
       'worksheet',
       'writing',
+      'submission',
       'review',
     ]);
     expect(runbook.currentStage).toMatchObject({
@@ -504,6 +572,95 @@ describe('buildOrganizationDashboardSnapshot', () => {
     expect(runbook.stages.find((stage) => stage.id === 'writing')).toMatchObject({
       done: true,
       status: 'complete',
+    });
+  });
+
+  it('separates writing submission wait from teacher review in the runbook', () => {
+    const activationSteps: OrganizationActivationStep[] = [
+      {
+        id: 'CREATE_COHORT',
+        label: 'クラスを作成する',
+        description: 'sample',
+        done: true,
+        target: null,
+      },
+      {
+        id: 'ASSIGN_STUDENTS',
+        label: '担当講師を割り当てる',
+        description: 'sample',
+        done: true,
+        target: null,
+      },
+      {
+        id: 'CREATE_FIRST_MISSION',
+        label: '初回ミッションを配布する',
+        description: 'sample',
+        done: true,
+        target: null,
+      },
+      {
+        id: 'SEND_FIRST_NOTIFICATION',
+        label: '最初のフォロー通知を送る',
+        description: 'sample',
+        done: true,
+        target: null,
+      },
+      {
+        id: 'ISSUE_FIRST_WRITING_ASSIGNMENT',
+        label: '初回作文を配布する',
+        description: 'sample',
+        done: true,
+        target: {
+          kind: 'WRITING_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.WRITING,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'WAIT_FOR_FIRST_WRITING_SUBMISSION',
+        label: '初回作文の提出を受ける',
+        description: 'sample',
+        done: false,
+        target: {
+          kind: 'WRITING_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.WRITING,
+          organizationId: 'org_demo_academy',
+        },
+      },
+      {
+        id: 'REVIEW_FIRST_WRITING_SUBMISSION',
+        label: '初回作文を返却する',
+        description: 'sample',
+        done: false,
+        target: {
+          kind: 'WRITING_ASSIGNMENT',
+          targetView: BusinessAdminWorkspaceView.WRITING,
+          organizationId: 'org_demo_academy',
+        },
+      },
+    ];
+
+    const runbook = buildOrganizationActivationRunbook({
+      organizationId: 'org_demo_academy',
+      totalStudents: 2,
+      activationSteps,
+      historyBasedWorksheetStudentCount: 2,
+      fallbackWorksheetStudentCount: 0,
+      issuedWritingAssignmentCount: 1,
+      submittedWritingAssignmentCount: 0,
+      reviewReadyWritingAssignmentCount: 0,
+      reviewedWritingAssignmentCount: 0,
+    });
+
+    expect(runbook.currentStage).toMatchObject({
+      id: 'submission',
+      status: 'stalled',
+      actionLabel: '提出状況を確認する',
+    });
+    expect(runbook.stalledStage?.stalledReason).toContain('提出がまだありません');
+    expect(runbook.stages.find((stage) => stage.id === 'review')).toMatchObject({
+      done: false,
+      status: 'pending',
     });
   });
 });

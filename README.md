@@ -67,7 +67,7 @@ npm run cf:preview
   - `cf:doctor` は GitHub / Cloudflare の read-only inventory を見るため、`gh` 認証と `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要です。
   - content QA gate は remote D1 の公式/配信教材を読み取り、必須語義の空欄、`[未抽出]` などの sentinel、空教材を release-blocking error として扱います。
   - source ledger gate は公式/配信教材に `material_source_ledger` 行があること、content QA blocker がないこと、Today Focus に使える承認済み教材が最低1冊あることを必須条件にします。重複 headword や source coverage 不足は既定では warning として出力し、必要な release では `--max-warning-books 0` で厳格化できます。
-  - B2B activation integrity gate は organization membership、cohort、担当割当、mission、通知、writing assignment/submission/review の参照整合性を release-blocking error として扱います。cohort なし、通知なし、作文未配布、B2B product event の telemetry 不整合は既定では warning として出力し、必要な release では `--max-activation-warning-orgs 0` / `--max-product-event-warning-rows 0` / `--require-active-b2b-loop` で厳格化できます。
+  - B2B activation integrity gate は organization membership、cohort、担当割当、mission、通知、writing assignment/submission/review の参照整合性を release-blocking error として扱います。cohort なし、通知なし、作文未配布、B2B product event の telemetry 不整合は既定では warning として出力し、必要な release では `--max-activation-warning-orgs 0` / `--max-product-event-warning-rows 0` / `--require-active-b2b-loop` で、初回作文の講師返却まで到達した組織があることを厳格化できます。
 - `npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json` は本番 D1 の read-only baseline report です。大きな product / B2B /教材判断の前後に保存し、query failure は non-zero exit として扱います。データ上の activation gap を release blocker にしたい場合は baseline ではなく `ops:b2b-activation:d1` の hardening flag を使います。
 - 推奨ローカル実行: `npm run cf:preview`
   - `vite build` 後に `wrangler pages dev dist` を起動し、Pages Functions と D1 を含めて確認します。

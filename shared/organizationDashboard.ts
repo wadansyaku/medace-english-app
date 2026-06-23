@@ -84,6 +84,9 @@ const buildActivationContract = ({
   totalNotificationCount,
   writingAssignmentCount,
   issuedWritingAssignmentCount,
+  submittedWritingAssignmentCount,
+  reviewReadyWritingAssignmentCount,
+  reviewedWritingAssignmentCount,
   students,
   missionAssignments,
 }: {
@@ -94,6 +97,9 @@ const buildActivationContract = ({
   totalNotificationCount: number;
   writingAssignmentCount: number;
   issuedWritingAssignmentCount: number;
+  submittedWritingAssignmentCount: number;
+  reviewReadyWritingAssignmentCount: number;
+  reviewedWritingAssignmentCount: number;
   students: StudentSummary[];
   missionAssignments: MissionAssignment[];
 }): {
@@ -133,6 +139,12 @@ const buildActivationContract = ({
   const hasMissionAssignment = Boolean(assignedStudentMission);
   const hasNotification = totalNotificationCount > 0;
   const hasIssuedWritingAssignment = issuedWritingAssignmentCount > 0;
+  const hasSubmittedWritingAssignment = (
+    submittedWritingAssignmentCount
+    + reviewReadyWritingAssignmentCount
+    + reviewedWritingAssignmentCount
+  ) > 0;
+  const hasReviewedWritingAssignment = reviewedWritingAssignmentCount > 0;
 
   const steps: OrganizationActivationStep[] = [
     {
@@ -198,13 +210,41 @@ const buildActivationContract = ({
         writingTargetMission,
       ),
     },
+    {
+      id: 'WAIT_FOR_FIRST_WRITING_SUBMISSION',
+      label: '初回作文の提出を受ける',
+      description: '作文を配布したら、生徒の最初の提出までを確認します。提出が入ると講師返却の価値ループを測れます。',
+      done: hasSubmittedWritingAssignment,
+      target: toStudentTarget(
+        organizationId,
+        'WRITING_ASSIGNMENT',
+        BusinessAdminWorkspaceView.WRITING,
+        writingTargetStudent,
+        writingTargetMission,
+      ),
+    },
+    {
+      id: 'REVIEW_FIRST_WRITING_SUBMISSION',
+      label: '初回作文を返却する',
+      description: reviewReadyWritingAssignmentCount > 0
+        ? '添削待ちの作文があります。講師が返却すると、初回B2B価値ループが完了します。'
+        : '提出済み作文を講師が返却すると、配布から返却までの運用価値を証跡として残せます。',
+      done: hasReviewedWritingAssignment,
+      target: toStudentTarget(
+        organizationId,
+        'WRITING_ASSIGNMENT',
+        BusinessAdminWorkspaceView.WRITING,
+        writingTargetStudent,
+        writingTargetMission,
+      ),
+    },
   ];
   const nextStep = steps.find((step) => !step.done) || null;
 
   return {
     activationState: nextStep?.id as OrganizationActivationState || 'ACTIVE',
-    nextRequiredActionLabel: nextStep?.label || '導入完了',
-    nextRequiredActionDescription: nextStep?.description || '基本の導入導線は完了しています。次は継続率と再開率を見ながら運用を整えます。',
+    nextRequiredActionLabel: nextStep?.label || 'B2B価値ループ完了',
+    nextRequiredActionDescription: nextStep?.description || '初回の配布、提出、講師返却まで完了しています。次は継続率と再開率を見ながら運用を整えます。',
     activationSteps: steps,
     nextRequiredActionTarget: nextStep?.target || null,
   };
@@ -309,6 +349,9 @@ export const buildOrganizationDashboardSnapshot = ({
     totalNotificationCount,
     writingAssignmentCount,
     issuedWritingAssignmentCount,
+    submittedWritingAssignmentCount,
+    reviewReadyWritingAssignmentCount,
+    reviewedWritingAssignmentCount,
     students,
     missionAssignments,
   });

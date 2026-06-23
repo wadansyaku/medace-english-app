@@ -463,8 +463,8 @@ describe('b2b workspace helpers', () => {
           evidenceLabel: '履歴ベース 0名 / 代替候補 2名',
         },
         completedStageCount: 4,
-        totalStageCount: 7,
-        progressPercent: 57,
+        totalStageCount: 8,
+        progressPercent: 50,
         worksheet: {
           historyBasedStudentCount: 0,
           fallbackStudentCount: 2,
@@ -488,7 +488,7 @@ describe('b2b workspace helpers', () => {
       tone: 'warning',
     });
     expect(runbookSummary.detail).toContain('学習履歴由来ではありません');
-    expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['導入ランブック', '57%']);
+    expect(decision.metrics.map((metric) => [metric.label, metric.value])).toContainEqual(['導入ランブック', '50%']);
     expect(decision).toMatchObject({
       title: 'PDF問題で停止',
       primaryAction: {

@@ -40,6 +40,13 @@ const expectTextInOrder = (source: string, expectedEntries: string[]) => {
   });
 };
 
+const readWorkflowStep = (source: string, stepName: string): string => {
+  const start = source.indexOf(`- name: ${stepName}`);
+  if (start < 0) throw new Error(`Missing workflow step ${stepName}`);
+  const next = source.indexOf('\n      - name:', start + 1);
+  return source.slice(start, next < 0 ? source.length : next);
+};
+
 type PackageJson = {
   scripts: Record<string, string>;
 };
@@ -99,6 +106,45 @@ describe('release hygiene contracts', () => {
       'run: npm run security:audit',
       'name: Fast verification gate',
       'run: npm run verify:fast',
+    ]);
+  });
+
+  it('keeps CI sentinel smoke enabled for pull requests without Cloudflare credentials', () => {
+    const ciWorkflow = readText('.github/workflows/ci.yml');
+    const browserSmokeWorkflow = readText('.github/workflows/browser-smoke.yml');
+    const installStep = readWorkflowStep(ciWorkflow, 'Install Playwright browser for sentinel smoke');
+    const sentinelStep = readWorkflowStep(ciWorkflow, 'Run smoke sentinel');
+
+    expectTextInOrder(ciWorkflow, [
+      'pull_request:',
+      'name: Build',
+      'run: npm run build',
+      'name: Install Playwright browser for sentinel smoke',
+      'run: node node_modules/playwright/cli.js install --with-deps chromium',
+      'name: Run smoke sentinel',
+      "SMOKE_SKIP_BUILD: '1'",
+      'run: node scripts/run-smoke-tests.mjs --suite sentinel',
+      'name: API integration tests',
+    ]);
+    expect(installStep).not.toContain("if: github.event_name == 'push'");
+    expect(sentinelStep).not.toContain("if: github.event_name == 'push'");
+    expect(sentinelStep).not.toContain('CLOUDFLARE_API_TOKEN');
+    expect(sentinelStep).not.toContain('CLOUDFLARE_ACCOUNT_ID');
+    expect(sentinelStep).toContain("SMOKE_SKIP_BUILD: '1'");
+    expect(browserSmokeWorkflow).toMatch(/pull_request:\n\s+branches:/);
+    expect(browserSmokeWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite "${{ inputs.suite || \'sentinel\' }}"');
+  });
+
+  it('does not reuse a Cloudflare smoke build for the IDB fallback suite', () => {
+    const smokeRunner = readText('scripts/run-smoke-tests.mjs');
+
+    expectTextInOrder(smokeRunner, [
+      'const canSkipBuildForSuite = (suiteEnv) => (',
+      'skipBuild',
+      "&& suiteEnv?.VITE_STORAGE_MODE !== 'idb'",
+      'if (canSkipBuildForSuite(suiteEnv))',
+      'return 0;',
+      'const buildKey = suite.env?.VITE_STORAGE_MODE === \'idb\' ? \'idb\' : \'cloudflare\';',
     ]);
   });
 

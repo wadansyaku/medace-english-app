@@ -89,7 +89,13 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
 
   const snapshot = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
-  expect(['SEND_FIRST_NOTIFICATION', 'ISSUE_FIRST_WRITING_ASSIGNMENT', 'ACTIVE']).toContain(snapshot.activationState);
+  expect([
+    'SEND_FIRST_NOTIFICATION',
+    'ISSUE_FIRST_WRITING_ASSIGNMENT',
+    'WAIT_FOR_FIRST_WRITING_SUBMISSION',
+    'REVIEW_FIRST_WRITING_SUBMISSION',
+    'ACTIVE',
+  ]).toContain(snapshot.activationState);
   expect(snapshot.assignmentCoverageRate).toBeGreaterThan(0);
   const currentRunbookStage = snapshot.activationRunbook?.currentStage || null;
   if (currentRunbookStage) {
@@ -149,7 +155,11 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await page.getByTestId('workspace-tab-writing').click();
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
-  } else if (snapshot.activationState === 'ISSUE_FIRST_WRITING_ASSIGNMENT') {
+  } else if ([
+    'ISSUE_FIRST_WRITING_ASSIGNMENT',
+    'WAIT_FOR_FIRST_WRITING_SUBMISSION',
+    'REVIEW_FIRST_WRITING_SUBMISSION',
+  ].includes(snapshot.activationState)) {
     if (currentRunbookStage && currentRunbookStage.id !== 'writing') {
       await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: `${currentRunbookStage.label}で停止` })).toBeVisible();
       await expect(page.getByTestId('business-admin-primary-decision-action')).toContainText(currentRunbookStage.actionLabel);

@@ -176,6 +176,10 @@ export const querySections = [
     sql: "SELECT COUNT(*) AS assignment_rows, COUNT(DISTINCT student_user_id) AS assigned_students, COUNT(DISTINCT instructor_user_id) AS active_instructors FROM student_instructor_assignments; SELECT COUNT(*) AS notifications, COUNT(DISTINCT student_user_id) AS notified_students FROM instructor_notifications; SELECT COUNT(*) AS kpi_snapshots FROM organization_kpi_daily_snapshots;",
   },
   {
+    name: 'product_telemetry_recency',
+    sql: "SELECT 'product_events' AS table_name, COUNT(*) AS row_count, MAX(created_at) AS latest_created_at FROM product_events; SELECT 'product_kpi_daily_snapshots' AS table_name, COUNT(*) AS row_count, MAX(updated_at) AS latest_updated_at, MAX(date_key) AS latest_date_key FROM product_kpi_daily_snapshots;",
+  },
+  {
     name: 'integrity_org_membership',
     sql: "SELECT COUNT(*) AS org_users, SUM(CASE WHEN organization_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM organization_memberships m WHERE m.user_id = users.id AND m.organization_id = users.organization_id AND m.status = 'ACTIVE') THEN 1 ELSE 0 END) AS org_users_without_active_membership, SUM(CASE WHEN organization_id IS NULL AND role IN ('INSTRUCTOR', 'STUDENT') AND subscription_plan IN ('TOB_FREE', 'TOB_PAID') THEN 1 ELSE 0 END) AS business_plan_users_without_org FROM users; SELECT SUM(CASE WHEN m.status = 'ACTIVE' AND (u.organization_id IS NULL OR u.organization_id != m.organization_id) THEN 1 ELSE 0 END) AS active_membership_user_org_mismatch, SUM(CASE WHEN m.status = 'ACTIVE' AND COALESCE(u.organization_role, '') != COALESCE(m.role, '') THEN 1 ELSE 0 END) AS active_membership_role_mismatch FROM organization_memberships m JOIN users u ON u.id = m.user_id;",
   },

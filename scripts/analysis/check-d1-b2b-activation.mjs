@@ -304,6 +304,11 @@ orgs_with_writing_submission AS (
   SELECT DISTINCT resolved_organization_id AS organization_id
   FROM writing_submission_rows
   WHERE resolved_organization_id IS NOT NULL
+),
+orgs_with_writing_review AS (
+  SELECT DISTINCT resolved_organization_id AS organization_id
+  FROM teacher_review_rows
+  WHERE resolved_organization_id IS NOT NULL
 )
 SELECT
   (SELECT COUNT(*) FROM organizations) AS total_organizations,
@@ -316,6 +321,7 @@ SELECT
   (SELECT COUNT(*) FROM orgs_with_notification) AS orgs_with_notification,
   (SELECT COUNT(*) FROM orgs_with_writing_assignment) AS orgs_with_writing_assignment,
   (SELECT COUNT(*) FROM orgs_with_writing_submission) AS orgs_with_writing_submission,
+  (SELECT COUNT(*) FROM orgs_with_writing_review) AS orgs_with_writing_review,
   (SELECT COUNT(*) FROM users WHERE organization_id IS NOT NULL) AS org_users,
   (SELECT COUNT(*) FROM users u WHERE u.organization_id IS NOT NULL AND NOT EXISTS (
     SELECT 1
@@ -545,9 +551,9 @@ export const evaluateB2BActivationIntegritySummary = (summary, thresholds = {}) 
   if (
     thresholds.requireActiveB2BLoop
     && toNumber(summary, 'orgs_with_active_students') > 0
-    && toNumber(summary, 'orgs_with_writing_assignment') < 1
+    && toNumber(summary, 'orgs_with_writing_review') < 1
   ) {
-    errors.push('At least one organization has active students, but no organization has reached writing assignment activation.');
+    errors.push('At least one organization has active students, but no organization has reached the writing review/returned loop.');
   }
   const maxProductEventWarningRows = thresholds.maxProductEventWarningRows;
   const productEventWarningRows = PRODUCT_EVENT_WARNING_KEYS.reduce((total, key) => total + toNumber(summary, key), 0);
@@ -578,7 +584,7 @@ Options:
   --persist-to <dir>                      Local D1 persist directory. Only with --local.
   --max-activation-warning-orgs <num>     Fail if activation warning org/gap count exceeds this value. Default: report only.
   --max-product-event-warning-rows <num>  Fail if B2B product event warning rows exceed this value. Default: report only.
-  --require-active-b2b-loop               Fail when active-student organizations exist but none has reached writing assignment activation.
+  --require-active-b2b-loop               Fail when active-student organizations exist but none has reached the writing review/returned loop.
   --compact                               Print compact JSON.
   --help                                  Show this help.
 `;
