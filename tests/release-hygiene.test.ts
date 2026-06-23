@@ -256,10 +256,10 @@ describe('release hygiene contracts', () => {
       'name: Summarize preview release gate evidence',
       'name: Deploy preview to Cloudflare Pages',
     ]);
-    expect(productionWorkflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+    expect(productionWorkflow).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a');
     expect(productionWorkflow).toContain('name: production-release-gate-evidence');
     expect(productionWorkflow).toContain('## Production Release Gate Evidence');
-    expect(previewWorkflow).toContain('uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02');
+    expect(previewWorkflow).toContain('uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a');
     expect(previewWorkflow).toContain('name: preview-release-gate-evidence');
     expect(previewWorkflow).toContain('## Preview Release Gate Evidence');
     expect(productionWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
