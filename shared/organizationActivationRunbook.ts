@@ -27,6 +27,7 @@ const STAGE_LABELS: Record<OrganizationActivationRunbookStageId, string> = {
   notification: '初回通知',
   worksheet: 'PDF問題',
   writing: '初回作文',
+  submission: '生徒提出',
   review: '返却レビュー',
 };
 
@@ -37,6 +38,7 @@ const STAGE_ACTION_LABELS: Record<OrganizationActivationRunbookStageId, string> 
   notification: '初回通知を送る',
   worksheet: '履歴ベースのPDF問題を作る',
   writing: '初回作文を配布する',
+  submission: '提出状況を確認する',
   review: '作文を返却する',
 };
 
@@ -47,6 +49,7 @@ const STAGE_DETAIL: Record<OrganizationActivationRunbookStageId, string> = {
   notification: '初回ミッション後に講師からフォロー通知を送ります。',
   worksheet: '学習履歴から紙配布用のPDF問題候補を作れる状態にします。',
   writing: '初回の自由英作文を生徒へ配布します。',
+  submission: '配布した自由英作文の初回提出を受けます。',
   review: '提出された作文を添削して返却します。',
 };
 
@@ -117,10 +120,13 @@ const getStalledReason = ({
       ? '初回作文は配布済みですが、ランブック上の配布完了判定を確認してください。'
       : '初回作文がまだ生徒へ配布されていません。';
   }
-  if (submittedWritingAssignmentCount + reviewReadyWritingAssignmentCount === 0) {
+  if (id === 'submission') {
     return issuedWritingAssignmentCount > 0
       ? '初回作文は配布済みですが、提出がまだありません。'
       : '作文配布後に提出と返却レビューを測れます。';
+  }
+  if (submittedWritingAssignmentCount + reviewReadyWritingAssignmentCount === 0) {
+    return '初回作文の提出後に返却レビューを測れます。';
   }
   return reviewReadyWritingAssignmentCount > 0
     ? '添削待ちの作文があります。返却すると導入ランブックが完了します。'
@@ -193,6 +199,17 @@ export const buildOrganizationActivationRunbook = ({
       actionLabel: STAGE_ACTION_LABELS.writing,
       target: stepById.ISSUE_FIRST_WRITING_ASSIGNMENT?.target || null,
       evidenceLabel: issuedWritingAssignmentCount > 0 ? `配布済み作文 ${issuedWritingAssignmentCount}件` : '配布済み作文なし',
+    },
+    {
+      id: 'submission',
+      label: STAGE_LABELS.submission,
+      detail: STAGE_DETAIL.submission,
+      done: Boolean(stepById.WAIT_FOR_FIRST_WRITING_SUBMISSION?.done),
+      actionLabel: STAGE_ACTION_LABELS.submission,
+      target: stepById.WAIT_FOR_FIRST_WRITING_SUBMISSION?.target || buildReviewTarget(organizationId),
+      evidenceLabel: submittedWritingAssignmentCount > 0
+        ? `提出済み作文 ${submittedWritingAssignmentCount}件`
+        : '提出済み作文なし',
     },
     {
       id: 'review',

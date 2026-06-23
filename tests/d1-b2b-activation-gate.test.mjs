@@ -49,6 +49,7 @@ describe('check-d1-b2b-activation', () => {
     expect(sql).toContain('product_events');
     expect(sql).toContain('writing_assignment_issued');
     expect(sql).toContain('product_event_subject_org_mismatch');
+    expect(sql).toContain('orgs_with_writing_review');
     expect(sql).toContain('orgs_with_active_students_without_writing_assignment');
     expect(sql).not.toMatch(/\b(UPDATE|INSERT|DELETE|DROP|ALTER)\b/i);
   });
@@ -121,16 +122,30 @@ describe('check-d1-b2b-activation', () => {
     expect(result.errors.join('\n')).toContain('Activation warning org/gap count 2 exceeds maximum 1');
   });
 
-  it('can require at least one active B2B organization to reach writing assignment activation', () => {
+  it('fails the strict active B2B loop gate when organizations only reached writing assignment distribution', () => {
     const result = evaluateB2BActivationIntegritySummary({
       orgs_with_active_students: 2,
-      orgs_with_writing_assignment: 0,
+      orgs_with_writing_assignment: 1,
+      orgs_with_writing_review: 0,
     }, {
       requireActiveB2BLoop: true,
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.join('\n')).toContain('no organization has reached writing assignment activation');
+    expect(result.errors.join('\n')).toContain('no organization has reached the writing review/returned loop');
+  });
+
+  it('passes the strict active B2B loop gate when at least one organization reached writing review return', () => {
+    const result = evaluateB2BActivationIntegritySummary({
+      orgs_with_active_students: 2,
+      orgs_with_writing_assignment: 1,
+      orgs_with_writing_review: 1,
+    }, {
+      requireActiveB2BLoop: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   it('can harden B2B product event warning rows when telemetry integrity must be strict', () => {

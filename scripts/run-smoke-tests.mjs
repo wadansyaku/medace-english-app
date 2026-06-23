@@ -518,8 +518,13 @@ let exitCode = 0;
 let filteredTestCount = 0;
 const buildCache = new Set();
 
+const canSkipBuildForSuite = (suiteEnv) => (
+  skipBuild
+  && suiteEnv?.VITE_STORAGE_MODE !== 'idb'
+);
+
 const runBuildForEnv = async (suiteEnv, buildKey) => {
-  if (skipBuild) {
+  if (canSkipBuildForSuite(suiteEnv)) {
     return 0;
   }
   if (buildCache.has(buildKey)) {

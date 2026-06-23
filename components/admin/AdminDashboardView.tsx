@@ -272,7 +272,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       : '導入ファネルの欠測なし'}
                   </div>
                   <div className="mt-1 text-xs opacity-90">
-                    初回作文配布までの到達率 {snapshot.activationFunnel.completionRate}%。
+                    初回作文の講師返却までの到達率 {snapshot.activationFunnel.completionRate}%。
                   </div>
                 </div>
                 {snapshot.activationFunnel.steps.map((step) => (
@@ -294,10 +294,13 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   フォーム open {snapshot.activationFunnel.commercialFormOpenCount30d} 件 / 相談送信 {snapshot.activationFunnel.commercialRequestCount30d} 件
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                  30日内の進行: クラス {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedCohort} / 担当 {snapshot.activationFunnel.activationVelocity30d.organizationsAssignedStudent} / ミッション {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedFirstMission} / 通知 {snapshot.activationFunnel.activationVelocity30d.organizationsSentNotification} / 作文 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingAssignment} 組織
+                  30日内の進行: クラス {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedCohort} / 担当 {snapshot.activationFunnel.activationVelocity30d.organizationsAssignedStudent} / ミッション {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedFirstMission} / 通知 {snapshot.activationFunnel.activationVelocity30d.organizationsSentNotification} / 作文配布 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingAssignment} / 提出 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingSubmission} / 返却 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingReview} 組織
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                  作文配布済み {snapshot.activationFunnel.organizationsWithWritingAssignmentCount} 組織 / 作成 {snapshot.activationFunnel.writingAssignmentsCreated30d} 件 / 提出 {snapshot.activationFunnel.writingSubmissionsReceived30d} 件 / 返却 {snapshot.activationFunnel.writingReviewsCompleted30d} 件
+                  累積到達: 作文配布済み {snapshot.activationFunnel.organizationsWithWritingAssignmentCount} 組織 / 提出あり {snapshot.activationFunnel.organizationsWithWritingSubmissionCount} 組織 / 返却済み {snapshot.activationFunnel.organizationsWithWritingReviewCount} 組織
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  30日内の作文件数: 作成 {snapshot.activationFunnel.writingAssignmentsCreated30d} / 提出 {snapshot.activationFunnel.writingSubmissionsReceived30d} / 返却 {snapshot.activationFunnel.writingReviewsCompleted30d} 件
                 </div>
               </div>
             </section>

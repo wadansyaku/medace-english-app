@@ -1036,6 +1036,8 @@ export interface ProductKpiDailySnapshot {
   organizationsWithMissionCount: number;
   organizationsWithNotificationCount: number;
   organizationsWithWritingAssignmentCount: number;
+  organizationsWithWritingSubmissionCount: number;
+  organizationsWithWritingReviewCount: number;
   organizationsCreatedCohort30d: number;
   organizationsAssignedStudent30d: number;
   organizationsCreatedFirstMission30d: number;
@@ -1334,6 +1336,8 @@ export type OrganizationActivationState =
   | 'CREATE_FIRST_MISSION'
   | 'SEND_FIRST_NOTIFICATION'
   | 'ISSUE_FIRST_WRITING_ASSIGNMENT'
+  | 'WAIT_FOR_FIRST_WRITING_SUBMISSION'
+  | 'REVIEW_FIRST_WRITING_SUBMISSION'
   | 'ACTIVE';
 
 export type OrganizationActivationStepId = Exclude<OrganizationActivationState, 'ACTIVE'>;
@@ -1375,6 +1379,7 @@ export type OrganizationActivationRunbookStageId =
   | 'notification'
   | 'worksheet'
   | 'writing'
+  | 'submission'
   | 'review';
 
 export type OrganizationActivationRunbookStageStatus = 'complete' | 'stalled' | 'pending';
@@ -1551,6 +1556,8 @@ export interface AdminActivationFunnel {
   organizationsWithMissionCount: number;
   organizationsWithNotificationCount: number;
   organizationsWithWritingAssignmentCount: number;
+  organizationsWithWritingSubmissionCount: number;
+  organizationsWithWritingReviewCount: number;
   activationVelocity30d: AdminActivationVelocity30d;
   writingAssignmentsCreated30d: number;
   writingSubmissionsReceived30d: number;
@@ -1579,7 +1586,9 @@ export type AdminActivationFunnelStepId =
   | 'assignment'
   | 'mission'
   | 'notification'
-  | 'writing';
+  | 'writing'
+  | 'submission'
+  | 'review';
 
 export interface AdminActivationFunnelStep {
   id: AdminActivationFunnelStepId;

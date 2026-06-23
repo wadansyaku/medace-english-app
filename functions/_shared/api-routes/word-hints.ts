@@ -1,5 +1,6 @@
 import { requireUser } from '../auth';
 import { HttpError, readJson } from '../http';
+import { assertInternalJobMutation } from '../request-guards';
 import {
   handleGetWordHintImageResponse,
   runWordHintAuditSweep,
@@ -10,19 +11,6 @@ import {
 } from './runtime';
 
 const WORD_HINT_IMAGE_ROUTE = /^word-hints\/([^/]+)\/image$/;
-const INTERNAL_JOB_SECRET_HEADER = 'X-Internal-Job-Secret';
-
-const requireInternalJobSecret = (env: { INTERNAL_JOB_SECRET?: string }, request: Request): void => {
-  const expected = env.INTERNAL_JOB_SECRET;
-  if (!expected) {
-    throw new HttpError(503, 'INTERNAL_JOB_SECRET が設定されていません。');
-  }
-
-  const provided = request.headers.get(INTERNAL_JOB_SECRET_HEADER);
-  if (!provided || provided !== expected) {
-    throw new HttpError(401, '内部ジョブ認証に失敗しました。');
-  }
-};
 
 export const wordHintRoutes: ApiRouteDefinition[] = [
   {
@@ -44,7 +32,7 @@ export const wordHintRoutes: ApiRouteDefinition[] = [
   {
     matches: ({ pathname, request }) => pathname === 'internal/word-hint-audits/run' && request.method === 'POST',
     handle: async ({ env, request }) => {
-      requireInternalJobSecret(env, request);
+      assertInternalJobMutation(env, request);
       const body: { limit?: number; staleAfterHours?: number } = await readJson<{ limit?: number; staleAfterHours?: number }>(request).catch(() => ({}));
       const result = await runWordHintAuditSweep(env, {
         limit: typeof body.limit === 'number' ? body.limit : undefined,

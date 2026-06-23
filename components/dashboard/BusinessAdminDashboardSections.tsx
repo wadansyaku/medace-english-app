@@ -47,6 +47,13 @@ interface ActivationGateDefinition {
   allowBootstrap?: boolean;
 }
 
+const ACTIVATION_BOOTSTRAP_FINAL_STATES: readonly OrganizationActivationState[] = [
+  'ISSUE_FIRST_WRITING_ASSIGNMENT',
+  'WAIT_FOR_FIRST_WRITING_SUBMISSION',
+  'REVIEW_FIRST_WRITING_SUBMISSION',
+  'ACTIVE',
+];
+
 const resolveViewGate = (
   activeView: BusinessAdminWorkspaceView,
   activationState: OrganizationActivationState,
@@ -215,8 +222,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   const nextActionView = resolveBusinessAdminNextActionView(snapshot);
   const gate = resolveViewGate(activeView, snapshot.activationState);
   const canBootstrap = !runtimeFlags.deployment.isProductionLike
-    && snapshot.activationState !== 'ACTIVE'
-    && snapshot.activationState !== 'ISSUE_FIRST_WRITING_ASSIGNMENT';
+    && !ACTIVATION_BOOTSTRAP_FINAL_STATES.includes(snapshot.activationState);
 
   if (gate) {
     return (

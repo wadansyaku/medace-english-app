@@ -161,7 +161,11 @@ export const resolveBusinessAdminNextActionView = (
   }
   if (snapshot.nextRequiredActionTarget?.targetView) return snapshot.nextRequiredActionTarget.targetView;
   if (snapshot.nextRequiredAction === 'CREATE_COHORT') return BusinessAdminWorkspaceView.SETTINGS;
-  if (snapshot.nextRequiredAction === 'ISSUE_FIRST_WRITING_ASSIGNMENT') return BusinessAdminWorkspaceView.WRITING;
+  if (
+    snapshot.nextRequiredAction === 'ISSUE_FIRST_WRITING_ASSIGNMENT'
+    || snapshot.nextRequiredAction === 'WAIT_FOR_FIRST_WRITING_SUBMISSION'
+    || snapshot.nextRequiredAction === 'REVIEW_FIRST_WRITING_SUBMISSION'
+  ) return BusinessAdminWorkspaceView.WRITING;
   return BusinessAdminWorkspaceView.ASSIGNMENTS;
 };
 

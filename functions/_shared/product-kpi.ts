@@ -32,6 +32,8 @@ interface DbProductKpiDailySnapshotRow {
   organizations_with_mission_count: number;
   organizations_with_notification_count: number;
   organizations_with_writing_assignment_count: number;
+  organizations_with_writing_submission_count: number;
+  organizations_with_writing_review_count: number;
   organizations_created_cohort_30d: number;
   organizations_assigned_student_30d: number;
   organizations_created_first_mission_30d: number;
@@ -80,6 +82,8 @@ const toProductKpiDailySnapshot = (row?: Partial<DbProductKpiDailySnapshotRow> |
   organizationsWithMissionCount: Number(row?.organizations_with_mission_count || 0),
   organizationsWithNotificationCount: Number(row?.organizations_with_notification_count || 0),
   organizationsWithWritingAssignmentCount: Number(row?.organizations_with_writing_assignment_count || 0),
+  organizationsWithWritingSubmissionCount: Number(row?.organizations_with_writing_submission_count || 0),
+  organizationsWithWritingReviewCount: Number(row?.organizations_with_writing_review_count || 0),
   organizationsCreatedCohort30d: Number(row?.organizations_created_cohort_30d || 0),
   organizationsAssignedStudent30d: Number(row?.organizations_assigned_student_30d || 0),
   organizationsCreatedFirstMission30d: Number(row?.organizations_created_first_mission_30d || 0),
@@ -238,6 +242,8 @@ export const runProductAnalyticsSnapshotJob = async (
     organizationsWithMissionCount,
     organizationsWithNotificationCount,
     organizationsWithWritingAssignmentCount,
+    organizationsWithWritingSubmissionCount,
+    organizationsWithWritingReviewCount,
     organizationsCreatedCohort30d,
     organizationsAssignedStudent30d,
     organizationsCreatedFirstMission30d,
@@ -354,6 +360,33 @@ export const runProductAnalyticsSnapshotJob = async (
        )
        WHERE resolved_organization_id IS NOT NULL`,
     ),
+    readCount(
+      env,
+      `SELECT COUNT(DISTINCT resolved_organization_id) AS count
+       FROM (
+         SELECT COALESCE(w.organization_id, o.id) AS resolved_organization_id
+         FROM writing_submissions s
+         JOIN writing_assignments w ON w.id = s.assignment_id
+         LEFT JOIN organizations o
+           ON w.organization_id IS NULL
+          AND LOWER(TRIM(w.organization_name)) = o.name_key
+       )
+       WHERE resolved_organization_id IS NOT NULL`,
+    ),
+    readCount(
+      env,
+      `SELECT COUNT(DISTINCT resolved_organization_id) AS count
+       FROM (
+         SELECT COALESCE(w.organization_id, o.id) AS resolved_organization_id
+         FROM writing_teacher_reviews r
+         JOIN writing_submissions s ON s.id = r.submission_id
+         JOIN writing_assignments w ON w.id = s.assignment_id
+         LEFT JOIN organizations o
+           ON w.organization_id IS NULL
+          AND LOWER(TRIM(w.organization_name)) = o.name_key
+       )
+       WHERE resolved_organization_id IS NOT NULL`,
+    ),
     readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_created_cohort' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_assigned_student' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(DISTINCT organization_id) AS count FROM product_events WHERE event_name = 'group_admin_created_first_mission' AND organization_id IS NOT NULL AND created_at >= ?`, active30dSince),
@@ -445,6 +478,8 @@ export const runProductAnalyticsSnapshotJob = async (
       organizations_with_mission_count,
       organizations_with_notification_count,
       organizations_with_writing_assignment_count,
+      organizations_with_writing_submission_count,
+      organizations_with_writing_review_count,
       organizations_created_cohort_30d,
       organizations_assigned_student_30d,
       organizations_created_first_mission_30d,
@@ -467,7 +502,7 @@ export const runProductAnalyticsSnapshotJob = async (
       created_at,
       updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(date_key) DO UPDATE SET
       total_users = excluded.total_users,
@@ -487,6 +522,8 @@ export const runProductAnalyticsSnapshotJob = async (
       organizations_with_mission_count = excluded.organizations_with_mission_count,
       organizations_with_notification_count = excluded.organizations_with_notification_count,
       organizations_with_writing_assignment_count = excluded.organizations_with_writing_assignment_count,
+      organizations_with_writing_submission_count = excluded.organizations_with_writing_submission_count,
+      organizations_with_writing_review_count = excluded.organizations_with_writing_review_count,
       organizations_created_cohort_30d = excluded.organizations_created_cohort_30d,
       organizations_assigned_student_30d = excluded.organizations_assigned_student_30d,
       organizations_created_first_mission_30d = excluded.organizations_created_first_mission_30d,
@@ -526,6 +563,8 @@ export const runProductAnalyticsSnapshotJob = async (
     organizationsWithMissionCount,
     organizationsWithNotificationCount,
     organizationsWithWritingAssignmentCount,
+    organizationsWithWritingSubmissionCount,
+    organizationsWithWritingReviewCount,
     organizationsCreatedCohort30d,
     organizationsAssignedStudent30d,
     organizationsCreatedFirstMission30d,
@@ -568,6 +607,8 @@ export const runProductAnalyticsSnapshotJob = async (
     organizations_with_mission_count: organizationsWithMissionCount,
     organizations_with_notification_count: organizationsWithNotificationCount,
     organizations_with_writing_assignment_count: organizationsWithWritingAssignmentCount,
+    organizations_with_writing_submission_count: organizationsWithWritingSubmissionCount,
+    organizations_with_writing_review_count: organizationsWithWritingReviewCount,
     organizations_created_cohort_30d: organizationsCreatedCohort30d,
     organizations_assigned_student_30d: organizationsAssignedStudent30d,
     organizations_created_first_mission_30d: organizationsCreatedFirstMission30d,

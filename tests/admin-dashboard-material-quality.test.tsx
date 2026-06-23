@@ -30,6 +30,8 @@ const productKpis: ProductKpiDailySnapshot = {
   organizationsWithMissionCount: 1,
   organizationsWithNotificationCount: 1,
   organizationsWithWritingAssignmentCount: 0,
+  organizationsWithWritingSubmissionCount: 0,
+  organizationsWithWritingReviewCount: 0,
   organizationsCreatedCohort30d: 2,
   organizationsAssignedStudent30d: 1,
   organizationsCreatedFirstMission30d: 1,
@@ -124,6 +126,7 @@ describe('AdminDashboardView material quality', () => {
     expect(rendered).toContain('運用警告 1 冊、確認中 1 冊、QA停止 1 冊、台帳なし 0 冊です。');
     expect(rendered).toContain('最大の欠測');
     expect(rendered).toContain('初回通知 -&gt; 作文配布で 1 組織');
-    expect(rendered).toContain('30日内の進行: クラス 2 / 担当 1 / ミッション 1 / 通知 1 / 作文 0 組織');
+    expect(rendered).toContain('30日内の進行: クラス 2 / 担当 1 / ミッション 1 / 通知 1 / 作文配布 0 / 提出 0 / 返却 0 組織');
+    expect(rendered).toContain('累積到達: 作文配布済み 0 組織 / 提出あり 0 組織 / 返却済み 0 組織');
   });
 });

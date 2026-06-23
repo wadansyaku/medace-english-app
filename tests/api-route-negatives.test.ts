@@ -6,6 +6,7 @@ import { authProfileRoutes } from '../functions/_shared/api-routes/auth-profile'
 import { publicCommercialRoutes } from '../functions/_shared/api-routes/public-commercial';
 import { handleAiAction } from '../functions/_shared/ai-actions';
 import { HttpError } from '../functions/_shared/http';
+import { MUTATING_REQUEST_FAILURE_MESSAGES } from '../functions/_shared/request-guards';
 import { handleStorageAction } from '../functions/_shared/storage-actions';
 import { handleWritingRequest } from '../functions/_shared/writing-actions';
 
@@ -124,7 +125,7 @@ describe('negative route guards', () => {
         pathname: 'public/commercial-request',
       }),
       403,
-      'Cross-origin な mutation は許可されていません。',
+      MUTATING_REQUEST_FAILURE_MESSAGES.originMismatch,
     );
   });
 
@@ -157,7 +158,7 @@ describe('negative route guards', () => {
         pathname: 'ai',
       }),
       403,
-      'Cross-origin な mutation は許可されていません。',
+      MUTATING_REQUEST_FAILURE_MESSAGES.originMismatch,
     );
   });
 

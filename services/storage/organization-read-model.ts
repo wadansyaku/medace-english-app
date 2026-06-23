@@ -714,7 +714,9 @@ export const getOrganizationDashboardSnapshot = async (
   const cohortCount = getLocalOrganizationCohorts(sessionOrganization.organizationId).length;
   const studentAssignmentCount = students.filter((student) => student.assignedInstructorUid).length;
   const totalNotificationCount = instructors.reduce((sum, instructor) => sum + instructor.notifications7d, 0);
-  const writingAssignmentCount = missionAssignments.filter((assignment) => assignment.mission.writingAssignmentId).length;
+  const writingMissionAssignments = missionAssignments.filter((assignment) => assignment.mission.writingAssignmentId);
+  const writingAssignmentCount = writingMissionAssignments.length;
+  const reviewedWritingAssignmentCount = writingMissionAssignments.filter((assignment) => assignment.progress.writingCompleted).length;
 
   return buildOrganizationDashboardSnapshot({
     organizationId: sessionOrganization.organizationId,
@@ -730,6 +732,9 @@ export const getOrganizationDashboardSnapshot = async (
     totalNotificationCount,
     writingAssignmentCount,
     issuedWritingAssignmentCount: writingAssignmentCount,
+    submittedWritingAssignmentCount: reviewedWritingAssignmentCount,
+    reviewReadyWritingAssignmentCount: 0,
+    reviewedWritingAssignmentCount,
     instructors,
     students,
     missionAssignments,

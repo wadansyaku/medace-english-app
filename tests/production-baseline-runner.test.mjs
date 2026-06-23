@@ -36,11 +36,19 @@ describe('run-production-baseline', () => {
       'learning_activity_windows',
       'writing_activity',
       'business_ops_activity',
+      'product_telemetry_recency',
       'integrity_org_membership',
       'integrity_books_and_plans',
       'recency_markers',
     ]));
     expect(querySections.every((section) => !/\b(UPDATE|INSERT|DELETE|DROP|ALTER)\b/i.test(section.sql))).toBe(true);
+
+    const productTelemetrySection = querySections.find((section) => section.name === 'product_telemetry_recency');
+    expect(productTelemetrySection?.sql).toContain('COUNT(*) AS row_count');
+    expect(productTelemetrySection?.sql).toContain('MAX(created_at) AS latest_created_at FROM product_events');
+    expect(productTelemetrySection?.sql).toContain('MAX(updated_at) AS latest_updated_at');
+    expect(productTelemetrySection?.sql).toContain('FROM product_kpi_daily_snapshots');
+    expect(/\b(UPDATE|INSERT|DELETE|DROP|ALTER)\b/i.test(productTelemetrySection?.sql || '')).toBe(false);
   });
 
   it('normalizes both direct wrangler results and API result wrappers', () => {
@@ -70,6 +78,7 @@ describe('run-production-baseline', () => {
 
     expect(report.generatedAt).toBe('2026-06-19T00:00:00.000Z');
     expect(report.sections).toHaveLength(querySections.length);
+    expect(report.sections.map((section) => section.name)).toContain('product_telemetry_recency');
     expect(evaluation.ok).toBe(true);
     expect(evaluation.errors).toEqual([]);
   });

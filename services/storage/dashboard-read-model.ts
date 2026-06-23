@@ -303,6 +303,8 @@ export const getAdminDashboardSnapshot = async (
     organizationsWithMissionCount: 0,
     organizationsWithNotificationCount: 0,
     organizationsWithWritingAssignmentCount: 0,
+    organizationsWithWritingSubmissionCount: 0,
+    organizationsWithWritingReviewCount: 0,
     organizationsCreatedCohort30d: 0,
     organizationsAssignedStudent30d: 0,
     organizationsCreatedFirstMission30d: 0,
