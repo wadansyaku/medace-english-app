@@ -214,6 +214,11 @@ const pushRecord = (status, label, detail) => {
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
 const isGithubInventoryPermissionError = (result) => /Resource not accessible by integration/i.test(`${result.stderr}\n${result.stdout}`);
 const isTransientCloudflareApiError = (result) => /Received a malformed response from the API|502 Bad Gateway|503 Service Temporarily Unavailable|504 Gateway Timeout/i.test(`${result.stderr}\n${result.stdout}`);
+const isProtectedReleaseContext = isGitHubActions && (
+  process.env.GITHUB_REF_PROTECTED === 'true'
+  || ['main', 'master'].includes(process.env.GITHUB_REF_NAME || '')
+  || /^Deploy Pages/.test(process.env.GITHUB_WORKFLOW || '')
+);
 
 const runWranglerWithTransientRetries = (args, { transientRetries = 2, retryDelayMs = 1000, ...options } = {}) => {
   let result = runWrangler(args, options);
@@ -271,6 +276,15 @@ pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing en
 pushRecord('info', 'Writing AI mode', writingAiMode || '(missing locally, expecting Pages binding)');
 pushRecord('info', 'R2 buckets', r2Buckets.length > 0 ? r2Buckets.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
+
+const missingCloudflareCredentials = REQUIRED_GITHUB_SECRETS.filter((name) => !process.env[name]);
+if (isProtectedReleaseContext && missingCloudflareCredentials.length > 0) {
+  pushRecord(
+    'error',
+    'Cloudflare credentials for protected release context',
+    `missing ${missingCloudflareCredentials.join(', ')}; cf:doctor must fail closed in protected/release workflows`,
+  );
+}
 
 const ghAuth = run('gh', ['auth', 'status']);
 const githubReady = recordCommand('GitHub auth', ghAuth, 'authenticated');

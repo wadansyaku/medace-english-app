@@ -20,7 +20,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
-      CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
+      CLOUDFLARE_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
       WRITING_AI_MODE: ${{ vars.WRITING_AI_MODE || 'hybrid' }}
       VITE_ENABLE_ADMIN_DEMO: ${{ vars.VITE_ENABLE_ADMIN_DEMO || 'false' }}
     permissions:
@@ -87,7 +87,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          bookmark_json="$(node node_modules/wrangler/bin/wrangler.js d1 time-travel info "$CF_D1_DATABASE" --json)"
+          bookmark_json="$(node node_modules/wrangler/bin/wrangler.js d1 time-travel info "$CLOUDFLARE_D1_DATABASE" --json)"
           printf '%s\n' "$bookmark_json"
           bookmark="$(printf '%s' "$bookmark_json" | node -e "let data=''; process.stdin.on('data', (chunk) => data += chunk); process.stdin.on('end', () => { const payload = JSON.parse(data); process.stdout.write(payload.bookmark || ''); });")"
           if [ -z "$bookmark" ]; then
@@ -100,13 +100,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node node_modules/wrangler/bin/wrangler.js d1 migrations apply "$CF_D1_DATABASE" --remote
+        run: node node_modules/wrangler/bin/wrangler.js d1 migrations apply "$CLOUDFLARE_D1_DATABASE" --remote
 
       - name: Generate production content QA report
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact
+        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact
 
       - name: Enforce production content QA gate
         run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json
@@ -115,13 +115,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact
+        run: npm run content:source-ledger:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact
 
       - name: Enforce production B2B activation integrity gate
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact
+        run: npm run ops:b2b-activation:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact
 
       - name: Upload production release gate evidence
         if: always()
@@ -197,7 +197,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          output="$(node node_modules/wrangler/bin/wrangler.js pages secret list --project-name "$CF_PAGES_PROJECT" || true)"
+          set -euo pipefail
+          output="$(node node_modules/wrangler/bin/wrangler.js pages secret list --project-name "$CF_PAGES_PROJECT")"
           printf '%s\n' "$output"
           names="$(printf '%s\n' "$output" | sed -n 's/^  - \([^:]*\):.*/\1/p' | paste -sd ',' -)"
           if [ -z "$names" ]; then
@@ -224,6 +225,10 @@ jobs:
           echo "names=$names" >> "$GITHUB_OUTPUT"
           echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"
           echo "missing-optional=$missing_optional" >> "$GITHUB_OUTPUT"
+          if [ "$missing_required" != "(none)" ]; then
+            echo "Missing required production Pages secrets: $missing_required" >&2
+            exit 1
+          fi
 
       - name: Summarize production deployment
         run: |
@@ -234,7 +239,7 @@ jobs:
             echo "- Project URL: ${{ steps.deploy.outputs['project-url'] }}"
             echo "- Deployment URL: ${{ steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
-            echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
+            echo "- D1 Database: \`${{ env.CLOUDFLARE_D1_DATABASE }}\`"
             echo "- Recovery Bookmark: \`${{ steps.d1-bookmark.outputs.bookmark }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
             echo "- Admin Demo Enabled: \`${{ env.VITE_ENABLE_ADMIN_DEMO }}\`"

@@ -24,7 +24,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
-      CF_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db-preview' }}
+      CLOUDFLARE_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db-preview' }}
       CF_D1_BINDING: DB
       WRITING_AI_MODE: ${{ vars.WRITING_AI_MODE || 'hybrid' }}
       PREVIEW_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
@@ -90,7 +90,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact
+        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact
 
       - name: Enforce preview content QA gate
         run: npm run content:qa:gate -- --input tmp/content-qa/preview-content-qa.json
@@ -99,13 +99,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-source-ledger.json --compact
+        run: npm run content:source-ledger:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/preview-source-ledger.json --compact
 
       - name: Enforce preview B2B activation integrity gate
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-b2b-activation.json --compact
+        run: npm run ops:b2b-activation:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/preview-b2b-activation.json --compact
 
       - name: Upload preview release gate evidence
         if: always()
@@ -200,7 +200,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          output="$(node node_modules/wrangler/bin/wrangler.js pages secret list --project-name "$CF_PAGES_PROJECT" --env preview || true)"
+          set -euo pipefail
+          output="$(node node_modules/wrangler/bin/wrangler.js pages secret list --project-name "$CF_PAGES_PROJECT" --env preview)"
           printf '%s\n' "$output"
           names="$(printf '%s\n' "$output" | sed -n 's/^  - \([^:]*\):.*/\1/p' | paste -sd ',' -)"
           if [ -z "$names" ]; then
@@ -227,6 +228,10 @@ jobs:
           echo "names=$names" >> "$GITHUB_OUTPUT"
           echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"
           echo "missing-optional=$missing_optional" >> "$GITHUB_OUTPUT"
+          if [ "$missing_required" != "(none)" ]; then
+            echo "Missing required preview Pages secrets: $missing_required" >&2
+            exit 1
+          fi
 
       - name: Summarize preview deployment
         run: |
@@ -237,7 +242,7 @@ jobs:
             echo "- Branch Alias URL: ${{ steps.deploy.outputs['branch-alias-url'] }}"
             echo "- Deployment URL: ${{ steps.deploy.outputs['deployment-url'] }}"
             echo "- Pages Project: \`${{ env.CF_PAGES_PROJECT }}\`"
-            echo "- D1 Database: \`${{ env.CF_D1_DATABASE }}\`"
+            echo "- D1 Database: \`${{ env.CLOUDFLARE_D1_DATABASE }}\`"
             echo "- Writing AI Mode: \`${{ env.WRITING_AI_MODE }}\`"
             echo "- Verification: local release gate equivalent (security:audit + verify:fast + build + API integration tests + full smoke suite + cf:doctor + content QA gate + source ledger gate + B2B activation integrity gate + build)"
             echo "- Content QA Gate: \`passed\`"
@@ -260,7 +265,7 @@ jobs:
           MISSING_REQUIRED_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs['missing-required'] }}
           MISSING_OPTIONAL_PREVIEW_SECRETS: ${{ steps.preview-secrets.outputs['missing-optional'] }}
           CF_PAGES_PROJECT: ${{ env.CF_PAGES_PROJECT }}
-          CF_D1_DATABASE: ${{ env.CF_D1_DATABASE }}
+          CLOUDFLARE_D1_DATABASE: ${{ env.CLOUDFLARE_D1_DATABASE }}
           PREVIEW_BRANCH: ${{ env.PREVIEW_BRANCH }}
         with:
           script: |
@@ -276,7 +281,7 @@ jobs:
               `- Branch Alias URL: ${process.env.ALIAS_URL || process.env.DEPLOYMENT_URL}`,
               `- Deployment URL: ${process.env.DEPLOYMENT_URL}`,
               `- Pages Project: \`${process.env.CF_PAGES_PROJECT}\``,
-              `- D1 Database: \`${process.env.CF_D1_DATABASE}\``,
+              `- D1 Database: \`${process.env.CLOUDFLARE_D1_DATABASE}\``,
               `- Writing AI Mode: \`${process.env.WRITING_AI_MODE}\``,
               '- Post-deploy Smoke: `passed`',
               `- Preview Secrets: \`${process.env.PREVIEW_SECRETS || '(none)'}\``,

@@ -87,6 +87,8 @@ describe('release hygiene contracts', () => {
     expect(doctor).toContain('`Possible duplicate Pages project ${gitMirrorProject}`');
     expect(doctor).toContain('project settings could not be verified');
     expect(doctor).toContain('Cloudflare dashboard may show "Deployments paused"');
+    expect(doctor).toContain('isProtectedReleaseContext');
+    expect(doctor).toContain('cf:doctor must fail closed in protected/release workflows');
     expect(readme).toContain('cf:doctor` の `Summary` が `error=0`');
     expect(readme).toContain('Cloudflare native Git auto-deploy');
     expect(readme).toContain('Deployments paused');
@@ -99,6 +101,25 @@ describe('release hygiene contracts', () => {
     expect(runbook).toContain('release-blocking error');
     expect(productionWorkflow).toMatch(/run: npm run cf:doctor/);
     expect(previewWorkflow).toMatch(/run: npm run cf:doctor/);
+  });
+
+  it('keeps Cloudflare doctor fail-closed in protected CI contexts', () => {
+    const ciWorkflow = readText('.github/workflows/ci.yml');
+    const doctorStep = readWorkflowStep(ciWorkflow, 'Verify GitHub and Cloudflare configuration');
+
+    expect(doctorStep).toContain('set -euo pipefail');
+    expect(doctorStep).toContain('protected_ref="${GITHUB_REF_PROTECTED:-false}"');
+    expect(doctorStep).toContain('main|master');
+    expect(doctorStep).toContain('Missing Cloudflare credentials in a protected CI context');
+    expect(doctorStep).toContain('exit 1');
+    expectTextInOrder(doctorStep, [
+      'if [ -n "$missing" ] && [ "$protected_ref" = "true" ]; then',
+      'exit 1',
+      'if [ -n "$missing" ]; then',
+      'Skipping cf:doctor because Cloudflare credentials are unavailable in this unprotected pull request context',
+      'exit 0',
+      'npm run cf:doctor',
+    ]);
   });
 
   it('keeps CI verify from skipping the npm security audit gate', () => {
@@ -161,14 +182,23 @@ describe('release hygiene contracts', () => {
     const productionWorkflow = readText('.github/workflows/deploy-pages.yml');
     const previewWorkflow = readText('.github/workflows/deploy-pages-preview.yml');
 
-    expect(packageJson.scripts['release:gate:local']).toBe('node scripts/run-release-gate-local.mjs');
-    expect(packageJson.scripts['release:gate:local:dry']).toBe('node scripts/run-release-gate-local.mjs --dry-run');
+    expect(packageJson.scripts['release:gate']).toBe('node scripts/run-release-gate-local.mjs --scope release');
+    expect(packageJson.scripts['release:gate:dry']).toBe('node scripts/run-release-gate-local.mjs --scope release --dry-run');
+    expect(packageJson.scripts['release:gate:local']).toBe('node scripts/run-release-gate-local.mjs --scope release');
+    expect(packageJson.scripts['release:gate:local:dry']).toBe('node scripts/run-release-gate-local.mjs --scope release --dry-run');
+    expect(packageJson.scripts['release:gate:local-only']).toBe('node scripts/run-release-gate-local.mjs --scope local-only');
+    expect(packageJson.scripts['release:gate:remote-readonly']).toBe('node scripts/run-release-gate-local.mjs --scope remote-readonly');
     expect(packageJson.scripts['security:audit']).toBe('node scripts/check-npm-audit.mjs');
     expect(packageJson.scripts['content:qa:gate']).toBe('node scripts/check-content-qa-report.mjs');
     expect(packageJson.scripts['content:source-ledger:d1']).toBe('node scripts/analysis/check-d1-material-source-ledger.mjs');
     expect(packageJson.scripts['ops:b2b-activation:d1']).toBe('node scripts/analysis/check-d1-b2b-activation.mjs');
     expect(packageJson.scripts['ops:production-baseline:d1']).toBe('node scripts/analysis/run-production-baseline.mjs');
     expect(localGate).toContain('--dry-run');
+    expect(localGate).toContain("'local-only'");
+    expect(localGate).toContain("'remote-readonly'");
+    expect(localGate).toContain("'release'");
+    expect(localGate).toContain('CLOUDFLARE_D1_DATABASE');
+    expect(localGate).toContain('CF_D1_DATABASE');
     expect(localGate).toContain("'scripts/check-npm-audit.mjs'");
     expect(localGate).toContain("'scripts/run-smoke-tests.mjs', '--suite', 'full'");
     expect(localGate).toContain("'scripts/cf-doctor.mjs'");
@@ -188,12 +218,12 @@ describe('release hygiene contracts', () => {
       'Build app for API integration tests',
       'API integration tests',
       'Full Playwright smoke suite',
+      'Build deploy artifact',
       'Cloudflare configuration doctor',
       'Remote D1 content QA report',
       'Content QA blocking check',
       'Remote D1 source ledger gate',
       'Remote D1 B2B activation integrity gate',
-      'Build deploy artifact',
     ]);
     const smokeRunner = readText('scripts/run-smoke-tests.mjs');
     expect(smokeRunner).toContain("workers: '1'");
@@ -236,13 +266,13 @@ describe('release hygiene contracts', () => {
     expectTextInOrder(productionWorkflow, [
       'name: Apply remote D1 migrations',
       'name: Generate production content QA report',
-      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact',
+      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact',
       'name: Enforce production content QA gate',
       'run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json',
       'name: Enforce production source ledger gate',
-      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/production-source-ledger.json --compact',
       'name: Enforce production B2B activation integrity gate',
-      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact',
+      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/production-b2b-activation.json --compact',
       'name: Upload production release gate evidence',
       'name: Summarize production release gate evidence',
       'name: Deploy to Cloudflare Pages',
@@ -250,13 +280,13 @@ describe('release hygiene contracts', () => {
     expectTextInOrder(previewWorkflow, [
       'name: Apply remote preview D1 migrations',
       'name: Generate preview content QA report',
-      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CF_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact',
+      'run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/preview-content-qa.json --compact',
       'name: Enforce preview content QA gate',
       'run: npm run content:qa:gate -- --input tmp/content-qa/preview-content-qa.json',
       'name: Enforce preview source ledger gate',
-      'run: npm run content:source-ledger:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-source-ledger.json --compact',
+      'run: npm run content:source-ledger:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/preview-source-ledger.json --compact',
       'name: Enforce preview B2B activation integrity gate',
-      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CF_D1_DATABASE" --output tmp/release-gates/preview-b2b-activation.json --compact',
+      'run: npm run ops:b2b-activation:d1 -- --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/release-gates/preview-b2b-activation.json --compact',
       'name: Upload preview release gate evidence',
       'name: Summarize preview release gate evidence',
       'name: Deploy preview to Cloudflare Pages',
@@ -276,6 +306,24 @@ describe('release hygiene contracts', () => {
     expect(previewWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
     expect(previewWorkflow).toContain('name: Upload preview deployed smoke artifacts');
     expect(previewWorkflow).toContain('name: preview-deployed-smoke-artifacts');
+    const productionSecretsStep = readWorkflowStep(productionWorkflow, 'Inspect production Pages secrets');
+    const previewSecretsStep = readWorkflowStep(previewWorkflow, 'Inspect preview Pages secrets');
+    expect(productionSecretsStep).toContain('set -euo pipefail');
+    expect(previewSecretsStep).toContain('set -euo pipefail');
+    expect(productionSecretsStep).not.toContain('pages secret list --project-name "$CF_PAGES_PROJECT" || true');
+    expect(previewSecretsStep).not.toContain('pages secret list --project-name "$CF_PAGES_PROJECT" --env preview || true');
+    expectTextInOrder(productionSecretsStep, [
+      'echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"',
+      'if [ "$missing_required" != "(none)" ]; then',
+      'Missing required production Pages secrets',
+      'exit 1',
+    ]);
+    expectTextInOrder(previewSecretsStep, [
+      'echo "missing-required=$missing_required" >> "$GITHUB_OUTPUT"',
+      'if [ "$missing_required" != "(none)" ]; then',
+      'Missing required preview Pages secrets',
+      'exit 1',
+    ]);
     expect(productionWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
     expect(previewWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
 
@@ -288,7 +336,6 @@ describe('release hygiene contracts', () => {
     expect(readme).toContain('B2B activation integrity gate');
     expect(readme).toContain('ops:production-baseline:d1');
     expect(runbook).toContain('npm run release:gate:local');
-    expect(runbook).toContain('npm security audit');
     expect(runbook).toContain('`security:audit`');
     expect(runbook).toContain('node scripts/run-smoke-tests.mjs --suite full');
     expect(runbook).toContain('content QA gate');

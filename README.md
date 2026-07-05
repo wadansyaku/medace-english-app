@@ -42,10 +42,16 @@ Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習
 
 ## 開発コマンド
 
+詳細な文書索引は [`./docs/README.md`](./docs/README.md)、release / deploy の運用手順は [`./docs/deployment-ops-runbook.md`](./docs/deployment-ops-runbook.md) を参照してください。
+
 ```bash
 npm install
-npm run release:gate:local:dry
-npm run release:gate:local
+npm run release:gate:local-only:dry
+npm run release:gate:local-only
+npm run release:gate:remote-readonly:dry
+npm run release:gate:remote-readonly
+npm run release:gate:dry
+npm run release:gate
 npm run verify:fast
 npm run security:audit
 npm run typecheck
@@ -62,8 +68,14 @@ npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp
 npm run cf:preview
 ```
 
-- `npm run release:gate:local` は deploy 前のローカル release gate です。migration filename check / 一時 D1 migration replay / npm security audit / typecheck / unit tests / build / API integration tests / full smoke suite / `cf:doctor` / remote D1 content QA / source ledger gate / B2B activation integrity gate / deploy artifact build を直列で確認します。
-  - `npm run release:gate:local:dry` は実行予定の順序だけを表示します。
+- Gate は `local-only` / `remote-readonly` / `release` に分けます。
+  - `local-only` は local files、一時 D1、local build、local test server だけで完結する確認です。
+  - `remote-readonly` は GitHub / Cloudflare / remote D1 を読みますが、preview / production を変更しません。
+  - `release` は remote migration、Pages deploy、deployed smoke、rollback bookmark など preview / production を進める手順で、GitHub Actions の release workflow を正規経路にします。
+- `npm run release:gate` は deploy 前に手元で起動する full release gate です。remote migration / Pages deploy は実行しませんが、release blocker を先に見つけるために local-only checks と remote-readonly checks の両方を直列で確認します。既存互換の `npm run release:gate:local` も同じ full release gate を指します。
+  - `npm run release:gate:local-only` は migration filename check / 一時 D1 migration replay / npm security audit / typecheck / unit tests / build / API integration tests / full smoke suite / deploy artifact build を確認します。
+  - `npm run release:gate:remote-readonly` は `cf:doctor` / remote D1 content QA / source ledger gate / B2B activation integrity gate を読み取り専用で確認します。
+  - `npm run release:gate:dry`、`npm run release:gate:local-only:dry`、`npm run release:gate:remote-readonly:dry` は実行予定の順序だけを表示します。
   - `cf:doctor` は GitHub / Cloudflare の read-only inventory を見るため、`gh` 認証と `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要です。
   - content QA gate は remote D1 の公式/配信教材を読み取り、必須語義の空欄、`[未抽出]` などの sentinel、空教材を release-blocking error として扱います。
   - source ledger gate は公式/配信教材に `material_source_ledger` 行があること、content QA blocker がないこと、Today Focus に使える承認済み教材が最低1冊あることを必須条件にします。重複 headword や source coverage 不足は既定では warning として出力し、必要な release では `--max-warning-books 0` で厳格化できます。
@@ -224,6 +236,10 @@ GitHub Actions を正史の配信経路にする前提では、Cloudflare の Gi
 Cloudflare Dashboard で `Deployments paused` / `デプロイを一時停止` と表示される場合は、GitHub Actions 以外の native Git auto-deploy だけが停止していることを確認してください。このプロジェクトではその表示が期待状態です。`Resume deployments` を押すと migration / release gate より前に Cloudflare が直接 deploy する可能性があるため、`npm run cf:doctor` が `error=0` で live `/api/session` の `x-deployment-sha` が最新なら解除しないでください。
 
 設定の反映を自動化したい場合は `npm run cf:sync` を使ってから `npm run cf:doctor` で検証してください。
+
+### One-off scripts
+
+`scripts/` に置く tracked script は、product operations、QA、release、または再利用可能な content workflow に限ります。個別調査用の one-off script は、入力・出力・失敗時の扱い・owner が文書化され、repeatable workflow として昇格するまで `package.json` に接続しません。
 
 ### Frontend Environment Variables
 

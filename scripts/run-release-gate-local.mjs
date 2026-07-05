@@ -8,11 +8,42 @@ import { createNodeToolCommand } from './_shared/tooling.mjs';
 const cwd = process.cwd();
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
-const unknownArgs = args.filter((arg) => arg !== '--dry-run');
+const scopeArgIndex = args.indexOf('--scope');
+const scopeFromOption = scopeArgIndex >= 0 ? args[scopeArgIndex + 1] : null;
+const scopeFromFlag = args.includes('--local-only')
+  ? 'local-only'
+  : args.includes('--remote-readonly')
+    ? 'remote-readonly'
+    : args.includes('--release')
+      ? 'release'
+      : null;
+const scope = scopeFromOption || scopeFromFlag || 'release';
+const knownArgs = new Set([
+  '--dry-run',
+  '--scope',
+  scopeFromOption,
+  '--local-only',
+  '--remote-readonly',
+  '--release',
+].filter(Boolean));
+const unknownArgs = args.filter((arg) => !knownArgs.has(arg));
+const validScopes = new Set(['local-only', 'remote-readonly', 'release']);
+
+if (scopeArgIndex >= 0 && !scopeFromOption) {
+  console.error('Missing value after --scope.');
+  console.error('Usage: node scripts/run-release-gate-local.mjs [--dry-run] [--scope local-only|remote-readonly|release]');
+  process.exit(1);
+}
+
+if (!validScopes.has(scope)) {
+  console.error(`Invalid scope: ${scope}`);
+  console.error('Usage: node scripts/run-release-gate-local.mjs [--dry-run] [--scope local-only|remote-readonly|release]');
+  process.exit(1);
+}
 
 if (unknownArgs.length > 0) {
   console.error(`Unknown argument(s): ${unknownArgs.join(', ')}`);
-  console.error('Usage: node scripts/run-release-gate-local.mjs [--dry-run]');
+  console.error('Usage: node scripts/run-release-gate-local.mjs [--dry-run] [--scope local-only|remote-readonly|release]');
   process.exit(1);
 }
 
@@ -44,7 +75,13 @@ const runCommand = (command, commandArgs) => new Promise((resolve) => {
   });
 });
 
-const createSteps = (d1PersistDir, contentQaReportPath, sourceLedgerReportPath, b2bActivationReportPath) => {
+const resolveD1Database = () => {
+  if (process.env.CLOUDFLARE_D1_DATABASE) return process.env.CLOUDFLARE_D1_DATABASE;
+  if (process.env.CF_D1_DATABASE) return process.env.CF_D1_DATABASE;
+  return 'medace-db';
+};
+
+const createLocalOnlySteps = (d1PersistDir) => {
   const migrationReplay = createNodeToolCommand('wrangler', [
     'd1',
     'migrations',
@@ -55,7 +92,6 @@ const createSteps = (d1PersistDir, contentQaReportPath, sourceLedgerReportPath, 
     d1PersistDir,
   ]);
   const viteBuild = createNodeToolCommand('vite', ['build']);
-  const d1Database = process.env.CF_D1_DATABASE || 'medace-db';
 
   return [
     {
@@ -98,6 +134,18 @@ const createSteps = (d1PersistDir, contentQaReportPath, sourceLedgerReportPath, 
       command: process.execPath,
       args: ['scripts/run-smoke-tests.mjs', '--suite', 'full'],
     },
+    {
+      label: 'Build deploy artifact',
+      command: viteBuild.command,
+      args: viteBuild.args,
+    },
+  ];
+};
+
+const createRemoteReadonlySteps = (contentQaReportPath, sourceLedgerReportPath, b2bActivationReportPath) => {
+  const d1Database = resolveD1Database();
+
+  return [
     {
       label: 'Cloudflare configuration doctor',
       command: process.execPath,
@@ -147,12 +195,20 @@ const createSteps = (d1PersistDir, contentQaReportPath, sourceLedgerReportPath, 
         '--compact',
       ],
     },
-    {
-      label: 'Build deploy artifact',
-      command: viteBuild.command,
-      args: viteBuild.args,
-    },
   ];
+};
+
+const createSteps = (gateScope, d1PersistDir, contentQaReportPath, sourceLedgerReportPath, b2bActivationReportPath) => {
+  const localOnlySteps = createLocalOnlySteps(d1PersistDir);
+  const remoteReadonlySteps = createRemoteReadonlySteps(
+    contentQaReportPath,
+    sourceLedgerReportPath,
+    b2bActivationReportPath,
+  );
+
+  if (gateScope === 'local-only') return localOnlySteps;
+  if (gateScope === 'remote-readonly') return remoteReadonlySteps;
+  return [...localOnlySteps, ...remoteReadonlySteps];
 };
 
 let persistDir;
@@ -175,13 +231,20 @@ try {
     : path.join(persistDir, 'b2b-activation-report.json');
 
   const steps = createSteps(
+    scope,
     persistDir,
     contentQaReportPath,
     sourceLedgerReportPath,
     b2bActivationReportPath,
   );
 
-  console.log(dryRun ? 'Local release gate dry run:' : 'Local release gate:');
+  const gateLabel = {
+    'local-only': 'Local-only release gate',
+    'remote-readonly': 'Remote read-only release gate',
+    release: 'Full release gate',
+  }[scope];
+  console.log(dryRun ? `${gateLabel} dry run:` : `${gateLabel}:`);
+  console.log(`Scope: ${scope}`);
   steps.forEach((step, index) => {
     console.log(`${String(index + 1).padStart(2, '0')}. ${step.label}`);
     console.log(`    ${formatCommand(step.command, step.args)}`);
