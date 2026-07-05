@@ -39,6 +39,11 @@ const AdminPanel: React.FC = () => {
     loading: dashboardLoading,
     error: dashboardError,
     refresh: fetchDashboard,
+    passwordRecoveryUpdatingId,
+    updatePasswordRecoveryRequest,
+    passwordResetIssuingId,
+    passwordResetLinkByRequestId,
+    issuePasswordResetLink,
   } = useAdminDashboardSnapshot();
   const {
     requests,
@@ -365,6 +370,11 @@ const AdminPanel: React.FC = () => {
           error={dashboardError}
           headline={headline}
           subcopy={subcopy}
+          passwordRecoveryUpdatingId={passwordRecoveryUpdatingId}
+          onUpdatePasswordRecoveryRequest={updatePasswordRecoveryRequest}
+          passwordResetIssuingId={passwordResetIssuingId}
+          passwordResetLinkByRequestId={passwordResetLinkByRequestId}
+          onIssuePasswordResetLink={issuePasswordResetLink}
         />
       ) : panelView === 'commercial' ? (
         <AdminCommercialOpsView

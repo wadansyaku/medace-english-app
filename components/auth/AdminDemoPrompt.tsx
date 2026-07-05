@@ -25,7 +25,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
       <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Admin Demo</div>
       <h2 className="mt-3 text-2xl font-black text-slate-950">管理者デモを開く</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        サービス管理者デモには管理用パスワードが必要です。ローカルでは `admin` が既定値です。
+        サービス管理者デモには管理用パスワードが必要です。共有された確認用パスワードを入力してください。
       </p>
       <label className="mt-5 block">
         <span className="ui-form-label mb-2 block">管理用パスワード</span>

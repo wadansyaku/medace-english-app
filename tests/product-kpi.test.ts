@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildAdminPmfSummary,
   buildActivationFunnel,
   runProductAnalyticsSnapshotJob,
+  toAdminPmfTrendPoint,
 } from '../functions/_shared/product-kpi';
 import type { ProductKpiDailySnapshot } from '../types';
 
@@ -18,6 +20,7 @@ const makeSnapshot = (overrides: Partial<ProductKpiDailySnapshot> = {}): Product
   studySessionsFinished30d: 0,
   quizSessionsStarted30d: 0,
   spellingChecksStarted30d: 0,
+  dashboardStartTaskCount30d: 0,
   commercialFormOpenCount30d: 0,
   commercialRequestCount30d: 0,
   organizationsWithCohortCount: 0,
@@ -111,9 +114,63 @@ describe('buildActivationFunnel', () => {
   });
 });
 
+describe('admin PMF signal helpers', () => {
+  it('derives PMF rates and trend points from daily product KPI snapshots', () => {
+    const snapshot = makeSnapshot({
+      totalUsers: 100,
+      activeStudents30d: 42,
+      totalOrganizations: 10,
+      activeOrganizations30d: 6,
+      studySessionsStarted30d: 80,
+      studySessionsFinished30d: 52,
+      quizSessionsStarted30d: 30,
+      dashboardStartTaskCount30d: 64,
+      commercialFormOpenCount30d: 20,
+      commercialRequestCount30d: 5,
+      organizationsWithWritingReviewCount: 3,
+      writingSubmissionsReceived30d: 10,
+      writingReviewsCompleted30d: 7,
+      updatedAt: 1,
+    });
+
+    const pmf = buildAdminPmfSummary(snapshot);
+    const trend = toAdminPmfTrendPoint(snapshot);
+
+    expect(pmf.signalLevel).toBe('strong');
+    expect(pmf.activeStudentRate30d).toBe(42);
+    expect(pmf.activeOrganizationRate30d).toBe(60);
+    expect(pmf.studyCompletionRate30d).toBe(65);
+    expect(pmf.dashboardStartTaskCount30d).toBe(64);
+    expect(pmf.b2bActivationCompletionRate).toBe(30);
+    expect(pmf.writingReviewRate30d).toBe(70);
+    expect(pmf.commercialConversionRate30d).toBe(25);
+    expect(pmf.evidence.map((metric) => metric.id)).toContain('b2b-value-loop');
+    expect(pmf.evidence.map((metric) => metric.id)).toContain('dashboard-start-task');
+    expect(trend).toMatchObject({
+      date: '2026-06-19',
+      activeStudents30d: 42,
+      activeOrganizations30d: 6,
+      studyCompletionRate30d: 65,
+      dashboardStartTaskCount30d: 64,
+      b2bActivationCompletionRate: 30,
+      writingReviewRate30d: 70,
+      commercialRequestCount30d: 5,
+    });
+  });
+
+  it('keeps PMF explicitly unclassified before analytics snapshots run', () => {
+    const pmf = buildAdminPmfSummary(makeSnapshot());
+
+    expect(pmf.signalLevel).toBe('insufficient_data');
+    expect(pmf.signalLabel).toBe('データ不足');
+    expect(pmf.evidence.every((metric) => metric.tone === 'neutral')).toBe(true);
+  });
+});
+
 describe('runProductAnalyticsSnapshotJob', () => {
   it('counts writing activation from issued assignment rows rather than draft creation events', async () => {
     const preparedSql: string[] = [];
+    const boundStatements: Array<{ sql: string; bindings: unknown[] }> = [];
     const resolveCount = (sql: string): number => {
       if (sql.includes("event_name = 'writing_assignment_created'")) {
         return 99;
@@ -156,6 +213,9 @@ describe('runProductAnalyticsSnapshotJob', () => {
       if (sql.includes('SELECT COUNT(*) AS count FROM organizations')) {
         return 3;
       }
+      if (sql.includes("event_name = 'student_dashboard_start_task'")) {
+        return 12;
+      }
       return 0;
     };
     const env = {
@@ -163,13 +223,16 @@ describe('runProductAnalyticsSnapshotJob', () => {
         prepare: (sql: string) => {
           preparedSql.push(sql);
           return {
-            bind: (..._bindings: unknown[]) => ({
-              all: async () => ({
-                results: sql.includes('SELECT id FROM organizations ORDER BY id ASC') ? [] : [],
-              }),
-              first: async () => ({ count: resolveCount(sql) }),
-              run: async () => ({ success: true }),
-            }),
+            bind: (...bindings: unknown[]) => {
+              boundStatements.push({ sql, bindings });
+              return {
+                all: async () => ({
+                  results: sql.includes('SELECT id FROM organizations ORDER BY id ASC') ? [] : [],
+                }),
+                first: async () => ({ count: resolveCount(sql) }),
+                run: async () => ({ success: true }),
+              };
+            },
           };
         },
       },
@@ -187,6 +250,10 @@ describe('runProductAnalyticsSnapshotJob', () => {
     expect(result.snapshot.organizationsWithWritingAssignment30d).toBe(1);
     expect(result.snapshot.writingAssignmentsCreated30d).toBe(1);
     expect(result.snapshot.writingAssignmentsCreated30d).not.toBe(99);
+    expect(result.snapshot.dashboardStartTaskCount30d).toBe(12);
+    const insertStatement = boundStatements.find(({ sql }) => sql.includes('INSERT INTO product_kpi_daily_snapshots'));
+    expect(insertStatement).toBeTruthy();
+    expect(insertStatement?.bindings).toHaveLength(insertStatement?.sql.match(/\?/g)?.length || 0);
     expect(preparedSql.some((sql) => (
       sql.includes("event_name = 'writing_assignment_created'")
       && sql.includes('writing_assignments_created_30d')

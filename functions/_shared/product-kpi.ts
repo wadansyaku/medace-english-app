@@ -3,6 +3,8 @@ import {
 } from '../../config/subscription';
 import type {
   AdminAiEconomicsSummary,
+  AdminPmfSummary,
+  AdminPmfTrendPoint,
   ProductKpiDailySnapshot,
 } from '../../types';
 export { buildActivationFunnel } from '../../shared/adminActivationFunnel';
@@ -25,6 +27,7 @@ interface DbProductKpiDailySnapshotRow {
   study_sessions_finished_30d: number;
   quiz_sessions_started_30d: number;
   spelling_checks_started_30d: number;
+  dashboard_start_task_count_30d: number;
   commercial_form_open_count_30d: number;
   commercial_request_count_30d: number;
   organizations_with_cohort_count: number;
@@ -75,6 +78,7 @@ const toProductKpiDailySnapshot = (row?: Partial<DbProductKpiDailySnapshotRow> |
   studySessionsFinished30d: Number(row?.study_sessions_finished_30d || 0),
   quizSessionsStarted30d: Number(row?.quiz_sessions_started_30d || 0),
   spellingChecksStarted30d: Number(row?.spelling_checks_started_30d || 0),
+  dashboardStartTaskCount30d: Number(row?.dashboard_start_task_count_30d || 0),
   commercialFormOpenCount30d: Number(row?.commercial_form_open_count_30d || 0),
   commercialRequestCount30d: Number(row?.commercial_request_count_30d || 0),
   organizationsWithCohortCount: Number(row?.organizations_with_cohort_count || 0),
@@ -116,6 +120,145 @@ const calculateRatio = (numerator: number, denominator: number): number => (
   denominator > 0 ? Math.round((numerator / denominator) * 100) : 0
 );
 
+const formatRate = (value: number): string => `${value}%`;
+
+const toneFromRate = (
+  value: number,
+  thresholds: { strong: number; watch: number },
+): AdminPmfSummary['evidence'][number]['tone'] => {
+  if (value >= thresholds.strong) return 'strong';
+  if (value >= thresholds.watch) return 'watch';
+  return 'weak';
+};
+
+export const toAdminPmfTrendPoint = (snapshot: ProductKpiDailySnapshot): AdminPmfTrendPoint => ({
+  date: snapshot.dateKey,
+  activeStudents30d: snapshot.activeStudents30d,
+  activeOrganizations30d: snapshot.activeOrganizations30d,
+  studySessionsStarted30d: snapshot.studySessionsStarted30d,
+  studyCompletionRate30d: calculateRatio(snapshot.studySessionsFinished30d, snapshot.studySessionsStarted30d),
+  dashboardStartTaskCount30d: snapshot.dashboardStartTaskCount30d,
+  quizSessionsStarted30d: snapshot.quizSessionsStarted30d,
+  b2bActivationCompletionRate: calculateRatio(snapshot.organizationsWithWritingReviewCount, snapshot.totalOrganizations),
+  writingReviewRate30d: calculateRatio(snapshot.writingReviewsCompleted30d, snapshot.writingSubmissionsReceived30d),
+  commercialRequestCount30d: snapshot.commercialRequestCount30d,
+});
+
+export const buildAdminPmfSummary = (snapshot: ProductKpiDailySnapshot): AdminPmfSummary => {
+  const activeStudentRate30d = calculateRatio(snapshot.activeStudents30d, snapshot.totalUsers);
+  const activeOrganizationRate30d = calculateRatio(snapshot.activeOrganizations30d, snapshot.totalOrganizations);
+  const studyCompletionRate30d = calculateRatio(snapshot.studySessionsFinished30d, snapshot.studySessionsStarted30d);
+  const writingReviewRate30d = calculateRatio(snapshot.writingReviewsCompleted30d, snapshot.writingSubmissionsReceived30d);
+  const commercialConversionRate30d = calculateRatio(snapshot.commercialRequestCount30d, snapshot.commercialFormOpenCount30d);
+  const b2bActivationCompletionRate = calculateRatio(snapshot.organizationsWithWritingReviewCount, snapshot.totalOrganizations);
+  const hasData = snapshot.updatedAt > 0 && (snapshot.totalUsers > 0 || snapshot.totalOrganizations > 0);
+
+  const score = [
+    activeStudentRate30d >= 35 ? 2 : activeStudentRate30d >= 15 ? 1 : 0,
+    activeOrganizationRate30d >= 40 ? 2 : activeOrganizationRate30d >= 15 ? 1 : 0,
+    studyCompletionRate30d >= 60 ? 2 : studyCompletionRate30d >= 35 ? 1 : 0,
+    b2bActivationCompletionRate >= 30 ? 2 : b2bActivationCompletionRate >= 10 ? 1 : 0,
+    commercialConversionRate30d >= 20 ? 2 : commercialConversionRate30d > 0 ? 1 : 0,
+  ].reduce((sum, value) => sum + value, 0);
+
+  const signalLevel: AdminPmfSummary['signalLevel'] = !hasData
+    ? 'insufficient_data'
+    : score >= 7
+      ? 'strong'
+      : score >= 4
+        ? 'forming'
+        : 'weak';
+
+  const signalCopy: Record<AdminPmfSummary['signalLevel'], { label: string; headline: string }> = {
+    strong: {
+      label: 'PMFシグナル強め',
+      headline: '継続利用と価値到達が同時に出ています',
+    },
+    forming: {
+      label: 'PMFシグナル形成中',
+      headline: '利用は出始めていますが、価値到達の厚みを追う段階です',
+    },
+    weak: {
+      label: 'PMFシグナル弱め',
+      headline: '利用・継続・価値到達のどこかがまだ薄い状態です',
+    },
+    insufficient_data: {
+      label: 'データ不足',
+      headline: 'PMF判定にはanalytics snapshotの実行が必要です',
+    },
+  };
+
+  return {
+    signalLevel,
+    signalLabel: signalCopy[signalLevel].label,
+    headline: signalCopy[signalLevel].headline,
+    activeStudentRate30d,
+    activeOrganizationRate30d,
+    studyCompletionRate30d,
+    dashboardStartTaskCount30d: snapshot.dashboardStartTaskCount30d,
+    writingReviewRate30d,
+    commercialConversionRate30d,
+    b2bActivationCompletionRate,
+    evidence: [
+      {
+        id: 'active-students',
+        label: '30日学習アクティブ率',
+        value: formatRate(activeStudentRate30d),
+        detail: `${snapshot.activeStudents30d} / ${snapshot.totalUsers} ユーザーが30日内に学習イベントを残しています。`,
+        tone: hasData ? toneFromRate(activeStudentRate30d, { strong: 35, watch: 15 }) : 'neutral',
+      },
+      {
+        id: 'study-completion',
+        label: '学習セッション完了率',
+        value: formatRate(studyCompletionRate30d),
+        detail: `開始 ${snapshot.studySessionsStarted30d} 件に対して完了 ${snapshot.studySessionsFinished30d} 件です。`,
+        tone: snapshot.studySessionsStarted30d > 0 ? toneFromRate(studyCompletionRate30d, { strong: 60, watch: 35 }) : 'neutral',
+      },
+      {
+        id: 'dashboard-start-task',
+        label: 'ダッシュボード開始CTA',
+        value: `${snapshot.dashboardStartTaskCount30d}件`,
+        detail: `30日内に学習者ホームからタスク開始を押した回数です。実セッション開始 ${snapshot.studySessionsStarted30d} 件との差分も確認します。`,
+        tone: hasData
+          ? snapshot.dashboardStartTaskCount30d >= 20
+            ? 'strong'
+            : snapshot.dashboardStartTaskCount30d > 0
+              ? 'watch'
+              : 'weak'
+          : 'neutral',
+      },
+      {
+        id: 'active-organizations',
+        label: '30日アクティブ組織率',
+        value: formatRate(activeOrganizationRate30d),
+        detail: `${snapshot.activeOrganizations30d} / ${snapshot.totalOrganizations} 組織で学習・通知・運用イベントが出ています。`,
+        tone: snapshot.totalOrganizations > 0 ? toneFromRate(activeOrganizationRate30d, { strong: 40, watch: 15 }) : 'neutral',
+      },
+      {
+        id: 'b2b-value-loop',
+        label: 'B2B価値ループ到達率',
+        value: formatRate(b2bActivationCompletionRate),
+        detail: `対象組織のうち ${snapshot.organizationsWithWritingReviewCount} 組織が「作文配布 -> 提出 -> 講師返却」まで到達しています。`,
+        tone: snapshot.totalOrganizations > 0 ? toneFromRate(b2bActivationCompletionRate, { strong: 30, watch: 10 }) : 'neutral',
+      },
+      {
+        id: 'writing-review',
+        label: '作文返却率',
+        value: formatRate(writingReviewRate30d),
+        detail: `30日内の提出 ${snapshot.writingSubmissionsReceived30d} 件に対して返却 ${snapshot.writingReviewsCompleted30d} 件です。`,
+        tone: snapshot.writingSubmissionsReceived30d > 0 ? toneFromRate(writingReviewRate30d, { strong: 60, watch: 30 }) : 'neutral',
+      },
+      {
+        id: 'commercial-conversion',
+        label: '導入相談転換率',
+        value: formatRate(commercialConversionRate30d),
+        detail: `30日内のフォーム open ${snapshot.commercialFormOpenCount30d} 件から相談送信 ${snapshot.commercialRequestCount30d} 件です。`,
+        tone: snapshot.commercialFormOpenCount30d > 0 ? toneFromRate(commercialConversionRate30d, { strong: 20, watch: 1 }) : 'neutral',
+      },
+    ],
+  };
+};
+
 export const buildAdminAiEconomicsSummary = (
   monthKey: string,
   values: {
@@ -152,6 +295,22 @@ export const readLatestProductKpiSnapshot = async (
      LIMIT 1`,
   );
   return toProductKpiDailySnapshot(row);
+};
+
+export const readRecentProductKpiSnapshots = async (
+  env: AppEnv,
+  limit = 30,
+): Promise<ProductKpiDailySnapshot[]> => {
+  const safeLimit = Math.max(1, Math.min(90, Math.floor(limit)));
+  const rows = await readAll<DbProductKpiDailySnapshotRow>(
+    env,
+    `SELECT *
+     FROM product_kpi_daily_snapshots
+     ORDER BY date_key DESC
+     LIMIT ?`,
+    safeLimit,
+  );
+  return rows.map(toProductKpiDailySnapshot).reverse();
 };
 
 export const readCurrentMonthAiEconomics = async (
@@ -258,6 +417,7 @@ export const runProductAnalyticsSnapshotJob = async (
     studySessionsFinished30d,
     quizSessionsStarted30d,
     spellingChecksStarted30d,
+    dashboardStartTaskCount30d,
     commercialFormOpenCount30d,
     commercialRequestCount30d,
     generationCount30d,
@@ -422,6 +582,7 @@ export const runProductAnalyticsSnapshotJob = async (
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'study_session_finished' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'quiz_session_started' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'spelling_check_started' AND created_at >= ?`, active30dSince),
+    readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'student_dashboard_start_task' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM product_events WHERE event_name = 'commercial_form_opened' AND created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM commercial_requests WHERE created_at >= ?`, active30dSince),
     readCount(env, `SELECT COUNT(*) AS count FROM ai_usage_events WHERE created_at >= ?`, active30dSince),
@@ -471,6 +632,7 @@ export const runProductAnalyticsSnapshotJob = async (
       study_sessions_finished_30d,
       quiz_sessions_started_30d,
       spelling_checks_started_30d,
+      dashboard_start_task_count_30d,
       commercial_form_open_count_30d,
       commercial_request_count_30d,
       organizations_with_cohort_count,
@@ -502,7 +664,7 @@ export const runProductAnalyticsSnapshotJob = async (
       created_at,
       updated_at
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
     ON CONFLICT(date_key) DO UPDATE SET
       total_users = excluded.total_users,
@@ -515,6 +677,7 @@ export const runProductAnalyticsSnapshotJob = async (
       study_sessions_finished_30d = excluded.study_sessions_finished_30d,
       quiz_sessions_started_30d = excluded.quiz_sessions_started_30d,
       spelling_checks_started_30d = excluded.spelling_checks_started_30d,
+      dashboard_start_task_count_30d = excluded.dashboard_start_task_count_30d,
       commercial_form_open_count_30d = excluded.commercial_form_open_count_30d,
       commercial_request_count_30d = excluded.commercial_request_count_30d,
       organizations_with_cohort_count = excluded.organizations_with_cohort_count,
@@ -556,6 +719,7 @@ export const runProductAnalyticsSnapshotJob = async (
     studySessionsFinished30d,
     quizSessionsStarted30d,
     spellingChecksStarted30d,
+    dashboardStartTaskCount30d,
     commercialFormOpenCount30d,
     commercialRequestCount30d,
     organizationsWithCohortCount,
@@ -600,6 +764,7 @@ export const runProductAnalyticsSnapshotJob = async (
     study_sessions_finished_30d: studySessionsFinished30d,
     quiz_sessions_started_30d: quizSessionsStarted30d,
     spelling_checks_started_30d: spellingChecksStarted30d,
+    dashboard_start_task_count_30d: dashboardStartTaskCount30d,
     commercial_form_open_count_30d: commercialFormOpenCount30d,
     commercial_request_count_30d: commercialRequestCount30d,
     organizations_with_cohort_count: organizationsWithCohortCount,

@@ -29,6 +29,8 @@ export const shouldPreserveCurrentRoute = (
       return Boolean(navigationState.selectedTask);
     case 'englishPractice':
       return nextHomeView === 'dashboard';
+    case 'resetPassword':
+      return true;
     default:
       return false;
   }
@@ -47,6 +49,9 @@ export const useAuthExperienceController = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>('LOGIN');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [passwordRecoveryLoading, setPasswordRecoveryLoading] = useState(false);
+  const [passwordRecoveryMessage, setPasswordRecoveryMessage] = useState<string | null>(null);
   const [showAlternateAccess, setShowAlternateAccess] = useState(false);
   const [showAdminDemoPrompt, setShowAdminDemoPrompt] = useState(false);
   const [adminDemoPassword, setAdminDemoPassword] = useState('');
@@ -157,6 +162,7 @@ export const useAuthExperienceController = ({
   const handleEmailAuth = async (event: FormEvent) => {
     event.preventDefault();
     setAuthError(null);
+    setPasswordRecoveryMessage(null);
 
     if (!email || !password) {
       setAuthError('メールアドレスとパスワードを入力してください。');
@@ -201,9 +207,50 @@ export const useAuthExperienceController = ({
     }
   };
 
+  const handleOpenPasswordRecovery = () => {
+    setAuthMode('LOGIN');
+    setAuthError(null);
+    setPasswordRecoveryMessage(null);
+    setShowPasswordRecovery(true);
+  };
+
+  const handleClosePasswordRecovery = () => {
+    setAuthError(null);
+    setPasswordRecoveryMessage(null);
+    setShowPasswordRecovery(false);
+  };
+
+  const handleRequestPasswordRecovery = async () => {
+    const recoveryEmail = email.trim();
+    setAuthError(null);
+    setPasswordRecoveryMessage(null);
+
+    if (!recoveryEmail) {
+      setAuthError('再設定に使うメールアドレスを入力してください。');
+      setShowPasswordRecovery(true);
+      return;
+    }
+
+    setPasswordRecoveryLoading(true);
+    try {
+      const result = await sessionService.requestPasswordRecovery(recoveryEmail, 'login');
+      setPasswordRecoveryMessage(result.message);
+      setPassword('');
+      setConfirmPassword('');
+      setShowPasswordRecovery(true);
+    } catch (error: any) {
+      setAuthError(error?.message || '再設定リクエストを受け付けられませんでした。');
+      setShowPasswordRecovery(true);
+    } finally {
+      setPasswordRecoveryLoading(false);
+    }
+  };
+
   const switchAuthMode = (mode: AuthMode) => {
     setAuthMode(mode);
     setAuthError(null);
+    setPasswordRecoveryMessage(null);
+    setShowPasswordRecovery(false);
     setPassword('');
     setConfirmPassword('');
   };
@@ -217,6 +264,9 @@ export const useAuthExperienceController = ({
     setPassword('');
     setConfirmPassword('');
     setAuthError(null);
+    setShowPasswordRecovery(false);
+    setPasswordRecoveryMessage(null);
+    setPasswordRecoveryLoading(false);
     setShowAlternateAccess(false);
     dismissAdminDemoPrompt();
     onLogoutReset?.();
@@ -229,6 +279,9 @@ export const useAuthExperienceController = ({
     password,
     confirmPassword,
     authError,
+    showPasswordRecovery,
+    passwordRecoveryLoading,
+    passwordRecoveryMessage,
     showAlternateAccess,
     motivationSnapshot: publicMotivationSnapshot,
     motivationLoading: publicMotivationLoading,
@@ -239,6 +292,9 @@ export const useAuthExperienceController = ({
     onPasswordChange: setPassword,
     onConfirmPasswordChange: setConfirmPassword,
     onSubmitEmailAuth: handleEmailAuth,
+    onOpenPasswordRecovery: handleOpenPasswordRecovery,
+    onClosePasswordRecovery: handleClosePasswordRecovery,
+    onRequestPasswordRecovery: handleRequestPasswordRecovery,
     onDemoLogin: handleDemoLogin,
     onToggleAlternateAccess: () => setShowAlternateAccess((previous) => !previous),
   };

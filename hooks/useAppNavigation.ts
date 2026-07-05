@@ -19,7 +19,7 @@ import {
   type EnglishPracticeRouteLaneId,
 } from '../utils/englishPracticeProgress';
 
-export type AppRoute = 'login' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
+export type AppRoute = 'login' | 'resetPassword' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 export type EnglishPracticeRouteLane = EnglishPracticeRouteLaneId;
@@ -30,6 +30,7 @@ export interface AppNavigationState {
   selectedTask: LearningTaskIntent | null;
   publicRole: PublicBusinessRoleKey | null;
   englishPracticeLane: EnglishPracticeRouteLane | null;
+  passwordResetToken?: string | null;
 }
 
 export type AppNavigationAction =
@@ -87,7 +88,7 @@ export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
 };
 
 export const canAccessAppView = (user: UserProfile | null, view: AppRoute): boolean => {
-  if (view === 'login' || view === 'publicInfo' || view === 'publicRole') {
+  if (view === 'login' || view === 'resetPassword' || view === 'publicInfo' || view === 'publicRole') {
     return true;
   }
   if (!user) {
@@ -141,6 +142,15 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
     };
   }
 
+  if (normalizedPath === '/reset-password') {
+    const params = new URLSearchParams(search);
+    return {
+      ...initialNavigationState,
+      currentView: 'resetPassword',
+      passwordResetToken: params.get('token') || null,
+    };
+  }
+
   if (normalizedPath === '/dashboard') return buildHomeState('dashboard');
   if (root === 'english-practice') {
     const lane = parseEnglishPracticeRouteLane(bookId);
@@ -188,6 +198,10 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
       return '/public';
     case 'publicRole':
       return state.publicRole ? getPublicBusinessRolePath(state.publicRole) : '/public';
+    case 'resetPassword': {
+      const token = state.passwordResetToken ? `?token=${encodeURIComponent(state.passwordResetToken)}` : '';
+      return `/reset-password${token}`;
+    }
     case 'dashboard':
       return '/dashboard';
     case 'englishPractice':

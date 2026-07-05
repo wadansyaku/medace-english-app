@@ -2,6 +2,7 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  AdminPasswordRecoveryRequest,
   AiGeneratedProblemReviewQueueItem,
   AiGeneratedProblemReviewQueueResponse,
   CommercialRequest,
@@ -48,6 +49,11 @@ import {
   EnglishPracticeAttemptPayload,
   EnglishPracticeAttemptResult,
   GenerateWordHintAssetPayload,
+  AdminPasswordResetLinkIssuePayload,
+  AdminPasswordResetLinkIssueResult,
+  AdminPasswordRecoveryUpdatePayload,
+  PasswordResetConfirmResponse,
+  PasswordRecoveryResponse,
   ProductAnnouncementUpsertPayload,
 } from '../contracts/storage';
 import { CloudflareStorageService } from './cloudflare';
@@ -89,6 +95,8 @@ import {
   clearSession as clearAuthSession,
   getSession as getAuthSession,
   login as loginWithAuthSession,
+  confirmPasswordReset as confirmPasswordResetWithAuthSession,
+  requestPasswordRecovery as requestPasswordRecoveryWithAuthSession,
   saveSession as saveAuthSession,
   updateSessionUser as updateAuthSessionUser,
   type AuthSessionContext,
@@ -259,6 +267,14 @@ export class IndexedDBStorageService implements IStorageService {
 
   async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null> {
     return authenticateWithAuthSession(this.getAuthSessionContext(), email, password, isSignUp, role, displayName);
+  }
+
+  async requestPasswordRecovery(email: string, source?: string): Promise<PasswordRecoveryResponse> {
+    return requestPasswordRecoveryWithAuthSession(this.getAuthSessionContext(), email, source);
+  }
+
+  async confirmPasswordReset(token: string, password: string): Promise<PasswordResetConfirmResponse> {
+    return confirmPasswordResetWithAuthSession(this.getAuthSessionContext(), token, password);
   }
 
   async saveSession(user: UserProfile): Promise<void> {
@@ -505,6 +521,18 @@ export class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.ANNOUNCEMENT_RECEIPTS).clear();
     await waitForTransaction(tx);
     resetLocalMissionState();
+  }
+
+  async updatePasswordRecoveryRequest(
+    _payload: AdminPasswordRecoveryUpdatePayload,
+  ): Promise<AdminPasswordRecoveryRequest> {
+    throw new Error('パスワード再設定リクエストの対応管理はクラウド保存でのみ利用できます。');
+  }
+
+  async issuePasswordResetLink(
+    _payload: AdminPasswordResetLinkIssuePayload,
+  ): Promise<AdminPasswordResetLinkIssueResult> {
+    throw new Error('パスワード再設定リンクの発行はクラウド保存でのみ利用できます。');
   }
 
   async saveLearningPlan(plan: LearningPlan): Promise<void> {

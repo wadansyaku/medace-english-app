@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import AdminDashboardView from '../components/admin/AdminDashboardView';
-import { buildActivationFunnel } from '../functions/_shared/product-kpi';
+import {
+  buildActivationFunnel,
+  buildAdminPmfSummary,
+  toAdminPmfTrendPoint,
+} from '../functions/_shared/product-kpi';
 import {
   type ProductKpiDailySnapshot,
   StudentRiskLevel,
@@ -23,6 +27,7 @@ const productKpis: ProductKpiDailySnapshot = {
   studySessionsFinished30d: 0,
   quizSessionsStarted30d: 0,
   spellingChecksStarted30d: 0,
+  dashboardStartTaskCount30d: 0,
   commercialFormOpenCount30d: 0,
   commercialRequestCount30d: 0,
   organizationsWithCohortCount: 3,
@@ -95,6 +100,20 @@ const snapshot: AdminDashboardSnapshot = {
   organizations: [],
   atRiskStudents: [],
   productKpis,
+  productKpiTrend: [toAdminPmfTrendPoint(productKpis)],
+  pmf: buildAdminPmfSummary(productKpis),
+  pmfSegments: [
+    {
+      organizationName: 'Steady Study Demo Academy',
+      studentCount: 4,
+      active7dCount: 2,
+      active7dRate: 50,
+      paidCount: 2,
+      paidRate: 50,
+      averageLearnedWords: 24,
+      signalScore: 53,
+    },
+  ],
   activationFunnel: buildActivationFunnel(productKpis),
   aiEconomics: {
     monthKey: '2026-06',
@@ -107,6 +126,17 @@ const snapshot: AdminDashboardSnapshot = {
     estimatedProviderCostMilliYen: 0,
     avoidedCostMilliYen: 0,
   },
+  passwordRecoveryRequests: [
+    {
+      id: 1,
+      email: 'student@example.com',
+      hasMatchingUser: true,
+      status: 'OPEN',
+      source: 'login',
+      createdAt: 1783057800000,
+      updatedAt: 1783057800000,
+    },
+  ],
 };
 
 describe('AdminDashboardView material quality', () => {
@@ -125,6 +155,15 @@ describe('AdminDashboardView material quality', () => {
     expect(rendered).toContain('承認済み 1 / 3 冊。');
     expect(rendered).toContain('運用警告 1 冊、確認中 1 冊、QA停止 1 冊、台帳なし 0 冊です。');
     expect(rendered).toContain('最大の欠測');
+    expect(rendered).toContain('PMF達成シグナル');
+    expect(rendered).toContain('30日窓の利用シグナル推移');
+    expect(rendered).toContain('ダッシュボード開始CTA');
+    expect(rendered).toContain('所属別PMFシグナル');
+    expect(rendered).toContain('Steady Study Demo Academy');
+    expect(rendered).toContain('パスワード再設定リクエスト');
+    expect(rendered).toContain('student@example.com');
+    expect(rendered).toContain('登録一致あり');
+    expect(rendered).toContain('処理済みにする');
     expect(rendered).toContain('初回通知 -&gt; 作文配布で 1 組織');
     expect(rendered).toContain('30日内の進行: クラス 2 / 担当 1 / ミッション 1 / 通知 1 / 作文配布 0 / 提出 0 / 返却 0 組織');
     expect(rendered).toContain('累積到達: 作文配布済み 0 組織 / 提出あり 0 組織 / 返却済み 0 組織');

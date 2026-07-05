@@ -103,6 +103,24 @@ exports[`storage action contract > matches the storage action contract snapshot 
     ],
   },
   {
+    "action": "updatePasswordRecoveryRequest",
+    "alias": "updatePasswordRecoveryRequest",
+    "domain": "dashboard",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+    ],
+  },
+  {
+    "action": "issuePasswordResetLink",
+    "alias": "issuePasswordResetLink",
+    "domain": "dashboard",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+    ],
+  },
+  {
     "action": "getOrganizationDashboardSnapshot",
     "alias": "getOrganizationDashboardSnapshot",
     "domain": "organization",

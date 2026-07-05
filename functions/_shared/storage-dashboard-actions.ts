@@ -11,6 +11,9 @@ import {
   AdminBookInsight,
   AdminDashboardSnapshot,
   AdminOrganizationInsight,
+  AdminPasswordRecoveryRequest,
+  AdminPasswordRecoveryStatus,
+  AdminPmfSegmentInsight,
   AdminPlanBreakdownItem,
   AdminRiskBreakdownItem,
   AdminTrendPoint,
@@ -37,12 +40,20 @@ import { buildDashboardPrimaryMission } from './dashboard-primary-mission';
 import { buildDashboardBookCollections, buildDashboardSnapshotModel } from './dashboard-snapshot-model';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
 import { handleGetCoachNotifications } from './organization-notification-actions';
-import { buildActivationFunnel, readCurrentMonthAiEconomics, readLatestProductKpiSnapshot } from './product-kpi';
+import {
+  buildActivationFunnel,
+  buildAdminPmfSummary,
+  readCurrentMonthAiEconomics,
+  readLatestProductKpiSnapshot,
+  readRecentProductKpiSnapshots,
+  toAdminPmfTrendPoint,
+} from './product-kpi';
 import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { readMissionAssignmentsByStudent } from './storage-mission-actions';
 import { readWeaknessProfile } from './weakness-actions';
 import type { AppEnv, DbUserRow } from './types';
+import { HttpError } from './http';
 import {
   currentMonthKey,
   getBookProgress,
@@ -85,6 +96,36 @@ interface MaterialQualityBookRow {
   ledger_qa_source_coverage_rate: number | null;
   ledger_qa_example_pair_coverage_rate: number | null;
 }
+
+interface PasswordRecoveryRequestRow {
+  id: number;
+  email: string;
+  has_matching_user: number;
+  status: AdminPasswordRecoveryStatus;
+  source: string;
+  created_at: number;
+  updated_at: number;
+  resolved_at: number | null;
+  resolved_by: string | null;
+  resolution_note: string | null;
+}
+
+const PASSWORD_RECOVERY_STATUSES: AdminPasswordRecoveryStatus[] = ['OPEN', 'RESOLVED'];
+
+const toAdminPasswordRecoveryRequest = (
+  row: PasswordRecoveryRequestRow,
+): AdminPasswordRecoveryRequest => ({
+  id: Number(row.id),
+  email: row.email,
+  hasMatchingUser: Boolean(row.has_matching_user),
+  status: PASSWORD_RECOVERY_STATUSES.includes(row.status) ? row.status : 'OPEN',
+  source: row.source || 'login',
+  createdAt: Number(row.created_at || 0),
+  updatedAt: Number(row.updated_at || 0),
+  resolvedAt: row.resolved_at ? Number(row.resolved_at) : undefined,
+  resolvedBy: row.resolved_by || undefined,
+  resolutionNote: row.resolution_note || undefined,
+});
 
 const toAccuracyRate = (totalCorrect: number, totalAnswers: number): number => (
   totalAnswers > 0 ? Math.round((totalCorrect / totalAnswers) * 100) : 0
@@ -149,6 +190,34 @@ const evaluateAdminMaterialQualityGate = (row: MaterialQualityBookRow) => evalua
   catalogSource: row.created_by ? BookCatalogSource.USER_GENERATED : (row.catalog_source as BookMetadata['catalogSource']),
 }, toMaterialLedgerSnapshot(row));
 
+const readPasswordRecoveryRequests = async (
+  env: AppEnv,
+  limit = 8,
+): Promise<AdminPasswordRecoveryRequest[]> => {
+  const rows = await readAll<PasswordRecoveryRequestRow>(
+    env,
+    `SELECT
+       id,
+       email,
+       has_matching_user,
+       status,
+       source,
+       created_at,
+       updated_at,
+       resolved_at,
+       resolved_by,
+       resolution_note
+     FROM auth_recovery_requests
+     ORDER BY
+       CASE WHEN status = 'OPEN' THEN 0 ELSE 1 END,
+       created_at DESC
+     LIMIT ?`,
+    limit,
+  );
+
+  return rows.map(toAdminPasswordRecoveryRequest);
+};
+
 const readMotivationTotals = async (
   env: AppEnv,
   sql: string,
@@ -188,7 +257,9 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     notificationTrendRows,
     signupTrendRows,
     productKpis,
+    productKpiTrendRows,
     aiEconomics,
+    passwordRecoveryRequests,
   ] = await Promise.all([
     readFirst<{ count: number }>(
       env,
@@ -378,7 +449,9 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
       trendStart,
     ),
     readLatestProductKpiSnapshot(env),
+    readRecentProductKpiSnapshots(env, 30),
     readCurrentMonthAiEconomics(env),
+    readPasswordRecoveryRequests(env, 8),
   ]);
 
   const aiActions: AdminAiActionSummary[] = aiUsageRows.map((row) => ({
@@ -529,6 +602,26 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     .sort((left, right) => right.studentCount - left.studentCount || right.active7dCount - left.active7dCount)
     .slice(0, 6);
 
+  const pmfSegments: AdminPmfSegmentInsight[] = [...organizationsMap.entries()]
+    .map(([organizationName, value]) => {
+      const active7dRate = value.studentCount ? Math.round((value.active7dCount / value.studentCount) * 100) : 0;
+      const paidRate = value.studentCount ? Math.round((value.paidCount / value.studentCount) * 100) : 0;
+      const averageLearnedWords = value.studentCount ? Math.round(value.totalLearned / value.studentCount) : 0;
+      const learningDepthScore = Math.min(100, Math.round((averageLearnedWords / 40) * 100));
+      return {
+        organizationName,
+        studentCount: value.studentCount,
+        active7dCount: value.active7dCount,
+        active7dRate,
+        paidCount: value.paidCount,
+        paidRate,
+        averageLearnedWords,
+        signalScore: Math.round((active7dRate * 0.5) + (paidRate * 0.25) + (learningDepthScore * 0.25)),
+      };
+    })
+    .sort((left, right) => right.signalScore - left.signalScore || right.studentCount - left.studentCount)
+    .slice(0, 8);
+
   const overview = {
     totalStudents: students.length,
     activeToday: students.filter((student) => student.lastActive && toTokyoDateKey(student.lastActive) === todayKey).length,
@@ -559,9 +652,79 @@ export const handleGetAdminDashboardSnapshot = async (env: AppEnv, user: DbUserR
     organizations,
     atRiskStudents,
     productKpis,
+    productKpiTrend: productKpiTrendRows.map(toAdminPmfTrendPoint),
+    pmf: buildAdminPmfSummary(productKpis),
+    pmfSegments,
     activationFunnel: buildActivationFunnel(productKpis),
     aiEconomics,
+    passwordRecoveryRequests,
   };
+};
+
+export const handleUpdatePasswordRecoveryRequest = async (
+  env: AppEnv,
+  user: DbUserRow,
+  payload: {
+    requestId: number;
+    status: AdminPasswordRecoveryStatus;
+    resolutionNote?: string;
+  },
+): Promise<AdminPasswordRecoveryRequest> => {
+  const requestId = Math.trunc(Number(payload.requestId));
+  if (!Number.isFinite(requestId) || requestId <= 0) {
+    throw new HttpError(400, '再設定リクエストIDが不正です。');
+  }
+
+  if (!PASSWORD_RECOVERY_STATUSES.includes(payload.status)) {
+    throw new HttpError(400, '再設定リクエストのステータスが不正です。');
+  }
+
+  const now = Date.now();
+  const note = typeof payload.resolutionNote === 'string' && payload.resolutionNote.trim()
+    ? payload.resolutionNote.trim().slice(0, 240)
+    : null;
+
+  await env.DB.prepare(`
+    UPDATE auth_recovery_requests
+    SET
+      status = ?,
+      updated_at = ?,
+      resolved_at = ?,
+      resolved_by = ?,
+      resolution_note = ?
+    WHERE id = ?
+  `).bind(
+    payload.status,
+    now,
+    payload.status === 'RESOLVED' ? now : null,
+    payload.status === 'RESOLVED' ? user.id : null,
+    payload.status === 'RESOLVED' ? note : null,
+    requestId,
+  ).run();
+
+  const updated = await readFirst<PasswordRecoveryRequestRow>(
+    env,
+    `SELECT
+       id,
+       email,
+       has_matching_user,
+       status,
+       source,
+       created_at,
+       updated_at,
+       resolved_at,
+       resolved_by,
+       resolution_note
+     FROM auth_recovery_requests
+     WHERE id = ?`,
+    requestId,
+  );
+
+  if (!updated) {
+    throw new HttpError(404, '再設定リクエストが見つかりません。');
+  }
+
+  return toAdminPasswordRecoveryRequest(updated);
 };
 
 export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Promise<AccountOverview['aiUsage']> => {

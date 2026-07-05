@@ -1,6 +1,9 @@
 import {
   CatalogImportRequest,
   CatalogImportResult,
+  AdminPasswordResetLinkIssuePayload,
+  AdminPasswordResetLinkIssueResult,
+  AdminPasswordRecoveryUpdatePayload,
   AiGeneratedProblemReviewPayload,
   AiGeneratedProblemReviewQueueRequest,
   ClassroomWorksheetLifecycleEventPayload,
@@ -9,13 +12,15 @@ import {
   EnglishPracticeAttemptPayload,
   EnglishPracticeAttemptResult,
   GenerateWordHintAssetPayload,
+  PasswordResetConfirmResponse,
+  PasswordRecoveryResponse,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
   StorageAction,
   StorageActionRequest,
   StorageResponse,
 } from '../contracts/storage';
-import { ActivityLog, AdminDashboardSnapshot, type AiGeneratedProblemReviewQueueItem, type AiGeneratedProblemReviewQueueResponse, BookMetadata, BookProgress, type ClassroomWorksheetLifecycleEventResult, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
+import { ActivityLog, AdminDashboardSnapshot, type AdminPasswordRecoveryRequest, type AiGeneratedProblemReviewQueueItem, type AiGeneratedProblemReviewQueueResponse, BookMetadata, BookProgress, type ClassroomWorksheetLifecycleEventResult, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
 import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
 
@@ -84,6 +89,22 @@ export class CloudflareStorageService implements IStorageService {
       displayName,
     });
     return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
+  }
+
+  async requestPasswordRecovery(email: string, source = 'login'): Promise<PasswordRecoveryResponse> {
+    return apiPost<PasswordRecoveryResponse>('/api/auth', {
+      action: 'password-recovery-request',
+      email,
+      source,
+    });
+  }
+
+  async confirmPasswordReset(token: string, password: string): Promise<PasswordResetConfirmResponse> {
+    return apiPost<PasswordResetConfirmResponse>('/api/auth', {
+      action: 'password-reset-confirm',
+      token,
+      password,
+    });
   }
 
   async saveSession(user: UserProfile): Promise<void> {
@@ -305,6 +326,24 @@ export class CloudflareStorageService implements IStorageService {
 
   async resetAllData(): Promise<void> {
     await this.callStorage({ action: 'resetAllData' });
+  }
+
+  async updatePasswordRecoveryRequest(
+    payload: AdminPasswordRecoveryUpdatePayload,
+  ): Promise<AdminPasswordRecoveryRequest> {
+    return this.callStorage({
+      action: 'updatePasswordRecoveryRequest',
+      payload,
+    });
+  }
+
+  async issuePasswordResetLink(
+    payload: AdminPasswordResetLinkIssuePayload,
+  ): Promise<AdminPasswordResetLinkIssueResult> {
+    return this.callStorage({
+      action: 'issuePasswordResetLink',
+      payload,
+    });
   }
 
   async saveLearningPlan(plan: LearningPlan): Promise<void> {
