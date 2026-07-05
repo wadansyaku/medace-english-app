@@ -2,9 +2,11 @@ import React from 'react';
 import {
   ArrowRight,
   CheckCircle2,
+  LifeBuoy,
   Lock,
   LogIn,
   Mail,
+  Loader2,
   User,
   UserPlus,
 } from 'lucide-react';
@@ -29,6 +31,9 @@ interface AuthExperienceScreenProps {
   password: string;
   confirmPassword: string;
   authError: string | null;
+  showPasswordRecovery: boolean;
+  passwordRecoveryLoading: boolean;
+  passwordRecoveryMessage: string | null;
   showAlternateAccess: boolean;
   motivationSnapshot: PublicMotivationSnapshot | null;
   motivationLoading: boolean;
@@ -39,6 +44,9 @@ interface AuthExperienceScreenProps {
   onPasswordChange: (value: string) => void;
   onConfirmPasswordChange: (value: string) => void;
   onSubmitEmailAuth: (event: React.FormEvent) => void;
+  onOpenPasswordRecovery: () => void;
+  onClosePasswordRecovery: () => void;
+  onRequestPasswordRecovery: () => void;
   onDemoLogin: (role: UserRole, organizationRole?: OrganizationRole) => void;
   onToggleAlternateAccess: () => void;
   onOpenPublicInfo: () => void;
@@ -56,6 +64,9 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   password,
   confirmPassword,
   authError,
+  showPasswordRecovery,
+  passwordRecoveryLoading,
+  passwordRecoveryMessage,
   showAlternateAccess,
   motivationSnapshot,
   motivationLoading,
@@ -66,6 +77,9 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   onPasswordChange,
   onConfirmPasswordChange,
   onSubmitEmailAuth,
+  onOpenPasswordRecovery,
+  onClosePasswordRecovery,
+  onRequestPasswordRecovery,
   onDemoLogin,
   onToggleAlternateAccess,
   onOpenPublicInfo,
@@ -106,6 +120,35 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
       compact
     />
   );
+
+  const fastStartPanel = authMode === 'LOGIN' && !isMobileViewport ? (
+    <div
+      data-testid="auth-fast-start-panel"
+      className="mb-6 rounded-xl border border-medace-200 bg-white px-4 py-4 shadow-sm"
+    >
+      <p className="text-sm font-black tracking-[0.12em] text-medace-700">ログイン不要で先に試せます</p>
+      <p className="mt-2 text-sm leading-relaxed text-slate-600">
+        初回の人は登録前に、12問診断・復習画面・教材開始まで確認できます。
+      </p>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={() => onDemoLogin(UserRole.STUDENT)}
+          data-testid="auth-fast-start-student"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-medace-600 px-4 py-2.5 text-sm font-bold leading-tight text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+        >
+          生徒として体験開始 <ArrowRight className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChangeAuthMode('SIGNUP')}
+          className="inline-flex min-h-11 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold leading-tight text-slate-700 transition-colors hover:bg-slate-50"
+        >
+          アカウントを作る
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   const authCard = (
     <div className="overflow-hidden rounded-panel border border-medace-200 bg-white shadow-[0_18px_48px_rgba(255,122,0,0.10)]">
@@ -225,6 +268,8 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
               </p>
             </div>
 
+            {fastStartPanel}
+
             <form onSubmit={onSubmitEmailAuth} className="space-y-4">
               {authMode === 'SIGNUP' && (
                 <div>
@@ -260,7 +305,18 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
               <div>
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <label className="ui-form-label mb-0">パスワード</label>
-                  {authMode === 'SIGNUP' && <span className="text-sm font-bold text-slate-500">6文字以上</span>}
+                  {authMode === 'LOGIN' ? (
+                    <button
+                      type="button"
+                      onClick={onOpenPasswordRecovery}
+                      data-testid="open-password-recovery"
+                      className="text-sm font-bold text-medace-800 underline-offset-4 hover:underline"
+                    >
+                      パスワードを忘れた方
+                    </button>
+                  ) : (
+                    <span className="text-sm font-bold text-slate-500">6文字以上</span>
+                  )}
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
@@ -292,6 +348,59 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                 </div>
               )}
 
+              {authMode === 'LOGIN' && showPasswordRecovery && (
+                <div
+                  data-testid="password-recovery-panel"
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-medace-700">
+                      <LifeBuoy className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black text-slate-900">再設定リクエスト</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                        メールアドレス欄を確認して送信してください。アカウントの有無は画面に表示しません。
+                      </p>
+                      {passwordRecoveryMessage && (
+                        <div
+                          data-testid="password-recovery-message"
+                          className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium leading-relaxed text-emerald-800"
+                        >
+                          {passwordRecoveryMessage}
+                        </div>
+                      )}
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <button
+                          type="button"
+                          onClick={onRequestPasswordRecovery}
+                          disabled={passwordRecoveryLoading}
+                          data-testid="submit-password-recovery"
+                          className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                        >
+                          {passwordRecoveryLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                          再設定を依頼する
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDemoLogin(UserRole.STUDENT)}
+                          className="inline-flex min-h-10 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100"
+                        >
+                          今は体験で進む
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onClosePasswordRecovery}
+                          className="inline-flex min-h-10 items-center justify-center rounded-lg px-3 py-2 text-sm font-bold text-slate-500 transition-colors hover:bg-white"
+                        >
+                          閉じる
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {authError && (
                 <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                   {authError}
@@ -300,7 +409,11 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
               <button
                 type="submit"
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-medace-600 px-4 py-3 text-base font-bold leading-tight text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+                className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-bold leading-tight shadow-sm transition-colors ${
+                  authMode === 'LOGIN'
+                    ? 'bg-slate-950 text-white hover:bg-slate-800'
+                    : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
+                }`}
               >
                 {authMode === 'LOGIN' ? (
                   <><LogIn className="h-4 w-4" /> ログイン</>
@@ -316,7 +429,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
             <div className="mt-6 border-t border-slate-100 pt-6">
               <div className="ui-panel-subtle">
-                <div className="text-sm font-bold text-slate-500">Public Guide</div>
+                <div className="text-sm font-bold text-slate-500">導入ガイド</div>
                 <h3 className="mt-2 text-xl font-black text-slate-950">詳しい説明と料金は別ページへ</h3>
                 <p className="mt-2 text-[0.98rem] leading-relaxed text-slate-600">
                   ホーム画面はログインと体験開始に絞り、アプリ説明や料金の考え方は公開ページにまとめています。

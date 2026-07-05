@@ -41,7 +41,7 @@ const readAttemptLimit = async (
 
 export const createAuthAttemptScopeKey = (
   request: Request,
-  scope: 'admin-demo' | 'email-auth',
+  scope: 'admin-demo' | 'email-auth' | 'password-recovery',
   identity: string,
 ): string => {
   const clientAddress = normalizeKeySegment(getClientAddress(request));

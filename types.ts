@@ -1029,6 +1029,7 @@ export interface ProductKpiDailySnapshot {
   studySessionsFinished30d: number;
   quizSessionsStarted30d: number;
   spellingChecksStarted30d: number;
+  dashboardStartTaskCount30d: number;
   commercialFormOpenCount30d: number;
   commercialRequestCount30d: number;
   organizationsWithCohortCount: number;
@@ -1059,6 +1060,45 @@ export interface ProductKpiDailySnapshot {
   estimatedAvoidedCostMilliYen30d: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export type AdminPmfSignalTone = 'strong' | 'watch' | 'weak' | 'neutral';
+
+export type AdminPmfSignalLevel = 'strong' | 'forming' | 'weak' | 'insufficient_data';
+
+export interface AdminPmfEvidenceMetric {
+  id: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: AdminPmfSignalTone;
+}
+
+export interface AdminPmfSummary {
+  signalLevel: AdminPmfSignalLevel;
+  signalLabel: string;
+  headline: string;
+  activeStudentRate30d: number;
+  activeOrganizationRate30d: number;
+  studyCompletionRate30d: number;
+  dashboardStartTaskCount30d: number;
+  writingReviewRate30d: number;
+  commercialConversionRate30d: number;
+  b2bActivationCompletionRate: number;
+  evidence: AdminPmfEvidenceMetric[];
+}
+
+export interface AdminPmfTrendPoint {
+  date: string;
+  activeStudents30d: number;
+  activeOrganizations30d: number;
+  studySessionsStarted30d: number;
+  studyCompletionRate30d: number;
+  dashboardStartTaskCount30d: number;
+  quizSessionsStarted30d: number;
+  b2bActivationCompletionRate: number;
+  writingReviewRate30d: number;
+  commercialRequestCount30d: number;
 }
 
 export interface AiUsageSummary {
@@ -1621,6 +1661,32 @@ export interface AdminAiEconomicsSummary {
   avoidedCostMilliYen: number;
 }
 
+export type AdminPasswordRecoveryStatus = 'OPEN' | 'RESOLVED';
+
+export interface AdminPasswordRecoveryRequest {
+  id: number;
+  email: string;
+  hasMatchingUser: boolean;
+  status: AdminPasswordRecoveryStatus;
+  source: string;
+  createdAt: number;
+  updatedAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+  resolutionNote?: string;
+}
+
+export interface AdminPmfSegmentInsight {
+  organizationName: string;
+  studentCount: number;
+  active7dCount: number;
+  active7dRate: number;
+  paidCount: number;
+  paidRate: number;
+  averageLearnedWords: number;
+  signalScore: number;
+}
+
 export interface AdminDashboardSnapshot {
   overview: AdminOverviewStats;
   planBreakdown: AdminPlanBreakdownItem[];
@@ -1634,6 +1700,10 @@ export interface AdminDashboardSnapshot {
   organizations: AdminOrganizationInsight[];
   atRiskStudents: StudentSummary[];
   productKpis: ProductKpiDailySnapshot;
+  productKpiTrend: AdminPmfTrendPoint[];
+  pmf: AdminPmfSummary;
+  pmfSegments: AdminPmfSegmentInsight[];
   activationFunnel: AdminActivationFunnel;
   aiEconomics: AdminAiEconomicsSummary;
+  passwordRecoveryRequests: AdminPasswordRecoveryRequest[];
 }

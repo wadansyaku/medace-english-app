@@ -5,16 +5,24 @@ import {
   BellRing,
   BookOpen,
   Bot,
+  CheckCircle2,
   Clock3,
+  Copy,
   Database,
+  KeyRound,
+  Link2,
   Loader2,
   MessageSquareText,
+  RotateCcw,
   ShieldAlert,
   Target,
+  TrendingUp,
   Users,
 } from 'lucide-react';
+import type { AdminPasswordResetLinkIssueResult } from '../../contracts/storage';
 import {
   type AdminDashboardSnapshot,
+  type AdminPasswordRecoveryStatus,
   StudentRiskLevel,
   SUBSCRIPTION_PLAN_LABELS,
   SubscriptionPlan,
@@ -75,6 +83,59 @@ const funnelSeverityTone = (severity: 'ok' | 'watch' | 'blocked'): string => {
   return 'border-emerald-200 bg-emerald-50 text-emerald-800';
 };
 
+const pmfLevelTone = (level: AdminDashboardSnapshot['pmf']['signalLevel']): string => {
+  if (level === 'strong') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (level === 'forming') return 'border-medace-200 bg-medace-50 text-medace-900';
+  if (level === 'weak') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
+};
+
+const pmfMetricTone = (tone: AdminDashboardSnapshot['pmf']['evidence'][number]['tone']): string => {
+  if (tone === 'strong') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (tone === 'watch') return 'border-medace-200 bg-medace-50 text-medace-900';
+  if (tone === 'weak') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-slate-200 bg-slate-50 text-slate-700';
+};
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, value));
+
+const buildLinePoints = (
+  points: AdminDashboardSnapshot['productKpiTrend'],
+  field: keyof AdminDashboardSnapshot['productKpiTrend'][number],
+  maxValue: number,
+): string => {
+  if (points.length === 0) return '';
+  const width = 620;
+  const height = 160;
+  const left = 14;
+  const top = 18;
+  const step = points.length > 1 ? width / (points.length - 1) : 0;
+  return points.map((point, index) => {
+    const value = Number(point[field] || 0);
+    const x = points.length > 1 ? left + (index * step) : left + (width / 2);
+    const y = top + height - ((value / Math.max(1, maxValue)) * height);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+};
+
+const RateBar: React.FC<{
+  label: string;
+  value: number;
+  detail: string;
+  colorClass?: string;
+}> = ({ label, value, detail, colorClass = 'bg-medace-500' }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+    <div className="flex items-center justify-between gap-3">
+      <div className="text-sm font-bold text-slate-700">{label}</div>
+      <div className="text-sm font-black text-slate-950">{clampPercent(value)}%</div>
+    </div>
+    <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
+      <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${clampPercent(value)}%` }} />
+    </div>
+    <div className="mt-2 text-xs leading-relaxed text-slate-500">{detail}</div>
+  </div>
+);
+
 const MetricCard: React.FC<{
   label: string;
   value: string;
@@ -97,6 +158,15 @@ interface AdminDashboardViewProps {
   error: string | null;
   headline: string;
   subcopy: string;
+  passwordRecoveryUpdatingId?: number | null;
+  passwordResetIssuingId?: number | null;
+  passwordResetLinkByRequestId?: Record<number, AdminPasswordResetLinkIssueResult>;
+  onUpdatePasswordRecoveryRequest?: (
+    requestId: number,
+    status: AdminPasswordRecoveryStatus,
+    resolutionNote?: string,
+  ) => Promise<unknown>;
+  onIssuePasswordResetLink?: (requestId: number) => Promise<AdminPasswordResetLinkIssueResult>;
 }
 
 const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -105,9 +175,33 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   error,
   headline,
   subcopy,
+  passwordRecoveryUpdatingId = null,
+  passwordResetIssuingId = null,
+  passwordResetLinkByRequestId = {},
+  onUpdatePasswordRecoveryRequest,
+  onIssuePasswordResetLink,
 }) => {
+  const [copiedPasswordResetRequestId, setCopiedPasswordResetRequestId] = React.useState<number | null>(null);
   const overview = snapshot?.overview;
+  const passwordRecoveryRequests = snapshot?.passwordRecoveryRequests || [];
+  const openPasswordRecoveryCount = passwordRecoveryRequests.filter((request) => request.status === 'OPEN').length;
+  const matchingPasswordRecoveryCount = passwordRecoveryRequests.filter((request) => request.hasMatchingUser).length;
   const analyticsStatus = snapshot ? getAnalyticsStatus(snapshot.productKpis.updatedAt) : null;
+  const pmfTrend = snapshot?.productKpiTrend || [];
+  const maxPmfTrendValue = snapshot
+    ? Math.max(
+        ...pmfTrend.map((point) => Math.max(
+          point.activeStudents30d,
+          point.activeOrganizations30d,
+          point.studySessionsStarted30d,
+          point.dashboardStartTaskCount30d,
+        )),
+        1,
+      )
+    : 1;
+  const activeStudentsLine = buildLinePoints(pmfTrend, 'activeStudents30d', maxPmfTrendValue);
+  const activeOrganizationsLine = buildLinePoints(pmfTrend, 'activeOrganizations30d', maxPmfTrendValue);
+  const dashboardStartTaskLine = buildLinePoints(pmfTrend, 'dashboardStartTaskCount30d', maxPmfTrendValue);
   const maxTrendValue = snapshot
     ? Math.max(
         ...snapshot.trend.map((point) => Math.max(point.activeStudents, point.studiedWords, point.notifications, point.newStudents)),
@@ -128,6 +222,15 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       !book.qualityGate.isApprovedForLearner || book.qualityGate.warnings.length > 0
     ))
   ));
+  const copyPasswordResetLink = (requestId: number, resetUrl: string) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(resetUrl).then(() => {
+      setCopiedPasswordResetRequestId(requestId);
+      window.setTimeout(() => {
+        setCopiedPasswordResetRequestId((current) => (current === requestId ? null : current));
+      }, 1800);
+    });
+  };
 
   return (
     <>
@@ -208,6 +311,274 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             />
           </div>
 
+          <section data-testid="admin-password-recovery-queue" className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm md:p-7">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-center gap-3">
+                <KeyRound className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">ログイン救済</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">パスワード再設定リクエスト</h3>
+                  <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+                    ログイン画面で受け付けた再設定依頼です。生徒側には登録有無を出さず、管理者だけが一致状況と対応状態を確認します。
+                  </p>
+                </div>
+              </div>
+              <div className="grid min-w-[220px] grid-cols-2 gap-2 text-sm">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-amber-800">
+                  <div className="text-xs font-bold">未対応</div>
+                  <div className="mt-1 text-2xl font-black">{openPasswordRecoveryCount}</div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-slate-700">
+                  <div className="text-xs font-bold">登録一致</div>
+                  <div className="mt-1 text-2xl font-black">{matchingPasswordRecoveryCount}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {passwordRecoveryRequests.length === 0 ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-8 text-center text-sm font-medium text-emerald-700">
+                  未対応の再設定リクエストはありません。
+                </div>
+              ) : (
+                passwordRecoveryRequests.map((request) => {
+                  const isUpdating = passwordRecoveryUpdatingId === request.id;
+                  const isIssuing = passwordResetIssuingId === request.id;
+                  const issuedLink = passwordResetLinkByRequestId[request.id];
+                  const isOpen = request.status === 'OPEN';
+                  return (
+                    <div key={request.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full border px-2.5 py-1 text-xs font-black ${
+                              isOpen
+                                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                            }`}>
+                              {isOpen ? '未対応' : '処理済み'}
+                            </span>
+                            <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${
+                              request.hasMatchingUser
+                                ? 'border-medace-200 bg-medace-50 text-medace-900'
+                                : 'border-slate-200 bg-white text-slate-600'
+                            }`}>
+                              {request.hasMatchingUser ? '登録一致あり' : '登録一致なし'}
+                            </span>
+                            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500">
+                              {request.source}
+                            </span>
+                          </div>
+                          <div className="mt-3 truncate text-base font-black text-slate-950">{request.email}</div>
+                          <div className="mt-1 text-xs leading-relaxed text-slate-500">
+                            受付 {formatDateTime(request.createdAt)}
+                            {request.resolvedAt ? ` / 対応 ${formatDateTime(request.resolvedAt)}` : ''}
+                          </div>
+                          {request.resolutionNote && (
+                            <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-600">
+                              {request.resolutionNote}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
+                          {isOpen && request.hasMatchingUser && (
+                            <button
+                              type="button"
+                              disabled={!onIssuePasswordResetLink || isIssuing || isUpdating}
+                              onClick={() => {
+                                void onIssuePasswordResetLink?.(request.id);
+                              }}
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-900 transition-colors hover:bg-medace-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isIssuing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                              再設定リンクを発行
+                            </button>
+                          )}
+                          {isOpen && !request.hasMatchingUser && (
+                            <div className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-500">
+                              登録一致なし
+                            </div>
+                          )}
+                          {isOpen ? (
+                            <button
+                              type="button"
+                              disabled={!onUpdatePasswordRecoveryRequest || isUpdating || isIssuing}
+                              onClick={() => {
+                                void onUpdatePasswordRecoveryRequest?.(
+                                  request.id,
+                                  'RESOLVED',
+                                  '運営が再設定手順を案内済み',
+                                );
+                              }}
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                            >
+                              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                              処理済みにする
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!onUpdatePasswordRecoveryRequest || isUpdating}
+                              onClick={() => {
+                                void onUpdatePasswordRecoveryRequest?.(request.id, 'OPEN');
+                              }}
+                              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                              未対応に戻す
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {issuedLink && (
+                        <div
+                          data-testid="password-reset-issued-link"
+                          className="mt-4 rounded-2xl border border-medace-200 bg-white px-4 py-4"
+                        >
+                          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 text-sm font-black text-medace-900">
+                                <Link2 className="h-4 w-4 shrink-0" />
+                                <span>再設定リンクを発行しました</span>
+                              </div>
+                              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                                有効期限 {formatDateTime(issuedLink.expiresAt)}。本人確認後、メール本文などに貼り付けて案内してください。
+                              </p>
+                              <div className="mt-3 break-all rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium leading-relaxed text-slate-700">
+                                {issuedLink.resetUrl}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => copyPasswordResetLink(request.id, issuedLink.resetUrl)}
+                              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-slate-800"
+                            >
+                              <Copy className="h-4 w-4" />
+                              {copiedPasswordResetRequestId === request.id ? 'コピー済み' : 'コピー'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section data-testid="admin-pmf-dashboard" className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm md:p-7">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-5 w-5 text-medace-600" />
+                <div>
+                  <p className="text-xs font-bold text-slate-400">PMF達成シグナル</p>
+                  <h3 className="mt-1 text-2xl font-black text-slate-950">{snapshot.pmf.headline}</h3>
+                </div>
+              </div>
+              <div className={`rounded-2xl border px-4 py-3 text-sm font-black ${pmfLevelTone(snapshot.pmf.signalLevel)}`}>
+                {snapshot.pmf.signalLabel}
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {snapshot.pmf.evidence.map((metric) => (
+                <div key={metric.id} className={`rounded-2xl border px-4 py-4 ${pmfMetricTone(metric.tone)}`}>
+                  <div className="text-xs font-bold">{metric.label}</div>
+                  <div className="mt-2 text-3xl font-black">{metric.value}</div>
+                  <div className="mt-2 text-xs leading-relaxed opacity-90">{metric.detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black text-slate-900">30日窓の利用シグナル推移</div>
+                    <div className="mt-1 text-xs text-slate-500">analytics snapshot の時系列から、開始CTA、継続利用、組織利用の厚みを確認します。</div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-500">
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-medace-600" />学習者</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-slate-500" />組織</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" />開始CTA</span>
+                  </div>
+                </div>
+                {pmfTrend.length === 0 ? (
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                    時系列スナップショットがまだありません。analytics snapshot 実行後に線グラフが表示されます。
+                  </div>
+                ) : (
+                  <div className="mt-5 overflow-x-auto">
+                    <div className="min-w-[680px]">
+                      <svg viewBox="0 0 660 220" role="img" aria-label="PMF利用シグナル推移" className="h-[220px] w-full">
+                        <line x1="14" y1="178" x2="636" y2="178" stroke="#e2e8f0" strokeWidth="2" />
+                        <line x1="14" y1="98" x2="636" y2="98" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="5 5" />
+                        <polyline points={activeStudentsLine} fill="none" stroke="#f97316" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={activeOrganizationsLine} fill="none" stroke="#475569" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <polyline points={dashboardStartTaskLine} fill="none" stroke="#0ea5e9" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        {pmfTrend.map((point, index) => {
+                          const x = pmfTrend.length > 1 ? 14 + (index * (620 / (pmfTrend.length - 1))) : 324;
+                          return (
+                            <g key={point.date}>
+                              <text x={x} y="210" textAnchor="middle" className="fill-slate-500 text-[11px] font-bold">{formatDateLabel(point.date)}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+                <div className="text-sm font-black text-slate-900">最新30日の率</div>
+                <div className="mt-1 text-xs text-slate-500">PMF判断で毎週確認する主要率です。</div>
+                <div className="mt-5 space-y-3">
+                  <RateBar label="学習アクティブ率" value={snapshot.pmf.activeStudentRate30d} detail="登録ユーザーに対する30日学習者比率" />
+                  <RateBar label="セッション完了率" value={snapshot.pmf.studyCompletionRate30d} detail="学習開始から完了まで進んだ比率" colorClass="bg-emerald-500" />
+                  <RateBar label="B2B価値ループ到達率" value={snapshot.pmf.b2bActivationCompletionRate} detail="組織が作文返却まで到達した比率" colorClass="bg-slate-700" />
+                  <RateBar label="導入相談転換率" value={snapshot.pmf.commercialConversionRate30d} detail="フォームopenから相談送信への転換" colorClass="bg-sky-500" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-slate-900">所属別PMFシグナル</div>
+                  <div className="mt-1 text-xs text-slate-500">7日内学習率、有料化率、平均学習語数を合成した比較です。</div>
+                </div>
+                <div className="text-xs font-bold text-slate-500">最大8件</div>
+              </div>
+              <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                {snapshot.pmfSegments.length === 0 ? (
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                    所属別に比較できるデータはまだありません。
+                  </div>
+                ) : (
+                  snapshot.pmfSegments.map((segment) => (
+                    <div key={segment.organizationName} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-slate-900">{segment.organizationName}</div>
+                          <div className="mt-1 text-xs text-slate-500">{segment.studentCount} 名 / 有料 {segment.paidCount} 名 / 平均 {segment.averageLearnedWords} 語</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-black text-slate-950">{segment.signalScore}</div>
+                          <div className="text-xs text-slate-500">score</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <RateBar label="7日内学習率" value={segment.active7dRate} detail={`${segment.active7dCount} 名が7日内に学習`} />
+                        <RateBar label="有料化率" value={segment.paidRate} detail={`${segment.paidCount} 名が有料プラン`} colorClass="bg-slate-700" />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+
           <div className="grid gap-6 xl:grid-cols-3">
             <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-3">
@@ -237,7 +608,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">30日セッション</div>
                   <div className="mt-1 text-2xl font-black text-slate-950">{snapshot.productKpis.studySessionsStarted30d}</div>
-                  <div className="mt-1 text-xs text-slate-500">完了 {snapshot.productKpis.studySessionsFinished30d} / テスト {snapshot.productKpis.quizSessionsStarted30d}</div>
+                  <div className="mt-1 text-xs text-slate-500">完了 {snapshot.productKpis.studySessionsFinished30d} / テスト {snapshot.productKpis.quizSessionsStarted30d} / CTA開始 {snapshot.productKpis.dashboardStartTaskCount30d}</div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                   <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">30日英作文</div>

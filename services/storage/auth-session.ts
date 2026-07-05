@@ -18,6 +18,7 @@ import {
   STORES,
   type StoredSessionRecord,
 } from './idb-support';
+import type { PasswordRecoveryResponse, PasswordResetConfirmResponse } from '../../contracts/storage';
 
 export interface AuthSessionContext {
   getStore: GetStore;
@@ -73,6 +74,32 @@ export const authenticate = async (
   const matchedUser = IDB_MOCK_USERS.find((candidate) => candidate.email === email) || IDB_MOCK_USERS[0];
   await saveSession(context, matchedUser);
   return matchedUser;
+};
+
+export const requestPasswordRecovery = async (
+  _context: AuthSessionContext,
+  _email: string,
+  _source?: string,
+): Promise<PasswordRecoveryResponse> => ({
+  message: '再設定リクエストを受け付けました。登録済みのアカウントの場合、運営から再設定手順を案内します。',
+  requestedAt: Date.now(),
+});
+
+export const confirmPasswordReset = async (
+  _context: AuthSessionContext,
+  token: string,
+  password: string,
+): Promise<PasswordResetConfirmResponse> => {
+  if (!token.trim()) {
+    throw new Error('再設定リンクが無効または期限切れです。');
+  }
+  if (password.length < 6) {
+    throw new Error('パスワードは6文字以上にしてください。');
+  }
+  return {
+    message: 'パスワードを更新しました。新しいパスワードでログインしてください。',
+    resetAt: Date.now(),
+  };
 };
 
 export const saveSession = async (context: AuthSessionContext, user: UserProfile): Promise<void> => {

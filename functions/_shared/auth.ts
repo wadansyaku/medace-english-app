@@ -115,10 +115,12 @@ const buildCookie = (request: Request, token: string, maxAgeSeconds: number): st
   return `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;
 };
 
-const hashSessionToken = async (token: string): Promise<string> => {
+export const hashOpaqueToken = async (token: string): Promise<string> => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
   return encodeBase64(digest);
 };
+
+const hashSessionToken = hashOpaqueToken;
 
 const parseSessionCredential = (
   value: string | undefined,

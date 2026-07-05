@@ -1,6 +1,8 @@
 import {
   ActivityLog,
   AdminDashboardSnapshot,
+  AdminPasswordRecoveryRequest,
+  AdminPasswordRecoveryStatus,
   AiGeneratedProblemReviewDecision,
   AiGeneratedProblemReviewQueueResponse,
   AiGeneratedProblemReviewQueueStatus,
@@ -303,6 +305,14 @@ export interface StorageActionMap {
     payload: undefined;
     response: AdminDashboardSnapshot;
   };
+  updatePasswordRecoveryRequest: {
+    payload: AdminPasswordRecoveryUpdatePayload;
+    response: AdminPasswordRecoveryRequest;
+  };
+  issuePasswordResetLink: {
+    payload: AdminPasswordResetLinkIssuePayload;
+    response: AdminPasswordResetLinkIssueResult;
+  };
   getOrganizationDashboardSnapshot: {
     payload: undefined;
     response: OrganizationDashboardSnapshot;
@@ -520,6 +530,8 @@ export const STORAGE_ACTIONS = [
   'getBookSession',
   'getDashboardSnapshot',
   'getAdminDashboardSnapshot',
+  'updatePasswordRecoveryRequest',
+  'issuePasswordResetLink',
   'getOrganizationDashboardSnapshot',
   'getOrganizationSettingsSnapshot',
   'getDueCount',
@@ -587,7 +599,50 @@ export interface EmailAuthRequest {
   displayName?: string;
 }
 
-export type AuthRequest = DemoLoginRequest | EmailAuthRequest;
+export interface PasswordRecoveryRequest {
+  action: 'password-recovery-request';
+  email?: string;
+  source?: string;
+}
+
+export interface PasswordRecoveryResponse {
+  message: string;
+  requestedAt: number;
+}
+
+export interface PasswordResetConfirmRequest {
+  action: 'password-reset-confirm';
+  token?: string;
+  password?: string;
+}
+
+export interface PasswordResetConfirmResponse {
+  message: string;
+  resetAt: number;
+}
+
+export type AuthRequest =
+  | DemoLoginRequest
+  | EmailAuthRequest
+  | PasswordRecoveryRequest
+  | PasswordResetConfirmRequest;
+
+export interface AdminPasswordRecoveryUpdatePayload {
+  requestId: number;
+  status: AdminPasswordRecoveryStatus;
+  resolutionNote?: string;
+}
+
+export interface AdminPasswordResetLinkIssuePayload {
+  requestId: number;
+}
+
+export interface AdminPasswordResetLinkIssueResult {
+  requestId: number;
+  resetUrl: string;
+  expiresAt: number;
+  issuedAt: number;
+}
 
 export interface AssignmentEventSummary {
   events: AssignmentEvent[];

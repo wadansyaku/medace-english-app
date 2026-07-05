@@ -9,6 +9,14 @@ import {
   type LearningClient,
   type SessionClient,
 } from './clients';
+import type {
+  AdminPasswordRecoveryRequest,
+} from '../types';
+import type {
+  AdminPasswordResetLinkIssuePayload,
+  AdminPasswordResetLinkIssueResult,
+  AdminPasswordRecoveryUpdatePayload,
+} from '../contracts/storage';
 
 type DashboardSurface = Pick<DashboardClient,
   | 'getAdminDashboardSnapshot'
@@ -36,6 +44,12 @@ type DashboardSessionSurface = Pick<SessionClient,
 
 type DashboardAdminSurface = {
   resetAllData: () => Promise<void>;
+  updatePasswordRecoveryRequest: (
+    payload: AdminPasswordRecoveryUpdatePayload,
+  ) => Promise<AdminPasswordRecoveryRequest>;
+  issuePasswordResetLink: (
+    payload: AdminPasswordResetLinkIssuePayload,
+  ) => Promise<AdminPasswordResetLinkIssueResult>;
 };
 
 export type DashboardService =
@@ -56,6 +70,8 @@ export const dashboardService: DashboardService = {
   getLearningPreference: (uid) => learningClient.getLearningPreference(uid),
   getSession: () => sessionClient.getSession(),
   resetAllData: () => adminClient.resetAllData(),
+  updatePasswordRecoveryRequest: (payload) => adminClient.updatePasswordRecoveryRequest(payload),
+  issuePasswordResetLink: (payload) => adminClient.issuePasswordResetLink(payload),
   saveLearningPlan: (plan) => learningClient.saveLearningPlan(plan),
   saveLearningPreference: (preference) => learningClient.saveLearningPreference(preference),
   updateSessionUser: (user) => sessionClient.updateSessionUser(user),

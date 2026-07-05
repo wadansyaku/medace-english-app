@@ -8,6 +8,7 @@ import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from
 import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
+import PasswordResetScreen from './components/auth/PasswordResetScreen';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
 import {
   canAccessAppView,
@@ -16,7 +17,7 @@ import {
 } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
-import { recordClientProductEvent } from './services/productEvents';
+import { recordDashboardStartTaskEvent } from './services/productEvents';
 import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -32,7 +33,7 @@ const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
   const [instructorWorkspaceView, setInstructorWorkspaceView] = useState<InstructorWorkspaceView>(InstructorWorkspaceView.OVERVIEW);
   const [businessAdminWorkspaceView, setBusinessAdminWorkspaceView] = useState<BusinessAdminWorkspaceView>(BusinessAdminWorkspaceView.OVERVIEW);
-  const { currentView, publicRole, selectedTask, englishPracticeLane } = navigationState;
+  const { currentView, publicRole, selectedTask, englishPracticeLane, passwordResetToken } = navigationState;
   const {
     user,
     setCurrentUser,
@@ -61,27 +62,29 @@ const App: React.FC = () => {
     ? (isGroupAdminUser ? businessAdminWorkspaceView : instructorWorkspaceView)
     : undefined;
 
-  const handleBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
+  const openBookTask = (bookId: string, mode: 'study' | 'quiz') => {
     dispatchNavigation({
       type: 'open-task',
       task: createTaskIntentFromBookSelection(bookId, mode),
     });
   };
 
-  const handleTaskSelect = (task: LearningTaskIntent) => {
-    void recordClientProductEvent({
-      eventName: 'student_dashboard_start_task',
-      subjectType: 'learning_task',
-      subjectId: task.intentType,
-      status: 'STARTED',
-      metadata: {
-        mode: task.mode,
-        bookId: getTaskRouteBookId(task),
-        intentType: task.intentType,
-        targetQuestionModes: task.targetQuestionModes || [],
-      },
-    }).catch(() => undefined);
+  const handleDashboardBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
+    const task = createTaskIntentFromBookSelection(bookId, mode);
+    recordDashboardStartTaskEvent(task);
+    dispatchNavigation({
+      type: 'open-task',
+      task,
+    });
+  };
+
+  const openLearningTask = (task: LearningTaskIntent) => {
     dispatchNavigation({ type: 'open-task', task });
+  };
+
+  const handleDashboardTaskSelect = (task: LearningTaskIntent) => {
+    recordDashboardStartTaskEvent(task);
+    openLearningTask(task);
   };
 
   const handleSessionComplete = (updatedUser: UserProfile) => {
@@ -147,8 +150,8 @@ const App: React.FC = () => {
           <Dashboard
             user={user}
             announcementFeed={announcementFeed}
-            onSelectBook={handleBookSelect}
-            onStartTask={handleTaskSelect}
+            onSelectBook={handleDashboardBookSelect}
+            onStartTask={handleDashboardTaskSelect}
             onUserUpdate={setCurrentUser}
             activePracticeLane={null}
             onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
@@ -160,7 +163,7 @@ const App: React.FC = () => {
             user={user}
             initialLane={englishPracticeLane && englishPracticeLane !== 'overview' ? englishPracticeLane : 'grammar'}
             onBack={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
-            onStartVocabulary={() => handleTaskSelect(createTodayFocusTaskIntent())}
+            onStartVocabulary={() => openLearningTask(createTodayFocusTaskIntent())}
             onActiveLaneChange={(lane) => {
               if (lane !== 'overview') {
                 dispatchNavigation({ type: 'open-english-practice', lane, historyMode: 'replace' });
@@ -194,14 +197,14 @@ const App: React.FC = () => {
         return isGroupAdminUser ? (
           <BusinessAdminDashboard
             user={user}
-            onSelectBook={handleBookSelect}
+            onSelectBook={openBookTask}
             activeView={businessAdminWorkspaceView}
             onChangeView={setBusinessAdminWorkspaceView}
           />
         ) : (
           <InstructorDashboard
             user={user}
-            onSelectBook={handleBookSelect}
+            onSelectBook={openBookTask}
             activeView={instructorWorkspaceView}
             onChangeView={setInstructorWorkspaceView}
           />
@@ -211,8 +214,8 @@ const App: React.FC = () => {
           <Dashboard
             user={user}
             announcementFeed={announcementFeed}
-            onSelectBook={handleBookSelect}
-            onStartTask={handleTaskSelect}
+            onSelectBook={handleDashboardBookSelect}
+            onStartTask={handleDashboardTaskSelect}
             onUserUpdate={setCurrentUser}
             onOpenPracticeLane={(lane) => dispatchNavigation({ type: 'open-english-practice', lane })}
           />
@@ -227,6 +230,15 @@ const App: React.FC = () => {
           <Loader2 className="w-12 h-12 text-medace-500 animate-spin mb-4" />
           <p className="text-slate-500">認証中...</p>
         </div>
+      );
+    }
+
+    if (currentView === 'resetPassword') {
+      return (
+        <PasswordResetScreen
+          token={passwordResetToken || null}
+          onBackToLogin={() => dispatchNavigation({ type: 'reset', historyMode: 'replace' })}
+        />
       );
     }
 
@@ -258,7 +270,7 @@ const App: React.FC = () => {
         activeWorkspaceSection={activeWorkspaceSection}
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
         forceNoIndex={currentView === 'publicRole'}
-        immersiveContent={false}
+        immersiveContent={currentView === 'resetPassword'}
       >
         <Suspense
           fallback={

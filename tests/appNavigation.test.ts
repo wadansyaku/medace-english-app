@@ -116,6 +116,26 @@ describe('app navigation paths', () => {
     })).toBe('/dashboard');
   });
 
+  it('round-trips password reset links without requiring login', () => {
+    expect(parseNavigationPath('/reset-password', '?token=abc123')).toEqual({
+      currentView: 'resetPassword',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: null,
+      passwordResetToken: 'abc123',
+    });
+    expect(buildNavigationPath({
+      currentView: 'resetPassword',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: null,
+      passwordResetToken: 'abc123',
+    })).toBe('/reset-password?token=abc123');
+    expect(canAccessAppView(null, 'resetPassword')).toBe(true);
+  });
+
   it('keeps the english practice workspace student-only even for direct URLs', () => {
     expect(canAccessAppView(createUser(UserRole.STUDENT), 'englishPractice')).toBe(true);
     expect(canAccessAppView(createUser(UserRole.INSTRUCTOR), 'englishPractice')).toBe(false);
@@ -138,6 +158,15 @@ describe('app navigation paths', () => {
       publicRole: null,
       englishPracticeLane: null,
     }, 'instructor')).toBe(false);
+
+    expect(shouldPreserveCurrentRoute({
+      currentView: 'resetPassword',
+      returnView: 'dashboard',
+      selectedTask: null,
+      publicRole: null,
+      englishPracticeLane: null,
+      passwordResetToken: 'token',
+    }, 'dashboard')).toBe(true);
   });
 
   it('round-trips task query state for smart study routes', () => {

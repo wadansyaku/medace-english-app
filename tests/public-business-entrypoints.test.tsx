@@ -14,7 +14,13 @@ import { resolveRuntimeFlags } from '../shared/runtimeFlags';
 
 const noop = () => {};
 
-const buildAuthScreen = () => renderToStaticMarkup(
+const buildAuthScreen = ({
+  showPasswordRecovery = false,
+  passwordRecoveryMessage = null,
+}: {
+  showPasswordRecovery?: boolean;
+  passwordRecoveryMessage?: string | null;
+} = {}) => renderToStaticMarkup(
   <AuthExperienceScreen
     currentView="login"
     publicRole={null}
@@ -24,6 +30,9 @@ const buildAuthScreen = () => renderToStaticMarkup(
     password=""
     confirmPassword=""
     authError={null}
+    showPasswordRecovery={showPasswordRecovery}
+    passwordRecoveryLoading={false}
+    passwordRecoveryMessage={passwordRecoveryMessage}
     showAlternateAccess={false}
     motivationSnapshot={null}
     motivationLoading={false}
@@ -34,6 +43,9 @@ const buildAuthScreen = () => renderToStaticMarkup(
     onPasswordChange={noop}
     onConfirmPasswordChange={noop}
     onSubmitEmailAuth={(event) => event.preventDefault()}
+    onOpenPasswordRecovery={noop}
+    onClosePasswordRecovery={noop}
+    onRequestPasswordRecovery={noop}
     onDemoLogin={noop}
     onToggleAlternateAccess={noop}
     onOpenPublicInfo={noop}
@@ -54,6 +66,28 @@ const buildPublicInfoPage = () => renderToStaticMarkup(
 );
 
 describe('public business role entrypoints', () => {
+  it('keeps the first login surface oriented around fast trial and recovery paths', () => {
+    const authMarkup = buildAuthScreen();
+
+    expect(authMarkup).toContain('ログイン不要で先に試せます');
+    expect(authMarkup).toContain('data-testid="auth-fast-start-panel"');
+    expect(authMarkup).toContain('data-testid="auth-fast-start-student"');
+    expect(authMarkup).toContain('パスワードを忘れた方');
+    expect(authMarkup).toContain('導入ガイド');
+  });
+
+  it('renders a password recovery panel without revealing account existence', () => {
+    const authMarkup = buildAuthScreen({
+      showPasswordRecovery: true,
+      passwordRecoveryMessage: '再設定リクエストを受け付けました。',
+    });
+
+    expect(authMarkup).toContain('data-testid="password-recovery-panel"');
+    expect(authMarkup).toContain('アカウントの有無は画面に表示しません');
+    expect(authMarkup).toContain('data-testid="password-recovery-message"');
+    expect(authMarkup).toContain('再設定リクエストを受け付けました。');
+  });
+
   it('renders every role card on both login and public guide surfaces', () => {
     const authMarkup = buildAuthScreen();
     const publicMarkup = buildPublicInfoPage();

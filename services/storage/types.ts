@@ -1,6 +1,7 @@
 import type {
   ActivityLog,
   AdminDashboardSnapshot,
+  AdminPasswordRecoveryRequest,
   AiGeneratedProblemReviewQueueItem,
   AiGeneratedProblemReviewQueueResponse,
   BookMetadata,
@@ -45,6 +46,11 @@ import type {
   CommercialRequestUpdatePayload,
   EnglishPracticeAttemptPayload,
   EnglishPracticeAttemptResult,
+  AdminPasswordResetLinkIssuePayload,
+  AdminPasswordResetLinkIssueResult,
+  AdminPasswordRecoveryUpdatePayload,
+  PasswordResetConfirmResponse,
+  PasswordRecoveryResponse,
   PrepareBookExamplesResult,
   ProductAnnouncementUpsertPayload,
   GenerateWordHintAssetPayload,
@@ -53,6 +59,8 @@ import type {
 export interface SessionStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>;
   authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null>;
+  requestPasswordRecovery(email: string, source?: string): Promise<PasswordRecoveryResponse>;
+  confirmPasswordReset(token: string, password: string): Promise<PasswordResetConfirmResponse>;
   saveSession(user: UserProfile): Promise<void>;
   updateSessionUser(user: UserProfile): Promise<void>;
   clearSession(): Promise<void>;
@@ -172,6 +180,8 @@ export interface AnnouncementStorageService {
 
 export interface AdminStorageService {
   resetAllData(): Promise<void>;
+  updatePasswordRecoveryRequest(payload: AdminPasswordRecoveryUpdatePayload): Promise<AdminPasswordRecoveryRequest>;
+  issuePasswordResetLink(payload: AdminPasswordResetLinkIssuePayload): Promise<AdminPasswordResetLinkIssueResult>;
 }
 
 export type SessionClient = SessionStorageService;

@@ -193,6 +193,8 @@ describe('storage action contract', () => {
       'reviewAiGeneratedProblem',
     ];
     const adminOnlyActions: StorageAction[] = [
+      'updatePasswordRecoveryRequest',
+      'issuePasswordResetLink',
       'listCommercialRequests',
       'updateCommercialRequest',
       'listProductAnnouncementsAdmin',
@@ -212,6 +214,45 @@ describe('storage action contract', () => {
     sharedMissionActions.forEach((action) => {
       expect(resolveStorageActionDefinition(action).roles).toEqual([UserRole.ADMIN, UserRole.INSTRUCTOR, UserRole.STUDENT]);
     });
+  });
+
+  it('validates password recovery queue updates for admin operation', () => {
+    const definition = resolveStorageActionDefinition('updatePasswordRecoveryRequest');
+
+    expect(definition.roles).toEqual([UserRole.ADMIN]);
+    expect(definition.parse({
+      requestId: 1,
+      status: 'RESOLVED',
+      resolutionNote: 'メールで案内済み',
+    })).toEqual({
+      requestId: 1,
+      status: 'RESOLVED',
+      resolutionNote: 'メールで案内済み',
+    });
+    expect(definition.parse({
+      requestId: 1,
+      status: 'OPEN',
+    })).toEqual({
+      requestId: 1,
+      status: 'OPEN',
+      resolutionNote: undefined,
+    });
+    expect(() => definition.parse({
+      requestId: 1,
+      status: 'PENDING',
+    })).toThrow('status が不正です。');
+    expect(() => definition.parse({
+      requestId: '1',
+      status: 'RESOLVED',
+    })).toThrow('requestId は数値である必要があります。');
+  });
+
+  it('validates password reset link issue requests for admin operation', () => {
+    const definition = resolveStorageActionDefinition('issuePasswordResetLink');
+
+    expect(definition.roles).toEqual([UserRole.ADMIN]);
+    expect(definition.parse({ requestId: 12 })).toEqual({ requestId: 12 });
+    expect(() => definition.parse({ requestId: '12' })).toThrow('requestId は数値である必要があります。');
   });
 
   it('validates commercial provision payloads before execution', () => {

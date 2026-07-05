@@ -296,6 +296,7 @@ export const getAdminDashboardSnapshot = async (
     studySessionsFinished30d: 0,
     quizSessionsStarted30d: 0,
     spellingChecksStarted30d: 0,
+    dashboardStartTaskCount30d: 0,
     commercialFormOpenCount30d: 0,
     commercialRequestCount30d: 0,
     organizationsWithCohortCount: 0,
@@ -326,6 +327,27 @@ export const getAdminDashboardSnapshot = async (
     estimatedAvoidedCostMilliYen30d: 0,
     createdAt: 0,
     updatedAt: 0,
+  };
+  const pmf = {
+    signalLevel: 'insufficient_data' as const,
+    signalLabel: 'データ不足',
+    headline: 'PMF判定にはanalytics snapshotの実行が必要です',
+    activeStudentRate30d: 0,
+    activeOrganizationRate30d: 0,
+    studyCompletionRate30d: 0,
+    dashboardStartTaskCount30d: 0,
+    writingReviewRate30d: 0,
+    commercialConversionRate30d: 0,
+    b2bActivationCompletionRate: 0,
+    evidence: [
+      {
+        id: 'active-students',
+        label: '30日学習アクティブ率',
+        value: '0%',
+        detail: 'ローカルモックではanalytics snapshotを集計していません。',
+        tone: 'neutral' as const,
+      },
+    ],
   };
 
   return {
@@ -371,6 +393,9 @@ export const getAdminDashboardSnapshot = async (
     organizations: [],
     atRiskStudents,
     productKpis,
+    productKpiTrend: [],
+    pmf,
+    pmfSegments: [],
     activationFunnel: buildActivationFunnel(productKpis),
     aiEconomics: {
       monthKey: formatMonthKey(new Date()),
@@ -383,5 +408,6 @@ export const getAdminDashboardSnapshot = async (
       estimatedProviderCostMilliYen: 0,
       avoidedCostMilliYen: 0,
     },
+    passwordRecoveryRequests: [],
   };
 };

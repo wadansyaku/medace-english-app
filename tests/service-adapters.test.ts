@@ -15,6 +15,8 @@ describe('service adapters', () => {
     expect(typeof sessionService.getSession).toBe('function');
     expect(typeof sessionService.login).toBe('function');
     expect(typeof sessionService.authenticate).toBe('function');
+    expect(typeof sessionService.requestPasswordRecovery).toBe('function');
+    expect(typeof sessionService.confirmPasswordReset).toBe('function');
   });
 
   it('exposes dashboard operations through a dedicated adapter boundary', () => {
@@ -22,6 +24,8 @@ describe('service adapters', () => {
     expect(typeof dashboardService.getDashboardSnapshot).toBe('function');
     expect(typeof dashboardService.batchImportWords).toBe('function');
     expect(typeof dashboardService.resetAllData).toBe('function');
+    expect(typeof dashboardService.updatePasswordRecoveryRequest).toBe('function');
+    expect(typeof dashboardService.issuePasswordResetLink).toBe('function');
   });
 
   it('exposes learning operations through a dedicated adapter boundary', () => {

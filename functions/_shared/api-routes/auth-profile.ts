@@ -1,4 +1,12 @@
-import { AuthRequest, EmailAuthRequest, DemoLoginRequest } from '../../../contracts/storage';
+import {
+  AuthRequest,
+  DemoLoginRequest,
+  EmailAuthRequest,
+  PasswordRecoveryRequest,
+  PasswordResetConfirmRequest,
+  type PasswordResetConfirmResponse,
+  type PasswordRecoveryResponse,
+} from '../../../contracts/storage';
 import { EnglishLevel, UserGrade, UserRole, UserStudyMode } from '../../../types';
 import { DEMO_SESSION_TTL_MS } from '../../../utils/demo';
 import {
@@ -19,6 +27,7 @@ import {
   recordAuthFailure,
 } from '../auth-rate-limit';
 import { HttpError, noContent, readJson } from '../http';
+import { handlePasswordResetConfirm } from '../password-reset-actions';
 import { assertSameOriginMutation } from '../request-guards';
 import getServerRuntimeFlags from '../runtime';
 import type { DbUserRow } from '../types';
@@ -151,6 +160,66 @@ const handleEmailAuth = async (
   };
 };
 
+const normalizeRecoverySource = (value: unknown): string => (
+  typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, 80)
+    : 'login'
+);
+
+const handlePasswordRecoveryRequest = async (
+  context: Parameters<ApiRouteDefinition['handle']>[0],
+  body: PasswordRecoveryRequest,
+): Promise<ApiRouteResult> => {
+  const { env, request } = context;
+  const email = String(body.email || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    throw new HttpError(400, '再設定に使うメールアドレスを入力してください。');
+  }
+
+  const authScopeKey = createAuthAttemptScopeKey(request, 'password-recovery', email);
+  await assertAuthAttemptAllowed(env, authScopeKey);
+
+  const existing = await findUserByEmail(env, email);
+  const now = Date.now();
+  await env.DB.prepare(`
+    INSERT INTO auth_recovery_requests (
+      email,
+      has_matching_user,
+      status,
+      source,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, 'OPEN', ?, ?, ?)
+  `).bind(
+    email,
+    existing ? 1 : 0,
+    normalizeRecoverySource(body.source),
+    now,
+    now,
+  ).run();
+
+  await recordAuthFailure(env, authScopeKey, now);
+
+  const response: PasswordRecoveryResponse = {
+    message: '再設定リクエストを受け付けました。登録済みのアカウントの場合、運営から再設定手順を案内します。',
+    requestedAt: now,
+  };
+
+  return {
+    response: createJsonResponse(response),
+  };
+};
+
+const handlePasswordResetConfirmRequest = async (
+  context: Parameters<ApiRouteDefinition['handle']>[0],
+  body: PasswordResetConfirmRequest,
+): Promise<ApiRouteResult> => {
+  const response: PasswordResetConfirmResponse = await handlePasswordResetConfirm(context.env, body);
+  return {
+    response: createJsonResponse(response),
+  };
+};
+
 const handleProfileUpdate = async (
   context: Parameters<ApiRouteDefinition['handle']>[0],
   currentUser: DbUserRow,
@@ -204,6 +273,12 @@ export const authProfileRoutes: ApiRouteDefinition[] = [
       }
       if (body.action === 'email-auth') {
         return handleEmailAuth(context, body);
+      }
+      if (body.action === 'password-recovery-request') {
+        return handlePasswordRecoveryRequest(context, body);
+      }
+      if (body.action === 'password-reset-confirm') {
+        return handlePasswordResetConfirmRequest(context, body);
       }
       throw new HttpError(404, '未知の認証操作です。');
     },
