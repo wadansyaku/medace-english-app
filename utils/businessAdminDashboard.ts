@@ -1,6 +1,7 @@
 import {
   BusinessAdminWorkspaceView,
   StudentRiskLevel,
+  type OrganizationActivationActionTarget,
   type OrganizationDashboardSnapshot,
   type OrganizationInstructorBacklogSummary,
   type OrganizationInstructorSummary,
@@ -21,6 +22,7 @@ export interface BusinessAdminDecisionAction {
   label: string;
   targetView: BusinessAdminWorkspaceView;
   assignmentFilter?: AssignmentFilter;
+  target?: OrganizationActivationActionTarget | null;
 }
 
 export interface BusinessAdminDecisionMetric {
@@ -70,6 +72,32 @@ export interface BusinessAdminRunbookSummaryModel {
   tone: BusinessAdminDecisionTone;
   targetView: BusinessAdminWorkspaceView;
 }
+
+export interface BusinessAdminActivationNavigationIntent {
+  targetView: BusinessAdminWorkspaceView;
+  assignmentFilter: AssignmentFilter | null;
+  assignmentQuery: string | null;
+  selectedStudentUid: string | null;
+}
+
+export const resolveBusinessAdminActivationNavigationIntent = (
+  target: OrganizationActivationActionTarget | null | undefined,
+  fallbackView: BusinessAdminWorkspaceView,
+  assignmentFilter: AssignmentFilter | null = null,
+): BusinessAdminActivationNavigationIntent => {
+  const targetView = target?.targetView || fallbackView;
+  const shouldFocusAssignmentStudent = targetView === BusinessAdminWorkspaceView.ASSIGNMENTS
+    && Boolean(target?.studentUid);
+
+  return {
+    targetView,
+    assignmentFilter: shouldFocusAssignmentStudent
+      ? assignmentFilter || 'ALL'
+      : assignmentFilter,
+    assignmentQuery: shouldFocusAssignmentStudent ? '' : null,
+    selectedStudentUid: shouldFocusAssignmentStudent ? target!.studentUid! : null,
+  };
+};
 
 const matchesStudentKeyword = (student: StudentSummary, query: string): boolean => {
   const keyword = query.trim().toLowerCase();
@@ -295,6 +323,9 @@ const buildOverviewDecision = (
   const shouldSendNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
   const shouldFollowRunbookStage = runbookSummary.hasCurrentStage && !shouldSendNotification;
+  const primaryTarget = shouldFollowRunbookStage
+    ? snapshot.activationRunbook?.currentStage?.target || null
+    : snapshot.nextRequiredActionTarget || null;
 
   return {
     eyebrow: '判断メモ',
@@ -321,6 +352,7 @@ const buildOverviewDecision = (
             ? '割当状況を確認する'
             : '次の一手へ進む',
         targetView: nextActionView,
+        target: primaryTarget,
       },
     secondaryAction: {
       kind: 'SET_ASSIGNMENT_FILTER',
@@ -368,6 +400,15 @@ const buildAssignmentsDecision = (
   const priorityFilter = resolveAssignmentPriorityFilter(snapshot);
   const priorityStudent = getPriorityStudent(snapshot);
   const hasPriorityStudent = Boolean(priorityStudent);
+  const priorityStudentTarget: OrganizationActivationActionTarget | null = priorityStudent
+    ? {
+      kind: 'STUDENT_ASSIGNMENT',
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      organizationId: snapshot.organizationId,
+      studentUid: priorityStudent.uid,
+      studentName: priorityStudent.name,
+    }
+    : null;
 
   return {
     eyebrow: '割当トリアージ',
@@ -385,6 +426,7 @@ const buildAssignmentsDecision = (
           : '全生徒を見る',
       targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
       assignmentFilter: priorityFilter,
+      target: priorityStudentTarget,
     },
     secondaryAction: {
       kind: 'OPEN_VIEW',
@@ -435,8 +477,18 @@ const buildInstructorsDecision = (
   writingQueue: WritingQueueItem[],
 ): BusinessAdminDecisionModel => {
   const topInstructor = getTopInstructorLoad(snapshot);
+  const priorityStudent = getPriorityStudent(snapshot);
   const shouldSendNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
+  const priorityStudentTarget: OrganizationActivationActionTarget | null = priorityStudent
+    ? {
+      kind: 'STUDENT_ASSIGNMENT',
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      organizationId: snapshot.organizationId,
+      studentUid: priorityStudent.uid,
+      studentName: priorityStudent.name,
+    }
+    : null;
 
   return {
     eyebrow: '講師負荷メモ',
@@ -462,6 +514,7 @@ const buildInstructorsDecision = (
         label: snapshot.interventionBacklogCount > 0 ? '要対応生徒を割り振る' : '割当一覧を確認する',
         targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
         assignmentFilter: resolveAssignmentPriorityFilter(snapshot),
+        target: priorityStudentTarget,
       },
     secondaryAction: {
       kind: 'OPEN_VIEW',
