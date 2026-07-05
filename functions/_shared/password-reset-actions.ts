@@ -162,18 +162,23 @@ export const handlePasswordResetConfirm = async (
     throw new HttpError(400, '再設定リンクが無効または期限切れです。');
   }
 
+  const consumeResult = await env.DB.prepare(`
+    UPDATE password_reset_tokens
+    SET used_at = ?
+    WHERE id = ? AND used_at IS NULL AND expires_at > ?
+  `).bind(now, resetToken.id, now).run();
+
+  const consumedRows = Number((consumeResult.meta as { changes?: number } | undefined)?.changes || 0);
+  if (consumedRows !== 1) {
+    throw new HttpError(400, '再設定リンクが無効または期限切れです。');
+  }
+
   const passwordHash = await hashPassword(password);
   await env.DB.prepare(`
     UPDATE users
     SET password_hash = ?, updated_at = ?
     WHERE id = ?
   `).bind(passwordHash, now, resetToken.user_id).run();
-
-  await env.DB.prepare(`
-    UPDATE password_reset_tokens
-    SET used_at = ?
-    WHERE id = ?
-  `).bind(now, resetToken.id).run();
 
   await env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(resetToken.user_id).run();
 

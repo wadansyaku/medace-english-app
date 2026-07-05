@@ -162,6 +162,7 @@ const createPasswordResetDb = (): {
       resolution_note: string | null;
     };
     deletedSessionUserId: string | null;
+    simulateConcurrentTokenUse: boolean;
   };
 } => {
   const writes: DbWrite[] = [];
@@ -190,6 +191,7 @@ const createPasswordResetDb = (): {
       resolution_note: null,
     },
     deletedSessionUserId: null as string | null,
+    simulateConcurrentTokenUse: false,
   };
 
   const db: D1Database = {
@@ -245,9 +247,22 @@ const createPasswordResetDb = (): {
               updated_at: values[1] as number,
             };
           } else if (sql.includes('UPDATE password_reset_tokens') && sql.includes('WHERE id')) {
+            if (state.simulateConcurrentTokenUse) {
+              state.simulateConcurrentTokenUse = false;
+              state.resetTokens = state.resetTokens.map((token) => (
+                token.id === values[1] ? { ...token, used_at: (values[0] as number) - 1 } : token
+              ));
+            }
+            let changes = 0;
             state.resetTokens = state.resetTokens.map((token) => (
-              token.id === values[1] ? { ...token, used_at: values[0] as number } : token
+              token.id === values[1] && token.used_at === null && Number(token.expires_at) > Number(values[2])
+                ? (() => {
+                  changes += 1;
+                  return { ...token, used_at: values[0] as number };
+                })()
+                : token
             ));
+            return { meta: { changes }, success: true };
           } else if (sql.includes('DELETE FROM sessions')) {
             state.deletedSessionUserId = values[0] as string;
           } else if (sql.includes('UPDATE auth_recovery_requests') && sql.includes("status = 'RESOLVED'")) {
@@ -534,6 +549,34 @@ describe('password reset token flow', () => {
       status: 400,
       message: '再設定リンクが無効または期限切れです。',
     } satisfies Partial<HttpError>);
+  });
+
+  it('does not update the password if the reset token is consumed concurrently', async () => {
+    const { db, state } = createPasswordResetDb();
+    const issued = await handleIssuePasswordResetLink(
+      { DB: db } as never,
+      new Request('https://medace-english-app.pages.dev/api/storage', { method: 'POST' }),
+      createAdminUser(),
+      { requestId: 1 },
+    );
+    const rawToken = new URL(issued.resetUrl).searchParams.get('token') || '';
+    const route = findAuthRoute(createPasswordResetConfirmRequest(rawToken, 'race-secret'));
+    const originalPasswordHash = state.user.password_hash;
+    state.simulateConcurrentTokenUse = true;
+
+    await expect(route.handle({
+      env: { DB: db } as never,
+      request: createPasswordResetConfirmRequest(rawToken, 'race-secret'),
+      pathname: 'auth',
+    })).rejects.toMatchObject({
+      name: 'HttpError',
+      status: 400,
+      message: '再設定リンクが無効または期限切れです。',
+    } satisfies Partial<HttpError>);
+
+    expect(state.user.password_hash).toBe(originalPasswordHash);
+    expect(state.deletedSessionUserId).toBeNull();
+    expect(state.recoveryRequest.status).toBe('OPEN');
   });
 
   it('does not issue a reset link for unmatched recovery requests', async () => {
