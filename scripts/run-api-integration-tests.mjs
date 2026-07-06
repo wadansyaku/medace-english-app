@@ -1393,6 +1393,22 @@ const main = async () => {
       'analytics snapshot should increase writing review counts after the writing flow',
     );
     assert(
+      analyticsAfter.productKpis.organizationsWithWritingAssignmentCount > analyticsBefore.productKpis.organizationsWithWritingAssignmentCount,
+      'analytics snapshot should count a new organization that issued a writing assignment',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingSubmissionCount > analyticsBefore.productKpis.organizationsWithWritingSubmissionCount,
+      'analytics snapshot should count a new organization that received a writing submission',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingReviewCount > analyticsBefore.productKpis.organizationsWithWritingReviewCount,
+      'analytics snapshot should count a new organization that reached writing review return',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingReviewCount >= 1,
+      'B2B value loop should have at least one organization reaching writing assignment -> submission -> teacher return',
+    );
+    assert(
       analyticsAfter.activationFunnel.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
       'activation funnel writing assignment counts should mirror product KPI writing counts',
     );
@@ -1421,6 +1437,30 @@ const main = async () => {
       'activation funnel should count at least one organization with a notification after the integration flow',
     );
     assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingAssignmentCount === analyticsAfter.productKpis.organizationsWithWritingAssignmentCount,
+      'activation funnel should mirror organization-level writing assignment counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingSubmissionCount === analyticsAfter.productKpis.organizationsWithWritingSubmissionCount,
+      'activation funnel should mirror organization-level writing submission counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingReviewCount === analyticsAfter.productKpis.organizationsWithWritingReviewCount,
+      'activation funnel should mirror organization-level writing review return counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.activationVelocity30d.organizationsWithWritingReview >= 1,
+      'activation velocity should count at least one organization reaching writing review return in the last 30 days',
+    );
+    assert(
+      analyticsAfter.activationFunnel.completionRate === analyticsAfter.pmf.b2bActivationCompletionRate,
+      'PMF B2B value-loop rate should match activation funnel completion rate',
+    );
+    assert(
+      analyticsAfter.activationFunnel.completionRate > analyticsBefore.activationFunnel.completionRate,
+      'activation funnel completion rate should increase after the organization completes the writing return loop',
+    );
+    assert(
       analyticsAfterRun.snapshot.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
       'snapshot API response should match admin KPI writing assignment counts',
     );
@@ -1431,6 +1471,10 @@ const main = async () => {
     assert(
       analyticsAfterRun.snapshot.writingReviewsCompleted30d === analyticsAfter.productKpis.writingReviewsCompleted30d,
       'snapshot API response should match admin KPI writing review counts',
+    );
+    assert(
+      analyticsAfterRun.snapshot.organizationsWithWritingReviewCount === analyticsAfter.productKpis.organizationsWithWritingReviewCount,
+      'snapshot API response should match admin KPI organization-level writing review counts',
     );
 
     const futureAnnouncement = await admin.storage('upsertProductAnnouncement', {
