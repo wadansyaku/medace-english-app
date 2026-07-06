@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { CommercialRequestUpdatePayload, ProductAnnouncementUpsertPayload } from '../../contracts/storage';
+import type {
+  CommercialActivationSetupResult,
+  CommercialRequestUpdatePayload,
+  ProductAnnouncementUpsertPayload,
+} from '../../contracts/storage';
 import {
   ANNOUNCEMENT_AUDIENCE_ROLE_LABELS,
   ANNOUNCEMENT_SEVERITY_LABELS,
@@ -24,6 +28,7 @@ interface AdminCommercialOpsViewProps {
   loading: boolean;
   error: string | null;
   onUpdateRequest: (payload: CommercialRequestUpdatePayload) => Promise<void>;
+  onRunInitialB2BSetup: (requestId: number) => Promise<CommercialActivationSetupResult>;
   onUpsertAnnouncement: (payload: ProductAnnouncementUpsertPayload) => Promise<void>;
 }
 
@@ -47,6 +52,7 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
   loading,
   error,
   onUpdateRequest,
+  onRunInitialB2BSetup,
   onUpsertAnnouncement,
 }) => {
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(requests[0]?.id || null);
@@ -59,6 +65,9 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
   const [targetOrgName, setTargetOrgName] = useState('');
   const [targetOrgRole, setTargetOrgRole] = useState<OrganizationRole>(OrganizationRole.GROUP_ADMIN);
   const [savingRequest, setSavingRequest] = useState(false);
+  const [setupPendingRequestId, setSetupPendingRequestId] = useState<number | null>(null);
+  const [setupResult, setSetupResult] = useState<CommercialActivationSetupResult | null>(null);
+  const [setupError, setSetupError] = useState<{ requestId: number; message: string } | null>(null);
 
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -68,6 +77,12 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [savingAnnouncement, setSavingAnnouncement] = useState(false);
+  const selectedRequestPlan = selectedRequest?.targetSubscriptionPlan || targetPlan;
+  const canRunInitialB2BSetup = Boolean(
+    selectedRequest
+      && selectedRequest.status === CommercialRequestStatus.PROVISIONED
+      && (selectedRequestPlan === SubscriptionPlan.TOB_FREE || selectedRequestPlan === SubscriptionPlan.TOB_PAID),
+  );
 
   useEffect(() => {
     if (requests.length === 0) {
@@ -233,6 +248,62 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
                   </button>
                 ))}
               </div>
+              {canRunInitialB2BSetup && (
+                <div className="mt-5 rounded-2xl border border-medace-200 bg-white px-4 py-4" data-testid="admin-commercial-b2b-setup-panel">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-black text-slate-950">初回運用セットアップ</div>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                        対象組織の最初のクラス、担当割当、初回ミッション配布をまとめて確認します。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="admin-commercial-b2b-setup"
+                      disabled={setupPendingRequestId === selectedRequest.id}
+                      onClick={async () => {
+                        setSetupPendingRequestId(selectedRequest.id);
+                        setSetupError(null);
+                        try {
+                          const result = await onRunInitialB2BSetup(selectedRequest.id);
+                          setSetupResult(result);
+                        } catch (setupFailure) {
+                          setSetupError({
+                            requestId: selectedRequest.id,
+                            message: (setupFailure as Error).message || '初回運用セットアップに失敗しました。',
+                          });
+                        } finally {
+                          setSetupPendingRequestId(null);
+                        }
+                      }}
+                      className="inline-flex min-h-11 items-center justify-center rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-60"
+                    >
+                      {setupPendingRequestId === selectedRequest.id ? '実行中...' : '初回セットアップを実行'}
+                    </button>
+                  </div>
+                  {setupResult?.commercialRequestId === selectedRequest.id && (
+                    <div className="mt-4 grid gap-2 text-xs font-bold text-slate-600 md:grid-cols-2" data-testid="admin-commercial-b2b-setup-result">
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+                        クラス: {setupResult.createdCohort ? '新規作成' : '既存利用'} / {setupResult.cohortId}
+                      </div>
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800">
+                        ミッション: {setupResult.createdMission ? '新規作成' : '既存利用'} / {setupResult.missionId}
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        生徒: {setupResult.studentUid}
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        講師: {setupResult.instructorUid} / {setupResult.assignedMission ? '新規配布' : '既存割当維持'}
+                      </div>
+                    </div>
+                  )}
+                  {setupError?.requestId === selectedRequest.id && (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700" data-testid="admin-commercial-b2b-setup-error">
+                      {setupError.message}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </section>

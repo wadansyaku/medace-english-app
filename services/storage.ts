@@ -44,6 +44,7 @@ import {
   AiGeneratedProblemReviewPayload,
   AiGeneratedProblemReviewQueueRequest,
   ClassroomWorksheetLifecycleEventPayload,
+  CommercialActivationSetupResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
   EnglishPracticeAttemptPayload,
@@ -695,6 +696,10 @@ export class IndexedDBStorageService implements IStorageService {
 
   async updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<CommercialRequest> {
     return updateCommercialRequestIdb(this.getCommercialStorageContext(), payload);
+  }
+
+  async prepareCommercialActivationSetup(_requestId: number): Promise<CommercialActivationSetupResult> {
+    throw new Error('初回運用セットアップはCloudflare storage modeで実行してください。');
   }
 
   async listProductAnnouncementsAdmin(): Promise<ProductAnnouncement[]> {

@@ -52,6 +52,7 @@ const AdminPanel: React.FC = () => {
     error: commercialError,
     refresh: refreshCommercialOps,
     updateRequest,
+    runInitialB2BSetup,
     upsertAnnouncement,
   } = useAdminCommercialOps();
 
@@ -383,6 +384,7 @@ const AdminPanel: React.FC = () => {
           loading={commercialLoading}
           error={commercialError}
           onUpdateRequest={updateRequest}
+          onRunInitialB2BSetup={runInitialB2BSetup}
           onUpsertAnnouncement={upsertAnnouncement}
         />
       ) : (

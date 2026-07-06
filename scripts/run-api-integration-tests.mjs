@@ -1549,14 +1549,16 @@ const main = async () => {
       resolutionNote: '導入案内を送付し、組織アカウントへ反映しました。',
       linkedUserUid: freeStudentUser.uid,
       targetSubscriptionPlan: 'TOB_FREE',
-      targetOrganizationName: 'Phase 4 Integration Academy',
+      targetOrganizationId: groupAdminUser.organizationId,
+      targetOrganizationName: renamedGroupAdminSession.organizationName,
       targetOrganizationRole: 'GROUP_ADMIN',
     });
     assert(provisionedCommercialRequest.status === 'PROVISIONED', 'admin should be able to provision a commercial request');
 
     const provisionedSession = await freeStudent.get('/api/session');
     assert(provisionedSession.subscriptionPlan === 'TOB_FREE', 'provisioned user should receive the target subscription plan');
-    assert(provisionedSession.organizationName === 'Phase 4 Integration Academy', 'provisioned user should receive the target organization name');
+    assert(provisionedSession.organizationId === groupAdminUser.organizationId, 'provisioned user should join the selected organization');
+    assert(provisionedSession.organizationName === renamedGroupAdminSession.organizationName, 'provisioned user should receive the current target organization name');
     assert(provisionedSession.organizationRole === 'GROUP_ADMIN', 'provisioned user should receive the target organization role');
     assert(provisionedSession.role === 'INSTRUCTOR', 'GROUP_ADMIN provisioning should elevate the user to instructor role');
     assert(provisionedSession.organizationId, 'provisioned user should receive a concrete organizationId');
@@ -1565,6 +1567,49 @@ const main = async () => {
     assert(
       provisionedSettings.auditEvents.some((event) => event.actionType === 'COMMERCIAL_PROVISIONED'),
       'commercial provisioning should append an organization audit event',
+    );
+
+    const commercialActivationSetup = await admin.storage('prepareCommercialActivationSetup', {
+      requestId: freeStudentCommercialRequest.id,
+    });
+    assert(
+      commercialActivationSetup.organizationId === groupAdminUser.organizationId,
+      'commercial setup should resolve the provisioned organization',
+    );
+    assert(commercialActivationSetup.cohortId, 'commercial setup should return the prepared cohort');
+    assert(commercialActivationSetup.studentUid, 'commercial setup should return the prepared student');
+    assert(commercialActivationSetup.instructorUid, 'commercial setup should return the assigned instructor');
+    assert(commercialActivationSetup.missionId, 'commercial setup should return the initial mission');
+    assert(
+      commercialActivationSetup.nextActionTarget.kind === 'INSTRUCTOR_NOTIFICATION',
+      'commercial setup should hand off to the first notification action',
+    );
+
+    const repeatedCommercialActivationSetup = await admin.storage('prepareCommercialActivationSetup', {
+      requestId: freeStudentCommercialRequest.id,
+    });
+    assert(
+      repeatedCommercialActivationSetup.cohortId === commercialActivationSetup.cohortId,
+      'commercial setup should reuse the existing cohort on retry',
+    );
+    assert(
+      repeatedCommercialActivationSetup.missionId === commercialActivationSetup.missionId,
+      'commercial setup should reuse the existing mission on retry',
+    );
+    assert(
+      !repeatedCommercialActivationSetup.createdCohort && !repeatedCommercialActivationSetup.createdMission && !repeatedCommercialActivationSetup.assignedMission,
+      'commercial setup retry should be idempotent after the first preparation',
+    );
+
+    const provisionedSettingsAfterSetup = await freeStudent.storage('getOrganizationSettingsSnapshot');
+    assert(
+      provisionedSettingsAfterSetup.auditEvents.some((event) => event.actionType === 'COMMERCIAL_ACTIVATION_SETUP_PREPARED'),
+      'commercial setup should append an organization audit event',
+    );
+    const provisionedOrganizationSnapshot = await freeStudent.storage('getOrganizationDashboardSnapshot');
+    assert(
+      !['CREATE_COHORT', 'ASSIGN_STUDENTS', 'CREATE_FIRST_MISSION'].includes(provisionedOrganizationSnapshot.activationState),
+      'commercial setup should move the organization past the first cohort, assignment, and mission gates',
     );
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');

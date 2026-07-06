@@ -1,16 +1,21 @@
 import type {
+  CommercialActivationSetupPayload,
+  CommercialActivationSetupResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
 } from '../../contracts/storage';
 import {
+  BusinessAdminWorkspaceView,
   CommercialRequestKind,
   CommercialRequestStatus,
   CommercialWorkspaceRole,
+  LearningTrack,
   OrganizationRole,
   SubscriptionPlan,
   TeachingFormat,
   type CommercialRequest,
   UserRole,
+  WeeklyMissionStatus,
 } from '../../types';
 import { hasDuplicateOpenRequest, normalizeCommercialEmail } from '../../shared/commercial';
 import { HttpError } from './http';
@@ -18,9 +23,24 @@ import {
   appendOrganizationAuditLog,
   clearActiveOrganizationMembership,
   getUserRoleForOrganizationRole,
+  isBusinessSubscriptionPlan,
+  normalizeOrganizationNameKey,
+  readActiveOrganizationContextForUser,
+  readOrganizationById,
+  readOrganizationByNameKey,
   resolveOrCreateOrganization,
   upsertActiveOrganizationMembership,
 } from './organization-memberships';
+import {
+  handleAssignStudentInstructor,
+  handleGetOrganizationDashboardSnapshot,
+  handleSetStudentCohort,
+  handleUpsertOrganizationCohort,
+} from './storage-organization-actions';
+import {
+  handleAssignWeeklyMission,
+  handleCreateWeeklyMission,
+} from './storage-mission-actions';
 import { recordProductEvent, recordProductEventForUser } from './product-events';
 import { readAll, readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
@@ -182,6 +202,15 @@ export const assertCommercialRequestUpdatePayload = (
     targetOrganizationId,
     targetOrganizationName,
   };
+};
+
+export const assertCommercialActivationSetupPayload = (
+  payload: CommercialActivationSetupPayload,
+): CommercialActivationSetupPayload => {
+  if (typeof payload.requestId !== 'number' || !Number.isInteger(payload.requestId) || payload.requestId <= 0) {
+    throw new HttpError(400, '申請IDが不正です。');
+  }
+  return { requestId: payload.requestId };
 };
 
 const readRecentCommercialRequests = async (
@@ -453,4 +482,277 @@ export const handleUpdateCommercialRequest = async (
     throw new HttpError(500, '申請更新に失敗しました。');
   }
   return createCommercialRequestFromRow(updated);
+};
+
+const resolveCommercialActivationOrganization = async (
+  env: AppEnv,
+  request: DbCommercialRequestRow,
+) => {
+  let organization = request.target_organization_id
+    ? await readOrganizationById(env, request.target_organization_id)
+    : null;
+
+  if (!organization && request.target_organization_name) {
+    organization = await readOrganizationByNameKey(
+      env,
+      normalizeOrganizationNameKey(request.target_organization_name),
+    );
+  }
+
+  if (!organization && request.linked_user_id) {
+    const linkedUserOrganization = await readActiveOrganizationContextForUser(env, request.linked_user_id);
+    organization = linkedUserOrganization
+      ? await readOrganizationById(env, linkedUserOrganization.organizationId)
+      : null;
+  }
+
+  if (!organization) {
+    throw new HttpError(409, '反映済み商談に紐づく組織が見つかりません。先にプロビジョニング内容を確認してください。');
+  }
+  if (!isBusinessSubscriptionPlan(organization.subscription_plan)) {
+    throw new HttpError(409, '初回運用セットアップはビジネス組織にのみ実行できます。');
+  }
+
+  return organization;
+};
+
+const readCommercialActivationActor = async (
+  env: AppEnv,
+  organizationId: string,
+): Promise<DbUserRow> => {
+  const actor = await readFirst<DbUserRow>(
+    env,
+    `SELECT u.*
+       FROM users u
+       JOIN organization_memberships m
+         ON m.user_id = u.id
+        AND m.status = 'ACTIVE'
+      WHERE m.organization_id = ?
+        AND u.role = ?
+        AND m.role = ?
+      ORDER BY u.created_at ASC
+      LIMIT 1`,
+    organizationId,
+    UserRole.INSTRUCTOR,
+    OrganizationRole.GROUP_ADMIN,
+  );
+  if (!actor) {
+    throw new HttpError(409, '初回セットアップを実行できるグループ管理者が対象組織にいません。');
+  }
+  return actor;
+};
+
+export const handlePrepareCommercialActivationSetup = async (
+  env: AppEnv,
+  user: DbUserRow,
+  payload: CommercialActivationSetupPayload,
+): Promise<CommercialActivationSetupResult> => {
+  const { requestId } = assertCommercialActivationSetupPayload(payload);
+  const request = await readFirst<DbCommercialRequestRow>(
+    env,
+    'SELECT * FROM commercial_requests WHERE id = ?',
+    requestId,
+  );
+  if (!request) {
+    throw new HttpError(404, '申請が見つかりません。');
+  }
+  if (request.status !== CommercialRequestStatus.PROVISIONED) {
+    throw new HttpError(409, '初回運用セットアップはPROVISIONED済みの商談にのみ実行できます。');
+  }
+
+  const organization = await resolveCommercialActivationOrganization(env, request);
+  const actor = await readCommercialActivationActor(env, organization.id);
+
+  const [cohorts, students, instructors, books] = await Promise.all([
+    readAll<{ id: string; name: string }>(
+      env,
+      `SELECT id, name
+         FROM organization_cohorts
+        WHERE organization_id = ?
+        ORDER BY created_at ASC`,
+      organization.id,
+    ),
+    readAll<{ id: string }>(
+      env,
+      `SELECT u.id AS id
+         FROM users u
+         JOIN organization_memberships m
+           ON m.user_id = u.id
+          AND m.status = 'ACTIVE'
+        WHERE m.organization_id = ?
+          AND u.role = ?
+        ORDER BY u.created_at ASC`,
+      organization.id,
+      UserRole.STUDENT,
+    ),
+    readAll<{ id: string }>(
+      env,
+      `SELECT u.id AS id
+         FROM users u
+         JOIN organization_memberships m
+           ON m.user_id = u.id
+          AND m.status = 'ACTIVE'
+        WHERE m.organization_id = ?
+          AND u.role = ?
+        ORDER BY CASE WHEN m.role = ? THEN 0 ELSE 1 END, u.created_at ASC`,
+      organization.id,
+      UserRole.INSTRUCTOR,
+      OrganizationRole.GROUP_ADMIN,
+    ),
+    readAll<{ id: string; title: string }>(
+      env,
+      `SELECT id, title
+         FROM books
+        ORDER BY is_priority DESC, title ASC
+        LIMIT 1`,
+    ),
+  ]);
+
+  if (students.length === 0) {
+    throw new HttpError(409, '初回セットアップ対象の生徒が対象組織にいません。');
+  }
+  if (instructors.length === 0) {
+    throw new HttpError(409, '初回セットアップ対象の講師が対象組織にいません。');
+  }
+
+  const existingStudentCohort = await readFirst<{ cohort_id: string }>(
+    env,
+    `SELECT c.id AS cohort_id
+       FROM organization_cohort_students cs
+       JOIN organization_cohorts c ON c.id = cs.cohort_id
+      WHERE cs.student_user_id = ?
+        AND c.organization_id = ?
+      LIMIT 1`,
+    students[0].id,
+    organization.id,
+  );
+
+  let cohortId = existingStudentCohort?.cohort_id || cohorts[0]?.id;
+  let createdCohort = false;
+  if (!cohortId) {
+    const cohort = await handleUpsertOrganizationCohort(env, actor, undefined, '導入スタートクラス');
+    cohortId = cohort.id;
+    createdCohort = true;
+  }
+
+  const studentUid = students[0].id;
+  const instructorIds = new Set(instructors.map((instructor) => instructor.id));
+  const existingInstructorAssignment = await readFirst<{ instructor_user_id: string | null }>(
+    env,
+    'SELECT instructor_user_id FROM student_instructor_assignments WHERE student_user_id = ?',
+    studentUid,
+  );
+  const existingInstructorUid = existingInstructorAssignment?.instructor_user_id
+    && instructorIds.has(existingInstructorAssignment.instructor_user_id)
+    ? existingInstructorAssignment.instructor_user_id
+    : null;
+  const instructorUid = existingInstructorUid || instructors[0].id;
+
+  if (!existingStudentCohort) {
+    await handleSetStudentCohort(env, actor, studentUid, cohortId);
+  }
+  if (!existingInstructorUid) {
+    await handleAssignStudentInstructor(env, actor, studentUid, instructorUid);
+  }
+
+  const activeAssignment = await readFirst<{ id: string; mission_id: string }>(
+    env,
+    `SELECT a.id, a.mission_id
+       FROM weekly_mission_assignments a
+       JOIN weekly_missions m ON m.id = a.mission_id
+      WHERE m.organization_id = ?
+        AND a.student_user_id = ?
+        AND a.status != ?
+      ORDER BY a.assigned_at DESC
+      LIMIT 1`,
+    organization.id,
+    studentUid,
+    WeeklyMissionStatus.ARCHIVED,
+  );
+
+  let missionId = activeAssignment?.mission_id;
+  let missionAssignmentId = activeAssignment?.id;
+  let createdMission = false;
+  let assignedMission = false;
+
+  if (!missionId) {
+    const existingMission = await readFirst<{ id: string }>(
+      env,
+      `SELECT id
+         FROM weekly_missions
+        WHERE organization_id = ?
+        ORDER BY created_at ASC
+        LIMIT 1`,
+      organization.id,
+    );
+    missionId = existingMission?.id;
+    if (!missionId) {
+      const mission = await handleCreateWeeklyMission(env, actor, {
+        learningTrack: LearningTrack.SCHOOL_TERM,
+        title: '初回導入ミッション',
+        rationale: '最初の導線確認のための最小ミッションです。',
+        bookId: books[0]?.id,
+        bookTitle: books[0]?.title,
+        newWordsTarget: 8,
+        reviewWordsTarget: 4,
+        quizTargetCount: 1,
+      });
+      missionId = mission.id;
+      createdMission = true;
+    }
+
+    const assignment = await handleAssignWeeklyMission(env, actor, missionId, studentUid);
+    missionAssignmentId = assignment.id;
+    assignedMission = true;
+  }
+  if (!missionId) {
+    throw new HttpError(500, '初回ミッションの準備に失敗しました。');
+  }
+
+  await appendOrganizationAuditLog(env, {
+    organizationId: organization.id,
+    actorUserId: user.id,
+    actionType: 'COMMERCIAL_ACTIVATION_SETUP_PREPARED',
+    targetType: 'commercial_request',
+    targetId: String(requestId),
+    payload: {
+      actorUserId: actor.id,
+      cohortId,
+      studentUid,
+      instructorUid,
+      missionId,
+      missionAssignmentId: missionAssignmentId || null,
+      createdCohort,
+      createdMission,
+      assignedMission,
+    },
+  });
+
+  const dashboard = await handleGetOrganizationDashboardSnapshot(env, actor);
+  const nextActionTarget = dashboard.nextRequiredActionTarget || {
+    kind: 'INSTRUCTOR_NOTIFICATION' as const,
+    targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+    organizationId: organization.id,
+    studentUid,
+    instructorUid,
+    missionAssignmentId,
+    missionId,
+  };
+
+  return {
+    commercialRequestId: requestId,
+    organizationId: organization.id,
+    organizationName: organization.display_name,
+    actorUserId: actor.id,
+    createdCohort,
+    cohortId,
+    studentUid,
+    instructorUid,
+    createdMission,
+    assignedMission,
+    missionId,
+    missionAssignmentId,
+    nextActionLabel: dashboard.nextRequiredActionLabel || '初回通知へ進む',
+    nextActionTarget,
+  };
 };

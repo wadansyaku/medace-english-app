@@ -42,6 +42,7 @@ import type {
   AiGeneratedProblemReviewPayload,
   AiGeneratedProblemReviewQueueRequest,
   ClassroomWorksheetLifecycleEventPayload,
+  CommercialActivationSetupResult,
   CommercialRequestPayload,
   CommercialRequestUpdatePayload,
   EnglishPracticeAttemptPayload,
@@ -168,6 +169,7 @@ export interface CommercialStorageService {
   submitCommercialRequest(payload: CommercialRequestPayload): Promise<import('../../types').CommercialRequest>;
   listCommercialRequests(): Promise<import('../../types').CommercialRequest[]>;
   updateCommercialRequest(payload: CommercialRequestUpdatePayload): Promise<import('../../types').CommercialRequest>;
+  prepareCommercialActivationSetup(requestId: number): Promise<CommercialActivationSetupResult>;
 }
 
 export interface AnnouncementStorageService {

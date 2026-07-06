@@ -446,6 +446,15 @@ exports[`storage action contract > matches the storage action contract snapshot 
     ],
   },
   {
+    "action": "prepareCommercialActivationSetup",
+    "alias": "prepareCommercialActivationSetup",
+    "domain": "commercial",
+    "requiresDestructiveAdminFlag": false,
+    "roles": [
+      "ADMIN",
+    ],
+  },
+  {
     "action": "listProductAnnouncementsAdmin",
     "alias": "listProductAnnouncementsAdmin",
     "domain": "announcements",

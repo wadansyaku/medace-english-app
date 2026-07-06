@@ -1,4 +1,4 @@
-import type { CommercialRequestPayload } from '../contracts/storage';
+import type { CommercialActivationSetupResult, CommercialRequestPayload } from '../contracts/storage';
 import type { CommercialRequest } from '../types';
 import { apiPost } from './apiClient';
 import { resolveStorageMode } from '../shared/storageMode';
@@ -41,4 +41,11 @@ export const updateCommercialRequest = async (
 ): Promise<CommercialRequest> => {
   assertCommercialAvailable();
   return commercialService.updateCommercialRequest(payload);
+};
+
+export const prepareCommercialActivationSetup = async (
+  requestId: number,
+): Promise<CommercialActivationSetupResult> => {
+  assertCommercialAvailable();
+  return commercialService.prepareCommercialActivationSetup(requestId);
 };
