@@ -8,7 +8,7 @@ import {
 import {
   PUBLIC_BUSINESS_ROLE_KEYS,
   getPublicBusinessRoleConfig,
-  getPublicBusinessRolePath,
+  getPublicBusinessRoleDirectPath,
   type PublicBusinessRoleKey,
 } from '../../shared/publicBusinessRoles';
 
@@ -412,7 +412,7 @@ export const getBookBandIndex = (title?: string) => {
 
 export const openBusinessPreview = async (page: Page) => {
   await page.goto('/');
-  await page.getByTestId('business-role-preview-section').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('start-first-home')).toBeVisible();
 };
 
 export const openBusinessRolePage = async (
@@ -428,7 +428,7 @@ export const openBusinessRolePage = async (
     await openBusinessPreview(page);
   }
   await page.getByTestId(role.cardActionTestId).click();
-  await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRolePath(roleKey)}$`));
+  await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRoleDirectPath(roleKey)}$`));
   await expect(page.getByTestId(role.pageTestId)).toBeVisible();
   return role;
 };

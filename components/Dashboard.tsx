@@ -23,9 +23,7 @@ import {
   useStudentDashboardViewModel,
   type StudentDashboardLearningRouteId,
 } from '../hooks/useStudentDashboardViewModel';
-import { submitCommercialRequest } from '../services/commercial';
 import { workspaceService } from '../services/workspace';
-import type { CommercialRequestPayload } from '../contracts/storage';
 import {
   loadEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
@@ -198,11 +196,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     controller.setShowCreateModal(true);
   }, [controller, onStartTask, todayTaskIntent, viewModel.hasStudyBooks]);
 
-  const handleSubmitCommercialRequest = React.useCallback(async (payload: CommercialRequestPayload) => {
-    await submitCommercialRequest(payload);
-    await refreshDashboard();
-  }, [refreshDashboard]);
-
   const handleLearningRouteSelect = React.useCallback(async (routeId: StudentDashboardLearningRouteId) => {
     if (routeId === 'today') {
       if (viewModel.hasStudyBooks) {
@@ -337,7 +330,6 @@ const Dashboard: React.FC<DashboardProps> = ({
         viewModel={viewModel}
         isMobileViewport={isMobileViewport}
         onUserUpdate={onUserUpdate}
-        onSubmitCommercialRequest={handleSubmitCommercialRequest}
       />
 
       {selectedPracticeLane ? (
@@ -371,7 +363,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           }}
           onSelectPracticeLane={handlePracticeLaneSelect}
           onStartTask={onStartTask}
-          onSubmitCommercialRequest={handleSubmitCommercialRequest}
         />
       )}
     </div>

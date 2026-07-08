@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { STATUS_LABELS, StudentSummary, StudentWorksheetSnapshot, UserProfile, WorksheetQuestionMode } from '../types';
+import {
+  STATUS_LABELS,
+  type BookMetadata,
+  StudentSummary,
+  StudentWorksheetSnapshot,
+  UserProfile,
+  type WordData,
+  WorksheetQuestionMode,
+} from '../types';
 import { workspaceService } from '../services/workspace';
+import { learningService } from '../services/learning';
 import {
   filterWorksheetQuestionCandidates,
   GeneratedWorksheetQuestion,
@@ -8,15 +17,19 @@ import {
   isGrammarWorksheetMode,
   WORKSHEET_MODE_COPY,
 } from '../utils/worksheet';
+import { getQuizCandidateWords, normalizeQuizRange } from '../utils/quiz';
 import { BookOpen, ExternalLink, Eye, FileDown, Loader2, Printer, ShieldCheck, X } from 'lucide-react';
 import ModalOverlay from './ModalOverlay';
 
 type WorksheetStatusFilter = 'ALL' | 'REVIEW_PLUS' | 'GRADUATED_ONLY';
+type WorksheetSourceMode = 'STUDENT_HISTORY' | 'BOOK_RANGE';
 
 interface WorksheetPrintLauncherProps {
   user: UserProfile;
   buttonLabel?: string;
   buttonClassName?: string;
+  defaultSourceMode?: WorksheetSourceMode;
+  allowSourceModeSwitch?: boolean;
 }
 
 type WorksheetPrintVariant = 'HANDOUT' | 'ANSWER_KEY';
@@ -51,6 +64,17 @@ const shouldIncludeStatus = (filter: WorksheetStatusFilter, status: string): boo
 };
 
 const MAX_PRINTABLE_WORDS = 40;
+
+const SOURCE_MODE_COPY: Record<WorksheetSourceMode, { label: string; description: string; }> = {
+  BOOK_RANGE: {
+    label: '単語帳の範囲から作る',
+    description: '生徒を選ばず、単語帳と番号範囲からランダムに配布用プリントを作ります。',
+  },
+  STUDENT_HISTORY: {
+    label: '生徒の学習履歴から作る',
+    description: '担当生徒の学習済み語彙と定着状況をもとに確認プリントを作ります。',
+  },
+};
 
 export const escapeWorksheetHtml = (value: unknown): string => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -88,6 +112,7 @@ export const buildPrintableWorksheetHtml = (
 ): string => {
   const variantCopy = PRINT_VARIANT_COPY[variant];
   const isProblemSheet = variant === 'HANDOUT';
+  const isBookRangeSnapshot = snapshot.source === 'book_range' || snapshot.studentUid === 'book-range';
   const modeLabel = questions[0] ? WORKSHEET_MODE_COPY[questions[0].mode].label : '問題';
   const escapedModeLabel = escapeWorksheetHtml(modeLabel);
   const escapedStudentName = escapeWorksheetHtml(snapshot.studentName);
@@ -117,6 +142,9 @@ export const buildPrintableWorksheetHtml = (
   const footerNote = isProblemSheet
     ? '問題: 答え欄は空欄です。鉛筆で書き込みながら確認できます。'
     : '解答: 問題シートと同じ答え欄に、赤字で正解を記入しています。';
+  const headerTitle = isBookRangeSnapshot
+    ? `${escapedModeLabel} 配布プリント`
+    : `${escapedStudentName} さん用 ${escapedModeLabel} チェック`;
   const questionColumns = [
     questions.slice(0, wordsPerColumn),
     questions.slice(wordsPerColumn),
@@ -174,7 +202,7 @@ export const buildPrintableWorksheetHtml = (
   <html lang="ja">
     <head>
       <meta charset="UTF-8" />
-      <title>${escapedStudentName} - ${escapedModeLabel} ワークシート (${escapeWorksheetHtml(variantCopy.label)})</title>
+      <title>${isBookRangeSnapshot ? '配布プリント' : escapedStudentName} - ${escapedModeLabel} ワークシート (${escapeWorksheetHtml(variantCopy.label)})</title>
       <style>
         :root {
           color-scheme: light;
@@ -419,7 +447,7 @@ export const buildPrintableWorksheetHtml = (
           <div class="header-top">
             <div>
               <div class="eyebrow">Vocabulary Check Sheet</div>
-              <h1 class="title">${escapedStudentName} さん用 ${escapedModeLabel} チェック</h1>
+              <h1 class="title">${headerTitle}</h1>
             </div>
             <div class="header-chips">
               <div class="chip chip-subtle">${escapeWorksheetHtml(variantCopy.label)}</div>
@@ -432,7 +460,7 @@ export const buildPrintableWorksheetHtml = (
               <div class="value">${escapedAuthorName}</div>
             </div>
             <div class="meta-card">
-              <div class="label">生徒</div>
+              <div class="label">${isBookRangeSnapshot ? '対象範囲' : '生徒'}</div>
               <div class="value">${escapedSelectedStudentName}</div>
             </div>
             <div class="meta-card">
@@ -461,12 +489,22 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   user,
   buttonLabel = 'PDF問題を作る',
   buttonClassName = 'inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700',
+  defaultSourceMode = 'STUDENT_HISTORY',
+  allowSourceModeSwitch = true,
 }) => {
   const [open, setOpen] = useState(false);
+  const [sourceMode, setSourceMode] = useState<WorksheetSourceMode>(defaultSourceMode);
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const [snapshot, setSnapshot] = useState<StudentWorksheetSnapshot | null>(null);
+  const [books, setBooks] = useState<BookMetadata[]>([]);
+  const [booksLoading, setBooksLoading] = useState(false);
+  const [catalogWords, setCatalogWords] = useState<WordData[]>([]);
+  const [catalogWordsLoading, setCatalogWordsLoading] = useState(false);
+  const [selectedCatalogBookId, setSelectedCatalogBookId] = useState('');
+  const [rangeStart, setRangeStart] = useState(1);
+  const [rangeEnd, setRangeEnd] = useState(1);
   const [selectedStudentUid, setSelectedStudentUid] = useState('');
   const [selectedBookId, setSelectedBookId] = useState('ALL');
   const [questionCount, setQuestionCount] = useState(MAX_PRINTABLE_WORDS);
@@ -475,10 +513,11 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewVariant, setPreviewVariant] = useState<WorksheetPrintVariant>('HANDOUT');
+  const [worksheetShuffleToken, setWorksheetShuffleToken] = useState(0);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || sourceMode !== 'STUDENT_HISTORY') return;
 
     const loadStudents = async () => {
       setStudentsLoading(true);
@@ -498,10 +537,10 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     };
 
     loadStudents();
-  }, [open, selectedStudentUid]);
+  }, [open, selectedStudentUid, sourceMode]);
 
   useEffect(() => {
-    if (!open || !selectedStudentUid) return;
+    if (!open || sourceMode !== 'STUDENT_HISTORY' || !selectedStudentUid) return;
 
     const loadSnapshot = async () => {
       setSnapshotLoading(true);
@@ -518,9 +557,121 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     };
 
     loadSnapshot();
-  }, [open, selectedStudentUid]);
+  }, [open, selectedStudentUid, sourceMode]);
+
+  useEffect(() => {
+    if (!open || sourceMode !== 'BOOK_RANGE') return;
+
+    const loadBooks = async () => {
+      setBooksLoading(true);
+      setError(null);
+      try {
+        const nextBooks = await learningService.getBooks();
+        setBooks(nextBooks);
+        if (!selectedCatalogBookId && nextBooks[0]) {
+          setSelectedCatalogBookId(nextBooks[0].id);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        setError((loadError as Error).message || '単語帳一覧の取得に失敗しました。');
+      } finally {
+        setBooksLoading(false);
+      }
+    };
+
+    loadBooks();
+  }, [open, selectedCatalogBookId, sourceMode]);
+
+  useEffect(() => {
+    if (!open || sourceMode !== 'BOOK_RANGE' || !selectedCatalogBookId) return;
+
+    const loadBookWords = async () => {
+      setCatalogWordsLoading(true);
+      setError(null);
+      try {
+        const nextWords = await learningService.getWordsByBook(selectedCatalogBookId);
+        const sortedWords = [...nextWords].sort((left, right) => left.number - right.number);
+        setCatalogWords(sortedWords);
+        if (sortedWords.length > 0) {
+          const nextStart = Math.min(...sortedWords.map((word) => word.number));
+          const nextEnd = Math.max(...sortedWords.map((word) => word.number));
+          setRangeStart(nextStart);
+          setRangeEnd(nextEnd);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        setCatalogWords([]);
+        setError((loadError as Error).message || '単語帳の語彙取得に失敗しました。');
+      } finally {
+        setCatalogWordsLoading(false);
+      }
+    };
+
+    loadBookWords();
+  }, [open, selectedCatalogBookId, sourceMode]);
 
   const selectedStudent = students.find((student) => student.uid === selectedStudentUid);
+  const selectedCatalogBook = books.find((book) => book.id === selectedCatalogBookId);
+  const minCatalogWordNumber = catalogWords.length > 0 ? Math.min(...catalogWords.map((word) => word.number)) : 1;
+  const maxCatalogWordNumber = catalogWords.length > 0 ? Math.max(...catalogWords.map((word) => word.number)) : 1;
+  const normalizedCatalogRange = normalizeQuizRange(rangeStart, rangeEnd, minCatalogWordNumber, maxCatalogWordNumber);
+
+  const catalogWorksheetWords = useMemo(() => {
+    if (!selectedCatalogBook) return [];
+    const scopedWords = getQuizCandidateWords({
+      words: catalogWords,
+      selectionMode: 'RANGE_RANDOM',
+      rangeStart: normalizedCatalogRange.start,
+      rangeEnd: normalizedCatalogRange.end,
+      minWordNumber: minCatalogWordNumber,
+      maxWordNumber: maxCatalogWordNumber,
+      learnedWordIds: new Set<string>(),
+    });
+    return scopedWords.map((word) => ({
+      wordId: word.id,
+      bookId: word.bookId,
+      bookTitle: selectedCatalogBook.title,
+      word: word.word,
+      definition: word.definition,
+      exampleSentence: word.exampleSentence,
+      exampleMeaning: word.exampleMeaning,
+      status: 'new' as const,
+      lastStudiedAt: 0,
+      attemptCount: 0,
+      correctCount: 0,
+    }));
+  }, [
+    catalogWords,
+    maxCatalogWordNumber,
+    minCatalogWordNumber,
+    normalizedCatalogRange.end,
+    normalizedCatalogRange.start,
+    selectedCatalogBook,
+  ]);
+
+  const catalogSnapshot = useMemo<StudentWorksheetSnapshot | null>(() => {
+    if (!selectedCatalogBook) return null;
+    return {
+      studentUid: 'book-range',
+      studentName: '配布プリント',
+	      organizationName: user.organizationName || 'Steady Study',
+	      source: 'book_range',
+      sourceLabel: `${selectedCatalogBook.title} / No. ${normalizedCatalogRange.start} - ${normalizedCatalogRange.end}`,
+      words: catalogWorksheetWords,
+    };
+  }, [
+    catalogWorksheetWords,
+    normalizedCatalogRange.end,
+    normalizedCatalogRange.start,
+    selectedCatalogBook,
+    user.organizationName,
+  ]);
+
+  const activeSnapshot = sourceMode === 'BOOK_RANGE' ? catalogSnapshot : snapshot;
+  const activeStudent = sourceMode === 'BOOK_RANGE' ? undefined : selectedStudent;
+  const isPrintDataLoading = sourceMode === 'BOOK_RANGE'
+    ? booksLoading || catalogWordsLoading
+    : studentsLoading || snapshotLoading;
 
   const bookOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -531,13 +682,17 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   }, [snapshot]);
 
   const filteredWords = useMemo(() => {
-    if (!snapshot) return [];
+    if (!activeSnapshot) return [];
 
-    return snapshot.words.filter((word) => {
+    if (sourceMode === 'BOOK_RANGE') {
+      return activeSnapshot.words;
+    }
+
+    return activeSnapshot.words.filter((word) => {
       if (selectedBookId !== 'ALL' && word.bookId !== selectedBookId) return false;
       return shouldIncludeStatus(statusFilter, word.status);
     });
-  }, [selectedBookId, snapshot, statusFilter]);
+  }, [activeSnapshot, selectedBookId, sourceMode, statusFilter]);
 
   const eligibleQuestionWords = useMemo(
     () => filterWorksheetQuestionCandidates(filteredWords, questionMode),
@@ -546,22 +701,31 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const grammarModeSelected = isGrammarWorksheetMode(questionMode);
 
   const generatedQuestions = useMemo(() => {
-    if (!snapshot || filteredWords.length === 0) return [];
+    if (!activeSnapshot || filteredWords.length === 0) return [];
     return generateWorksheetQuestions(filteredWords, questionMode, Math.min(questionCount, MAX_PRINTABLE_WORDS));
-  }, [filteredWords, questionCount, questionMode, snapshot]);
+  }, [activeSnapshot, filteredWords, questionCount, questionMode, worksheetShuffleToken]);
+
+  const sourceWordById = useMemo(() => (
+    new Map(filteredWords.map((word) => [word.wordId, word]))
+  ), [filteredWords]);
+
+  const handleReshuffleQuestions = () => {
+    setWorksheetShuffleToken((current) => current + 1);
+    setShowPreview(false);
+  };
 
   const printableHtmlByVariant = useMemo<Record<WorksheetPrintVariant, string>>(() => {
-    if (!snapshot || generatedQuestions.length === 0) {
+    if (!activeSnapshot || generatedQuestions.length === 0) {
       return {
         HANDOUT: '',
         ANSWER_KEY: '',
       };
     }
     return {
-      HANDOUT: buildPrintableWorksheetHtml(user, selectedStudent, snapshot, generatedQuestions, 'HANDOUT'),
-      ANSWER_KEY: buildPrintableWorksheetHtml(user, selectedStudent, snapshot, generatedQuestions, 'ANSWER_KEY'),
+      HANDOUT: buildPrintableWorksheetHtml(user, activeStudent, activeSnapshot, generatedQuestions, 'HANDOUT'),
+      ANSWER_KEY: buildPrintableWorksheetHtml(user, activeStudent, activeSnapshot, generatedQuestions, 'ANSWER_KEY'),
     };
-  }, [generatedQuestions, selectedStudent, snapshot, user]);
+  }, [activeSnapshot, activeStudent, generatedQuestions, user]);
 
   const printableHtml = printableHtmlByVariant[previewVariant];
   const previewVariantCopy = PRINT_VARIANT_COPY[previewVariant];
@@ -590,10 +754,10 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
       return;
     }
 
-    if (snapshot) {
+    if (sourceMode === 'STUDENT_HISTORY' && activeSnapshot) {
       void workspaceService.recordClassroomWorksheetLifecycleEvent({
-        studentUid: snapshot.studentUid,
-        worksheetSource: snapshot.source || 'history',
+        studentUid: activeSnapshot.studentUid,
+        worksheetSource: activeSnapshot.source || 'history',
         lifecycleStatus: 'printed',
         payload: {
           variant: previewVariant,
@@ -601,7 +765,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
           selectedBookId,
           generatedQuestionCount: generatedQuestions.length,
           filteredWordCount: filteredWords.length,
-          sourceLabel: snapshot.sourceLabel || null,
+          sourceLabel: activeSnapshot.sourceLabel || null,
         },
       }).catch((recordError) => {
         console.error(recordError);
@@ -657,10 +821,16 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">PDF Worksheet</p>
-                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">学習済み単語を A4 1枚で確認する</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                  問題と解答を分けて作れます。英単語テストだけでなく、登場済み単語を使った文法穴埋め、英語語順、日本語並び替えまで A4 1枚にまとめます。
-                </p>
+	                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+	                  {sourceMode === 'BOOK_RANGE'
+	                    ? '単語帳の範囲から A4 配布プリントを作る'
+	                    : '学習済み単語を A4 1枚で確認する'}
+	                </h3>
+	                <p className="mt-2 text-sm leading-relaxed text-slate-500">
+	                  {sourceMode === 'BOOK_RANGE'
+	                    ? '生徒を選ばず、単語帳と番号範囲からランダムに問題と解答を作れます。英単語テスト、文法穴埋め、英語語順、日本語並び替えまで A4 1枚にまとめます。'
+	                    : '問題と解答を分けて作れます。英単語テストだけでなく、登場済み単語を使った文法穴埋め、英語語順、日本語並び替えまで A4 1枚にまとめます。'}
+	                </p>
               </div>
               <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                 A4 / 2列 / 最大40語
@@ -675,37 +845,113 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
 
             <div className="mt-6 grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
               <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">対象生徒</label>
-                  <select
-                    value={selectedStudentUid}
-                    onChange={(event) => setSelectedStudentUid(event.target.value)}
-                    disabled={studentsLoading}
-                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
-                  >
-                    <option value="">生徒を選択</option>
-                    {students.map((student) => (
-                      <option key={student.uid} value={student.uid}>
-                        {student.name} / {student.organizationName || '個人利用'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {allowSourceModeSwitch && (
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">作成方法</label>
+                    <div className="grid gap-3">
+                      {(Object.keys(SOURCE_MODE_COPY) as WorksheetSourceMode[]).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          data-testid={`worksheet-source-${mode.toLowerCase()}`}
+                          onClick={() => setSourceMode(mode)}
+                          className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                            sourceMode === mode
+                              ? 'border-medace-500 bg-medace-50'
+                              : 'border-slate-200 bg-slate-50 hover:border-medace-200 hover:bg-white'
+                          }`}
+                        >
+                          <div className="text-sm font-bold text-slate-900">{SOURCE_MODE_COPY[mode].label}</div>
+                          <div className="mt-1 text-sm text-slate-500">{SOURCE_MODE_COPY[mode].description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">出題書籍</label>
-                  <select
-                    value={selectedBookId}
-                    onChange={(event) => setSelectedBookId(event.target.value)}
-                    disabled={snapshotLoading || bookOptions.length === 0}
-                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
-                  >
-                    <option value="ALL">すべての単語帳</option>
-                    {bookOptions.map((book) => (
-                      <option key={book.bookId} value={book.bookId}>{book.title}</option>
-                    ))}
-                  </select>
-                </div>
+                {sourceMode === 'STUDENT_HISTORY' ? (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">対象生徒</label>
+                      <select
+                        value={selectedStudentUid}
+                        onChange={(event) => setSelectedStudentUid(event.target.value)}
+                        disabled={studentsLoading}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                      >
+                        <option value="">生徒を選択</option>
+                        {students.map((student) => (
+                          <option key={student.uid} value={student.uid}>
+                            {student.name} / {student.organizationName || '個人利用'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">出題書籍</label>
+                      <select
+                        value={selectedBookId}
+                        onChange={(event) => setSelectedBookId(event.target.value)}
+                        disabled={snapshotLoading || bookOptions.length === 0}
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                      >
+                        <option value="ALL">すべての単語帳</option>
+                        {bookOptions.map((book) => (
+                          <option key={book.bookId} value={book.bookId}>{book.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">単語帳</label>
+                      <select
+                        value={selectedCatalogBookId}
+                        onChange={(event) => setSelectedCatalogBookId(event.target.value)}
+                        disabled={booksLoading || books.length === 0}
+                        data-testid="worksheet-catalog-book-select"
+                        className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                      >
+                        <option value="">単語帳を選択</option>
+                        {books.map((book) => (
+                          <option key={book.id} value={book.id}>
+                            {book.title} / {book.wordCount}語
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">開始番号</label>
+                        <input
+                          type="number"
+                          min={minCatalogWordNumber}
+                          max={maxCatalogWordNumber}
+                          value={rangeStart}
+                          onChange={(event) => setRangeStart(Number(event.target.value) || minCatalogWordNumber)}
+                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">終了番号</label>
+                        <input
+                          type="number"
+                          min={minCatalogWordNumber}
+                          max={maxCatalogWordNumber}
+                          value={rangeEnd}
+                          onChange={(event) => setRangeEnd(Number(event.target.value) || maxCatalogWordNumber)}
+                          className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
+                        />
+                      </div>
+                    </div>
+                    <p className="rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold leading-relaxed text-medace-900">
+                      No. {normalizedCatalogRange.start} - {normalizedCatalogRange.end} の候補からランダムに出題します。
+                    </p>
+                  </>
+                )}
 
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">出題モード</label>
@@ -728,6 +974,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                   </div>
                 </div>
 
+                {sourceMode === 'STUDENT_HISTORY' && (
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">学習ステータス</label>
                   <div className="grid gap-3">
@@ -748,9 +995,10 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                     ))}
                   </div>
                 </div>
+                )}
 
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">問題数</label>
+	                <div>
+	                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">問題数</label>
                   <input
                     type="number"
                     min={4}
@@ -759,35 +1007,51 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                     onChange={(event) => setQuestionCount(Math.max(4, Math.min(MAX_PRINTABLE_WORDS, Number(event.target.value) || 4)))}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
                   />
-                  <p className="mt-2 text-xs text-slate-500">A4 1ページに収める前提で、最大 {MAX_PRINTABLE_WORDS} 語まで出力します。</p>
-                </div>
-              </div>
+	                  <p className="mt-2 text-xs text-slate-500">A4 1ページに収める前提で、最大 {MAX_PRINTABLE_WORDS} 語まで出力します。</p>
+	                </div>
+
+	                {sourceMode === 'BOOK_RANGE' && (
+	                  <button
+	                    type="button"
+	                    data-testid="worksheet-reshuffle"
+	                    onClick={handleReshuffleQuestions}
+	                    disabled={filteredWords.length === 0}
+	                    className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-medace-200 bg-white px-4 py-3 text-sm font-bold text-medace-700 hover:bg-medace-50 disabled:opacity-50"
+	                  >
+	                    今回の問題を再抽選
+	                  </button>
+	                )}
+	              </div>
 
               <div className="rounded-[28px] border border-slate-200 bg-[#fff8f1] p-5">
-                {(studentsLoading || snapshotLoading) ? (
+                {isPrintDataLoading ? (
                   <div className="flex min-h-[420px] flex-col items-center justify-center text-slate-500">
                     <Loader2 className="h-8 w-8 animate-spin text-medace-500" />
                     <div className="mt-3 text-sm font-medium">印刷データを準備中...</div>
                   </div>
-                ) : snapshot ? (
+                ) : activeSnapshot ? (
                   <>
                     <div className="flex items-center gap-3 text-medace-700">
                       <ShieldCheck className="h-5 w-5" />
                       <span className="text-sm font-bold">出題プレビュー</span>
                     </div>
                     <h4 className="mt-3 text-xl font-black tracking-tight text-slate-950">
-                      {snapshot.studentName} さん向けワークシート
+                      {sourceMode === 'BOOK_RANGE'
+                        ? `${selectedCatalogBook?.title || '単語帳'} の配布プリント`
+                        : `${activeSnapshot.studentName} さん向けワークシート`}
                     </h4>
                     <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                      条件に合う学習済み単語から、紙配布しやすい問題形式で出力します。
+                      {sourceMode === 'BOOK_RANGE'
+                        ? '単語帳の指定範囲からランダムに抽出し、紙配布しやすい問題形式で出力します。'
+                        : '条件に合う学習済み単語から、紙配布しやすい問題形式で出力します。'}
                     </p>
-                    {snapshot.sourceLabel && (
+                    {activeSnapshot.sourceLabel && (
                       <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
-                        snapshot.source === 'history'
+                        activeSnapshot.source === 'history'
                           ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                           : 'border-amber-200 bg-amber-50 text-amber-800'
                       }`}>
-                        {snapshot.sourceLabel}
+                        {activeSnapshot.sourceLabel}
                       </div>
                     )}
 
@@ -813,39 +1077,52 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      {[
-                        { label: '習得中', count: filteredWords.filter((word) => word.status === 'learning').length },
-                        { label: '復習期', count: filteredWords.filter((word) => word.status === 'review').length },
-                        { label: '定着済', count: filteredWords.filter((word) => word.status === 'graduated').length },
-                      ].map((item) => (
-                        <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                          <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{item.label}</div>
-                          <div className="mt-2 text-2xl font-black text-slate-950">{item.count}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-5 rounded-3xl border border-slate-200 bg-white px-4 py-4">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                        <BookOpen className="h-4 w-4 text-medace-600" />
-                        問題候補
-                      </div>
-                      <div className="mt-3 space-y-2">
-                        {filteredWords.slice(0, 6).map((word) => (
-                          <div key={word.wordId} className="flex items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
-                            <div>
-                              <div className="text-sm font-bold text-slate-900">{word.word}</div>
-                              <div className="mt-1 text-sm text-slate-500">{word.definition}</div>
-                            </div>
-                            <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500">
-                              {STATUS_LABELS[word.status]}
-                            </div>
+                    {sourceMode === 'STUDENT_HISTORY' && (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        {[
+                          { label: '習得中', count: filteredWords.filter((word) => word.status === 'learning').length },
+                          { label: '復習期', count: filteredWords.filter((word) => word.status === 'review').length },
+                          { label: '定着済', count: filteredWords.filter((word) => word.status === 'graduated').length },
+                        ].map((item) => (
+                          <div key={item.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                            <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{item.label}</div>
+                            <div className="mt-2 text-2xl font-black text-slate-950">{item.count}</div>
                           </div>
                         ))}
-                        {filteredWords.length === 0 && (
+                      </div>
+                    )}
+
+	                    <div className="mt-5 rounded-3xl border border-slate-200 bg-white px-4 py-4">
+	                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+	                        <BookOpen className="h-4 w-4 text-medace-600" />
+	                        今回出す問題
+	                      </div>
+	                      <div className="mt-3 space-y-2">
+	                        {generatedQuestions.slice(0, 6).map((question) => {
+	                          const word = sourceWordById.get(question.wordId);
+	                          return (
+	                          <div key={question.id} className="flex items-start justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+	                            <div>
+	                              <div className="text-sm font-bold text-slate-900">{word?.word || question.promptText}</div>
+	                              <div className="mt-1 text-sm text-slate-500">{word?.definition || question.promptLabel}</div>
+	                            </div>
+	                            {sourceMode === 'STUDENT_HISTORY' ? (
+	                              <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500">
+	                                {word ? STATUS_LABELS[word.status] : question.promptLabel}
+	                              </div>
+	                            ) : (
+	                              <div className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500">
+	                                No. {catalogWords.find((candidate) => candidate.id === question.wordId)?.number || '-'}
+	                              </div>
+	                            )}
+	                          </div>
+	                          );
+	                        })}
+	                        {generatedQuestions.length === 0 && (
                           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                            条件に合う学習済み単語がありません。書籍かステータス条件を緩めてください。
+                            {sourceMode === 'BOOK_RANGE'
+                              ? '条件に合う単語がありません。単語帳か番号範囲を広げてください。'
+                              : '条件に合う学習済み単語がありません。書籍かステータス条件を緩めてください。'}
                           </div>
                         )}
                       </div>
@@ -890,7 +1167,11 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                   </>
                 ) : (
                   <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white text-slate-500">
-                    <div className="text-sm">生徒を選ぶと印刷候補を表示します。</div>
+                    <div className="text-sm">
+                      {sourceMode === 'BOOK_RANGE'
+                        ? '単語帳を選ぶと印刷候補を表示します。'
+                        : '生徒を選ぶと印刷候補を表示します。'}
+                    </div>
                   </div>
                 )}
               </div>
@@ -914,7 +1195,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Print Preview</div>
                 <div className="mt-1 text-lg font-black text-slate-950">
-                  {snapshot?.studentName || '生徒'} さん向け {previewVariantCopy.label}
+                  {sourceMode === 'BOOK_RANGE'
+                    ? `${selectedCatalogBook?.title || '単語帳'} ${previewVariantCopy.label}`
+                    : `${activeSnapshot?.studentName || '生徒'} さん向け ${previewVariantCopy.label}`}
                 </div>
                 <div className="mt-1 text-sm text-slate-500">
                   {previewVariantCopy.previewNote} 印刷ダイアログで「PDF に保存」を選ぶと、そのまま PDF にできます。

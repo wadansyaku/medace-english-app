@@ -11,6 +11,7 @@ import {
 import {
   PUBLIC_BUSINESS_ROLE_KEYS,
   SERVICE_ADMIN_ACCESS_PATH,
+  getPublicBusinessRoleDirectPath,
   getPublicBusinessRolePath,
 } from '../shared/publicBusinessRoles';
 import { UserRole, type UserProfile } from '../types';
@@ -192,7 +193,15 @@ describe('app navigation paths', () => {
   it('round-trips public role detail routes', () => {
     for (const roleKey of PUBLIC_BUSINESS_ROLE_KEYS) {
       const path = getPublicBusinessRolePath(roleKey);
+      const directPath = getPublicBusinessRoleDirectPath(roleKey);
       expect(parseNavigationPath(path)).toEqual({
+        currentView: 'publicRole',
+        returnView: 'dashboard',
+        selectedTask: null,
+        publicRole: roleKey,
+        englishPracticeLane: null,
+      });
+      expect(parseNavigationPath(directPath)).toEqual({
         currentView: 'publicRole',
         returnView: 'dashboard',
         selectedTask: null,
@@ -205,7 +214,7 @@ describe('app navigation paths', () => {
         selectedTask: null,
         publicRole: roleKey,
         englishPracticeLane: null,
-      })).toBe(path);
+      })).toBe(directPath);
     }
   });
 

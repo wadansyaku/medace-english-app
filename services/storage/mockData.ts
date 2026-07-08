@@ -97,8 +97,8 @@ export const IDB_MOCK_COMMERCIAL_REQUESTS: CommercialRequest[] = [
     desiredStartTiming: '来月から試験運用を始めたいです。',
     requestedWorkspaceRole: CommercialWorkspaceRole.GROUP_ADMIN,
     seatEstimate: '31-100名',
-    message: '体験導入の進め方を知りたいです。',
-    source: 'PUBLIC_GUIDE',
+    message: '組織アカウント発行の進め方を確認したいです。',
+    source: 'ROLE_LINK_PREVIEW',
     createdAt: Date.now() - 6 * 3600 * 1000,
     updatedAt: Date.now() - 6 * 3600 * 1000,
   },
@@ -107,8 +107,8 @@ export const IDB_MOCK_COMMERCIAL_REQUESTS: CommercialRequest[] = [
 export const IDB_MOCK_PRODUCT_ANNOUNCEMENTS: ProductAnnouncement[] = [
   {
     id: 'mock-update-free',
-    title: '無料プランからの導入相談が分かりやすくなりました',
-    body: '設定画面からパーソナル相談と学校・教室導入相談の両方を送れるようになりました。',
+    title: '無料プランでも最初の学習開始が分かりやすくなりました',
+    body: '最初の画面から診断を挟まずに教材ホームへ入り、ログインや登録は後から開けるようになりました。',
     severity: AnnouncementSeverity.UPDATE,
     subscriptionPlans: [SubscriptionPlan.TOC_FREE],
     audienceRoles: [AnnouncementAudienceRole.STUDENT],
@@ -119,7 +119,7 @@ export const IDB_MOCK_PRODUCT_ANNOUNCEMENTS: ProductAnnouncement[] = [
   {
     id: 'mock-major-business',
     title: '学校・教室向けワークスペースを更新しました',
-    body: '講師フォロー、添削キュー、導入相談の運用を 1 つの導線で確認できます。',
+    body: '講師フォロー、添削キュー、受付キューの運用を 1 つの導線で確認できます。',
     severity: AnnouncementSeverity.UPDATE,
     subscriptionPlans: [SubscriptionPlan.TOB_FREE, SubscriptionPlan.TOB_PAID],
     audienceRoles: [AnnouncementAudienceRole.INSTRUCTOR, AnnouncementAudienceRole.GROUP_ADMIN, AnnouncementAudienceRole.ADMIN],
@@ -154,6 +154,8 @@ export const createEphemeralDemoUser = (role: UserRole, organizationRole?: Organ
       : role === UserRole.STUDENT
         ? SubscriptionPlan.TOC_FREE
         : SubscriptionPlan.TOB_PAID,
+  grade: role === UserRole.STUDENT ? UserGrade.JHS2 : undefined,
+  englishLevel: role === UserRole.STUDENT ? EnglishLevel.A2 : undefined,
   organizationName:
     role === UserRole.ADMIN
       ? 'Steady Study HQ'
@@ -166,7 +168,7 @@ export const createEphemeralDemoUser = (role: UserRole, organizationRole?: Organ
       : organizationRole
         ? IDB_MOCK_ORGANIZATION_IDS.DEMO_ACADEMY
         : undefined,
-  needsOnboarding: role === UserRole.STUDENT,
+  needsOnboarding: false,
   stats: {
     xp: 0,
     level: 1,

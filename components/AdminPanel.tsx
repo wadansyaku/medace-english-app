@@ -338,7 +338,7 @@ const AdminPanel: React.FC = () => {
               onClick={() => setPanelView('commercial')}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'commercial' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
             >
-              導入・お知らせ
+              受付・お知らせ
             </button>
           </div>
 

@@ -48,9 +48,9 @@ export enum CommercialRequestKind {
 }
 
 export const COMMERCIAL_REQUEST_KIND_LABELS: Record<CommercialRequestKind, string> = {
-  [CommercialRequestKind.PERSONAL_UPGRADE]: 'パーソナルプラン相談',
-  [CommercialRequestKind.BUSINESS_TRIAL]: '学校・教室向け導入相談',
-  [CommercialRequestKind.BUSINESS_ROLE_CONVERSION]: 'ビジネスアカウント切替相談',
+  [CommercialRequestKind.PERSONAL_UPGRADE]: 'パーソナルプラン受付',
+  [CommercialRequestKind.BUSINESS_TRIAL]: '学校・教室向け受付',
+  [CommercialRequestKind.BUSINESS_ROLE_CONVERSION]: 'ビジネスアカウント切替受付',
 };
 
 export enum CommercialRequestStatus {
@@ -1463,7 +1463,7 @@ export type ClassroomActivationLifecycleStage =
   | 'writing'
   | 'review';
 
-export type ClassroomWorksheetSource = 'history' | 'catalog_fallback' | 'starter_fallback';
+export type ClassroomWorksheetSource = 'history' | 'catalog_fallback' | 'starter_fallback' | 'book_range';
 
 export type ClassroomWorksheetLifecycleStatus = 'printed' | 'issued' | 'collected' | 'scored';
 

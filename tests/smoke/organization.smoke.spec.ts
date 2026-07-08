@@ -43,18 +43,26 @@ test('group admin can open the organization dashboard and update an assignment',
   await expect(page.getByTestId('assignment-history-section')).toContainText('変更者');
 });
 
-test('group admin can create a grammar worksheet from studied vocabulary', async ({ page }) => {
+test('group admin can create a grammar worksheet from a book range without selecting a student', async ({ page }) => {
   await loginGroupAdminDemo(page);
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  const importResult = await seedPhrasebook(page, 'Worksheet Range Smoke');
   await page.getByTestId('workspace-tab-worksheets').click();
   await expect(page.getByText('配布用PDF問題を独立して作る')).toBeVisible();
 
-  await page.getByRole('button', { name: '生徒別にPDF問題を作る' }).click();
-  await expect(page.getByText('学習済み単語を A4 1枚で確認する')).toBeVisible();
+  await page.getByRole('button', { name: '単語帳範囲からPDF問題を作る' }).click();
+  await expect(page.getByText('単語帳の範囲から A4 配布プリントを作る')).toBeVisible();
+  await expect(page.getByTestId('worksheet-catalog-book-select')).toBeVisible();
+  if (importResult.bookId) {
+    await page.getByTestId('worksheet-catalog-book-select').selectOption(importResult.bookId);
+  }
+  await expect(page.getByText('対象生徒')).toHaveCount(0);
   await page.getByRole('button', { name: /英語語順並び替え/ }).click();
   await expect(page.getByText('文法化できる語数')).toBeVisible();
   await expect(page.getByText(/英字の単語と日本語の意味/)).toBeVisible();
+  await expect(page.getByText('今回出す問題')).toBeVisible();
+  await page.getByTestId('worksheet-reshuffle').click();
 
   await page.getByRole('button', { name: '問題を開く' }).click();
   await expect(page.getByText('印刷プレビュー')).toBeVisible();

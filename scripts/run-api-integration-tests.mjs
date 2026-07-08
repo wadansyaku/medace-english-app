@@ -583,11 +583,11 @@ const main = async () => {
         contactEmail: publicCommercialEmail,
         organizationName: 'Phase 4 Academy',
         teachingFormat: 'ONLINE',
-        desiredStartTiming: '再来月に再相談',
+        desiredStartTiming: '再来月に再確認',
         requestedWorkspaceRole: 'GROUP_ADMIN',
         seatEstimate: '31-100名',
-        message: '導入相談を再送します。',
-        source: 'PUBLIC_GUIDE',
+        message: '受付内容を再送します。',
+        source: 'ROLE_LINK_PREVIEW',
       }),
     });
     assert(anonymousBusinessTrialRetry.status === 200, 'anonymous commercial request should allow a retry after the open request is closed');

@@ -120,8 +120,8 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
 
       <div className="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
         <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
-          <p className="text-xs font-bold text-slate-400">商談リクエスト</p>
-          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">導入・格上げキュー</h3>
+          <p className="text-xs font-bold text-slate-400">受付リクエスト</p>
+          <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">受付・運用キュー</h3>
           <div className="mt-5 space-y-3">
             {requests.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
@@ -226,6 +226,7 @@ const AdminCommercialOpsView: React.FC<AdminCommercialOpsViewProps> = ({
                     key={status}
                     type="button"
                     disabled={savingRequest}
+                    data-testid={`admin-commercial-request-status-${status}`}
                     onClick={async () => {
                       setSavingRequest(true);
                       try {

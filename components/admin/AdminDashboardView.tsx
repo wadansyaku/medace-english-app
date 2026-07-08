@@ -537,7 +537,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   <RateBar label="学習アクティブ率" value={snapshot.pmf.activeStudentRate30d} detail="登録ユーザーに対する30日学習者比率" />
                   <RateBar label="セッション完了率" value={snapshot.pmf.studyCompletionRate30d} detail="学習開始から完了まで進んだ比率" colorClass="bg-emerald-500" />
                   <RateBar label="B2B価値ループ到達率" value={snapshot.pmf.b2bActivationCompletionRate} detail="組織が作文返却まで到達した比率" colorClass="bg-slate-700" />
-                  <RateBar label="導入相談転換率" value={snapshot.pmf.commercialConversionRate30d} detail="フォームopenから相談送信への転換" colorClass="bg-sky-500" />
+                  <RateBar label="受付キュー作成率" value={snapshot.pmf.commercialConversionRate30d} detail="公開ロール接点から受付作成への転換" colorClass="bg-sky-500" />
                 </div>
               </div>
             </div>
@@ -662,7 +662,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   </div>
                 ))}
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                  フォーム open {snapshot.activationFunnel.commercialFormOpenCount30d} 件 / 相談送信 {snapshot.activationFunnel.commercialRequestCount30d} 件
+                  公開ロール接点 {snapshot.activationFunnel.commercialFormOpenCount30d} 件 / 受付作成 {snapshot.activationFunnel.commercialRequestCount30d} 件
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
                   30日内の進行: クラス {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedCohort} / 担当 {snapshot.activationFunnel.activationVelocity30d.organizationsAssignedStudent} / ミッション {snapshot.activationFunnel.activationVelocity30d.organizationsCreatedFirstMission} / 通知 {snapshot.activationFunnel.activationVelocity30d.organizationsSentNotification} / 作文配布 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingAssignment} / 提出 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingSubmission} / 返却 {snapshot.activationFunnel.activationVelocity30d.organizationsWithWritingReview} 組織

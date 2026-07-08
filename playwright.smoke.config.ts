@@ -7,6 +7,7 @@ const outputDir = process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results/smoke';
 const traceMode = process.env.PLAYWRIGHT_TRACE_MODE || 'retain-on-failure';
 const videoMode = process.env.PLAYWRIGHT_VIDEO_MODE || 'retain-on-failure';
 const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
+const chromiumChannel = process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || undefined;
 
 export default defineConfig({
   testDir: './tests/smoke',
@@ -29,6 +30,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         browserName: 'chromium',
+        ...(chromiumChannel ? { channel: chromiumChannel } : {}),
       },
     },
   ],

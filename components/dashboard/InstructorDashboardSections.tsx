@@ -648,8 +648,8 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
             </p>
             <div className="mt-5 grid gap-3">
               {[
-                '対象生徒を選ぶ',
-                '問題数と出題条件を確認する',
+                '単語帳と番号範囲を選ぶ',
+                '問題数と出題形式を確認する',
                 'そのまま印刷または PDF 保存する',
               ].map((item) => (
                 <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
@@ -667,7 +667,12 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 </div>
               }
             >
-              <WorksheetPrintLauncher user={user} />
+	              <WorksheetPrintLauncher
+	                user={user}
+	                buttonLabel="単語帳範囲からPDF問題を作る"
+	                defaultSourceMode="BOOK_RANGE"
+	                allowSourceModeSwitch={false}
+	              />
             </Suspense>
           </section>
         </div>

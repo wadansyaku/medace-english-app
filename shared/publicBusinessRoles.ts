@@ -9,6 +9,13 @@ export type PublicBusinessRoleKey =
 
 export const SERVICE_ADMIN_ACCESS_PATH = '/admin-access';
 
+export const PUBLIC_ROLE_DIRECT_PATHS: Record<PublicBusinessRoleKey, string> = {
+  student: '/student',
+  instructor: '/teacher',
+  'group-admin': '/school-admin',
+  'service-admin': '/service-admin',
+};
+
 type PublicBusinessRoleIcon = 'student' | 'instructor' | 'group-admin' | 'service-admin';
 
 export interface PublicBusinessRoleHighlight {
@@ -41,13 +48,10 @@ export interface PublicBusinessRoleConfig {
   previewPanels?: PublicBusinessRolePreviewPanel[];
   demoRole: UserRole;
   demoOrganizationRole?: OrganizationRole;
-  requestSource: string;
-  requestTitle: string;
-  requestDescription: string;
 }
 
 export interface PublicBusinessRolePrimaryAction {
-  kind: 'demo' | 'preview' | 'request';
+  kind: 'demo' | 'preview';
   label: string;
   note: string;
 }
@@ -83,9 +87,6 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     ],
     demoRole: UserRole.STUDENT,
     demoOrganizationRole: OrganizationRole.STUDENT,
-    requestSource: 'PUBLIC_ROLE_STUDENT',
-    requestTitle: 'ビジネス版 生徒導線について相談する',
-    requestDescription: '教材配信、生徒アカウント発行、授業運用への組み込み方をまとめて相談できます。',
   },
   {
     key: 'instructor',
@@ -117,9 +118,6 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     ],
     demoRole: UserRole.INSTRUCTOR,
     demoOrganizationRole: OrganizationRole.INSTRUCTOR,
-    requestSource: 'PUBLIC_ROLE_INSTRUCTOR',
-    requestTitle: '講師運用の導入を相談する',
-    requestDescription: '講師アカウント発行、担当割当、添削フローの運用設計をまとめて相談できます。',
   },
   {
     key: 'group-admin',
@@ -131,9 +129,9 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     primaryActionTestId: 'demo-login-group-admin',
     title: '学校管理者',
     audienceLabel: '学校管理者ロール',
-    cardDescription: '担当割当、導入運用、KPI の見え方を確認します。',
+    cardDescription: '担当割当、運用状況、KPI の見え方を確認します。',
     cardDetail: '組織ダッシュボード、担当割当、運用指標の代表画面を確認',
-    summary: '学校・教室の運用責任者として、講師配置、導入の進捗、継続率指標を俯瞰する役割です。',
+    summary: '学校・教室の運用責任者として、講師配置、運用の進捗、継続率指標を俯瞰する役割です。',
     primaryActionSummary: '組織の状況を俯瞰しながら、担当割当と運用改善のポイントを確認できます。',
     highlights: [
       {
@@ -145,15 +143,12 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
         detail: '講師や担当クラスの割当を確認し、運用上の抜け漏れを減らせます。',
       },
       {
-        label: '導入 KPI の把握',
+        label: '運用 KPI の把握',
         detail: '継続率や未着手率をもとに、現場で次に打つべき施策を整理できます。',
       },
     ],
     demoRole: UserRole.INSTRUCTOR,
     demoOrganizationRole: OrganizationRole.GROUP_ADMIN,
-    requestSource: 'PUBLIC_ROLE_GROUP_ADMIN',
-    requestTitle: '学校管理者向け導入を相談する',
-    requestDescription: '組織ダッシュボード、講師割当、導入 KPI の見え方を前提に導入相談を進められます。',
   },
   {
     key: 'service-admin',
@@ -165,14 +160,14 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     primaryActionTestId: 'demo-login-admin',
     title: 'サービス管理者',
     audienceLabel: 'サービス管理者ロール',
-    cardDescription: '導入相談キュー、お知らせ配信、教材運用の管理画面を確認します。',
+    cardDescription: '受付キュー、お知らせ配信、教材運用の管理画面を確認します。',
     cardDetail: 'AdminPanel、運用設定、全体お知らせの配信画面を確認',
-    summary: 'サービス全体の導入運用、お知らせ配信、教材メンテナンスを担うサービス側の管理役割です。',
-    primaryActionSummary: '全体配信、お知らせ、導入相談の運用導線を service admin 視点で確認できます。',
+    summary: 'サービス全体の受付運用、お知らせ配信、教材メンテナンスを担うサービス側の管理役割です。',
+    primaryActionSummary: '全体配信、お知らせ、受付キューの運用導線を service admin 視点で確認できます。',
     highlights: [
       {
-        label: '導入相談キュー',
-        detail: '学校・教室から届く相談を一覧で見て、次の対応先を整理できます。',
+        label: '受付キュー',
+        detail: '学校・教室から届く受付内容を一覧で見て、次の対応先を整理できます。',
       },
       {
         label: 'お知らせ配信',
@@ -185,9 +180,9 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     ],
     previewPanels: [
       {
-        eyebrow: '導入相談キュー',
-        title: '導入相談を運用タスクとして並べる',
-        body: '学校・教室から届いた相談を、担当、温度感、次アクション付きで一覧管理する想定です。',
+        eyebrow: '受付キュー',
+        title: '受付を運用タスクとして並べる',
+        body: '学校・教室から届いた受付内容を、担当、温度感、次アクション付きで一覧管理する想定です。',
         metrics: ['新着 4 件', '今週の初回返信 92%', '未対応 1 件'],
       },
       {
@@ -204,9 +199,6 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
       },
     ],
     demoRole: UserRole.ADMIN,
-    requestSource: 'PUBLIC_ROLE_SERVICE_ADMIN',
-    requestTitle: 'サービス管理画面について相談する',
-    requestDescription: 'サービス側の運用体制や管理権限を前提に、導入・運用フローをまとめて相談できます。',
   },
 ];
 
@@ -236,6 +228,16 @@ export const getPublicBusinessRolePath = (roleKey: PublicBusinessRoleKey): strin
   `/public/roles/${getPublicBusinessRoleConfig(roleKey).slug}`
 );
 
+export const getPublicBusinessRoleDirectPath = (roleKey: PublicBusinessRoleKey): string => (
+  PUBLIC_ROLE_DIRECT_PATHS[roleKey]
+);
+
+export const parsePublicBusinessRoleDirectPath = (pathname: string): PublicBusinessRoleKey | null => {
+  const matchedEntry = Object.entries(PUBLIC_ROLE_DIRECT_PATHS)
+    .find(([, path]) => path === pathname);
+  return matchedEntry ? matchedEntry[0] as PublicBusinessRoleKey : null;
+};
+
 export const isPublicBusinessRoleDemoEnabled = (
   roleKey: PublicBusinessRoleKey,
   runtimeFlags: RuntimeFlags,
@@ -264,8 +266,8 @@ export const getPublicBusinessRolePrimaryAction = (
           note: '本番公開環境では実データへ入らず、service admin 向け UI プレビューをこのページ内で確認できます。',
         }
     : {
-        kind: 'request',
-        label: '導入相談へ進む',
-        note: '本番相当の公開環境では、体験開始の代わりに導入相談フォームへ進みます。',
+        kind: 'preview',
+        label: '画面構成を見る',
+        note: '本番相当の公開環境では、体験開始の代わりに役割ごとの画面構成だけを確認できます。',
       }
 );

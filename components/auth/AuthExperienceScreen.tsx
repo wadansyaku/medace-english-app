@@ -15,12 +15,14 @@ import { AUTH_COPY, BRAND } from '../../config/brand';
 import getClientRuntimeFlags from '../../config/runtime';
 import useIsMobileViewport from '../../hooks/useIsMobileViewport';
 import { getDemoAccessWindowLabel } from '../../utils/demo';
-import BusinessRolePreviewSection from '../commercial/BusinessRolePreviewSection';
-import PublicMotivationPanel from '../PublicMotivationPanel';
 import PublicInfoPage from '../PublicInfoPage';
 import PublicRolePage from '../public/PublicRolePage';
 import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../../types';
-import type { PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
+import {
+  getPublicBusinessRoleDirectPath,
+  PUBLIC_BUSINESS_ROLE_CONFIGS,
+  type PublicBusinessRoleKey,
+} from '../../shared/publicBusinessRoles';
 
 interface AuthExperienceScreenProps {
   currentView: 'login' | 'publicInfo' | 'publicRole';
@@ -49,7 +51,6 @@ interface AuthExperienceScreenProps {
   onRequestPasswordRecovery: () => void;
   onDemoLogin: (role: UserRole, organizationRole?: OrganizationRole) => void;
   onToggleAlternateAccess: () => void;
-  onOpenPublicInfo: () => void;
   onClosePublicInfo: () => void;
   onOpenPublicRole: (roleKey: PublicBusinessRoleKey) => void;
   onClosePublicRole: () => void;
@@ -82,19 +83,25 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   onRequestPasswordRecovery,
   onDemoLogin,
   onToggleAlternateAccess,
-  onOpenPublicInfo,
   onClosePublicInfo,
   onOpenPublicRole,
-  onClosePublicRole,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
   const isMobileViewport = useIsMobileViewport();
+  const authEdgePanelRef = React.useRef<HTMLDetailsElement | null>(null);
+
+  const openAuthEdgePanel = (mode: 'LOGIN' | 'SIGNUP') => {
+    onChangeAuthMode(mode);
+    if (authEdgePanelRef.current) {
+      authEdgePanelRef.current.open = true;
+      authEdgePanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   if (currentView === 'publicRole' && publicRole) {
     return (
       <PublicRolePage
         roleKey={publicRole}
-        onBack={onClosePublicRole}
         onDemoLogin={onDemoLogin}
       />
     );
@@ -112,14 +119,10 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
     );
   }
 
-  const motivationPanel = (
-    <PublicMotivationPanel
-      snapshot={motivationSnapshot}
-      loading={motivationLoading}
-      error={motivationError}
-      compact
-    />
-  );
+  const roleQuickLinks = PUBLIC_BUSINESS_ROLE_CONFIGS.map((roleConfig) => ({
+    ...roleConfig,
+    directPath: getPublicBusinessRoleDirectPath(roleConfig.key),
+  }));
 
   const fastStartPanel = authMode === 'LOGIN' && !isMobileViewport ? (
     <div
@@ -128,7 +131,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
     >
       <p className="text-sm font-black tracking-[0.12em] text-medace-700">ログイン不要で先に試せます</p>
       <p className="mt-2 text-sm leading-relaxed text-slate-600">
-        初回の人は登録前に、12問診断・復習画面・教材開始まで確認できます。
+        初回の人は登録前に、診断テストを挟まず学習ホームと教材開始を確認できます。
       </p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
@@ -152,8 +155,8 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
   const authCard = (
     <div className="overflow-hidden rounded-panel border border-medace-200 bg-white shadow-[0_18px_48px_rgba(255,122,0,0.10)]">
-        <div className="grid lg:grid-cols-[1.04fr_0.96fr]">
-          <div className="relative overflow-hidden border-b border-medace-200 bg-medace-50 p-6 text-slate-950 sm:p-8 md:p-10 lg:border-b-0 lg:border-r">
+        <div className="grid">
+          <div className="relative overflow-hidden border-b border-medace-200 bg-medace-50 p-6 text-slate-950 sm:p-8">
             <div className="relative space-y-7">
               <div>
                 <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl border border-medace-200 bg-white shadow-sm sm:h-16 sm:w-16">
@@ -174,18 +177,10 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                   <div className="mt-5 grid gap-2.5">
                     <button
                       onClick={() => onDemoLogin(UserRole.STUDENT)}
-                      data-testid="demo-login-student"
+                      data-testid="demo-login-student-edge-mobile"
                       className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-[0.98rem] font-bold leading-tight text-medace-800 shadow-sm transition-colors hover:bg-medace-50"
                     >
                       生徒としてすぐ試す
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onOpenPublicInfo}
-                      data-testid="open-business-guide-mobile"
-                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold leading-tight text-medace-800"
-                    >
-                      教室向け導入を見る
                     </button>
                   </div>
                 )}
@@ -211,7 +206,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                   生徒向けの画面に加えて、学校・教室向けのビジネス版デモもこの画面からそのまま確認できます。体験用アカウントは期間限定で、別端末では別の体験セッションが作られます。
                 </p>
                 <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
-                  初回診断やテストを最初から試せるよう、体験ログインごとに新しいデモ環境を作成します。前回の demo 状態は別ブラウザや別端末へ共有されません。
+                  体験開始では診断テストを挟まず、教材ホームから始めます。アカウント登録またはログイン後は、レベル調整のために診断が表示されます。
                 </p>
                 {runtimeFlags.appOnlineOnly && (
                   <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
@@ -222,18 +217,10 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                   <div className="mt-4 grid gap-3">
                     <button
                       onClick={() => onDemoLogin(UserRole.STUDENT)}
-                      data-testid="demo-login-student"
+                      data-testid="demo-login-student-edge"
                       className="flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-base font-bold text-medace-800 shadow-sm transition-colors hover:bg-medace-50"
                     >
                       生徒としてすぐ試す
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onOpenPublicInfo}
-                      data-testid="open-business-guide-desktop"
-                      className="flex min-h-11 w-full items-center justify-center rounded-xl border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-800"
-                    >
-                      教室向け導入を見る
                     </button>
                   </div>
                 )}
@@ -241,7 +228,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
             </div>
           </div>
 
-          <div className="bg-[#fffdf9] p-7 md:p-9 lg:p-11">
+          <div className="bg-[#fffdf9] p-7 md:p-9">
             <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl border border-medace-200 bg-medace-50 p-1.5">
               <button
                 type="button"
@@ -280,6 +267,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                       type="text"
                       value={displayName}
                       onChange={(event) => onDisplayNameChange(event.target.value)}
+                      data-testid="auth-display-name-input"
                       className="ui-input pl-11 pr-4"
                       placeholder="例: 田中 はるか"
                     />
@@ -295,6 +283,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                     type="email"
                     value={email}
                     onChange={(event) => onEmailChange(event.target.value)}
+                    data-testid="auth-email-input"
                     className="ui-input pl-11 pr-4"
                     placeholder="name@example.com"
                     autoComplete="email"
@@ -324,6 +313,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                     type="password"
                     value={password}
                     onChange={(event) => onPasswordChange(event.target.value)}
+                    data-testid="auth-password-input"
                     className="ui-input pl-11 pr-4"
                     placeholder={authMode === 'SIGNUP' ? '6文字以上で設定' : 'パスワードを入力'}
                     autoComplete={authMode === 'LOGIN' ? 'current-password' : 'new-password'}
@@ -340,6 +330,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                       type="password"
                       value={confirmPassword}
                       onChange={(event) => onConfirmPasswordChange(event.target.value)}
+                      data-testid="auth-confirm-password-input"
                       className="ui-input pl-11 pr-4"
                       placeholder="確認用にもう一度入力"
                       autoComplete="new-password"
@@ -409,6 +400,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
 
               <button
                 type="submit"
+                data-testid="auth-submit"
                 className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-bold leading-tight shadow-sm transition-colors ${
                   authMode === 'LOGIN'
                     ? 'bg-slate-950 text-white hover:bg-slate-800'
@@ -427,35 +419,83 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
               </div>
             </form>
 
-            <div className="mt-6 border-t border-slate-100 pt-6">
-              <div className="ui-panel-subtle">
-                <div className="text-sm font-bold text-slate-500">導入ガイド</div>
-                <h3 className="mt-2 text-xl font-black text-slate-950">詳しい説明と料金は別ページへ</h3>
-                <p className="mt-2 text-[0.98rem] leading-relaxed text-slate-600">
-                  ホーム画面はログインと体験開始に絞り、アプリ説明や料金の考え方は公開ページにまとめています。
-                </p>
-                <button
-                  type="button"
-                  onClick={onOpenPublicInfo}
-                  className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-base font-bold text-slate-700 transition-colors hover:bg-slate-100"
-                >
-                  説明と料金を見る <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
           </div>
         </div>
     </div>
   );
 
   return (
-    <div className="mx-auto mt-6 max-w-6xl space-y-6 lg:mt-10">
-      {isMobileViewport ? authCard : motivationPanel}
-      {isMobileViewport ? motivationPanel : authCard}
-      <BusinessRolePreviewSection
-        onOpenGuide={onOpenPublicInfo}
-        onOpenRole={onOpenPublicRole}
-      />
+    <div className="mx-auto mt-6 max-w-7xl space-y-6 lg:mt-10">
+      <section
+        data-testid="start-first-home"
+        className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]"
+      >
+        <div className="rounded-[28px] border border-medace-200 bg-white p-6 shadow-[0_18px_48px_rgba(15,23,42,0.06)] md:p-8 lg:p-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 shadow-sm">
+            <span className="text-2xl font-black text-medace-700">{BRAND.mark}</span>
+          </div>
+          <h1 className="mt-6 max-w-3xl text-3xl font-black leading-tight tracking-tight text-slate-950 md:text-5xl">
+            最初の画面から、すぐ単語学習を始める
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
+            登録や診断テストを後回しにして、教材ホームを先に確認できます。ログインした後は、あなたのレベルに合わせるための診断へ進みます。
+          </p>
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => onDemoLogin(UserRole.STUDENT)}
+              data-testid="demo-login-student"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-6 py-3 text-base font-black text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+            >
+              今すぐ学習を始める <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => openAuthEdgePanel('SIGNUP')}
+              data-testid="start-first-signup"
+              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              登録して診断へ
+            </button>
+          </div>
+
+        </div>
+
+        <aside className="lg:sticky lg:top-28 lg:self-start">
+          <details
+            ref={authEdgePanelRef}
+            data-testid="auth-edge-panel"
+            className="rounded-[24px] border border-slate-200 bg-white shadow-sm open:shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-left [&::-webkit-details-marker]:hidden">
+              <span>
+                <span className="block text-sm font-black text-slate-950">ログイン / 登録</span>
+                <span className="mt-1 block text-xs font-bold text-slate-500">後からアカウントに保存する</span>
+              </span>
+              <LogIn className="h-4 w-4 text-slate-400" />
+            </summary>
+            <div className="border-t border-slate-100 p-3">
+              {authCard}
+            </div>
+          </details>
+        </aside>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 lg:col-span-2">
+          {roleQuickLinks.map((roleLink) => (
+            <button
+              key={roleLink.key}
+              type="button"
+              data-testid={roleLink.cardActionTestId}
+              onClick={() => onOpenPublicRole(roleLink.key)}
+              className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition-colors hover:border-medace-200 hover:bg-white"
+            >
+              <span className="block text-sm font-black text-slate-950">{roleLink.title}</span>
+              <span className="mt-2 block text-xs font-bold text-medace-700">{roleLink.directPath}</span>
+              <span className="mt-3 block text-sm leading-relaxed text-slate-600">{roleLink.cardDetail}</span>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 };

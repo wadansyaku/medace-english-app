@@ -8,7 +8,6 @@ import DashboardDeleteBookDialog from './DashboardDeleteBookDialog';
 import DashboardSettingsModal from './DashboardSettingsModal';
 import PhrasebookCreateModal from './PhrasebookCreateModal';
 import PlanEditorModal from './PlanEditorModal';
-import type { CommercialRequestPayload } from '../../contracts/storage';
 
 type StudentDashboardController = ReturnType<typeof useStudentDashboardController>;
 type StudentDashboardViewModel = ReturnType<typeof useStudentDashboardViewModel>;
@@ -20,7 +19,6 @@ interface StudentDashboardModalsProps {
   viewModel: StudentDashboardViewModel;
   isMobileViewport: boolean;
   onUserUpdate: (user: UserProfile) => void;
-  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
 
 export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
@@ -30,7 +28,6 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
   viewModel,
   isMobileViewport,
   onUserUpdate,
-  onSubmitCommercialRequest,
 }) => {
   const canUseSelectedCreateMode = controller.createMode === 'TEXT' ? viewModel.canCreateFromText : viewModel.canCreateFromFile;
 
@@ -56,7 +53,6 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
 
       <DashboardSettingsModal
         open={controller.showSettingsModal}
-        user={user}
         accountOverview={viewModel.accountOverview}
         currentEnglishLevel={user.englishLevel}
         editName={controller.editName}
@@ -94,7 +90,6 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
         onEditDisplayDensity={controller.setEditDisplayDensity}
         commercialRequests={viewModel.commercialRequests}
         announcementFeed={announcementFeed.feed}
-        onSubmitCommercialRequest={onSubmitCommercialRequest}
       />
 
       <PhrasebookCreateModal

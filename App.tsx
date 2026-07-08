@@ -248,7 +248,6 @@ const App: React.FC = () => {
           currentView={currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
           publicRole={publicRole}
           {...authExperienceProps}
-          onOpenPublicInfo={() => dispatchNavigation({ type: 'open-public-info' })}
           onClosePublicInfo={() => dispatchNavigation({ type: 'close-public-info' })}
           onOpenPublicRole={(roleKey) => dispatchNavigation({ type: 'open-public-role', role: roleKey })}
           onClosePublicRole={() => dispatchNavigation({ type: 'close-public-role' })}
