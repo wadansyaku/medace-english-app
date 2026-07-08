@@ -197,6 +197,7 @@ describe('storage action contract', () => {
       'issuePasswordResetLink',
       'listCommercialRequests',
       'updateCommercialRequest',
+      'prepareCommercialActivationSetup',
       'listProductAnnouncementsAdmin',
       'upsertProductAnnouncement',
     ];
@@ -308,5 +309,14 @@ describe('storage action contract', () => {
       status: CommercialRequestStatus.APPROVED,
       targetOrganizationRole: 'OWNER',
     })).toThrow('反映先の組織ロールが不正です。');
+  });
+
+  it('validates commercial activation setup requests for admin operation', () => {
+    const definition = resolveStorageActionDefinition('prepareCommercialActivationSetup');
+
+    expect(definition.roles).toEqual([UserRole.ADMIN]);
+    expect(definition.parse({ requestId: 12 })).toEqual({ requestId: 12 });
+    expect(() => definition.parse({ requestId: '12' })).toThrow('申請IDが不正です。');
+    expect(() => definition.parse({ requestId: 0 })).toThrow('申請IDが不正です。');
   });
 });

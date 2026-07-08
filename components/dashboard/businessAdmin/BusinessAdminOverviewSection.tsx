@@ -43,6 +43,10 @@ interface BusinessAdminOverviewSectionProps {
   isLocalMockData: boolean;
   nextActionView: BusinessAdminWorkspaceView;
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
+  onFollowActivationTarget: (
+    target: OrganizationActivationActionTarget | null | undefined,
+    fallbackView: BusinessAdminWorkspaceView,
+  ) => void;
   activationNotificationPending: boolean;
   onSendActivationNotification: (target: OrganizationActivationActionTarget) => void;
   policyFeatureSummary: string[];
@@ -58,6 +62,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
   isLocalMockData,
   nextActionView,
   onChangeView,
+  onFollowActivationTarget,
   activationNotificationPending,
   onSendActivationNotification,
   policyFeatureSummary,
@@ -76,6 +81,10 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
   const canSendActivationNotification = snapshot.nextRequiredActionTarget?.kind === 'INSTRUCTOR_NOTIFICATION'
     && Boolean(snapshot.nextRequiredActionTarget.studentUid);
   const shouldFollowRunbookStage = runbookSummary.hasCurrentStage && !canSendActivationNotification;
+  const runbookStageTarget = snapshot.activationRunbook?.currentStage?.target || null;
+  const primaryActionTarget = shouldFollowRunbookStage
+    ? runbookStageTarget
+    : snapshot.nextRequiredActionTarget;
   const nextActionTitle = shouldFollowRunbookStage ? runbookSummary.title : snapshot.nextRequiredActionLabel;
   const nextActionDescription = shouldFollowRunbookStage ? runbookSummary.detail : snapshot.nextRequiredActionDescription;
   const nextActionButtonLabel = shouldFollowRunbookStage ? runbookSummary.actionLabel : '次の一手へ進む';
@@ -141,7 +150,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             ) : (
               <button
                 type="button"
-                onClick={() => onChangeView(nextActionView)}
+                onClick={() => onFollowActivationTarget(primaryActionTarget, nextActionView)}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
               >
                 {nextActionButtonLabel} <ArrowRight className="h-4 w-4" />
@@ -177,7 +186,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             </div>
             <button
               type="button"
-              onClick={() => onChangeView(runbookSummary.targetView)}
+              onClick={() => onFollowActivationTarget(runbookStageTarget || snapshot.nextRequiredActionTarget, runbookSummary.targetView)}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
             >
               {runbookSummary.actionLabel} <ArrowRight className="h-4 w-4" />

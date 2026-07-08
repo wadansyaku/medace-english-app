@@ -1,7 +1,6 @@
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { AccountOverview, CommercialRequest, UserProfile } from '../../types';
-import type { CommercialRequestPayload } from '../../contracts/storage';
 import { SUBSCRIPTION_PLAN_LABELS } from '../../types';
 import AdSenseSlot from '../AdSenseSlot';
 import CommercialUpgradePanel from '../commercial/CommercialUpgradePanel';
@@ -19,7 +18,6 @@ interface DashboardAccountSectionProps {
   coachNotificationCount: number;
   showAdSlots: boolean;
   isCompact?: boolean;
-  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
   onToggle: () => void;
 }
 
@@ -35,7 +33,6 @@ const DashboardAccountSection: React.FC<DashboardAccountSectionProps> = ({
   coachNotificationCount,
   showAdSlots,
   isCompact = false,
-  onSubmitCommercialRequest,
   onToggle,
 }) => (
   <div className="space-y-4">
@@ -102,11 +99,8 @@ const DashboardAccountSection: React.FC<DashboardAccountSectionProps> = ({
         )}
 
         <CommercialUpgradePanel
-          user={user}
           accountOverview={accountOverview}
           requests={commercialRequests}
-          source="DASHBOARD_ACCOUNT"
-          onSubmit={onSubmitCommercialRequest}
         />
 
         {showAdSlots && (

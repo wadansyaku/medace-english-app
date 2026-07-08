@@ -73,7 +73,7 @@ describe('public abuse limits', () => {
   it('rejects oversized public commercial request bodies before storage writes', async () => {
     const request = createSameOriginPost('https://medace-english-app.pages.dev/api/public/commercial-request', {
       kind: CommercialRequestKind.BUSINESS_TRIAL,
-      contactName: '導入担当',
+      contactName: '受付担当',
       contactEmail: 'teacher@example.jp',
       organizationName: 'Steady Study',
       teachingFormat: TeachingFormat.ONLINE,
@@ -218,7 +218,7 @@ describe('public abuse limits', () => {
       organizationName: 'Steady Study',
       teachingFormat: TeachingFormat.ONLINE,
       requestedWorkspaceRole: CommercialWorkspaceRole.GROUP_ADMIN,
-      message: '導入相談です。',
+      message: '受付内容です。',
       source: 'public-business-role',
     });
     const route = findPublicRoute('public/commercial-request', request);

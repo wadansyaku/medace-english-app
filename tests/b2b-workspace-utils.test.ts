@@ -17,6 +17,7 @@ import {
   buildBusinessAdminDecisionModel,
   filterAssignmentStudents,
   getBusinessAdminRunbookSummary,
+  resolveBusinessAdminActivationNavigationIntent,
   resolveSelectedAssignmentStudentUid,
 } from '../utils/businessAdminDashboard';
 import {
@@ -213,6 +214,33 @@ describe('b2b workspace helpers', () => {
     expect(resolveFocusedStudentUid(filteredStudents, 'missing')).toBe('student-a');
     expect(resolveSelectedAssignmentStudentUid([], 'student-a')).toBeNull();
     expect(resolveFocusedStudentUid([], 'student-a')).toBeNull();
+  });
+
+  it('turns activation targets into assignment preselection intent', () => {
+    expect(resolveBusinessAdminActivationNavigationIntent({
+      kind: 'MISSION_ASSIGNMENT',
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      organizationId: 'org-1',
+      studentUid: 'student-a',
+      studentName: 'Alpha',
+      missionAssignmentId: 'mission-assignment-1',
+    }, BusinessAdminWorkspaceView.OVERVIEW)).toEqual({
+      targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      assignmentFilter: 'ALL',
+      assignmentQuery: '',
+      selectedStudentUid: 'student-a',
+    });
+
+    expect(resolveBusinessAdminActivationNavigationIntent({
+      kind: 'WORKSHEET',
+      targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      organizationId: 'org-1',
+    }, BusinessAdminWorkspaceView.OVERVIEW)).toEqual({
+      targetView: BusinessAdminWorkspaceView.WORKSHEETS,
+      assignmentFilter: null,
+      assignmentQuery: null,
+      selectedStudentUid: null,
+    });
   });
 
   it('sorts instructor student queues by queue segment first and oldest activity next', () => {

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { getHomeViewForUser } from '../config/access';
 import { UserRole, type LearningTaskIntent, type UserProfile } from '../types';
 import {
-  getPublicBusinessRolePath,
+  getPublicBusinessRoleDirectPath,
+  parsePublicBusinessRoleDirectPath,
   parsePublicBusinessRoleKey,
   SERVICE_ADMIN_ACCESS_PATH,
   type PublicBusinessRoleKey,
@@ -111,6 +112,15 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   const segments = normalizedPath.split('/').filter(Boolean);
   const [root, bookId, roleSlug] = segments;
   const taskFromSearch = parseTaskIntentFromSearch(search);
+  const directPublicRole = parsePublicBusinessRoleDirectPath(normalizedPath);
+
+  if (directPublicRole) {
+    return {
+      ...initialNavigationState,
+      currentView: 'publicRole',
+      publicRole: directPublicRole,
+    };
+  }
 
   if (root === 'public' && bookId === 'roles' && roleSlug) {
     const publicRole = parsePublicBusinessRoleKey(roleSlug);
@@ -197,7 +207,7 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
     case 'publicInfo':
       return '/public';
     case 'publicRole':
-      return state.publicRole ? getPublicBusinessRolePath(state.publicRole) : '/public';
+      return state.publicRole ? getPublicBusinessRoleDirectPath(state.publicRole) : '/public';
     case 'resetPassword': {
       const token = state.passwordResetToken ? `?token=${encodeURIComponent(state.passwordResetToken)}` : '';
       return `/reset-password${token}`;

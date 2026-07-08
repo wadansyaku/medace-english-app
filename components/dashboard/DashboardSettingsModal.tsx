@@ -1,6 +1,5 @@
 import React from 'react';
 import { RefreshCw, Settings, Sparkles, Target, User, X } from 'lucide-react';
-import type { CommercialRequestPayload } from '../../contracts/storage';
 import {
   ANNOUNCEMENT_SEVERITY_LABELS,
   type CommercialRequest,
@@ -11,7 +10,6 @@ import {
   LearningPreferenceIntensity,
   type AccountOverview,
   UserGrade,
-  type UserProfile,
   type UserStudyMode,
   UserStudyMode as UserStudyModeEnum,
   USER_STUDY_MODE_LABELS,
@@ -39,7 +37,6 @@ const DISPLAY_DENSITY_OPTIONS: Array<{ value: DisplayDensity; label: string; des
 
 interface DashboardSettingsModalProps {
   open: boolean;
-  user: UserProfile;
   accountOverview: AccountOverview | null;
   commercialRequests: CommercialRequest[];
   announcementFeed: ProductAnnouncementFeed;
@@ -61,7 +58,6 @@ interface DashboardSettingsModalProps {
   onClose: () => void;
   onRetakeLevel: () => void;
   onSave: () => void;
-  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
   onEditName: (value: string) => void;
   onEditGrade: (value: UserGrade) => void;
   onEditStudyMode: (value: UserStudyMode) => void;
@@ -108,7 +104,6 @@ const MobileSettingsSection: React.FC<MobileSettingsSectionProps> = ({
 
 const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
   open,
-  user,
   accountOverview,
   commercialRequests,
   announcementFeed,
@@ -130,7 +125,6 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
   onClose,
   onRetakeLevel,
   onSave,
-  onSubmitCommercialRequest,
   onEditName,
   onEditGrade,
   onEditStudyMode,
@@ -221,16 +215,13 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
             </section>
 
             <MobileSettingsSection
-              title="導入・お知らせ"
-              description="学校・教室向け導入、プラン相談、最近のお知らせをまとめて確認できます。"
-              badge={<span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-[11px] font-bold text-medace-700">新機能</span>}
+              title="プラン・お知らせ"
+              description="現在のプラン、受付状況、最近のお知らせをまとめて確認できます。"
+              badge={<span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-[11px] font-bold text-medace-700">確認</span>}
             >
               <CommercialUpgradePanel
-                user={user}
                 accountOverview={accountOverview}
                 requests={commercialRequests}
-                source="SETTINGS_MODAL"
-                onSubmit={onSubmitCommercialRequest}
               />
 
               {announcementFeed.announcements.length > 0 && (
@@ -701,11 +692,8 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
 
           <div className="ui-panel-subtle">
             <CommercialUpgradePanel
-              user={user}
               accountOverview={accountOverview}
               requests={commercialRequests}
-              source="SETTINGS_MODAL"
-              onSubmit={onSubmitCommercialRequest}
             />
             {announcementFeed.announcements.length > 0 && (
               <div className="mt-5 rounded-[28px] border border-slate-200 bg-white p-5">

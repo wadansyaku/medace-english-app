@@ -64,4 +64,38 @@ describe('worksheet print html', () => {
     expect(html).toContain('&lt;b&gt;Doctors&lt;/b&gt;');
     expect(html).toContain('&lt;img src=x onerror=student()&gt;');
   });
+
+  it('labels book-range handouts as distribution prints instead of student-specific sheets', () => {
+    const html = buildPrintableWorksheetHtml(
+      user,
+      undefined,
+      {
+        studentUid: 'book-range',
+        studentName: '配布プリント',
+        organizationName: 'Steady Study Demo Academy',
+        source: 'book_range',
+        sourceLabel: 'Starter 120 / No. 10 - 40',
+        words: [
+          {
+            wordId: 'word-1',
+            bookId: 'book-1',
+            bookTitle: 'Starter 120',
+            word: 'stabilize',
+            definition: '安定させる',
+            status: 'new',
+            lastStudiedAt: 0,
+            attemptCount: 0,
+            correctCount: 0,
+          },
+        ],
+      },
+      [question],
+      'HANDOUT',
+    );
+
+    expect(html).toContain('配布プリント');
+    expect(html).toContain('対象範囲');
+    expect(html).toContain('Starter 120 / No. 10 - 40');
+    expect(html).not.toContain('配布プリント さん用');
+  });
 });

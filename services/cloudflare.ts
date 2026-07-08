@@ -1,6 +1,7 @@
 import {
   CatalogImportRequest,
   CatalogImportResult,
+  CommercialActivationSetupResult,
   AdminPasswordResetLinkIssuePayload,
   AdminPasswordResetLinkIssueResult,
   AdminPasswordRecoveryUpdatePayload,
@@ -504,6 +505,13 @@ export class CloudflareStorageService implements IStorageService {
     return this.callStorage({
       action: 'updateCommercialRequest',
       payload,
+    });
+  }
+
+  async prepareCommercialActivationSetup(requestId: number): Promise<CommercialActivationSetupResult> {
+    return this.callStorage({
+      action: 'prepareCommercialActivationSetup',
+      payload: { requestId },
     });
   }
 

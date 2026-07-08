@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { CommercialRequestUpdatePayload, ProductAnnouncementUpsertPayload } from '../contracts/storage';
-import { listCommercialRequests, updateCommercialRequest } from '../services/commercial';
+import type {
+  CommercialActivationSetupResult,
+  CommercialRequestUpdatePayload,
+  ProductAnnouncementUpsertPayload,
+} from '../contracts/storage';
+import {
+  listCommercialRequests,
+  prepareCommercialActivationSetup,
+  updateCommercialRequest,
+} from '../services/commercial';
 import { listProductAnnouncementsAdmin, upsertProductAnnouncement } from '../services/announcements';
 import type { CommercialRequest, ProductAnnouncement } from '../types';
 
@@ -37,6 +45,12 @@ export const useAdminCommercialOps = () => {
     await refresh();
   }, [refresh]);
 
+  const runInitialB2BSetup = useCallback(async (requestId: number): Promise<CommercialActivationSetupResult> => {
+    const result = await prepareCommercialActivationSetup(requestId);
+    await refresh();
+    return result;
+  }, [refresh]);
+
   const upsertAnnouncement = useCallback(async (payload: ProductAnnouncementUpsertPayload) => {
     await upsertProductAnnouncement(payload);
     await refresh();
@@ -49,6 +63,7 @@ export const useAdminCommercialOps = () => {
     error,
     refresh,
     updateRequest,
+    runInitialB2BSetup,
     upsertAnnouncement,
   };
 };

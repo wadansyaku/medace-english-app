@@ -250,9 +250,9 @@ export const buildAdminPmfSummary = (snapshot: ProductKpiDailySnapshot): AdminPm
       },
       {
         id: 'commercial-conversion',
-        label: '導入相談転換率',
+        label: '受付キュー作成率',
         value: formatRate(commercialConversionRate30d),
-        detail: `30日内のフォーム open ${snapshot.commercialFormOpenCount30d} 件から相談送信 ${snapshot.commercialRequestCount30d} 件です。`,
+        detail: `30日内の公開ロール接点 ${snapshot.commercialFormOpenCount30d} 件から受付作成 ${snapshot.commercialRequestCount30d} 件です。`,
         tone: snapshot.commercialFormOpenCount30d > 0 ? toneFromRate(commercialConversionRate30d, { strong: 20, watch: 1 }) : 'neutral',
       },
     ],

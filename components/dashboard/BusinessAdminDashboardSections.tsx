@@ -29,6 +29,10 @@ interface BusinessAdminDashboardSectionsProps {
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   activeView: BusinessAdminWorkspaceView;
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
+  onFollowActivationTarget: (
+    target: OrganizationActivationActionTarget | null | undefined,
+    fallbackView: BusinessAdminWorkspaceView,
+  ) => void;
   controller: BusinessAdminDashboardController;
   snapshot: OrganizationDashboardSnapshot;
   settingsSnapshot: OrganizationSettingsSnapshot | null;
@@ -150,7 +154,10 @@ const resolveViewGate = (
 
 interface ActivationGateCardProps {
   gate: ActivationGateDefinition;
-  onChangeView: (view: BusinessAdminWorkspaceView) => void;
+  onFollowActivationTarget: (
+    target: OrganizationActivationActionTarget | null | undefined,
+    fallbackView: BusinessAdminWorkspaceView,
+  ) => void;
   canBootstrap: boolean;
   controller: BusinessAdminDashboardController;
   nextRequiredActionTarget: OrganizationActivationActionTarget | null;
@@ -158,7 +165,7 @@ interface ActivationGateCardProps {
 
 const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
   gate,
-  onChangeView,
+  onFollowActivationTarget,
   canBootstrap,
   controller,
   nextRequiredActionTarget,
@@ -182,7 +189,7 @@ const ActivationGateCard: React.FC<ActivationGateCardProps> = ({
       ) : (
         <button
           type="button"
-          onClick={() => onChangeView(gate.targetView)}
+          onClick={() => onFollowActivationTarget(nextRequiredActionTarget, gate.targetView)}
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
         >
           {gate.ctaLabel} <ArrowRight className="h-4 w-4" />
@@ -209,6 +216,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   onSelectBook,
   activeView,
   onChangeView,
+  onFollowActivationTarget,
   controller,
   snapshot,
   settingsSnapshot,
@@ -228,7 +236,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
     return (
       <ActivationGateCard
         gate={gate}
-        onChangeView={onChangeView}
+        onFollowActivationTarget={onFollowActivationTarget}
         canBootstrap={canBootstrap}
         controller={controller}
         nextRequiredActionTarget={snapshot.nextRequiredActionTarget}
@@ -245,6 +253,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         isLocalMockData={isLocalMockData}
         nextActionView={nextActionView}
         onChangeView={onChangeView}
+        onFollowActivationTarget={onFollowActivationTarget}
         activationNotificationPending={controller.activationNotificationPending}
         onSendActivationNotification={(target) => void controller.handleSendActivationNotification(target)}
         policyFeatureSummary={policy.featureSummary}

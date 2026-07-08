@@ -3,10 +3,12 @@ import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
 import { expectEmptyPayload, expectObject } from '../request-validation';
 import {
+  assertCommercialActivationSetupPayload,
   assertCommercialRequestUpdatePayload,
   handleCreateCommercialRequest,
   handleGetCommercialRequestStatus,
   handleListCommercialRequests,
+  handlePrepareCommercialActivationSetup,
   handleUpdateCommercialRequest,
 } from '../commercial-actions';
 
@@ -29,7 +31,12 @@ export const commercialStorageActionDefinitions = {
     roles: [UserRole.ADMIN],
     execute: ({ env, user }, payload) => handleUpdateCommercialRequest(env, user, payload),
   }),
+  prepareCommercialActivationSetup: defineStorageAction({
+    parse: (payload) => assertCommercialActivationSetupPayload(expectObject(payload) as never),
+    roles: [UserRole.ADMIN],
+    execute: ({ env, user }, payload) => handlePrepareCommercialActivationSetup(env, user, payload),
+  }),
 } satisfies Pick<
   StorageActionDefinitionMap,
-  'getCommercialRequestStatus' | 'submitCommercialRequest' | 'listCommercialRequests' | 'updateCommercialRequest'
+  'getCommercialRequestStatus' | 'submitCommercialRequest' | 'listCommercialRequests' | 'updateCommercialRequest' | 'prepareCommercialActivationSetup'
 >;

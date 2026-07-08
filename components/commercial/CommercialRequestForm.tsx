@@ -80,14 +80,14 @@ const CommercialRequestForm: React.FC<CommercialRequestFormProps> = ({
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Commercial Request</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Request Intake</p>
         <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">{title}</h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{description}</p>
       </div>
 
       <div className="mt-5 space-y-4" data-testid="commercial-request-form">
         <div>
-          <label className="ui-form-label">相談種別</label>
+          <label className="ui-form-label">受付種別</label>
           <div className="mt-2 grid gap-2 md:grid-cols-3">
             {availableKinds.map((option) => (
               <button

@@ -14,17 +14,20 @@ import {
 import {
   BusinessAdminWorkspaceView,
   SUBSCRIPTION_PLAN_LABELS,
+  type OrganizationActivationActionTarget,
   type UserProfile,
 } from '../types';
 import { useBusinessAdminDashboardData } from '../hooks/useBusinessAdminDashboardData';
 import { useBusinessAdminDashboardController } from '../hooks/useBusinessAdminDashboardController';
 import type {
+  AssignmentFilter,
   BusinessAdminDecisionAction,
   BusinessAdminDecisionFocusItem,
   BusinessAdminDecisionMetric,
   BusinessAdminDecisionModel,
   BusinessAdminDecisionTone,
 } from '../utils/businessAdminDashboard';
+import { resolveBusinessAdminActivationNavigationIntent } from '../utils/businessAdminDashboard';
 import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import BusinessAdminDashboardSections from './dashboard/BusinessAdminDashboardSections';
@@ -266,17 +269,32 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
   const viewCopy = VIEW_COPY[activeView];
   const isLocalMockData = storageMode.capabilities.organization.usesMockData;
   const decisionModel = controller.decisionModel;
-  const handleDecisionAction = (action: BusinessAdminDecisionAction) => {
-    if (action.assignmentFilter) {
-      controller.setAssignmentFilter(action.assignmentFilter);
+  const handleActivationTargetNavigation = (
+    target: OrganizationActivationActionTarget | null | undefined,
+    fallbackView: BusinessAdminWorkspaceView,
+    assignmentFilter: AssignmentFilter | null = null,
+  ) => {
+    const intent = resolveBusinessAdminActivationNavigationIntent(target, fallbackView, assignmentFilter);
+
+    if (intent.assignmentFilter) {
+      controller.setAssignmentFilter(intent.assignmentFilter);
+    }
+    if (intent.assignmentQuery !== null) {
+      controller.setAssignmentQuery(intent.assignmentQuery);
+    }
+    if (intent.selectedStudentUid) {
+      controller.setSelectedStudentUid(intent.selectedStudentUid);
     }
 
+    onChangeView(intent.targetView);
+  };
+  const handleDecisionAction = (action: BusinessAdminDecisionAction) => {
     if (action.kind === 'SEND_FIRST_NOTIFICATION') {
-      void controller.handleSendActivationNotification(snapshot.nextRequiredActionTarget);
+      void controller.handleSendActivationNotification(action.target || snapshot.nextRequiredActionTarget);
       return;
     }
 
-    onChangeView(action.targetView);
+    handleActivationTargetNavigation(action.target, action.targetView, action.assignmentFilter || null);
   };
 
   return (
@@ -349,6 +367,7 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
         onSelectBook={onSelectBook}
         activeView={activeView}
         onChangeView={onChangeView}
+        onFollowActivationTarget={handleActivationTargetNavigation}
         controller={controller}
         snapshot={snapshot}
         settingsSnapshot={settingsSnapshot}

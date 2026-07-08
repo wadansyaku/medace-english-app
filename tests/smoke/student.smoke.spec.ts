@@ -2,7 +2,6 @@ import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
   MOBILE_FLOW_TEST_IDS,
-  completeDiagnostic,
   findUnexpectedHorizontalOverflow,
   finishStudySession,
   getCurrentSessionUser,
@@ -14,22 +13,12 @@ import {
   updateSessionProfile,
 } from './smoke-support';
 
-test('demo student can complete onboarding and reach the dashboard', async ({ page }) => {
+test('demo student can start immediately without onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
 
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
-  await expect(page.getByTestId('onboarding-profile')).toBeVisible();
-
-  await page.getByRole('button', { name: /中学2年生/ }).click();
-  await page.getByRole('button', { name: /学校英語はだいたい分かる/ }).click();
-  await page.getByRole('button', { name: '診断を始める' }).click();
-
-  await completeDiagnostic(page);
-
-  await expect(page.getByTestId('onboarding-result')).toBeVisible();
-  await page.getByRole('button', { name: 'このレベルで学習を始める' }).click();
-
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  await expect(page.getByTestId('onboarding-profile')).toHaveCount(0);
   await expect(page.getByText('今日やること')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);

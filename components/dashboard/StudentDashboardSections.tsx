@@ -17,7 +17,6 @@ import type {
   StudentDashboardTaskId,
   useStudentDashboardViewModel,
 } from '../../hooks/useStudentDashboardViewModel';
-import type { CommercialRequestPayload } from '../../contracts/storage';
 import { workspaceService } from '../../services/workspace';
 import StudyCompanion from '../StudyCompanion';
 import MotivationBoard from '../MotivationBoard';
@@ -56,7 +55,6 @@ interface StudentDashboardSectionsProps {
   onSelectLearningRoute: (routeId: StudentDashboardLearningRouteId) => void;
   onSelectPracticeLane: (lane: FocusedPracticeLane) => void;
   onStartTask: (task: LearningTaskIntent) => void;
-  onSubmitCommercialRequest: (payload: CommercialRequestPayload) => Promise<void>;
 }
 
 export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> = ({
@@ -70,7 +68,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   onSelectLearningRoute,
   onSelectPracticeLane,
   onStartTask,
-  onSubmitCommercialRequest,
 }) => {
   const coachActionType = viewModel.coachRecommendedActionType;
   const primaryMission = viewModel.primaryMission;
@@ -368,7 +365,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         coachNotificationCount={viewModel.coachNotifications.length}
         showAdSlots={viewModel.showAdSlots}
         isCompact={isStudentMobileShell}
-        onSubmitCommercialRequest={onSubmitCommercialRequest}
         onToggle={() => controller.setShowAccountDetails((previous) => !previous)}
       />
     </div>

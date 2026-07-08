@@ -1,12 +1,9 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { AlertTriangle, ArrowLeft, BookOpen, Building2, Sparkles } from 'lucide-react';
 import getClientRuntimeFlags from '../config/runtime';
-import { getSubscriptionPolicy } from '../config/subscription';
-import { CommercialRequestKind, type PublicMotivationSnapshot, SubscriptionPlan } from '../types';
+import { type PublicMotivationSnapshot } from '../types';
 import PublicMotivationPanel from './PublicMotivationPanel';
 import BusinessRolePreviewSection from './commercial/BusinessRolePreviewSection';
-import CommercialRequestForm from './commercial/CommercialRequestForm';
-import { submitPublicCommercialRequest } from '../services/commercial';
 import type { PublicBusinessRoleKey } from '../shared/publicBusinessRoles';
 
 interface PublicInfoPageProps {
@@ -16,12 +13,6 @@ interface PublicInfoPageProps {
   motivationError: string | null;
   onOpenRole: (roleKey: PublicBusinessRoleKey) => void;
 }
-
-const PLAN_PREVIEWS = [
-  SubscriptionPlan.TOC_FREE,
-  SubscriptionPlan.TOC_PAID,
-  SubscriptionPlan.TOB_PAID,
-].map((plan) => getSubscriptionPolicy(plan));
 
 const PLATFORM_HIGHLIGHTS = [
   {
@@ -41,25 +32,6 @@ const PLATFORM_HIGHLIGHTS = [
   },
 ];
 
-const CONSULTATION_STEPS = [
-  {
-    title: '1. 対象塾か判断',
-    detail: 'オンライン中心か、既存教材を配信したいか、講師フォローまで必要かを先に確認します。',
-  },
-  {
-    title: '2. 役割別の見え方を見る',
-    detail: '生徒・講師・管理者でどこまで使うかを公開プレビューで揃えます。',
-  },
-  {
-    title: '3. 導入相談を送る',
-    detail: '授業形態、開始時期、想定人数を送れば、必要な案内だけ個別に返します。',
-  },
-  {
-    title: '4. 開始までの流れを確認',
-    detail: '自動発行ではなく、招待または手動 provisioning を前提に導入を進めます。',
-  },
-];
-
 const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   onBack,
   motivationSnapshot,
@@ -68,7 +40,6 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
   onOpenRole,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
-  const requestSectionRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <div className="mx-auto mt-6 max-w-5xl space-y-6">
@@ -77,7 +48,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         onClick={onBack}
         className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-base font-bold text-slate-700 transition-colors hover:bg-slate-50"
       >
-        <ArrowLeft className="h-4 w-4" /> ログイン画面に戻る
+        <ArrowLeft className="h-4 w-4" /> 最初の画面へ
       </button>
 
       <PublicMotivationPanel
@@ -85,7 +56,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         loading={motivationLoading}
         error={motivationError}
         title="公開ページで見える学習ライブ"
-        description="導入前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
+        description="ログイン前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
       />
 
       {(runtimeFlags.appOnlineOnly || !runtimeFlags.enablePublicBusinessDemo) && (
@@ -97,7 +68,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
             <div className="space-y-2 text-sm leading-relaxed text-amber-900">
               {runtimeFlags.appOnlineOnly && (
                 <p>
-                  現在の pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は、導入前の段階実装を完了するまで対象外です。
+                  現在の pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は、公開前の段階実装を完了するまで対象外です。
                 </p>
               )}
               {!runtimeFlags.enablePublicBusinessDemo && (
@@ -113,14 +84,14 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
         <div className="border-b border-slate-100 bg-medace-50 p-8 md:p-10">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold tracking-[0.12em] text-medace-500">Public Guide</p>
+            <p className="text-sm font-bold tracking-[0.12em] text-medace-500">Role Links</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-              アプリの説明と
+              役割別の
               <br />
-              料金の考え方
+              専用リンク
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-[1.05rem]">
-              Steady Study は、個人学習の立ち上がりを軽くしつつ、学校・教室では教材配信と講師フォローまでまとめて扱える設計です。
+              Steady Study は、生徒・講師・学校管理者・サービス管理者を分けて、それぞれの作業画面へ直接入れる設計に整理しています。
             </p>
           </div>
 
@@ -139,52 +110,9 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
 
         <div className="space-y-8 p-6 md:p-8">
           <BusinessRolePreviewSection
-            onOpenGuide={() => requestSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             onOpenRole={onOpenRole}
           />
 
-          <section>
-            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">Plan Overview</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">料金体系の考え方</h2>
-            <p className="mt-3 text-base leading-relaxed text-slate-600">
-              個人利用はそのまま始められる導線、ビジネス利用は教材配信と運用画面を含めた個別ご案内を前提にしています。
-            </p>
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              {PLAN_PREVIEWS.map((plan) => (
-                <div key={plan.plan} className="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
-                  <div className="text-sm font-bold text-slate-500">{plan.audienceLabel}</div>
-                  <div className="mt-2 text-lg font-black text-slate-950">{plan.label}</div>
-                  <div className="mt-1 text-base font-black text-medace-700">{plan.priceLabel}</div>
-                  <p className="mt-3 text-base leading-relaxed text-slate-600">{plan.pricingNote}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section>
-            <p className="text-sm font-bold tracking-[0.12em] text-slate-500">導入の進め方</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">オンライン塾向けの4ステップ</h2>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {CONSULTATION_STEPS.map((step) => (
-                <div key={step.title} className="rounded-3xl border border-slate-200 bg-slate-50/70 px-5 py-5">
-                  <div className="text-base font-black text-slate-950">{step.title}</div>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{step.detail}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <div ref={requestSectionRef}>
-            <CommercialRequestForm
-              title="学校・教室向け導入を相談する"
-              description="公開画面からそのまま相談を送れます。学校・教室導入、講師/管理者アカウントの案内、無料トライアルの相談をまとめて受け付けます。"
-              source="PUBLIC_GUIDE"
-              submitLabel="導入相談を送る"
-              availableKinds={[CommercialRequestKind.BUSINESS_TRIAL, CommercialRequestKind.BUSINESS_ROLE_CONVERSION]}
-              defaultKind={CommercialRequestKind.BUSINESS_TRIAL}
-              onSubmit={submitPublicCommercialRequest}
-            />
-          </div>
         </div>
       </div>
     </div>

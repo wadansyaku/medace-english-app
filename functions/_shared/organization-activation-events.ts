@@ -13,7 +13,7 @@ import { canAccessVisibleStudent } from './student-visibility';
 import { readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
 
-export const CLASSROOM_WORKSHEET_SOURCES = ['history', 'catalog_fallback', 'starter_fallback'] as const satisfies readonly ClassroomWorksheetSource[];
+export const CLASSROOM_WORKSHEET_SOURCES = ['history', 'catalog_fallback', 'starter_fallback', 'book_range'] as const satisfies readonly ClassroomWorksheetSource[];
 export const CLASSROOM_WORKSHEET_LIFECYCLE_STATUSES = ['printed', 'issued', 'collected', 'scored'] as const satisfies readonly ClassroomWorksheetLifecycleStatus[];
 
 interface AppendClassroomActivationEventInput {

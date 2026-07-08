@@ -19,7 +19,9 @@ const BusinessAdminWorksheetsSection: React.FC<BusinessAdminWorksheetsSectionPro
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
       <WorksheetPrintLauncher
         user={user}
-        buttonLabel="生徒別にPDF問題を作る"
+        buttonLabel="単語帳範囲からPDF問題を作る"
+        defaultSourceMode="BOOK_RANGE"
+        allowSourceModeSwitch={false}
         buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
       />
     </section>

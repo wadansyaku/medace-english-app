@@ -41,6 +41,7 @@ import {
   ProductAnnouncement,
   ProductAnnouncementFeed,
   OrganizationDashboardSnapshot,
+  OrganizationActivationActionTarget,
   OrganizationRole,
   StudentSummary,
   StudentWorksheetSnapshot,
@@ -226,6 +227,27 @@ export interface CommercialRequestUpdatePayload {
   targetOrganizationId?: string;
   targetOrganizationName?: string;
   targetOrganizationRole?: OrganizationRole;
+}
+
+export interface CommercialActivationSetupPayload {
+  requestId: number;
+}
+
+export interface CommercialActivationSetupResult {
+  commercialRequestId: number;
+  organizationId: string;
+  organizationName: string;
+  actorUserId: string;
+  createdCohort: boolean;
+  cohortId: string;
+  studentUid: string;
+  instructorUid: string;
+  createdMission: boolean;
+  assignedMission: boolean;
+  missionId: string;
+  missionAssignmentId?: string;
+  nextActionLabel: string;
+  nextActionTarget: OrganizationActivationActionTarget;
 }
 
 export interface ProductAnnouncementUpsertPayload {
@@ -503,6 +525,10 @@ export interface StorageActionMap {
     payload: CommercialRequestUpdatePayload;
     response: CommercialRequest;
   };
+  prepareCommercialActivationSetup: {
+    payload: CommercialActivationSetupPayload;
+    response: CommercialActivationSetupResult;
+  };
   listProductAnnouncementsAdmin: {
     payload: undefined;
     response: ProductAnnouncement[];
@@ -570,6 +596,7 @@ export const STORAGE_ACTIONS = [
   'acknowledgeAnnouncement',
   'listCommercialRequests',
   'updateCommercialRequest',
+  'prepareCommercialActivationSetup',
   'listProductAnnouncementsAdmin',
   'upsertProductAnnouncement',
 ] as const satisfies readonly StorageAction[];

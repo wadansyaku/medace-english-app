@@ -214,6 +214,11 @@ const pushRecord = (status, label, detail) => {
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
 const isGithubInventoryPermissionError = (result) => /Resource not accessible by integration/i.test(`${result.stderr}\n${result.stdout}`);
 const isTransientCloudflareApiError = (result) => /Received a malformed response from the API|502 Bad Gateway|503 Service Temporarily Unavailable|504 Gateway Timeout/i.test(`${result.stderr}\n${result.stdout}`);
+const isProtectedReleaseContext = isGitHubActions && (
+  process.env.GITHUB_REF_PROTECTED === 'true'
+  || ['main', 'master'].includes(process.env.GITHUB_REF_NAME || '')
+  || /^Deploy Pages/.test(process.env.GITHUB_WORKFLOW || '')
+);
 
 const runWranglerWithTransientRetries = (args, { transientRetries = 2, retryDelayMs = 1000, ...options } = {}) => {
   let result = runWrangler(args, options);
@@ -249,8 +254,19 @@ const previewD1Binding = previewConfig.d1_databases?.[0] || {};
 const primaryR2Bindings = wranglerConfig.r2_buckets || [];
 const previewR2Bindings = previewConfig.r2_buckets || [];
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
-const d1Database = process.env.CLOUDFLARE_D1_DATABASE || primaryD1Binding.database_name || '';
-const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW || `${d1Database}-preview`;
+const configuredD1Database = primaryD1Binding.database_name || '';
+const configuredPreviewD1Database = previewD1Binding.database_name || (configuredD1Database ? `${configuredD1Database}-preview` : '');
+const runtimeD1Database = process.env.CLOUDFLARE_D1_DATABASE || '';
+const runtimeD1DatabaseIsPreview = Boolean(
+  runtimeD1Database
+  && (runtimeD1Database === configuredPreviewD1Database || runtimeD1Database.endsWith('-preview'))
+);
+const d1Database = process.env.CLOUDFLARE_D1_DATABASE_PRODUCTION
+  || (runtimeD1Database && !runtimeD1DatabaseIsPreview ? runtimeD1Database : configuredD1Database)
+  || runtimeD1Database;
+const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW
+  || (runtimeD1DatabaseIsPreview ? runtimeD1Database : configuredPreviewD1Database)
+  || (d1Database ? `${d1Database}-preview` : '');
 const d1DatabaseId = primaryD1Binding.database_id || '';
 const previewD1DatabaseId = previewD1Binding.database_id || primaryD1Binding.preview_database_id || '';
 const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
@@ -271,6 +287,15 @@ pushRecord('info', 'Preview D1 database id', previewD1DatabaseId || '(missing en
 pushRecord('info', 'Writing AI mode', writingAiMode || '(missing locally, expecting Pages binding)');
 pushRecord('info', 'R2 buckets', r2Buckets.length > 0 ? r2Buckets.map((bucket) => `${bucket.env}:${bucket.name}`).join(', ') : '(none)');
 pushRecord('info', 'GitHub repo', repoSlug || '(unable to detect from origin)');
+
+const missingCloudflareCredentials = REQUIRED_GITHUB_SECRETS.filter((name) => !process.env[name]);
+if (isProtectedReleaseContext && missingCloudflareCredentials.length > 0) {
+  pushRecord(
+    'error',
+    'Cloudflare credentials for protected release context',
+    `missing ${missingCloudflareCredentials.join(', ')}; cf:doctor must fail closed in protected/release workflows`,
+  );
+}
 
 const ghAuth = run('gh', ['auth', 'status']);
 const githubReady = recordCommand('GitHub auth', ghAuth, 'authenticated');

@@ -583,11 +583,11 @@ const main = async () => {
         contactEmail: publicCommercialEmail,
         organizationName: 'Phase 4 Academy',
         teachingFormat: 'ONLINE',
-        desiredStartTiming: '再来月に再相談',
+        desiredStartTiming: '再来月に再確認',
         requestedWorkspaceRole: 'GROUP_ADMIN',
         seatEstimate: '31-100名',
-        message: '導入相談を再送します。',
-        source: 'PUBLIC_GUIDE',
+        message: '受付内容を再送します。',
+        source: 'ROLE_LINK_PREVIEW',
       }),
     });
     assert(anonymousBusinessTrialRetry.status === 200, 'anonymous commercial request should allow a retry after the open request is closed');
@@ -1393,6 +1393,22 @@ const main = async () => {
       'analytics snapshot should increase writing review counts after the writing flow',
     );
     assert(
+      analyticsAfter.productKpis.organizationsWithWritingAssignmentCount > analyticsBefore.productKpis.organizationsWithWritingAssignmentCount,
+      'analytics snapshot should count a new organization that issued a writing assignment',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingSubmissionCount > analyticsBefore.productKpis.organizationsWithWritingSubmissionCount,
+      'analytics snapshot should count a new organization that received a writing submission',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingReviewCount > analyticsBefore.productKpis.organizationsWithWritingReviewCount,
+      'analytics snapshot should count a new organization that reached writing review return',
+    );
+    assert(
+      analyticsAfter.productKpis.organizationsWithWritingReviewCount >= 1,
+      'B2B value loop should have at least one organization reaching writing assignment -> submission -> teacher return',
+    );
+    assert(
       analyticsAfter.activationFunnel.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
       'activation funnel writing assignment counts should mirror product KPI writing counts',
     );
@@ -1421,6 +1437,30 @@ const main = async () => {
       'activation funnel should count at least one organization with a notification after the integration flow',
     );
     assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingAssignmentCount === analyticsAfter.productKpis.organizationsWithWritingAssignmentCount,
+      'activation funnel should mirror organization-level writing assignment counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingSubmissionCount === analyticsAfter.productKpis.organizationsWithWritingSubmissionCount,
+      'activation funnel should mirror organization-level writing submission counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.organizationsWithWritingReviewCount === analyticsAfter.productKpis.organizationsWithWritingReviewCount,
+      'activation funnel should mirror organization-level writing review return counts',
+    );
+    assert(
+      analyticsAfter.activationFunnel.activationVelocity30d.organizationsWithWritingReview >= 1,
+      'activation velocity should count at least one organization reaching writing review return in the last 30 days',
+    );
+    assert(
+      analyticsAfter.activationFunnel.completionRate === analyticsAfter.pmf.b2bActivationCompletionRate,
+      'PMF B2B value-loop rate should match activation funnel completion rate',
+    );
+    assert(
+      analyticsAfter.activationFunnel.completionRate > analyticsBefore.activationFunnel.completionRate,
+      'activation funnel completion rate should increase after the organization completes the writing return loop',
+    );
+    assert(
       analyticsAfterRun.snapshot.writingAssignmentsCreated30d === analyticsAfter.productKpis.writingAssignmentsCreated30d,
       'snapshot API response should match admin KPI writing assignment counts',
     );
@@ -1431,6 +1471,10 @@ const main = async () => {
     assert(
       analyticsAfterRun.snapshot.writingReviewsCompleted30d === analyticsAfter.productKpis.writingReviewsCompleted30d,
       'snapshot API response should match admin KPI writing review counts',
+    );
+    assert(
+      analyticsAfterRun.snapshot.organizationsWithWritingReviewCount === analyticsAfter.productKpis.organizationsWithWritingReviewCount,
+      'snapshot API response should match admin KPI organization-level writing review counts',
     );
 
     const futureAnnouncement = await admin.storage('upsertProductAnnouncement', {
@@ -1505,14 +1549,16 @@ const main = async () => {
       resolutionNote: '導入案内を送付し、組織アカウントへ反映しました。',
       linkedUserUid: freeStudentUser.uid,
       targetSubscriptionPlan: 'TOB_FREE',
-      targetOrganizationName: 'Phase 4 Integration Academy',
+      targetOrganizationId: groupAdminUser.organizationId,
+      targetOrganizationName: renamedGroupAdminSession.organizationName,
       targetOrganizationRole: 'GROUP_ADMIN',
     });
     assert(provisionedCommercialRequest.status === 'PROVISIONED', 'admin should be able to provision a commercial request');
 
     const provisionedSession = await freeStudent.get('/api/session');
     assert(provisionedSession.subscriptionPlan === 'TOB_FREE', 'provisioned user should receive the target subscription plan');
-    assert(provisionedSession.organizationName === 'Phase 4 Integration Academy', 'provisioned user should receive the target organization name');
+    assert(provisionedSession.organizationId === groupAdminUser.organizationId, 'provisioned user should join the selected organization');
+    assert(provisionedSession.organizationName === renamedGroupAdminSession.organizationName, 'provisioned user should receive the current target organization name');
     assert(provisionedSession.organizationRole === 'GROUP_ADMIN', 'provisioned user should receive the target organization role');
     assert(provisionedSession.role === 'INSTRUCTOR', 'GROUP_ADMIN provisioning should elevate the user to instructor role');
     assert(provisionedSession.organizationId, 'provisioned user should receive a concrete organizationId');
@@ -1521,6 +1567,49 @@ const main = async () => {
     assert(
       provisionedSettings.auditEvents.some((event) => event.actionType === 'COMMERCIAL_PROVISIONED'),
       'commercial provisioning should append an organization audit event',
+    );
+
+    const commercialActivationSetup = await admin.storage('prepareCommercialActivationSetup', {
+      requestId: freeStudentCommercialRequest.id,
+    });
+    assert(
+      commercialActivationSetup.organizationId === groupAdminUser.organizationId,
+      'commercial setup should resolve the provisioned organization',
+    );
+    assert(commercialActivationSetup.cohortId, 'commercial setup should return the prepared cohort');
+    assert(commercialActivationSetup.studentUid, 'commercial setup should return the prepared student');
+    assert(commercialActivationSetup.instructorUid, 'commercial setup should return the assigned instructor');
+    assert(commercialActivationSetup.missionId, 'commercial setup should return the initial mission');
+    assert(
+      commercialActivationSetup.nextActionTarget.kind === 'INSTRUCTOR_NOTIFICATION',
+      'commercial setup should hand off to the first notification action',
+    );
+
+    const repeatedCommercialActivationSetup = await admin.storage('prepareCommercialActivationSetup', {
+      requestId: freeStudentCommercialRequest.id,
+    });
+    assert(
+      repeatedCommercialActivationSetup.cohortId === commercialActivationSetup.cohortId,
+      'commercial setup should reuse the existing cohort on retry',
+    );
+    assert(
+      repeatedCommercialActivationSetup.missionId === commercialActivationSetup.missionId,
+      'commercial setup should reuse the existing mission on retry',
+    );
+    assert(
+      !repeatedCommercialActivationSetup.createdCohort && !repeatedCommercialActivationSetup.createdMission && !repeatedCommercialActivationSetup.assignedMission,
+      'commercial setup retry should be idempotent after the first preparation',
+    );
+
+    const provisionedSettingsAfterSetup = await freeStudent.storage('getOrganizationSettingsSnapshot');
+    assert(
+      provisionedSettingsAfterSetup.auditEvents.some((event) => event.actionType === 'COMMERCIAL_ACTIVATION_SETUP_PREPARED'),
+      'commercial setup should append an organization audit event',
+    );
+    const provisionedOrganizationSnapshot = await freeStudent.storage('getOrganizationDashboardSnapshot');
+    assert(
+      !['CREATE_COHORT', 'ASSIGN_STUDENTS', 'CREATE_FIRST_MISSION'].includes(provisionedOrganizationSnapshot.activationState),
+      'commercial setup should move the organization past the first cohort, assignment, and mission gates',
     );
 
     const groupAdminReset = await groupAdmin.storageRaw('resetAllData');

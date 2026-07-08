@@ -588,6 +588,8 @@ export const ensureDemoUser = async (env: AppEnv, role: UserRole, organizationRo
     displayName,
     role,
     organizationRole,
+    grade: role === UserRole.STUDENT ? UserGrade.JHS2 : undefined,
+    englishLevel: role === UserRole.STUDENT ? EnglishLevel.A2 : undefined,
     subscriptionPlan:
       organizationRole
         ? SubscriptionPlan.TOB_PAID

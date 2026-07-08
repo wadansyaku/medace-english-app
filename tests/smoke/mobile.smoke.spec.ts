@@ -156,14 +156,20 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
-  test('public landing keeps the school guide CTA inside the first viewport on mobile', async ({ page }) => {
+  test('public landing keeps signup and edge login inside the first viewport on mobile', async ({ page }) => {
     await page.goto('/');
 
-    const guideButton = page.getByTestId('open-business-guide-mobile');
-    await expect(guideButton).toBeVisible();
-    const box = await guideButton.boundingBox();
-    expect(box).not.toBeNull();
-    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
+    const signupButton = page.getByTestId('start-first-signup');
+    await expect(signupButton).toBeVisible();
+    const signupBox = await signupButton.boundingBox();
+    expect(signupBox).not.toBeNull();
+    expect((signupBox?.y ?? 1000) + (signupBox?.height ?? 0)).toBeLessThanOrEqual(844);
+
+    const edgePanel = page.getByTestId('auth-edge-panel');
+    await expect(edgePanel).toBeVisible();
+    const edgeBox = await edgePanel.boundingBox();
+    expect(edgeBox).not.toBeNull();
+    expect((edgeBox?.y ?? 1000) + (edgeBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
@@ -588,7 +594,13 @@ test.describe('student mobile ux', () => {
 
   test('student onboarding keeps mobile start and next actions within reach', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await page.getByTestId('start-first-signup').click();
+    await expect(page.getByTestId('auth-display-name-input')).toBeVisible();
+    await page.getByTestId('auth-display-name-input').fill('Mobile Onboarding Student');
+    await page.getByTestId('auth-email-input').fill(`mobile-onboarding-${Date.now()}@example.test`);
+    await page.getByTestId('auth-password-input').fill('smoke-pass-123');
+    await page.getByTestId('auth-confirm-password-input').fill('smoke-pass-123');
+    await page.getByTestId('auth-submit').click();
     await expect(page.getByTestId('onboarding-profile')).toBeVisible();
     await expect(page.getByTestId('onboarding-profile-mobile-note')).toBeVisible();
     await expect(page.getByText('公式資格の判定ではなく')).toBeHidden();

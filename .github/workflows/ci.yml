@@ -53,8 +53,29 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "Skipping cf:doctor because Cloudflare credentials are unavailable in this workflow context."
+          set -euo pipefail
+          missing=""
+          for required in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!required:-}" ]; then
+              missing="${missing}${missing:+,}$required"
+            fi
+          done
+
+          protected_ref="${GITHUB_REF_PROTECTED:-false}"
+          case "${GITHUB_REF_NAME:-}" in
+            main|master)
+              protected_ref="true"
+              ;;
+          esac
+
+          if [ -n "$missing" ] && [ "$protected_ref" = "true" ]; then
+            echo "Missing Cloudflare credentials in a protected CI context: $missing" >&2
+            exit 1
+          fi
+
+          if [ -n "$missing" ]; then
+            echo "Skipping cf:doctor because Cloudflare credentials are unavailable in this unprotected pull request context: $missing."
             exit 0
           fi
+
           npm run cf:doctor

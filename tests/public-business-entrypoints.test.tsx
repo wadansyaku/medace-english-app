@@ -8,9 +8,12 @@ import PublicInfoPage from '../components/PublicInfoPage';
 import {
   PUBLIC_BUSINESS_ROLE_CONFIGS,
   getPublicBusinessRoleConfig,
+  getPublicBusinessRoleDirectPath,
   getPublicBusinessRolePrimaryAction,
 } from '../shared/publicBusinessRoles';
 import { resolveRuntimeFlags } from '../shared/runtimeFlags';
+import { createEphemeralDemoUser } from '../services/storage/mockData';
+import { UserRole } from '../types';
 
 const noop = () => {};
 
@@ -48,7 +51,6 @@ const buildAuthScreen = ({
     onRequestPasswordRecovery={noop}
     onDemoLogin={noop}
     onToggleAlternateAccess={noop}
-    onOpenPublicInfo={noop}
     onClosePublicInfo={noop}
     onOpenPublicRole={noop}
     onClosePublicRole={noop}
@@ -66,14 +68,18 @@ const buildPublicInfoPage = () => renderToStaticMarkup(
 );
 
 describe('public business role entrypoints', () => {
-  it('keeps the first login surface oriented around fast trial and recovery paths', () => {
+  it('keeps the first surface oriented around immediate start with login on the edge', () => {
     const authMarkup = buildAuthScreen();
 
-    expect(authMarkup).toContain('ログイン不要で先に試せます');
-    expect(authMarkup).toContain('data-testid="auth-fast-start-panel"');
-    expect(authMarkup).toContain('data-testid="auth-fast-start-student"');
+    expect(authMarkup).toContain('data-testid="start-first-home"');
+    expect(authMarkup).toContain('最初の画面から、すぐ単語学習を始める');
+    expect(authMarkup).toContain('data-testid="demo-login-student"');
+    expect(authMarkup).toContain('data-testid="auth-edge-panel"');
     expect(authMarkup).toContain('パスワードを忘れた方');
-    expect(authMarkup).toContain('導入ガイド');
+    expect(authMarkup).toContain('登録して診断へ');
+    expect(authMarkup).not.toContain('導入ガイド');
+    expect(authMarkup).not.toContain('相談フォーム');
+    expect(authMarkup).not.toContain('説明と料金を見る');
   });
 
   it('renders a password recovery panel without revealing account existence', () => {
@@ -88,16 +94,27 @@ describe('public business role entrypoints', () => {
     expect(authMarkup).toContain('再設定リクエストを受け付けました。');
   });
 
-  it('renders every role card on both login and public guide surfaces', () => {
+  it('lets the no-login student trial reach the learner home before the diagnostic', () => {
+    const demoStudent = createEphemeralDemoUser(UserRole.STUDENT);
+
+    expect(demoStudent.needsOnboarding).toBe(false);
+    expect(demoStudent.englishLevel).toBeTruthy();
+  });
+
+  it('renders role-specific direct entrypoints without consultation forms', () => {
     const authMarkup = buildAuthScreen();
     const publicMarkup = buildPublicInfoPage();
 
     for (const role of PUBLIC_BUSINESS_ROLE_CONFIGS) {
-      expect(authMarkup).toContain(role.cardTestId);
       expect(authMarkup).toContain(role.cardActionTestId);
+      expect(authMarkup).toContain(getPublicBusinessRoleDirectPath(role.key));
       expect(publicMarkup).toContain(role.cardTestId);
       expect(publicMarkup).toContain(role.cardActionTestId);
     }
+    expect(publicMarkup).not.toContain('導入相談を送る');
+    expect(publicMarkup).not.toContain('学校・教室向け導入を相談する');
+    expect(publicMarkup).not.toContain('Public Guide');
+    expect(publicMarkup).not.toContain('相談フォーム');
   });
 
   it('treats service admin demo separately from the other public business demos', () => {
@@ -134,7 +151,7 @@ describe('public business role entrypoints', () => {
     const serviceAdminConfig = getPublicBusinessRoleConfig('service-admin');
 
     expect(serviceAdminConfig.previewPanels?.length).toBeGreaterThan(0);
-    expect(serviceAdminConfig.previewPanels?.map((panel) => panel.title)).toContain('導入相談を運用タスクとして並べる');
+    expect(serviceAdminConfig.previewPanels?.map((panel) => panel.title)).toContain('受付を運用タスクとして並べる');
   });
 
   it('applies noindex only for preview deployments or explicit role pages', () => {
