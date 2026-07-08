@@ -425,27 +425,27 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
   );
 
   return (
-    <div className="mx-auto mt-6 max-w-7xl space-y-6 lg:mt-10">
+    <div className="mx-auto mt-4 max-w-7xl space-y-5 sm:mt-6 sm:space-y-6 lg:mt-10">
       <section
         data-testid="start-first-home"
-        className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]"
+        className="grid gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_400px]"
       >
-        <div className="rounded-[28px] border border-medace-200 bg-white p-6 shadow-[0_18px_48px_rgba(15,23,42,0.06)] md:p-8 lg:p-10">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 shadow-sm">
-            <span className="text-2xl font-black text-medace-700">{BRAND.mark}</span>
+        <div className="rounded-[24px] border border-medace-200 bg-white p-5 shadow-[0_18px_48px_rgba(15,23,42,0.06)] sm:rounded-[28px] sm:p-6 md:p-8 lg:p-10">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 shadow-sm sm:h-14 sm:w-14">
+            <span className="text-xl font-black text-medace-700 sm:text-2xl">{BRAND.mark}</span>
           </div>
-          <h1 className="mt-6 max-w-3xl text-3xl font-black leading-tight tracking-tight text-slate-950 md:text-5xl">
+          <h1 className="mt-4 max-w-3xl text-2xl font-black leading-tight tracking-tight text-slate-950 sm:mt-6 sm:text-3xl md:text-5xl">
             最初の画面から、すぐ単語学習を始める
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-lg">
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:mt-4 sm:text-base md:text-lg">
             登録や診断テストを後回しにして、教材ホームを先に確認できます。ログインした後は、あなたのレベルに合わせるための診断へ進みます。
           </p>
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-5 flex flex-col gap-2.5 sm:mt-7 sm:flex-row sm:gap-3">
             <button
               type="button"
               onClick={() => onDemoLogin(UserRole.STUDENT)}
               data-testid="demo-login-student"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-6 py-3 text-base font-black text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-2.5 text-base font-black text-slate-950 shadow-sm transition-colors hover:bg-medace-700 sm:min-h-12 sm:px-6 sm:py-3"
             >
               今すぐ学習を始める <ArrowRight className="h-4 w-4" />
             </button>
@@ -453,7 +453,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
               type="button"
               onClick={() => openAuthEdgePanel('SIGNUP')}
               data-testid="start-first-signup"
-              className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 text-base font-bold text-slate-700 transition-colors hover:bg-slate-50"
+              className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-base font-bold text-slate-700 transition-colors hover:bg-slate-50 sm:min-h-12 sm:px-6 sm:py-3"
             >
               登録して診断へ
             </button>
@@ -465,9 +465,9 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
           <details
             ref={authEdgePanelRef}
             data-testid="auth-edge-panel"
-            className="rounded-[24px] border border-slate-200 bg-white shadow-sm open:shadow-[0_18px_48px_rgba(15,23,42,0.08)]"
+            className="rounded-[20px] border border-slate-200 bg-white shadow-sm open:shadow-[0_18px_48px_rgba(15,23,42,0.08)] sm:rounded-[24px]"
           >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 text-left [&::-webkit-details-marker]:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left sm:px-5 sm:py-4 [&::-webkit-details-marker]:hidden">
               <span>
                 <span className="block text-sm font-black text-slate-950">ログイン / 登録</span>
                 <span className="mt-1 block text-xs font-bold text-slate-500">後からアカウントに保存する</span>
