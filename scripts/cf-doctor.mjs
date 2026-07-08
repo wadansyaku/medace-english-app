@@ -254,8 +254,19 @@ const previewD1Binding = previewConfig.d1_databases?.[0] || {};
 const primaryR2Bindings = wranglerConfig.r2_buckets || [];
 const previewR2Bindings = previewConfig.r2_buckets || [];
 const pagesProject = process.env.CLOUDFLARE_PAGES_PROJECT || wranglerConfig.name;
-const d1Database = process.env.CLOUDFLARE_D1_DATABASE || primaryD1Binding.database_name || '';
-const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW || `${d1Database}-preview`;
+const configuredD1Database = primaryD1Binding.database_name || '';
+const configuredPreviewD1Database = previewD1Binding.database_name || (configuredD1Database ? `${configuredD1Database}-preview` : '');
+const runtimeD1Database = process.env.CLOUDFLARE_D1_DATABASE || '';
+const runtimeD1DatabaseIsPreview = Boolean(
+  runtimeD1Database
+  && (runtimeD1Database === configuredPreviewD1Database || runtimeD1Database.endsWith('-preview'))
+);
+const d1Database = process.env.CLOUDFLARE_D1_DATABASE_PRODUCTION
+  || (runtimeD1Database && !runtimeD1DatabaseIsPreview ? runtimeD1Database : configuredD1Database)
+  || runtimeD1Database;
+const previewD1Database = process.env.CLOUDFLARE_D1_DATABASE_PREVIEW
+  || (runtimeD1DatabaseIsPreview ? runtimeD1Database : configuredPreviewD1Database)
+  || (d1Database ? `${d1Database}-preview` : '');
 const d1DatabaseId = primaryD1Binding.database_id || '';
 const previewD1DatabaseId = previewD1Binding.database_id || primaryD1Binding.preview_database_id || '';
 const writingAiMode = process.env.WRITING_AI_MODE || 'hybrid';
