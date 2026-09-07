@@ -2,12 +2,17 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 import { GeneratedAssetAuditStatus, WordHintAssetType, type WordData } from '../../types';
 import { AI_ACTION_ESTIMATES } from '../../config/subscription';
-import { resolveExampleTranslation, shouldAuditGeneratedAsset } from '../../shared/wordHintAssets';
+import {
+  isGeneratedAssetVisibleToLearner,
+  resolveExampleTranslation,
+  shouldAuditGeneratedAsset,
+} from '../../shared/wordHintAssets';
 import { generateMeteredGeminiSentence, generateMeteredWordImage } from './ai-actions';
 import { HttpError } from './http';
 import { recordProductEventForUser } from './product-events';
 import {
   assertBookReadAccess,
+  assertBookWriteAccess,
   buildWordHintImageUrl,
   readAll,
   readFirst,
@@ -45,6 +50,29 @@ export interface WordHintAuditSweepResult {
 const DEFAULT_AUDIT_LIMIT = 12;
 const DEFAULT_AUDIT_STALE_AFTER_HOURS = 168;
 const WORD_HINT_AUDIT_MODEL = 'gemini-2.5-flash';
+
+const parseAuditDecision = (value: unknown): AuditDecision => {
+  const parsed = value && typeof value === 'object'
+    ? value as { status?: unknown; reason?: unknown }
+    : {};
+  const reason = typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
+    ? parsed.reason.trim()
+    : '監査理由を取得できませんでした。';
+
+  if (parsed.status === GeneratedAssetAuditStatus.APPROVED) {
+    return {
+      status: GeneratedAssetAuditStatus.APPROVED,
+      reason,
+    };
+  }
+
+  return {
+    status: GeneratedAssetAuditStatus.REVIEW_REQUIRED,
+    reason: parsed.status === GeneratedAssetAuditStatus.REVIEW_REQUIRED
+      ? reason
+      : `監査判定が不明なため再確認が必要です。 ${reason}`,
+  };
+};
 
 const getAiClient = (env: AppEnv): GoogleGenAI => {
   if (!env.GEMINI_API_KEY) {
@@ -92,19 +120,23 @@ const parseDataUrl = (dataUrl: string): { mimeType: string; bytes: Uint8Array } 
   };
 };
 
-const buildWordHintImageKey = (wordId: string, mimeType: string): string => {
+const buildWordHintImageKey = (
+  wordId: string,
+  mimeType: string,
+  generationId: string,
+): string => {
   const extension = mimeType === 'image/png' ? 'png' : 'jpg';
-  return `word-hints/${wordId}/example-image.${extension}`;
+  return `word-hints/${wordId}/${generationId}.${extension}`;
 };
 
 const persistWordExample = async (
   env: AppEnv,
-  wordId: string,
+  current: DbWordHintAssetRow,
   sentence: string,
   translation: string,
 ): Promise<void> => {
   const now = Date.now();
-  await env.DB.prepare(`
+  const result = await env.DB.prepare(`
     UPDATE words
     SET example_sentence = ?,
         example_meaning = ?,
@@ -114,19 +146,30 @@ const persistWordExample = async (
         example_audited_at = NULL,
         updated_at = ?
     WHERE id = ?
+      AND example_sentence IS ?
+      AND example_meaning IS ?
+      AND example_generated_at IS ?
+      AND example_audit_status IS ?
   `).bind(
     sentence,
     translation,
     now,
     GeneratedAssetAuditStatus.PENDING,
     now,
-    wordId,
+    current.id,
+    current.example_sentence,
+    current.example_meaning,
+    current.example_generated_at,
+    current.example_audit_status,
   ).run();
+  if ((result.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, '例文ヒントが別の操作で更新されました。最新状態でやり直してください。');
+  }
 };
 
 const persistWordImage = async (
   env: AppEnv,
-  wordId: string,
+  current: DbWordHintAssetRow,
   dataUrl: string,
 ): Promise<void> => {
   if (!env.WRITING_ASSETS) {
@@ -134,32 +177,56 @@ const persistWordImage = async (
   }
 
   const { mimeType, bytes } = parseDataUrl(dataUrl);
-  const key = buildWordHintImageKey(wordId, mimeType);
+  const key = buildWordHintImageKey(current.id, mimeType, crypto.randomUUID());
   await env.WRITING_ASSETS.put(key, bytes, {
     httpMetadata: {
       contentType: mimeType,
     },
   });
 
-  const now = Date.now();
-  await env.DB.prepare(`
-    UPDATE words
-    SET example_image_key = ?,
-        example_image_content_type = ?,
-        example_image_generated_at = ?,
-        example_image_audit_status = ?,
-        example_image_audit_note = NULL,
-        example_image_audited_at = NULL,
-        updated_at = ?
-    WHERE id = ?
-  `).bind(
-    key,
-    mimeType,
-    now,
-    GeneratedAssetAuditStatus.PENDING,
-    now,
-    wordId,
-  ).run();
+  try {
+    const now = Date.now();
+    const result = await env.DB.prepare(`
+      UPDATE words
+      SET example_image_key = ?,
+          example_image_content_type = ?,
+          example_image_generated_at = ?,
+          example_image_audit_status = ?,
+          example_image_audit_note = NULL,
+          example_image_audited_at = NULL,
+          updated_at = ?
+      WHERE id = ?
+        AND example_image_key IS ?
+        AND example_image_content_type IS ?
+        AND example_image_generated_at IS ?
+        AND example_image_audit_status IS ?
+    `).bind(
+      key,
+      mimeType,
+      now,
+      GeneratedAssetAuditStatus.PENDING,
+      now,
+      current.id,
+      current.example_image_key,
+      current.example_image_content_type,
+      current.example_image_generated_at,
+      current.example_image_audit_status,
+    ).run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new HttpError(409, '画像ヒントが別の操作で更新されました。最新状態でやり直してください。');
+    }
+  } catch (error) {
+    await env.WRITING_ASSETS.delete(key).catch((cleanupError) => {
+      console.error('Failed to clean up an uncommitted word hint image.', cleanupError);
+    });
+    throw error;
+  }
+
+  if (current.example_image_key && current.example_image_key !== key) {
+    await env.WRITING_ASSETS.delete(current.example_image_key).catch((cleanupError) => {
+      console.error('Failed to clean up a superseded word hint image.', cleanupError);
+    });
+  }
 };
 
 const rereadWordData = async (env: AppEnv, wordId: string): Promise<WordData> => {
@@ -172,36 +239,70 @@ const rereadWordData = async (env: AppEnv, wordId: string): Promise<WordData> =>
 
 const markExampleAuditResult = async (
   env: AppEnv,
-  wordId: string,
+  audited: DbWordHintAssetRow,
   status: GeneratedAssetAuditStatus,
   note: string,
-): Promise<void> => {
+): Promise<boolean> => {
   const now = Date.now();
-  await env.DB.prepare(`
+  const result = await env.DB.prepare(`
     UPDATE words
     SET example_audit_status = ?,
         example_audit_note = ?,
         example_audited_at = ?,
         updated_at = ?
     WHERE id = ?
-  `).bind(status, note, now, now, wordId).run();
+      AND example_sentence IS ?
+      AND example_meaning IS ?
+      AND example_generated_at IS ?
+      AND example_audit_status IS ?
+      AND example_audited_at IS ?
+  `).bind(
+    status,
+    note,
+    now,
+    now,
+    audited.id,
+    audited.example_sentence,
+    audited.example_meaning,
+    audited.example_generated_at,
+    audited.example_audit_status,
+    audited.example_audited_at,
+  ).run();
+  return (result.meta.changes ?? 0) === 1;
 };
 
 const markImageAuditResult = async (
   env: AppEnv,
-  wordId: string,
+  audited: DbWordHintAssetRow,
   status: GeneratedAssetAuditStatus,
   note: string,
-): Promise<void> => {
+): Promise<boolean> => {
   const now = Date.now();
-  await env.DB.prepare(`
+  const result = await env.DB.prepare(`
     UPDATE words
     SET example_image_audit_status = ?,
         example_image_audit_note = ?,
         example_image_audited_at = ?,
         updated_at = ?
     WHERE id = ?
-  `).bind(status, note, now, now, wordId).run();
+      AND example_image_key IS ?
+      AND example_image_content_type IS ?
+      AND example_image_generated_at IS ?
+      AND example_image_audit_status IS ?
+      AND example_image_audited_at IS ?
+  `).bind(
+    status,
+    note,
+    now,
+    now,
+    audited.id,
+    audited.example_image_key,
+    audited.example_image_content_type,
+    audited.example_image_generated_at,
+    audited.example_image_audit_status,
+    audited.example_image_audited_at,
+  ).run();
+  return (result.meta.changes ?? 0) === 1;
 };
 
 const auditExampleSentence = async (
@@ -248,15 +349,7 @@ const auditExampleSentence = async (
     throw new HttpError(502, '例文監査レスポンスが空です。');
   }
 
-  const parsed = JSON.parse(response.text) as { status?: string; reason?: string };
-  return {
-    status: parsed.status === GeneratedAssetAuditStatus.REVIEW_REQUIRED
-      ? GeneratedAssetAuditStatus.REVIEW_REQUIRED
-      : GeneratedAssetAuditStatus.APPROVED,
-    reason: typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
-      ? parsed.reason.trim()
-      : '監査理由を取得できませんでした。',
-  };
+  return parseAuditDecision(JSON.parse(response.text));
 };
 
 const auditExampleImage = async (
@@ -326,15 +419,7 @@ const auditExampleImage = async (
     throw new HttpError(502, '画像監査レスポンスが空です。');
   }
 
-  const parsed = JSON.parse(response.text) as { status?: string; reason?: string };
-  return {
-    status: parsed.status === GeneratedAssetAuditStatus.REVIEW_REQUIRED
-      ? GeneratedAssetAuditStatus.REVIEW_REQUIRED
-      : GeneratedAssetAuditStatus.APPROVED,
-    reason: typeof parsed.reason === 'string' && parsed.reason.trim().length > 0
-      ? parsed.reason.trim()
-      : '監査理由を取得できませんでした。',
-  };
+  return parseAuditDecision(JSON.parse(response.text));
 };
 
 const isExampleAuditDue = (row: DbWordHintAssetRow, cutoffMs: number): boolean => {
@@ -367,6 +452,11 @@ export const handleGenerateWordHintAsset = async (
     throw new HttpError(404, '対象の単語が見つかりません。');
   }
   await assertBookReadAccess(env, user, row.book_id);
+  if (input.forceRefresh) {
+    // Existing shared content can only be replaced by the book owner or a global admin.
+    // Read access alone must never grant mutation rights over an official catalog row.
+    await assertBookWriteAccess(env, user, row.book_id);
+  }
 
   if (input.assetType === WordHintAssetType.EXAMPLE) {
     if (!input.forceRefresh && row.example_sentence?.trim()) {
@@ -390,7 +480,7 @@ export const handleGenerateWordHintAsset = async (
         userLevel: user.english_level as any || undefined,
         sourceContext: row.source_context || undefined,
       });
-      await persistWordExample(env, row.id, context.english, context.japanese);
+      await persistWordExample(env, row, context.english, context.japanese);
       await recordProductEventForUser(env, user, {
         eventName: 'word_hint_example_generated',
         subjectType: 'word',
@@ -445,7 +535,7 @@ export const handleGenerateWordHintAsset = async (
       throw new HttpError(502, '画像生成に失敗しました。');
     }
 
-    await persistWordImage(env, row.id, dataUrl);
+    await persistWordImage(env, row, dataUrl);
     await recordProductEventForUser(env, user, {
       eventName: 'word_hint_image_generated',
       subjectType: 'word',
@@ -488,8 +578,26 @@ export const handleGetWordHintImageResponse = async (
 
   const row = await readFirst<Pick<
     DbWordHintAssetRow,
-    'id' | 'book_id' | 'example_image_key' | 'example_image_content_type' | 'example_image_generated_at'
-  >>(env, 'SELECT id, book_id, example_image_key, example_image_content_type, example_image_generated_at FROM words WHERE id = ?', wordId);
+    | 'id'
+    | 'book_id'
+    | 'example_image_key'
+    | 'example_image_content_type'
+    | 'example_image_generated_at'
+    | 'example_image_audit_status'
+    | 'example_image_audited_at'
+  >>(
+    env,
+    `SELECT id,
+            book_id,
+            example_image_key,
+            example_image_content_type,
+            example_image_generated_at,
+            example_image_audit_status,
+            example_image_audited_at
+     FROM words
+     WHERE id = ?`,
+    wordId,
+  );
   if (!row) {
     throw new HttpError(404, '対象の単語が見つかりません。');
   }
@@ -497,6 +605,14 @@ export const handleGetWordHintImageResponse = async (
 
   if (!row.example_image_key || !row.example_image_content_type) {
     throw new HttpError(404, '画像ヒントはまだ生成されていません。');
+  }
+
+  if (!row.example_image_generated_at || !isGeneratedAssetVisibleToLearner({
+    generatedAt: row.example_image_generated_at,
+    auditedAt: row.example_image_audited_at,
+    auditStatus: (row.example_image_audit_status as GeneratedAssetAuditStatus | null) || null,
+  })) {
+    throw new HttpError(404, '画像ヒントは内容確認中です。');
   }
 
   const object = await env.WRITING_ASSETS.get(row.example_image_key);
@@ -579,40 +695,48 @@ export const runWordHintAuditSweep = async (
     if (isExampleAuditDue(row, cutoffMs) && summary.auditedCount < limit) {
       try {
         const decision = await auditExampleSentence(env, row);
-        await markExampleAuditResult(env, row.id, decision.status, decision.reason);
-        summary.auditedCount += 1;
-        summary.exampleAudits += 1;
-        if (decision.status === GeneratedAssetAuditStatus.APPROVED) {
-          summary.approvedCount += 1;
-        } else {
-          summary.reviewRequiredCount += 1;
+        const committed = await markExampleAuditResult(env, row, decision.status, decision.reason);
+        if (committed) {
+          summary.auditedCount += 1;
+          summary.exampleAudits += 1;
+          if (decision.status === GeneratedAssetAuditStatus.APPROVED) {
+            summary.approvedCount += 1;
+          } else {
+            summary.reviewRequiredCount += 1;
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || 'Unknown example audit failure');
-        await markExampleAuditResult(env, row.id, GeneratedAssetAuditStatus.FAILED, message);
-        summary.auditedCount += 1;
-        summary.exampleAudits += 1;
-        summary.failedCount += 1;
+        const committed = await markExampleAuditResult(env, row, GeneratedAssetAuditStatus.FAILED, message);
+        if (committed) {
+          summary.auditedCount += 1;
+          summary.exampleAudits += 1;
+          summary.failedCount += 1;
+        }
       }
     }
 
     if (isImageAuditDue(row, cutoffMs) && summary.auditedCount < limit) {
       try {
         const decision = await auditExampleImage(env, row);
-        await markImageAuditResult(env, row.id, decision.status, decision.reason);
-        summary.auditedCount += 1;
-        summary.imageAudits += 1;
-        if (decision.status === GeneratedAssetAuditStatus.APPROVED) {
-          summary.approvedCount += 1;
-        } else {
-          summary.reviewRequiredCount += 1;
+        const committed = await markImageAuditResult(env, row, decision.status, decision.reason);
+        if (committed) {
+          summary.auditedCount += 1;
+          summary.imageAudits += 1;
+          if (decision.status === GeneratedAssetAuditStatus.APPROVED) {
+            summary.approvedCount += 1;
+          } else {
+            summary.reviewRequiredCount += 1;
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || 'Unknown image audit failure');
-        await markImageAuditResult(env, row.id, GeneratedAssetAuditStatus.FAILED, message);
-        summary.auditedCount += 1;
-        summary.imageAudits += 1;
-        summary.failedCount += 1;
+        const committed = await markImageAuditResult(env, row, GeneratedAssetAuditStatus.FAILED, message);
+        if (committed) {
+          summary.auditedCount += 1;
+          summary.imageAudits += 1;
+          summary.failedCount += 1;
+        }
       }
     }
   }

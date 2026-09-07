@@ -426,15 +426,32 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     await dismissAnnouncementModalIfPresent(page);
 
-    await page.getByRole('button', { name: /くわしい学習記録/ }).click();
-    const legacyPlanToggle = page.getByRole('button', { name: /プラン・学習環境の詳細/ });
-    if (await legacyPlanToggle.isVisible().catch(() => false)) {
-      await legacyPlanToggle.click();
-    }
-    const libraryToggle = page.getByRole('button', { name: /公式コース/ });
-    if (await libraryToggle.isVisible().catch(() => false)) {
-      await libraryToggle.click();
-    }
+    await expect(page.getByTestId('dashboard-progress-section')).toHaveCount(0);
+    expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+
+    const importResult = await seedPhrasebook(page, 'Mobile Expanded Dashboard Drill');
+    expect(importResult.importedBookIds?.[0]).toBeTruthy();
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await dismissAnnouncementModalIfPresent(page);
+
+    const progressSection = page.getByTestId('dashboard-progress-section');
+    const weeklyRecord = progressSection.getByRole('heading', { name: '週間学習記録' });
+    await expect(weeklyRecord).toHaveCount(0);
+    await page.getByTestId('dashboard-task-reference-progress').click();
+    await expect(weeklyRecord).toBeVisible();
+    await expect(progressSection.getByRole('heading', { name: '学習ステータス' })).toBeVisible();
+    const progressToggle = progressSection.getByRole('button', { name: /くわしい学習記録/ });
+    await progressToggle.click();
+    await expect(weeklyRecord).toHaveCount(0);
+    await progressToggle.click();
+    await expect(weeklyRecord).toBeVisible();
+
+    await page.getByTestId('dashboard-task-reference-plan').click();
+    await expect(page.getByTestId('dashboard-plan-anchor')).toBeInViewport();
+    await page.getByTestId('dashboard-quicknav-library').click();
+    await page.getByRole('button', { name: '公式コースをもっと見る', exact: true }).click();
+    await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。')).toBeVisible();
 
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
@@ -764,6 +781,8 @@ test.describe('student mobile ux', () => {
       wordsPerLevel: 10,
     });
     await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await page.getByTestId('dashboard-quicknav-weakness').click();
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
     await expect(page.getByTestId('dashboard-weakness-section')).toContainText('あと少し解くと苦手が見えます');
 
@@ -779,6 +798,12 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('study-finish-exit')).toBeVisible();
     await page.getByTestId('study-finish-exit').click();
 
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    const weaknessDetails = page.getByTestId('dashboard-task-details-weakness');
+    await expect(weaknessDetails).toBeVisible();
+    await expect(page.getByTestId('dashboard-weakness-section')).toBeHidden();
+    await page.getByTestId('dashboard-quicknav-weakness').click();
+    await expect(weaknessDetails).toHaveAttribute('open', '');
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
     await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('あと少し解くと苦手が見えます');
     await expect(page.getByTestId('dashboard-weakness-section')).toContainText('今日はここから直す');
@@ -820,6 +845,9 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     await completeSeededStudySession(page, bookId);
+    await expect.poll(async () => (
+      storageAction<string[]>(page, 'getStudiedWordIdsByBook', { bookId })
+    )).toHaveLength(2);
 
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
@@ -1088,6 +1116,9 @@ test.describe('student mobile ux', () => {
     await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
     await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
+    await expect(studentPage.getByTestId('writing-feedback-approved-evaluation')).toHaveCount(1);
+    await expect(studentPage.getByText('AI比較', { exact: true })).toHaveCount(0);
+    await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]')).toHaveCount(0);
     await expect(studentPage.getByTestId('writing-feedback-corrected')).toBeVisible();
     await expectMobileFeedbackSingleColumn(studentPage);
 

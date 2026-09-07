@@ -6,6 +6,7 @@ import type {
 import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, LearningTaskIntentType, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import { normalizeStudySessionLimit } from '../../shared/studySession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
@@ -26,7 +27,6 @@ import {
   assertBookWriteAccess,
   buildInClause,
   createBookId,
-  ensurePositiveLimit,
   getMasterySourceSql,
   readAll,
   readFirst,
@@ -489,37 +489,6 @@ export const handleReportWord = async (env: AppEnv, user: DbUserRow, wordId: str
   await env.DB.prepare('UPDATE words SET is_reported = 1, updated_at = ? WHERE id = ?').bind(Date.now(), wordId).run();
 };
 
-export const handleUpdateWordCache = async (
-  env: AppEnv,
-  user: DbUserRow,
-  wordId: string,
-  sentence: string,
-  translation: string,
-): Promise<void> => {
-  const word = await readFirst<{ book_id: string }>(env, 'SELECT book_id FROM words WHERE id = ?', wordId);
-  if (!word) throw new HttpError(404, '対象の単語が見つかりません。');
-  await assertBookReadAccess(env, user, word.book_id);
-
-  await env.DB.prepare(`
-    UPDATE words
-    SET example_sentence = ?,
-        example_meaning = ?,
-        example_generated_at = ?,
-        example_audit_status = ?,
-        example_audit_note = NULL,
-        example_audited_at = NULL,
-        updated_at = ?
-    WHERE id = ?
-  `).bind(
-    sentence,
-    translation,
-    Date.now(),
-    GeneratedAssetAuditStatus.PENDING,
-    Date.now(),
-    wordId,
-  ).run();
-};
-
 export const handlePrepareBookExamples = async (
   env: AppEnv,
   user: DbUserRow,
@@ -606,7 +575,7 @@ export const handleGetDailySessionWords = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
-  const limit = ensurePositiveLimit(limitInput, 20);
+  const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
   const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
@@ -735,7 +704,7 @@ export const handleGetBookSession = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
-  const limit = ensurePositiveLimit(limitInput, 20);
+  const limit = normalizeStudySessionLimit(limitInput);
   await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
 

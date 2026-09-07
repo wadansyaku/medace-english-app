@@ -298,7 +298,7 @@ const rowsFromXlsxFile = async (inputPath, options = {}) => {
   }));
 
   try {
-    const { parseNounWorkbookSheets } = await import('../utils/nounWorkbookImport.js');
+    const { parseNounWorkbookSheets } = await import('./_shared/noun-workbook-import.mjs');
     const parsed = parseNounWorkbookSheets(sheetEntries);
     if (Array.isArray(parsed.importRows) && parsed.importRows.length > 0) {
       return parsed.importRows;

@@ -1,13 +1,13 @@
 import React from 'react';
 import {
+  AlertCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 
 import {
   GRADE_LABELS,
-  MissionNextActionType,
   MissionProgressEventType,
-  RecommendedActionType,
   UserGrade,
   type LearningTaskIntent,
   type UserProfile,
@@ -21,18 +21,13 @@ import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
 import { useStudentDashboardController } from '../hooks/useStudentDashboardController';
 import {
   useStudentDashboardViewModel,
-  type StudentDashboardLearningRouteId,
 } from '../hooks/useStudentDashboardViewModel';
+import type { StudentDashboardCommand, StudentDashboardSectionId, StudentDashboardTaskId } from '../shared/studentDashboardCommand';
 import { workspaceService } from '../services/workspace';
 import {
   loadEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
 } from '../utils/englishPracticeProgress';
-import {
-  createMissionTaskIntent,
-  createTodayFocusTaskIntent,
-  createWeaknessTaskIntent,
-} from '../shared/learningTask';
 import StudentDashboardModals from './dashboard/StudentDashboardModals';
 import StudentDashboardSections from './dashboard/StudentDashboardSections';
 
@@ -56,7 +51,6 @@ interface DashboardPracticeFocusProps {
   lane: FocusedPracticeLane;
   onSelectLane: (lane: FocusedPracticeLane) => void;
   onClose: () => void;
-  onStartVocabulary: () => void;
 }
 
 const isFocusedPracticeLane = (lane: string): lane is FocusedPracticeLane => (
@@ -68,7 +62,6 @@ const DashboardPracticeFocus: React.FC<DashboardPracticeFocusProps> = ({
   lane,
   onSelectLane,
   onClose,
-  onStartVocabulary,
 }) => (
   <section
     data-testid="dashboard-practice-focus"
@@ -89,7 +82,6 @@ const DashboardPracticeFocus: React.FC<DashboardPracticeFocusProps> = ({
         initialLane={lane}
         closeLabel="今日の画面へ戻る"
         onClose={onClose}
-        onStartVocabulary={onStartVocabulary}
         onActiveLaneChange={(nextLane) => {
           if (isFocusedPracticeLane(nextLane)) {
             onSelectLane(nextLane);
@@ -113,6 +105,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const {
     snapshot,
     loading,
+    error: loadError,
     refresh: refreshDashboard,
     updateLearningPlan,
     updateLearningPreference,
@@ -155,25 +148,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
 
-  const todayPreferredBookIds = React.useMemo(
-    () => viewModel.plannedBooks.map((book) => book.id),
-    [viewModel.plannedBooks],
-  );
-  const todayTaskIntent = React.useMemo(
-    () => createTodayFocusTaskIntent({ preferredBookIds: todayPreferredBookIds }),
-    [todayPreferredBookIds],
-  );
-  const weaknessTaskIntent = React.useMemo(
-    () => createWeaknessTaskIntent(viewModel.topWeakness),
-    [viewModel.topWeakness],
-  );
-  const missionTaskIntent = React.useMemo(
-    () => (
-      viewModel.primaryMission?.nextTaskIntent
-      || (viewModel.primaryMission ? createMissionTaskIntent(viewModel.primaryMission) : null)
-    ),
-    [viewModel.primaryMission],
-  );
   const [localPracticeLane, setLocalPracticeLane] = React.useState<FocusedPracticeLane | null>(null);
   const selectedPracticeLane = activePracticeLane !== undefined ? activePracticeLane : localPracticeLane;
 
@@ -188,93 +162,56 @@ const Dashboard: React.FC<DashboardProps> = ({
     onClosePracticeLane?.();
   }, [onClosePracticeLane, refreshEnglishPracticeSummary]);
 
-  const handlePracticeVocabularyStart = React.useCallback(() => {
-    if (viewModel.hasStudyBooks) {
-      onStartTask(todayTaskIntent);
+  const openDashboardSection = React.useCallback((sectionId: StudentDashboardSectionId) => {
+    if (sectionId === 'progress') controller.setShowProgressDetails(true);
+    if (sectionId === 'account') controller.setShowAccountDetails(true);
+    const refs = {
+      mission: navigation.missionSectionRef,
+      writing: navigation.writingSectionRef,
+      coach: navigation.coachSectionRef,
+      weakness: navigation.weaknessSectionRef,
+      plan: navigation.planSectionRef,
+      library: navigation.librarySectionRef,
+    };
+    const sectionRef = refs[sectionId as keyof typeof refs];
+    if (sectionRef) {
+      navigation.scrollToSection(sectionRef);
       return;
     }
-    controller.setShowCreateModal(true);
-  }, [controller, onStartTask, todayTaskIntent, viewModel.hasStudyBooks]);
+    window.requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-testid="dashboard-${sectionId}-section"]`);
+      if (element instanceof HTMLElement) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [controller, navigation]);
 
-  const handleLearningRouteSelect = React.useCallback(async (routeId: StudentDashboardLearningRouteId) => {
-    if (routeId === 'today') {
-      if (viewModel.hasStudyBooks) {
-        onStartTask(todayTaskIntent);
-        return;
-      }
-      controller.setShowCreateModal(true);
-      return;
+  const executeDashboardCommand = React.useCallback((command: StudentDashboardCommand) => {
+    // Opening a task is independent of the optional progress acknowledgement.
+    if (command.missionAssignmentId) {
+      void workspaceService.updateMissionProgress(command.missionAssignmentId, MissionProgressEventType.OPENED)
+        .catch(() => undefined);
     }
-
-    if (routeId === 'mission') {
-      const mission = viewModel.primaryMission;
-      if (!mission) return;
-      if (mission.assignmentId) {
-        try {
-          await workspaceService.updateMissionProgress(mission.assignmentId, MissionProgressEventType.OPENED);
-        } catch (missionError) {
-          console.error(missionError);
-        }
-      }
-      if (mission.nextActionType === MissionNextActionType.OPEN_PLAN) {
-        controller.setShowPlanEditModal(true);
+    switch (command.type) {
+      case 'start_learning':
+        onStartTask(command.task);
         return;
-      }
-      if (mission.nextActionType === MissionNextActionType.OPEN_WRITING && viewModel.canShowWritingSection) {
-        navigation.scrollToSection(navigation.writingSectionRef);
-        return;
-      }
-      if (mission.nextActionType === MissionNextActionType.OPEN_WRITING) {
-        controller.setShowPlanEditModal(true);
-        return;
-      }
-      if (!viewModel.hasStudyBooks) {
+      case 'create_book':
         controller.setShowCreateModal(true);
         return;
-      }
-      if (missionTaskIntent) {
-        onStartTask(missionTaskIntent);
-        return;
-      }
-      navigation.scrollToSection(navigation.missionSectionRef);
-      return;
-    }
-
-    if (routeId === 'weakness') {
-      if (viewModel.topWeakness?.recommendedActionType === RecommendedActionType.OPEN_PLAN) {
+      case 'open_plan':
         controller.setShowPlanEditModal(true);
         return;
-      }
-      if (viewModel.hasStudyBooks) {
-        onStartTask(weaknessTaskIntent);
+      case 'open_practice':
+        handlePracticeLaneSelect(command.lane);
         return;
-      }
-      controller.setShowCreateModal(true);
-      return;
+      case 'open_section':
+        openDashboardSection(command.sectionId);
     }
+  }, [controller, handlePracticeLaneSelect, onStartTask, openDashboardSection]);
 
-    if (routeId === 'englishPractice') {
-      handlePracticeLaneSelect(viewModel.practiceRecommendation.lane);
-      return;
-    }
-
-    if (routeId === 'writing') {
-      navigation.scrollToSection(navigation.writingSectionRef);
-    }
-  }, [
-    controller,
-    handlePracticeLaneSelect,
-    missionTaskIntent,
-    navigation,
-    onStartTask,
-    todayTaskIntent,
-    viewModel.hasStudyBooks,
-    viewModel.canShowWritingSection,
-    viewModel.primaryMission,
-    viewModel.practiceRecommendation.lane,
-    viewModel.topWeakness,
-    weaknessTaskIntent,
-  ]);
+  const handleTaskSelect = React.useCallback((taskId: StudentDashboardTaskId) => {
+    const task = viewModel.allTasks.find((candidate) => candidate.id === taskId);
+    if (task) executeDashboardCommand(task.command);
+  }, [executeDashboardCommand, viewModel.allTasks]);
 
   if (controller.showOnboarding) {
     return (
@@ -295,12 +232,25 @@ const Dashboard: React.FC<DashboardProps> = ({
     );
   }
 
-  if (loading && viewModel.planningBooks.length === 0) {
+  if (loading && !snapshot) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center text-medace-500">
         <Loader2 className="mb-2 h-10 w-10 animate-spin" />
         <p className="text-sm font-medium">学習データを読み込んでいます</p>
       </div>
+    );
+  }
+
+  if (!snapshot) {
+    return (
+      <section data-testid="dashboard-load-error" role="alert" className="mx-auto flex min-h-[50vh] max-w-lg flex-col items-center justify-center gap-4 px-5 text-center">
+        <AlertCircle className="h-9 w-9 text-slate-500" aria-hidden="true" />
+        <h1 className="text-xl font-black text-slate-950">学習データを読み込めませんでした</h1>
+        <p className="text-sm leading-relaxed text-slate-600">通信状況を確認して、もう一度読み込んでください。</p>
+        <button type="button" onClick={() => void refreshDashboard()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-steady-action px-5 py-3 font-bold text-steady-on-action hover:bg-steady-action-hover">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" /> もう一度読み込む
+        </button>
+      </section>
     );
   }
 
@@ -311,6 +261,15 @@ const Dashboard: React.FC<DashboardProps> = ({
         isStudentMobileShell ? 'gap-4 pb-28' : 'gap-5 pb-24'
       }`}
     >
+      {loadError === 'refresh' && (
+        <div data-testid="dashboard-refresh-error" role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>最新の状態を確認できません。前回読み込んだ学習データを表示しています。</p>
+          <button type="button" disabled={loading} onClick={() => void refreshDashboard()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 font-bold disabled:opacity-60">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {loading ? '読み込み中' : '再読み込み'}
+          </button>
+        </div>
+      )}
       {controller.pageNotice && (
         <div className={`sticky z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
           isStudentMobileShell ? 'top-[calc(0.35rem+var(--safe-top))]' : 'top-[calc(0.75rem+var(--safe-top))]'
@@ -344,7 +303,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             lane={selectedPracticeLane}
             onSelectLane={handlePracticeLaneSelect}
             onClose={handlePracticeLaneClose}
-            onStartVocabulary={handlePracticeVocabularyStart}
           />
         </div>
       ) : null}
@@ -358,11 +316,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           isStudentMobileShell={isStudentMobileShell}
           navigation={navigation}
           onSelectBook={onSelectBook}
-          onSelectLearningRoute={(routeId) => {
-            void handleLearningRouteSelect(routeId);
-          }}
+          onSelectTask={handleTaskSelect}
+          onOpenSection={openDashboardSection}
           onSelectPracticeLane={handlePracticeLaneSelect}
-          onStartTask={onStartTask}
         />
       )}
     </div>

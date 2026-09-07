@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_STUDY_SESSION_XP } from '../shared/xp';
 import { STORAGE_ACTIONS, type StorageAction } from '../contracts/storage';
 import { CommercialRequestStatus, OrganizationRole, SubscriptionPlan, UserRole } from '../types';
 import {
@@ -112,6 +113,17 @@ describe('storage action contract', () => {
       questionMode: 'FREE_TEXT_MODE',
       responseTimeMs: 1200,
     })).toThrow('questionMode が不正です。');
+  });
+
+  it('rejects non-finite and out-of-range XP awards before execution', () => {
+    const definition = resolveStorageActionDefinition('addXP');
+
+    for (const amount of [400, 500, MAX_STUDY_SESSION_XP]) {
+      expect(definition.parse({ amount })).toEqual({ amount });
+    }
+    for (const amount of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 0, MAX_STUDY_SESSION_XP + 1, 1.5]) {
+      expect(() => definition.parse({ amount })).toThrow();
+    }
   });
 
   it('declares AI generated problem review actions for teacher/admin operation', () => {

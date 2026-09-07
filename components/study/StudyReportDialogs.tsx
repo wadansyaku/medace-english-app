@@ -9,6 +9,8 @@ interface StudyReportDialogsProps {
   showReportModal: boolean;
   reportReason: string;
   reportNotice: string | null;
+  reportError?: string | null;
+  isSubmitting?: boolean;
   onChangeReportReason: (value: string) => void;
   onCloseReportModal: () => void;
   onSubmitReport: () => void;
@@ -20,6 +22,8 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
   showReportModal,
   reportReason,
   reportNotice,
+  reportError,
+  isSubmitting = false,
   onChangeReportReason,
   onCloseReportModal,
   onSubmitReport,
@@ -43,16 +47,19 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <textarea
+            aria-label="報告する内容"
+            disabled={isSubmitting}
             value={reportReason}
             onChange={(event) => onChangeReportReason(event.target.value)}
             className="h-32 w-full rounded-2xl border border-slate-200 p-3 text-sm"
             placeholder="例: 例文が古文として不自然です / 意味が間違っています"
           />
+          {reportError && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{reportError}</p>}
         </div>
         <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button onClick={onCloseReportModal} className="min-h-11 rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-700">キャンセル</button>
-            <button onClick={onSubmitReport} disabled={!reportReason.trim()} className="min-h-11 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white disabled:opacity-50">報告する</button>
+            <button type="button" onClick={onCloseReportModal} disabled={isSubmitting} className="min-h-11 rounded-2xl border border-slate-200 px-4 py-3 font-bold text-slate-700 disabled:opacity-50">キャンセル</button>
+            <button type="button" onClick={onSubmitReport} disabled={isSubmitting || !reportReason.trim()} className="min-h-11 rounded-2xl bg-red-500 px-4 py-3 font-bold text-white disabled:opacity-50">{isSubmitting ? '送信中…' : '報告する'}</button>
           </div>
         </MobileStickyActionBar>
       </MobileSheetDialog>

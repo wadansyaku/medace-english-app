@@ -211,26 +211,6 @@ export const resolveAssignmentStatusForTeacherDecision = (
   return AssignmentStatus.RETURNED;
 };
 
-export const setAssignmentTeacherDecision = async (
-  env: AppEnv,
-  params: {
-    assignmentId: string;
-    status: AssignmentStatus;
-    now: number;
-  },
-): Promise<void> => {
-  await env.DB.prepare(`
-    UPDATE writing_assignments
-    SET status = ?, last_returned_at = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(
-    params.status,
-    params.now,
-    params.now,
-    params.assignmentId,
-  ).run();
-};
-
 export const setAssignmentCompleted = async (
   env: AppEnv,
   params: {
@@ -238,15 +218,19 @@ export const setAssignmentCompleted = async (
     now: number;
   },
 ): Promise<void> => {
-  await env.DB.prepare(`
+  const result = await env.DB.prepare(`
     UPDATE writing_assignments
     SET status = ?, updated_at = ?
-    WHERE id = ?
+    WHERE id = ? AND status = ?
   `).bind(
     AssignmentStatus.COMPLETED,
     params.now,
     params.assignmentId,
+    AssignmentStatus.RETURNED,
   ).run();
+  if ((result.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, '課題の状態が別の操作で更新されました。最新状態でやり直してください。');
+  }
 };
 
 const isDuplicateSubmissionAttemptError = (error: unknown): boolean => {
@@ -388,12 +372,35 @@ export const commitTeacherReviewDecision = async (
     now: number;
   },
 ): Promise<void> => {
-  await env.DB.batch([
+  const latestSubmissionPredicate = `
+    EXISTS (
+      SELECT 1
+      FROM writing_submissions target
+      WHERE target.id = ?
+        AND target.assignment_id = writing_assignments.id
+        AND target.id = (
+          SELECT latest.id
+          FROM writing_submissions latest
+          WHERE latest.assignment_id = writing_assignments.id
+          ORDER BY latest.submitted_at DESC, latest.attempt_no DESC, latest.id DESC
+          LIMIT 1
+        )
+    )
+  `;
+  const results = await env.DB.batch([
     env.DB.prepare(`
       INSERT INTO writing_teacher_reviews (
         id, submission_id, reviewer_user_id, selected_evaluation_id, public_comment, private_memo, review_decision,
         created_at, updated_at, released_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      )
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE EXISTS (
+        SELECT 1
+        FROM writing_assignments
+        WHERE id = ?
+          AND status = ?
+          AND ${latestSubmissionPredicate}
+      )
       ON CONFLICT(submission_id) DO UPDATE SET
         reviewer_user_id = excluded.reviewer_user_id,
         selected_evaluation_id = excluded.selected_evaluation_id,
@@ -413,16 +420,29 @@ export const commitTeacherReviewDecision = async (
       params.now,
       params.now,
       params.now,
+      params.assignmentId,
+      AssignmentStatus.REVIEW_READY,
+      params.submissionId,
     ),
     env.DB.prepare(`
       UPDATE writing_assignments
       SET status = ?, last_returned_at = ?, updated_at = ?
       WHERE id = ?
+        AND status = ?
+        AND ${latestSubmissionPredicate}
     `).bind(
       params.assignmentStatus,
       params.now,
       params.now,
       params.assignmentId,
+      AssignmentStatus.REVIEW_READY,
+      params.submissionId,
     ),
   ]);
+  if (
+    (results[0]?.meta.changes ?? 0) !== 1
+    || (results[1]?.meta.changes ?? 0) !== 1
+  ) {
+    throw new HttpError(409, '提出または課題の状態が別の操作で更新されました。最新状態でやり直してください。');
+  }
 };

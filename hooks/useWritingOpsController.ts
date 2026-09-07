@@ -7,9 +7,9 @@ import {
   approveWritingReturn,
   completeWritingAssignment,
   createWritingUploadUrl,
-  finalizeWritingSubmission,
+  finalizeStaffWritingSubmission,
   generateWritingAssignment,
-  getWritingSubmissionDetail,
+  getStaffWritingSubmissionDetail,
   issueWritingAssignment,
   listWritingAssignments,
   listWritingReviewQueue,
@@ -137,7 +137,7 @@ export const useWritingOpsController = () => {
 
     const loadDetail = async () => {
       try {
-        const nextDetail = await getWritingSubmissionDetail(selectedSubmissionId);
+        const nextDetail = await getStaffWritingSubmissionDetail(selectedSubmissionId);
         if (cancelled) return;
 
         setDetail(nextDetail);
@@ -328,7 +328,7 @@ export const useWritingOpsController = () => {
         assetIds.push(upload.assetId);
       }
 
-      const detail = await finalizeWritingSubmission({
+      const detail = await finalizeStaffWritingSubmission({
         assignmentId: scannerTarget.id,
         source: WritingSubmissionSource.STAFF_SCANNER,
         assetIds,

@@ -42,7 +42,6 @@ import { buildDeterministicTranslationFeedback } from '../../utils/worksheet';
 import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
 import { learningService } from '../../services/learning';
 import {
-  clearEnglishPracticeProgress,
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
   getPendingEnglishPracticeAttempts,
   loadEnglishPracticeProgress,
@@ -80,7 +79,6 @@ type ScopeCategoryFilter = GrammarCurriculumCategoryId | 'all';
 interface EnglishPracticeHubProps {
   user: UserProfile;
   onBack?: () => void;
-  onStartVocabulary: () => void;
   variant?: 'standalone' | 'embedded';
   embeddedMode?: 'full' | 'drill';
   initialLane?: PracticeLane;
@@ -100,40 +98,40 @@ const LEVEL_LABELS: Record<EnglishLevel, string> = {
 
 const FALLBACK_WORDS: WordData[] = [
   {
-    id: 'practice-stabilize',
+    id: 'practice-organize',
     bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
     number: 1,
-    word: 'stabilize',
-    definition: '安定させる',
-    exampleSentence: 'Doctors stabilize the patient before surgery.',
-    exampleMeaning: '医師は 手術前に 患者を 安定させる。',
-  },
-  {
-    id: 'practice-monitor',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 2,
-    word: 'monitor',
-    definition: '観察する',
-    exampleSentence: 'Nurses monitor the patient while the medicine works.',
-    exampleMeaning: '看護師は 薬が効いている間 患者を 観察する。',
-  },
-  {
-    id: 'practice-recall',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 3,
-    word: 'recall',
-    definition: '思い出す',
-    exampleSentence: 'Students can recall the word after short practice.',
-    exampleMeaning: '生徒は 短い練習の後で その語を 思い出せる。',
+    word: 'organize',
+    definition: '整理する',
+    exampleSentence: 'Students organize their notes before class.',
+    exampleMeaning: '生徒は 授業前に ノートを 整理する。',
   },
   {
     id: 'practice-compare',
     bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 4,
+    number: 2,
     word: 'compare',
     definition: '比較する',
-    exampleSentence: 'Learners compare two answers before they choose one.',
+    exampleSentence: 'Learners compare two answers before choosing one.',
     exampleMeaning: '生徒は 1つを選ぶ前に 2つの答えを 比較する。',
+  },
+  {
+    id: 'practice-explain',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
+    number: 3,
+    word: 'explain',
+    definition: '説明する',
+    exampleSentence: 'Mika explains the idea to her classmates.',
+    exampleMeaning: 'ミカは クラスメートに その考えを 説明する。',
+  },
+  {
+    id: 'practice-improve',
+    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
+    number: 4,
+    word: 'improve',
+    definition: '改善する',
+    exampleSentence: 'Daily practice improves reading skills over time.',
+    exampleMeaning: '毎日の練習は 少しずつ 読解力を 伸ばす。',
   },
 ];
 
@@ -181,15 +179,6 @@ const laneConfig: Array<{
   },
 ];
 
-const examLevelLabels = ['中学', '高校基礎', '共通テスト', '二次・私大', '国公立二次'];
-const examLevels: EnglishLevel[] = [
-  EnglishLevel.A2,
-  EnglishLevel.B1,
-  EnglishLevel.B2,
-  EnglishLevel.C1,
-  EnglishLevel.C2,
-];
-const questionCountOptions = [5, 10, 15, 20] as const;
 const eikenWritingLevelOptions: EikenWritingLevel[] = ['grade-3', 'pre-2', 'grade-2', 'pre-1'];
 const eikenWritingTaskTypeOptions: EikenWritingTaskType[] = ['email', 'opinion', 'summary'];
 
@@ -282,7 +271,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [wordLoadFailed, setWordLoadFailed] = useState(false);
   const [practiceSeed, setPracticeSeed] = useState(1);
   const [grammarMode, setGrammarMode] = useState<GrammarMode>('GRAMMAR_CLOZE');
-  const [grammarQuestionCount, setGrammarQuestionCount] = useState<(typeof questionCountOptions)[number]>(5);
+  const grammarQuestionCount = 5;
   const [scopeViewFilter, setScopeViewFilter] = useState<ScopeViewFilter>('recommended');
   const [scopeCategoryFilter, setScopeCategoryFilter] = useState<ScopeCategoryFilter>('all');
   const [scopePickerOpen, setScopePickerOpen] = useState(false);
@@ -418,8 +407,14 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const samplePracticeActive = !wordsLoading && (wordLoadFailed || sessionWords.length === 0);
   const practiceWords = sessionWords.length > 0 ? sessionWords : samplePracticeActive ? FALLBACK_WORDS : [];
-  const selectedScopes = grammarScopes.filter((scope) => selectedScopeIds.includes(scope.id));
-  const activeScopePool = selectedScopes.length > 0 ? selectedScopes : grammarScopes.slice(0, 4);
+  const selectedScopes = useMemo(
+    () => grammarScopes.filter((scope) => selectedScopeIds.includes(scope.id)),
+    [grammarScopes, selectedScopeIds],
+  );
+  const activeScopePool = useMemo(
+    () => (selectedScopes.length > 0 ? selectedScopes : grammarScopes.slice(0, 4)),
+    [grammarScopes, selectedScopes],
+  );
   const targetGrammarKind = toGrammarKind(grammarMode);
   const examTarget = resolveTranslationExamTarget(user.grade);
 
@@ -572,10 +567,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     submittedTranslationInputRef.current = {};
     translationSubmissionVersionRef.current += 1;
     setCheckingTranslationId(null);
-  };
-
-  const resetPracticeProgress = () => {
-    setPracticeProgress(clearEnglishPracticeProgress(user.uid));
   };
 
   const toggleScope = (scopeId: GrammarCurriculumScopeId) => {
@@ -771,8 +762,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   }, [practiceLevel, recordPracticeAttempt, selectedWritingTask, writingDraft, writingWithinRange]);
   const overallAccuracy = formatPercent(progressSummary.accuracy);
   const currentStreak = user.stats?.currentStreak ?? 0;
-  const levelIndex = Math.max(0, examLevels.indexOf(practiceLevel));
-
   const renderGrammarItem = (item: GrammarPracticeItem) => {
     const isChecked = Boolean(checkedGrammarItems[item.id]);
 
@@ -793,6 +782,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               <button
                 key={option}
                 type="button"
+                aria-pressed={selected === option}
                 disabled={isChecked}
                 onClick={() => setGrammarSelections((current) => ({ ...current, [item.id]: option }))}
                 className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
@@ -815,7 +805,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               判定する
             </button>
             {isChecked && (
-              <span className={`inline-flex items-center gap-1 text-sm font-black ${correct ? 'text-emerald-700' : 'text-red-600'}`}>
+              <span aria-live="polite" className={`inline-flex items-center gap-1 text-sm font-black ${correct ? 'text-emerald-700' : 'text-red-600'}`}>
                 {correct ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 {correct ? '正解' : `正解は ${item.answer}`}
               </span>
@@ -888,7 +878,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               クリア
             </button>
             {isChecked && (
-              <span className={`inline-flex items-center gap-1 text-sm font-black ${correct ? 'text-emerald-700' : 'text-red-600'}`}>
+              <span aria-live="polite" className={`inline-flex items-center gap-1 text-sm font-black ${correct ? 'text-emerald-700' : 'text-red-600'}`}>
                 {correct ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                 {correct ? '正解' : `正解: ${getOrderedText(item)}`}
               </span>
@@ -939,6 +929,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <button
               key={item.mode}
               type="button"
+              aria-pressed={grammarMode === item.mode}
               onClick={() => setGrammarMode(item.mode)}
               className={`rounded-lg border px-4 py-3 text-sm font-black transition-colors ${
                 grammarMode === item.mode
@@ -954,6 +945,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
+            aria-pressed={randomScopeMode}
             onClick={() => setRandomScopeMode((current) => !current)}
             className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-black ${
               randomScopeMode ? 'border-medace-500 bg-medace-50 text-medace-800' : 'border-slate-200 bg-white text-slate-600'
@@ -964,11 +956,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           </button>
           <button
             type="button"
+            aria-pressed={showScopeHint}
             onClick={() => setShowScopeHint((current) => !current)}
             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-600"
           >
             {showScopeHint ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            {showScopeHint ? '範囲を明示' : '範囲を隠す'}
+            {showScopeHint ? '範囲を隠す' : '範囲を表示'}
           </button>
           <button
             type="button"
@@ -993,6 +986,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             </div>
             <button
               type="button"
+              aria-expanded={scopePickerOpen}
               onClick={() => setScopePickerOpen((current) => !current)}
               className="inline-flex min-h-10 items-center justify-center rounded-lg border border-medace-200 bg-medace-50 px-3 py-2 text-sm font-black text-medace-800 transition-colors hover:bg-medace-100"
             >
@@ -1012,6 +1006,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <button
                   key={filter.id}
                   type="button"
+                  aria-pressed={scopeViewFilter === filter.id}
                   onClick={() => handleScopeViewFilterChange(filter.id)}
                   className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
                     scopeViewFilter === filter.id
@@ -1027,6 +1022,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
+                aria-pressed={scopeCategoryFilter === 'all'}
                 onClick={() => setScopeCategoryFilter('all')}
                 className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
                   scopeCategoryFilter === 'all'
@@ -1040,6 +1036,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <button
                   key={category.id}
                   type="button"
+                  aria-pressed={scopeCategoryFilter === category.id}
                   onClick={() => setScopeCategoryFilter(category.id)}
                   className={`rounded-lg border px-3 py-2 text-xs font-black transition-colors ${
                     scopeCategoryFilter === category.id
@@ -1063,10 +1060,11 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   const selected = selectedScopeIds.includes(scope.id);
                   const weakScope = weakScopeById.get(scope.id);
                   return (
-                    <button
-                      key={scope.id}
-                      type="button"
-                      onClick={() => toggleScope(scope.id)}
+                  <button
+                    key={scope.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => toggleScope(scope.id)}
                       className={`rounded-lg border px-3 py-3 text-left transition-colors ${
                         selected
                           ? 'border-medace-400 bg-medace-50 text-medace-950'
@@ -1129,6 +1127,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               <button
                 key={item.mode}
                 type="button"
+                aria-pressed={translationMode === item.mode}
                 onClick={() => setTranslationMode(item.mode)}
                 className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-black transition-colors sm:px-4 sm:py-3 ${
                   translationMode === item.mode
@@ -1170,6 +1169,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               {translationMode === 'input' ? (
                 <>
                   <textarea
+                    aria-label={`和訳答案: ${item.sourceSentence}`}
                     value={translationInput}
                     onChange={(event) => setTranslationInputs((current) => ({ ...current, [item.id]: event.target.value }))}
                     rows={3}
@@ -1257,7 +1257,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       判定する
                     </button>
                     {orderChecked && (
-                      <span className={`inline-flex items-center gap-1 text-sm font-black ${orderCorrect ? 'text-emerald-700' : 'text-red-600'}`}>
+                      <span aria-live="polite" className={`inline-flex items-center gap-1 text-sm font-black ${orderCorrect ? 'text-emerald-700' : 'text-red-600'}`}>
                         {orderCorrect ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                         {orderCorrect ? '正解' : `正解: ${getOrderedText(item)}`}
                       </span>
@@ -1283,6 +1283,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <button
                   key={level}
                   type="button"
+                  aria-pressed={practiceLevel === level}
                   onClick={() => setPracticeLevel(level)}
                   className={`rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
                     practiceLevel === level
@@ -1348,6 +1349,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 <button
                   key={level}
                   type="button"
+                  aria-pressed={writingLevel === level}
                   onClick={() => setWritingLevel(level)}
                   className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-black transition-colors ${
                     writingLevel === level
@@ -1370,6 +1372,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   <button
                     key={taskType}
                     type="button"
+                    aria-pressed={writingTaskType === taskType && enabled}
                     disabled={!enabled}
                     onClick={() => setWritingTaskType(taskType)}
                     className={`min-h-10 rounded-lg border px-3 py-2 text-left text-sm font-black transition-colors ${
@@ -1395,6 +1398,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   <button
                     key={task.id}
                     type="button"
+                    aria-pressed={selectedWritingTask?.id === task.id}
                     onClick={() => {
                       if (selectedWritingTask?.id !== task.id) {
                         setSelectedWritingTaskId(task.id);
@@ -1495,13 +1499,21 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               </div>
               <textarea
                 data-testid="eiken-writing-draft"
+                aria-label="英検ライティング答案"
                 value={writingDraft}
                 onChange={(event) => setWritingDraft(event.target.value)}
                 rows={10}
                 className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-4 py-4 text-base font-medium leading-8 text-slate-900 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
                 placeholder="Write your answer here."
               />
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-medace-100">
+              <div
+                role="progressbar"
+                aria-label="英作文の語数"
+                aria-valuemin={0}
+                aria-valuemax={writingWordRange?.max ?? 0}
+                aria-valuenow={writingWordCount}
+                className="mt-3 h-2 overflow-hidden rounded-full bg-medace-100"
+              >
                 <div
                   className={`h-full rounded-full transition-all ${writingWithinRange ? 'bg-emerald-500' : 'bg-medace-500'}`}
                   style={{
@@ -1560,6 +1572,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               key={lane.id}
               type="button"
               data-testid={`english-practice-lane-${lane.id}`}
+              aria-pressed={activeLane === lane.id}
               onClick={() => activateLane(lane.id)}
               className={`flex min-h-[3.25rem] min-w-0 flex-col items-center justify-center gap-0.5 rounded-md border px-1.5 py-2 text-[11px] font-black leading-tight transition-colors sm:min-h-11 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
                 activeLane === lane.id
@@ -1593,7 +1606,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const renderPracticeNotices = () => (
     <>
       {wordsLoading && sessionWords.length === 0 && (
-        <section className="mb-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
+        <section role="status" aria-live="polite" className="mb-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
           <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
           単語を読み込み中です。
         </section>
@@ -1606,7 +1619,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       )}
 
       {practiceSyncError && (
-        <section className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+        <section role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
           {practiceSyncError}
         </section>
       )}
@@ -1698,7 +1711,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   return (
     <div data-testid="english-practice-hub" className="min-h-screen bg-medace-50 text-slate-900">
-      <main className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
+      <section aria-label="英語演習" className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
         <section className="mb-4 rounded-lg border border-medace-100 bg-white px-4 py-4 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
@@ -1731,7 +1744,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         {renderPracticeMeta()}
         {renderPracticeNotices()}
         {renderActiveLane()}
-      </main>
+      </section>
     </div>
   );
 };

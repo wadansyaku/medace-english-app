@@ -1,9 +1,11 @@
 import type {
   WritingAssignment,
+  WritingEvaluation,
   WritingPromptTemplate,
   WritingQueueItem,
   WritingSubmission,
   WritingSubmissionSource,
+  WritingTeacherReview,
   WritingExamCategory,
 } from '../types';
 
@@ -87,6 +89,68 @@ export interface WritingSubmissionDetailResponse {
   submission: WritingSubmission;
   sideEffectJob?: WritingSideEffectJobResult;
 }
+
+export type WritingStudentEvaluation = Pick<
+  WritingEvaluation,
+  | 'overallScore'
+  | 'rubric'
+  | 'strengths'
+  | 'improvementPoints'
+  | 'sentenceCorrections'
+  | 'correctedDraft'
+  | 'modelAnswer'
+>;
+
+export type WritingStudentTeacherReview = Pick<
+  WritingTeacherReview,
+  'publicComment' | 'releasedAt'
+>;
+
+export interface WritingStudentSideEffectWarning {
+  status: 'FAILED';
+}
+
+export type WritingStudentAssignment = Pick<
+  WritingAssignment,
+  'id' | 'promptTitle' | 'status'
+>;
+
+export type WritingStudentSubmissionBase = Pick<
+  WritingSubmission,
+  | 'id'
+  | 'assignmentId'
+  | 'attemptNo'
+  | 'submissionSource'
+  | 'transcript'
+  | 'submittedAt'
+  | 'assets'
+>;
+
+export type WritingStudentSubmissionReceipt = WritingStudentSubmissionBase & {
+  evaluations: [];
+};
+
+export interface WritingStudentSubmissionReceiptResponse {
+  assignment: WritingStudentAssignment;
+  submission: WritingStudentSubmissionReceipt;
+  sideEffectJob?: WritingStudentSideEffectWarning;
+}
+
+export type WritingStudentReleasedSubmission = WritingStudentSubmissionBase & {
+  evaluations: [WritingStudentEvaluation];
+  teacherReview: WritingStudentTeacherReview;
+};
+
+export interface WritingStudentSubmissionDetailResponse {
+  assignment: WritingStudentAssignment;
+  submission: WritingStudentReleasedSubmission;
+  sideEffectJob?: WritingStudentSideEffectWarning;
+}
+
+export type WritingSubmissionViewerResponse =
+  | WritingSubmissionDetailResponse
+  | WritingStudentSubmissionReceiptResponse
+  | WritingStudentSubmissionDetailResponse;
 
 export interface WritingListTemplateQuery {
   examCategory?: WritingExamCategory;

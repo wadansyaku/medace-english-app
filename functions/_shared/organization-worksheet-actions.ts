@@ -1,4 +1,10 @@
-import { type LearningHistory, type StudentWorksheetSnapshot, UserRole } from '../../types';
+import {
+  GeneratedAssetAuditStatus,
+  type LearningHistory,
+  type StudentWorksheetSnapshot,
+  UserRole,
+} from '../../types';
+import { projectWordHintAssetsForLearner } from '../../shared/wordHintAssets';
 import { HttpError } from './http';
 import { readActiveOrganizationMember } from './organization-support';
 import { canAccessVisibleStudent } from './student-visibility';
@@ -14,6 +20,42 @@ import {
   readVisibleLearningBookRows,
   type DbWordRow,
 } from './storage-support';
+
+interface WorksheetExampleProjectionInput {
+  id: string;
+  bookId: string;
+  word: string;
+  definition: string;
+  exampleSentence: string | null;
+  exampleMeaning: string | null;
+  exampleGeneratedAt: number | null;
+  exampleAuditStatus: string | null;
+  exampleAuditedAt: number | null;
+}
+
+const projectWorksheetExample = (input: WorksheetExampleProjectionInput): {
+  exampleSentence: string | null;
+  exampleMeaning: string | null;
+} => {
+  const projected = projectWordHintAssetsForLearner({
+    id: input.id,
+    bookId: input.bookId,
+    number: 0,
+    word: input.word,
+    definition: input.definition,
+    exampleSentence: input.exampleSentence,
+    exampleMeaning: input.exampleMeaning,
+    exampleGeneratedAt: input.exampleGeneratedAt,
+    exampleAuditStatus: (input.exampleAuditStatus as GeneratedAssetAuditStatus | null) || null,
+  }, {
+    exampleAuditedAt: input.exampleAuditedAt,
+  });
+
+  return {
+    exampleSentence: projected.exampleSentence,
+    exampleMeaning: projected.exampleMeaning,
+  };
+};
 
 export const handleGetStudentWorksheetSnapshot = async (
   env: AppEnv,
@@ -51,6 +93,9 @@ export const handleGetStudentWorksheetSnapshot = async (
     correct_count: number;
     example_sentence: string | null;
     example_meaning: string | null;
+    example_generated_at: number | null;
+    example_audit_status: string | null;
+    example_audited_at: number | null;
   }>(
     env,
     `SELECT
@@ -61,6 +106,9 @@ export const handleGetStudentWorksheetSnapshot = async (
        w.definition AS definition,
        w.example_sentence AS example_sentence,
        w.example_meaning AS example_meaning,
+       w.example_generated_at AS example_generated_at,
+       w.example_audit_status AS example_audit_status,
+       w.example_audited_at AS example_audited_at,
        h.status AS status,
        h.last_studied_at AS last_studied_at,
        h.attempt_count AS attempt_count,
@@ -103,14 +151,24 @@ export const handleGetStudentWorksheetSnapshot = async (
 
       bookWords.forEach((word, wordIndex) => {
         if (fallbackWords.length >= FALLBACK_WORKSHEET_WORD_LIMIT) return;
+        const projectedExample = projectWorksheetExample({
+          id: word.id,
+          bookId: word.book_id,
+          word: word.word,
+          definition: word.definition,
+          exampleSentence: word.example_sentence,
+          exampleMeaning: word.example_meaning,
+          exampleGeneratedAt: word.example_generated_at,
+          exampleAuditStatus: word.example_audit_status,
+          exampleAuditedAt: word.example_audited_at,
+        });
         fallbackWords.push({
           wordId: word.id,
           bookId: book.id,
           bookTitle: book.title,
           word: word.word,
           definition: word.definition,
-          exampleSentence: word.example_sentence,
-          exampleMeaning: word.example_meaning,
+          ...projectedExample,
           status: WORKSHEET_STATUSES[wordIndex % WORKSHEET_STATUSES.length],
           lastStudiedAt: Date.now() - (bookIndex + wordIndex + 1) * DAY_MS,
           attemptCount: 3 + wordIndex,
@@ -187,18 +245,31 @@ export const handleGetStudentWorksheetSnapshot = async (
     organizationName: student.organization_name || undefined,
     source: 'history',
     sourceLabel: '学習履歴ベース',
-    words: rows.map((row) => ({
-      wordId: row.word_id,
-      bookId: row.book_id,
-      bookTitle: row.book_title,
-      word: row.word,
-      definition: row.definition,
-      exampleSentence: row.example_sentence,
-      exampleMeaning: row.example_meaning,
-      status: row.status,
-      lastStudiedAt: Number(row.last_studied_at || 0),
-      attemptCount: Number(row.attempt_count || 0),
-      correctCount: Number(row.correct_count || 0),
-    })),
+    words: rows.map((row) => {
+      const projectedExample = projectWorksheetExample({
+        id: row.word_id,
+        bookId: row.book_id,
+        word: row.word,
+        definition: row.definition,
+        exampleSentence: row.example_sentence,
+        exampleMeaning: row.example_meaning,
+        exampleGeneratedAt: row.example_generated_at,
+        exampleAuditStatus: row.example_audit_status,
+        exampleAuditedAt: row.example_audited_at,
+      });
+
+      return {
+        wordId: row.word_id,
+        bookId: row.book_id,
+        bookTitle: row.book_title,
+        word: row.word,
+        definition: row.definition,
+        ...projectedExample,
+        status: row.status,
+        lastStudiedAt: Number(row.last_studied_at || 0),
+        attemptCount: Number(row.attempt_count || 0),
+        correctCount: Number(row.correct_count || 0),
+      };
+    }),
   };
 };

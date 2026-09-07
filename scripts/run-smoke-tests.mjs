@@ -39,19 +39,45 @@ const isFilteredRun = extraArgs.some((arg) => (
 ));
 const hasWorkerArg = extraArgs.some((arg) => arg === '--workers' || arg.startsWith('--workers='));
 
-const runCommand = (command, args, env) => new Promise((resolve) => {
+const runCommand = (command, args, env, serverSignal) => new Promise((resolve, reject) => {
+  if (serverSignal?.aborted) {
+    reject(serverSignal.reason);
+    return;
+  }
+
   const child = spawn(command, args, {
     cwd,
     env,
     stdio: 'inherit',
+    detached: Boolean(serverSignal) && process.platform !== 'win32',
   });
 
-  child.on('close', (code) => {
-    resolve(code ?? 1);
-  });
-  child.on('error', () => {
-    resolve(1);
-  });
+  let settled = false;
+  let stoppingForServer = false;
+  const finish = (code, error) => {
+    if (settled) return;
+    settled = true;
+    serverSignal?.removeEventListener('abort', onServerExit);
+    child.removeListener('close', onClose);
+    child.removeListener('error', onError);
+    if (error) reject(error);
+    else resolve(code ?? 1);
+  };
+  const onClose = (code) => {
+    if (!stoppingForServer) finish(code);
+  };
+  const onError = () => {
+    if (!stoppingForServer) finish(1);
+  };
+  const onServerExit = async () => {
+    stoppingForServer = true;
+    await stopChildProcess(child);
+    finish(1, serverSignal.reason);
+  };
+
+  child.once('close', onClose);
+  child.once('error', onError);
+  serverSignal?.addEventListener('abort', onServerExit, { once: true });
 });
 
 const runCommandCapture = (command, args, env) => new Promise((resolve) => {
@@ -253,8 +279,8 @@ const verifyBuiltAssetReferences = async () => {
   await verifyBuiltPwaReferences(html);
 };
 
-const verifyServedAssetReferences = async (baseUrl) => {
-  const rootResponse = await fetch(`${baseUrl}/`);
+const verifyServedAssetReferences = async (baseUrl, signal) => {
+  const rootResponse = await fetch(`${baseUrl}/`, { signal });
   if (!rootResponse.ok) {
     throw new Error(`[smoke] / returned ${rootResponse.status}`);
   }
@@ -279,7 +305,7 @@ const verifyServedAssetReferences = async (baseUrl) => {
   await Promise.all(assetPaths.map(async (assetPath) => {
     const assetUrl = new URL(assetPath, baseUrl).toString();
     try {
-      const response = await fetch(assetUrl);
+      const response = await fetch(assetUrl, { signal });
       const contentType = response.headers.get('content-type') || '';
       if (!response.ok) {
         failures.push(`${assetPath} -> HTTP ${response.status}`);
@@ -304,12 +330,12 @@ const verifyServedAssetReferences = async (baseUrl) => {
     throw new Error(`[smoke] static asset readiness failed:\n${failures.sort().join('\n')}`);
   }
 
-  await verifyServedPwaReferences(baseUrl, html);
+  await verifyServedPwaReferences(baseUrl, html, signal);
 };
 
-const verifyServedStaticFile = async (baseUrl, staticPath, expectedKind) => {
+const verifyServedStaticFile = async (baseUrl, staticPath, expectedKind, signal) => {
   const assetUrl = new URL(staticPath, baseUrl).toString();
-  const response = await fetch(assetUrl);
+  const response = await fetch(assetUrl, { signal });
   const contentType = response.headers.get('content-type') || '';
 
   if (!response.ok) {
@@ -325,7 +351,7 @@ const verifyServedStaticFile = async (baseUrl, staticPath, expectedKind) => {
   return response;
 };
 
-const verifyServedPwaReferences = async (baseUrl, html) => {
+const verifyServedPwaReferences = async (baseUrl, html, signal) => {
   const { manifestPaths, iconPaths } = extractHtmlPwaReferences(html);
   if (!manifestPaths.length) {
     throw new Error('[smoke] / did not reference a web manifest');
@@ -335,7 +361,7 @@ const verifyServedPwaReferences = async (baseUrl, html) => {
   const manifestIconPaths = [];
   await Promise.all(manifestPaths.map(async (manifestPath) => {
     try {
-      const response = await verifyServedStaticFile(baseUrl, manifestPath, 'manifest');
+      const response = await verifyServedStaticFile(baseUrl, manifestPath, 'manifest', signal);
       const manifest = await response.json();
       verifyPwaManifestMetadata(manifest, manifestPath);
       manifestIconPaths.push(...extractManifestIconPaths(manifest));
@@ -346,7 +372,7 @@ const verifyServedPwaReferences = async (baseUrl, html) => {
 
   await Promise.all([...new Set([...iconPaths, ...manifestIconPaths])].map(async (iconPath) => {
     try {
-      await verifyServedStaticFile(baseUrl, iconPath, 'image');
+      await verifyServedStaticFile(baseUrl, iconPath, 'image', signal);
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
@@ -388,24 +414,37 @@ const getFilteredTestCount = async (suite, suiteEnv, baseUrl, outputDir, port) =
   throw new Error(`[smoke:${suite.name}] could not determine filtered test count:\n${combinedOutput.trim()}`);
 };
 
-const waitForServer = async (baseUrl) => {
+const waitForServer = async (baseUrl, serverSignal) => {
   const timeoutMs = Number(process.env.PLAYWRIGHT_SMOKE_SERVER_TIMEOUT_MS || '180000');
   const deadline = Date.now() + timeoutMs;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const readinessSignal = serverSignal
+    ? AbortSignal.any([serverSignal, timeoutSignal])
+    : timeoutSignal;
   let lastError = '';
 
   while (Date.now() < deadline) {
+    serverSignal?.throwIfAborted();
     try {
-      const response = await fetch(`${baseUrl}/api/session`);
+      const response = await fetch(`${baseUrl}/api/session`, { signal: readinessSignal });
       if (response.status === 200 || response.status === 204) {
-        await verifyServedAssetReferences(baseUrl);
+        await verifyServedAssetReferences(baseUrl, readinessSignal);
+        serverSignal?.throwIfAborted();
         return;
       }
       lastError = `/api/session returned ${response.status}`;
     } catch (error) {
+      serverSignal?.throwIfAborted();
       lastError = error instanceof Error ? error.message : String(error);
       // Retry until ready.
     }
-    await delay(500);
+    if (timeoutSignal.aborted) break;
+    try {
+      await delay(500, undefined, { signal: readinessSignal });
+    } catch {
+      serverSignal?.throwIfAborted();
+      break;
+    }
   }
 
   throw new Error(`Timed out waiting for smoke server at ${baseUrl} after ${timeoutMs}ms${lastError ? `; last error: ${lastError}` : ''}`);
@@ -422,8 +461,29 @@ const startServer = (port, env) => spawn(
   },
 );
 
+const monitorServerProcess = (child, label) => {
+  const controller = new AbortController();
+  const onExit = (code, signal) => {
+    controller.abort(new Error(
+      `[smoke:${label}] local server exited unexpectedly (code=${code ?? 'null'}, signal=${signal ?? 'none'}); stopping browser tests.`,
+    ));
+  };
+  const onError = (error) => {
+    controller.abort(new Error(`[smoke:${label}] local server failed to start: ${error.message}`, { cause: error }));
+  };
+  child.once('exit', onExit);
+  child.once('error', onError);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
+    },
+  };
+};
+
 const stopChildProcess = async (child, graceMs = 2_000) => {
-  if (!child || child.exitCode !== null) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
 
@@ -438,9 +498,13 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
 
   await new Promise((resolve) => {
     let settled = false;
+    let forceKillTimer;
+    let settleTimer;
     const finish = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(forceKillTimer);
+      clearTimeout(settleTimer);
       child.removeListener('close', onClose);
       resolve();
     };
@@ -455,8 +519,8 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
       return;
     }
 
-    const forceKillTimer = setTimeout(() => {
-      if (child.exitCode === null) {
+    forceKillTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
         try {
           signalProcessTree('SIGKILL');
         } catch {
@@ -466,7 +530,7 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
     }, graceMs);
     forceKillTimer.unref?.();
 
-    const settleTimer = setTimeout(() => finish(), graceMs + 1_000);
+    settleTimer = setTimeout(() => finish(), graceMs + 1_000);
     settleTimer.unref?.();
   });
 };
@@ -474,15 +538,18 @@ const stopChildProcess = async (child, graceMs = 2_000) => {
 const sentinelFiles = [
   'tests/smoke/public.smoke.spec.ts',
   'tests/smoke/student.smoke.spec.ts',
+  'tests/smoke/dashboard-recovery.smoke.spec.ts',
 ];
 
 const cloudflareFiles = [
   'tests/smoke/public.smoke.spec.ts',
   'tests/smoke/student.smoke.spec.ts',
+  'tests/smoke/dashboard-recovery.smoke.spec.ts',
   'tests/smoke/organization.smoke.spec.ts',
   'tests/smoke/commercial.smoke.spec.ts',
   'tests/smoke/writing.smoke.spec.ts',
   'tests/smoke/mobile.smoke.spec.ts',
+  'tests/smoke/study-reliability.smoke.spec.ts',
 ];
 
 const suites = suiteMode === 'sentinel'
@@ -584,6 +651,7 @@ for (const suite of suites) {
   }
 
   let server;
+  let serverMonitor;
 
   try {
     if (!isExternalTarget) {
@@ -591,7 +659,8 @@ for (const suite of suites) {
         ...suiteEnv,
         PLAYWRIGHT_SMOKE_PORT: String(port),
       });
-      await waitForServer(baseUrl);
+      serverMonitor = monitorServerProcess(server, suite.name);
+      await waitForServer(baseUrl, serverMonitor.signal);
     } else {
       await verifyServedAssetReferences(baseUrl);
     }
@@ -615,6 +684,7 @@ for (const suite of suites) {
         PLAYWRIGHT_TRACE_MODE: baseEnv.PLAYWRIGHT_TRACE_MODE || 'off',
         PLAYWRIGHT_VIDEO_MODE: baseEnv.PLAYWRIGHT_VIDEO_MODE || 'off',
       },
+      serverMonitor?.signal,
     );
 
     if (suiteExitCode !== 0) {
@@ -623,10 +693,12 @@ for (const suite of suites) {
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     exitCode = 1;
+    if (serverMonitor?.signal.aborted) break;
   } finally {
+    serverMonitor?.dispose();
     await stopChildProcess(server);
-	  }
-	}
+  }
+}
 
 if (isFilteredRun && filteredTestCount === 0 && exitCode === 0) {
   console.error('[smoke] filtered run matched 0 tests across all suites');

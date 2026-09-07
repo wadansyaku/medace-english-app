@@ -6,10 +6,18 @@ import {
   WEAKNESS_FOCUS_SESSION_ID,
   WEAKNESS_FOCUS_SESSION_LIMIT,
   getSmartSessionConfig,
+  normalizeStudySessionLimit,
   isSmartSessionBookId,
 } from '../shared/studySession';
 
 describe('study session presets', () => {
+  it.each([[25, 25], [100, 100], [101, 100], [25.9, 25], [0.5, 1], [0, 20], [-1, 20], [Number.NaN, 20], [Number.POSITIVE_INFINITY, 20], ['25', 20], [undefined, 20]])('normalizes a session request %s to %s words', (value, expected) => {
+    expect(normalizeStudySessionLimit(value)).toBe(expected);
+  });
+
+  it('preserves the default book session size for an absent limit', () => {
+    expect(normalizeStudySessionLimit(undefined, 10)).toBe(10);
+  });
   it('keeps the default smart session on the regular 20-word limit', () => {
     expect(getSmartSessionConfig(DEFAULT_SMART_SESSION_ID)).toEqual({
       bookId: DEFAULT_SMART_SESSION_ID,

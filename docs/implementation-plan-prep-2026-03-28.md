@@ -1,3 +1,5 @@
+> 履歴資料（2026-09-07に整理）。現行の計画と検証状態は [再構築計画](./analysis/rebuild-plan-2026-09-07.md) を参照。この文書の完了・本番数値は記録当時のものです。
+
 # Implementation Plan Prep (2026-03-28)
 
 ## Why This Prep Exists

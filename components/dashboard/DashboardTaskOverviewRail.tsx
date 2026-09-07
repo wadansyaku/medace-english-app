@@ -85,8 +85,11 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
     ...(showPrimaryAction && primaryTask ? [primaryTask] : []),
     ...urgentTasks,
     ...supportingTasks,
-  ]).slice(0, 3);
-  const referenceShortcutTasks = uniqueTasks(referenceTasks).slice(0, 4);
+  ]).slice(0, 1);
+  const referenceOrder: StudentDashboardTaskId[] = ['library', 'progress', 'plan', 'account', 'weakness', 'writing', 'announcements', 'motivation', 'companion'];
+  const referenceShortcutTasks = uniqueTasks(referenceTasks)
+    .sort((left, right) => referenceOrder.indexOf(left.id) - referenceOrder.indexOf(right.id))
+    .slice(0, 4);
   const headlineTask = actionTasks[0] || referenceShortcutTasks[0] || (showPrimaryAction ? primaryTask : null);
 
   if (!headlineTask) return null;
@@ -94,12 +97,12 @@ const DashboardTaskOverviewRail: React.FC<DashboardTaskOverviewRailProps> = ({
   return (
     <section
       data-testid="dashboard-task-overview-rail"
-      className="min-w-0 rounded-lg border border-medace-100 bg-medace-50/70 px-3 py-3 shadow-[0_10px_30px_rgba(255,122,0,0.05)]"
+      className="min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-3"
     >
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-black text-medace-700">
-            {actionTasks.length > 0 ? '次に開けるもの' : '教材・記録'}
+            {actionTasks.length > 0 ? 'このあとに1つ' : '教材・記録'}
           </p>
           <h3 className="mt-0.5 truncate text-sm font-black text-slate-950">{headlineTask.title}</h3>
         </div>

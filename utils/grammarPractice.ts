@@ -172,14 +172,25 @@ const getWordPattern = (word: string): RegExp => {
   return new RegExp(`(^|[^A-Za-z])(${escaped})(?=$|[^A-Za-z])`, 'i');
 };
 
-const findStudyWordInSentence = (sentence: string, word: string): string | null => {
-  const exactMatch = sentence.match(getWordPattern(word));
-  if (exactMatch?.[2]) return exactMatch[2];
+const getStudyWordForms = (word: string): string[] => {
+  const normalized = normalizeWhitespace(word).toLowerCase();
+  if (!normalized) return [];
 
-  if (/\s/.test(word)) return null;
-  const escaped = normalizeWhitespace(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const inflectedMatch = sentence.match(new RegExp(`(^|[^A-Za-z])(${escaped}(?:s|es|ed|ing)?)(?=$|[^A-Za-z])`, 'i'));
-  return inflectedMatch?.[2] || null;
+  return [...new Set([
+    normalized,
+    toThirdPersonSingular(normalized),
+    toRegularPast(normalized),
+    toPastParticiple(normalized),
+    toPresentParticiple(normalized),
+  ])].sort((left, right) => right.length - left.length);
+};
+
+const findStudyWordInSentence = (sentence: string, word: string): string | null => {
+  for (const form of getStudyWordForms(word)) {
+    const match = sentence.match(getWordPattern(form));
+    if (match?.[2]) return match[2];
+  }
+  return null;
 };
 
 const tokenizeEnglishSentence = (sentence: string): string[] => (
@@ -205,12 +216,20 @@ const normalizeDefinitionForSentence = (definition: string): string => normalize
 interface ScopePracticeSentenceTemplate {
   levelMin: EnglishLevel;
   sentence: (usage: PracticeTermUsage) => string;
-  japaneseAnswerText: (meaning: string) => string;
+  japaneseAnswerText: (
+    practiceMeaning: string,
+    usage: PracticeTermUsage,
+    rawMeaning: string,
+  ) => string | undefined;
 }
 
+type PracticeTermRole = 'verb' | 'adjective' | 'adverb' | 'noun';
+
 interface PracticeTermUsage {
+  role: PracticeTermRole;
   base: string;
   nounPhrase: string;
+  subjectPhrase: string;
   pronoun: 'it' | 'them';
   bePresent: 'is' | 'are';
   bePast: 'was' | 'were';
@@ -219,6 +238,7 @@ interface PracticeTermUsage {
   actionPast: string;
   actionParticiple: string;
   actionIng: string;
+  pastParticiple: string;
 }
 
 const template = (
@@ -233,32 +253,116 @@ const template = (
 
 const isConsonantBeforeFinalY = (value: string): boolean => /[^aeiou]y$/i.test(value);
 
-const toThirdPersonSingular = (verb: string): string => {
-  const lower = verb.toLowerCase();
-  if (isConsonantBeforeFinalY(lower)) return `${verb.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh|o)$/i.test(lower)) return `${verb}es`;
-  return `${verb}s`;
+const IRREGULAR_THIRD_PERSON: Readonly<Record<string, string>> = {
+  be: 'is',
+  do: 'does',
+  have: 'has',
 };
 
-const toRegularPast = (verb: string): string => {
-  const lower = verb.toLowerCase();
-  if (lower.endsWith('e')) return `${verb}d`;
-  if (isConsonantBeforeFinalY(lower)) return `${verb.slice(0, -1)}ied`;
-  return `${verb}ed`;
+const IRREGULAR_PAST: Readonly<Record<string, string>> = {
+  be: 'was',
+  begin: 'began',
+  bring: 'brought',
+  buy: 'bought',
+  choose: 'chose',
+  come: 'came',
+  do: 'did',
+  find: 'found',
+  get: 'got',
+  give: 'gave',
+  go: 'went',
+  have: 'had',
+  know: 'knew',
+  make: 'made',
+  read: 'read',
+  run: 'ran',
+  see: 'saw',
+  speak: 'spoke',
+  take: 'took',
+  teach: 'taught',
+  think: 'thought',
+  understand: 'understood',
+  write: 'wrote',
 };
 
-const toPresentParticiple = (verb: string): string => {
-  const lower = verb.toLowerCase();
-  if (lower.endsWith('ie')) return `${verb.slice(0, -2)}ying`;
-  if (lower.endsWith('e') && !/(ee|ye|oe)$/i.test(lower)) return `${verb.slice(0, -1)}ing`;
-  return `${verb}ing`;
+const IRREGULAR_PAST_PARTICIPLE: Readonly<Record<string, string>> = {
+  be: 'been',
+  begin: 'begun',
+  bring: 'brought',
+  buy: 'bought',
+  choose: 'chosen',
+  come: 'come',
+  do: 'done',
+  find: 'found',
+  get: 'gotten',
+  give: 'given',
+  go: 'gone',
+  have: 'had',
+  know: 'known',
+  make: 'made',
+  read: 'read',
+  run: 'run',
+  see: 'seen',
+  speak: 'spoken',
+  take: 'taken',
+  teach: 'taught',
+  think: 'thought',
+  understand: 'understood',
+  write: 'written',
 };
 
-const inferPracticeTermRole = (word: WordData): 'verb' | 'adjective' | 'adverb' | 'noun' => {
+const DOUBLE_FINAL_CONSONANT_VERBS = new Set([
+  'admit',
+  'begin',
+  'occur',
+  'plan',
+  'prefer',
+  'run',
+  'sit',
+  'stop',
+  'swim',
+]);
+
+const transformVerbPhraseHead = (verb: string, transform: (head: string) => string): string => {
+  const [head, ...rest] = normalizeWhitespace(verb).split(' ');
+  return [transform(head), ...rest].join(' ');
+};
+
+const toThirdPersonSingular = (verb: string): string => transformVerbPhraseHead(verb, (head) => {
+  const lower = head.toLowerCase();
+  if (IRREGULAR_THIRD_PERSON[lower]) return IRREGULAR_THIRD_PERSON[lower];
+  if (isConsonantBeforeFinalY(lower)) return `${head.slice(0, -1)}ies`;
+  if (/(s|x|z|ch|sh|o)$/i.test(lower)) return `${head}es`;
+  return `${head}s`;
+});
+
+const toRegularPast = (verb: string): string => transformVerbPhraseHead(verb, (head) => {
+  const lower = head.toLowerCase();
+  if (IRREGULAR_PAST[lower]) return IRREGULAR_PAST[lower];
+  if (lower.endsWith('e')) return `${head}d`;
+  if (isConsonantBeforeFinalY(lower)) return `${head.slice(0, -1)}ied`;
+  if (DOUBLE_FINAL_CONSONANT_VERBS.has(lower)) return `${head}${head.slice(-1)}ed`;
+  return `${head}ed`;
+});
+
+const toPresentParticiple = (verb: string): string => transformVerbPhraseHead(verb, (head) => {
+  const lower = head.toLowerCase();
+  if (lower === 'be') return 'being';
+  if (lower.endsWith('ie')) return `${head.slice(0, -2)}ying`;
+  if (lower.endsWith('e') && !/(ee|ye|oe)$/i.test(lower)) return `${head.slice(0, -1)}ing`;
+  if (DOUBLE_FINAL_CONSONANT_VERBS.has(lower)) return `${head}${head.slice(-1)}ing`;
+  return `${head}ing`;
+});
+
+const toPastParticiple = (verb: string): string => transformVerbPhraseHead(verb, (head) => (
+  IRREGULAR_PAST_PARTICIPLE[head.toLowerCase()] || toRegularPast(head)
+));
+
+const inferPracticeTermRole = (word: WordData): PracticeTermRole => {
   const term = normalizeTermForSentence(word.word);
   const meaning = normalizeDefinitionForSentence(word.definition);
   if (term.endsWith('ly') || /に$/.test(meaning)) return 'adverb';
-  if (/(する|させる|される|できる|える|う)$/.test(meaning)) return 'verb';
+  if (/(する|させる|される|できる|[うくぐすつぬぶむる])$/.test(meaning)) return 'verb';
   if (/(い|な|的|の)$/.test(meaning)) return 'adjective';
   return 'noun';
 };
@@ -268,24 +372,31 @@ const buildPracticeTermUsage = (word: WordData): PracticeTermUsage => {
   const role = inferPracticeTermRole(word);
 
   if (role === 'verb') {
+    const presentParticiple = toPresentParticiple(base);
+    const pastParticiple = toPastParticiple(base);
     return {
+      role,
       base,
-      nounPhrase: `${toPresentParticiple(base)} the process`,
+      nounPhrase: `how to ${base} the material`,
+      subjectPhrase: `Knowing how to ${base} the material`,
       pronoun: 'it',
       bePresent: 'is',
       bePast: 'was',
-      actionBase: `${base} the process`,
-      actionThird: `${toThirdPersonSingular(base)} the process`,
-      actionPast: `${toRegularPast(base)} the process`,
-      actionParticiple: `${toRegularPast(base)} the process`,
-      actionIng: `${toPresentParticiple(base)} the process`,
+      actionBase: `${base} the material`,
+      actionThird: `${toThirdPersonSingular(base)} the material`,
+      actionPast: `${toRegularPast(base)} the material`,
+      actionParticiple: `${pastParticiple} the material`,
+      actionIng: `${presentParticiple} the material`,
+      pastParticiple,
     };
   }
 
   if (role === 'adjective') {
     return {
+      role,
       base,
       nounPhrase: `${base} cases`,
+      subjectPhrase: `${base.charAt(0).toUpperCase()}${base.slice(1)} cases`,
       pronoun: 'them',
       bePresent: 'are',
       bePast: 'were',
@@ -294,13 +405,16 @@ const buildPracticeTermUsage = (word: WordData): PracticeTermUsage => {
       actionPast: `chose ${base} cases`,
       actionParticiple: `chosen ${base} cases`,
       actionIng: `choosing ${base} cases`,
+      pastParticiple: 'chosen',
     };
   }
 
   if (role === 'adverb') {
     return {
+      role,
       base,
       nounPhrase: `responding ${base}`,
+      subjectPhrase: `Responding ${base}`,
       pronoun: 'it',
       bePresent: 'is',
       bePast: 'was',
@@ -309,12 +423,15 @@ const buildPracticeTermUsage = (word: WordData): PracticeTermUsage => {
       actionPast: `responded ${base}`,
       actionParticiple: `responded ${base}`,
       actionIng: `responding ${base}`,
+      pastParticiple: 'responded',
     };
   }
 
   return {
+    role,
     base,
     nounPhrase: `the ${base}`,
+    subjectPhrase: `The ${base}`,
     pronoun: 'it',
     bePresent: 'is',
     bePast: 'was',
@@ -323,7 +440,71 @@ const buildPracticeTermUsage = (word: WordData): PracticeTermUsage => {
     actionPast: `studied the ${base}`,
     actionParticiple: `studied the ${base}`,
     actionIng: `studying the ${base}`,
+    pastParticiple: 'studied',
   };
+};
+
+const buildPassiveSentence = (
+  usage: PracticeTermUsage,
+  tense: 'present' | 'past',
+  fallbackParticiple: 'checked' | 'used' | 'chosen',
+  agent: string,
+  timePhrase = '',
+): string => {
+  const trailingTime = timePhrase ? ` ${timePhrase}` : '';
+  if (usage.role === 'verb') {
+    const be = tense === 'present' ? 'is' : 'was';
+    return `The material ${be} ${usage.pastParticiple} by ${agent}${trailingTime}.`;
+  }
+
+  const be = tense === 'present' ? usage.bePresent : usage.bePast;
+  const subject = usage.nounPhrase.charAt(0).toUpperCase() + usage.nounPhrase.slice(1);
+  return `${subject} ${be} ${fallbackParticiple} by ${agent}${trailingTime}.`;
+};
+
+const toJapanesePassiveForm = (meaning: string): string | null => {
+  const normalized = normalizeDefinitionForSentence(meaning);
+  if (!normalized || /[\u3001・,\/／]/.test(normalized)) return null;
+  if (normalized.endsWith('来る')) return `${normalized.slice(0, -2)}来られる`;
+  if (normalized.endsWith('くる')) return `${normalized.slice(0, -2)}こられる`;
+  if (normalized.endsWith('される') || normalized.endsWith('られる')) return normalized;
+  if (normalized.endsWith('できる')) return null;
+  if (normalized.endsWith('させる')) return `${normalized.slice(0, -3)}させられる`;
+  if (normalized.endsWith('する')) return `${normalized.slice(0, -2)}される`;
+
+  const passiveEndings: Readonly<Record<string, string>> = {
+    'う': 'われる',
+    'く': 'かれる',
+    'ぐ': 'がれる',
+    'す': 'される',
+    'つ': 'たれる',
+    'ぬ': 'なれる',
+    'ぶ': 'ばれる',
+    'む': 'まれる',
+    'る': 'られる',
+  };
+  const ending = normalized.slice(-1);
+  const passiveEnding = passiveEndings[ending];
+  return passiveEnding ? `${normalized.slice(0, -1)}${passiveEnding}` : null;
+};
+
+const buildJapanesePassiveAnswer = (
+  usage: PracticeTermUsage,
+  rawMeaning: string,
+  parts: {
+    subject: string;
+    context?: string;
+    agent: string;
+    tense?: 'present' | 'past';
+  },
+): string | undefined => {
+  if (usage.role !== 'verb') return undefined;
+  const passive = toJapanesePassiveForm(rawMeaning);
+  if (!passive) return undefined;
+  const predicate = parts.tense === 'past' && passive.endsWith('る')
+    ? `${passive.slice(0, -1)}た`
+    : passive;
+  return [parts.subject, parts.context, parts.agent, predicate].filter(Boolean).join(' ');
 };
 
 const hasMetaStudyWordReference = (sentence: string, word: string): boolean => {
@@ -335,13 +516,13 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   'basic-svo': [
     template(EnglishLevel.A1, ({ actionBase }) => `Students ${actionBase} today.`, (meaning) => `生徒は 今日 ${meaning} を 使う`),
     template(EnglishLevel.A1, ({ nounPhrase }) => `Teachers check ${nounPhrase} after class.`, (meaning) => `先生は 授業後に ${meaning} を 確認する`),
-    template(EnglishLevel.A2, ({ actionThird }) => `A nurse ${actionThird} in reports.`, (meaning) => `看護師は 報告書で ${meaning} を 使う`),
+    template(EnglishLevel.A2, ({ actionThird }) => `A learner ${actionThird} in class.`, (meaning) => `生徒は 授業で ${meaning} を 使う`),
     template(EnglishLevel.A2, ({ nounPhrase }) => `Visitors saw ${nounPhrase} at museums.`, (meaning) => `来館者は 博物館で ${meaning} を 見た`),
   ],
   'be-verb': [
-    template(EnglishLevel.A1, ({ nounPhrase, bePresent }) => `${nounPhrase} ${bePresent} still useful.`, (meaning) => `${meaning} は 今も 役に立つ`),
+    template(EnglishLevel.A1, ({ subjectPhrase, bePresent }) => `${subjectPhrase} ${bePresent} still useful.`, (meaning) => `${meaning} は 今も 役に立つ`),
     template(EnglishLevel.A1, ({ nounPhrase }) => `Notes about ${nounPhrase} are clear today.`, (meaning) => `${meaning} についての メモは 今日 明確だ`),
-    template(EnglishLevel.A2, ({ nounPhrase, bePast }) => `${nounPhrase} ${bePast} important in this passage.`, (meaning) => `${meaning} は この文章で 重要だった`),
+    template(EnglishLevel.A2, ({ subjectPhrase, bePast }) => `${subjectPhrase} ${bePast} important in this passage.`, (meaning) => `${meaning} は この文章で 重要だった`),
     template(EnglishLevel.A2, ({ base }) => `The example with ${base} was helpful.`, (meaning) => `${meaning} を 含む 例は 役に立った`),
   ],
   'basic-tense': [
@@ -363,7 +544,7 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
   'time-preposition-phrase': [
     template(EnglishLevel.A1, ({ nounPhrase }) => `Learners check ${nounPhrase} before class.`, (meaning) => `生徒は 授業前に ${meaning} を 確認する`),
     template(EnglishLevel.A2, ({ nounPhrase }) => `Students review ${nounPhrase} during lunch.`, (meaning) => `生徒は 昼食中に ${meaning} を 復習する`),
-    template(EnglishLevel.B1, ({ nounPhrase }) => `Doctors discussed ${nounPhrase} after surgery.`, (meaning) => `医師は 手術後に ${meaning} を 話し合った`),
+    template(EnglishLevel.B1, ({ nounPhrase }) => `Students discussed ${nounPhrase} after class.`, (meaning) => `生徒は 授業後に ${meaning} を 話し合った`),
     template(EnglishLevel.B1, ({ nounPhrase }) => `The team has studied ${nounPhrase} since April.`, (meaning) => `チームは 4月から ${meaning} を 学んでいる`),
   ],
   'to-infinitive': [
@@ -397,15 +578,40 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
     template(EnglishLevel.B1, ({ actionPast }) => `Travelers ${actionPast} when asking directions.`, (meaning) => `旅行者は 道を尋ねるとき ${meaning} を 使った`),
   ],
   'passive-voice': [
-    template(EnglishLevel.A2, ({ nounPhrase, bePresent }) => `${nounPhrase} ${bePresent} checked by teachers today.`, (meaning) => `${meaning} は 今日 先生に 確認される`),
-    template(EnglishLevel.B1, ({ nounPhrase, bePresent }) => `${nounPhrase} ${bePresent} used by many writers in answers.`, (meaning) => `${meaning} は 答案で 多くの書き手に 使われる`),
-    template(EnglishLevel.B1, ({ nounPhrase, bePast }) => `${nounPhrase} ${bePast} chosen by students yesterday.`, (meaning) => `${meaning} は 昨日 生徒に 選ばれた`),
+    template(
+      EnglishLevel.A2,
+      (usage) => buildPassiveSentence(usage, 'present', 'checked', 'teachers', 'today'),
+      (meaning, usage, rawMeaning) => buildJapanesePassiveAnswer(usage, rawMeaning, {
+        subject: '教材は',
+        context: '今日',
+        agent: '先生に',
+      }) || (usage.role === 'verb' ? undefined : `${meaning} は 今日 先生に 確認される`),
+    ),
+    template(
+      EnglishLevel.B1,
+      (usage) => buildPassiveSentence(usage, 'present', 'used', 'many writers', 'in answers'),
+      (meaning, usage, rawMeaning) => buildJapanesePassiveAnswer(usage, rawMeaning, {
+        subject: '教材は',
+        context: '答案で',
+        agent: '多くの書き手に',
+      }) || (usage.role === 'verb' ? undefined : `${meaning} は 答案で 多くの書き手に 使われる`),
+    ),
+    template(
+      EnglishLevel.B1,
+      (usage) => buildPassiveSentence(usage, 'past', 'chosen', 'students', 'yesterday'),
+      (meaning, usage, rawMeaning) => buildJapanesePassiveAnswer(usage, rawMeaning, {
+        subject: '教材は',
+        context: '昨日',
+        agent: '生徒に',
+        tense: 'past',
+      }) || (usage.role === 'verb' ? undefined : `${meaning} は 昨日 生徒に 選ばれた`),
+    ),
     template(EnglishLevel.B1, ({ base }) => `Examples with ${base} were reviewed by coaches.`, (meaning) => `${meaning} を 含む 例は コーチに 復習された`),
   ],
   'present-perfect': [
     template(EnglishLevel.A2, ({ actionParticiple }) => `Learners have ${actionParticiple} today.`, (meaning) => `生徒は 今日 ${meaning} を 使った`),
     template(EnglishLevel.B1, ({ actionParticiple }) => `Teachers have ${actionParticiple} for weeks.`, (meaning) => `先生は 何週間も ${meaning} を 使っている`),
-    template(EnglishLevel.B1, ({ nounPhrase }) => `Nurses have written about ${nounPhrase} in reports.`, (meaning) => `看護師は 報告書で ${meaning} について 書いてきた`),
+    template(EnglishLevel.B1, ({ nounPhrase }) => `Students have written about ${nounPhrase} in reports.`, (meaning) => `生徒は 報告書で ${meaning} について 書いてきた`),
     template(EnglishLevel.B1, ({ nounPhrase }) => `The class has studied ${nounPhrase} since April.`, (meaning) => `クラスは 4月から ${meaning} を 学んでいる`),
   ],
   'relative-clause': [
@@ -455,7 +661,7 @@ const SCOPE_PRACTICE_SENTENCE_POOLS: Record<GrammarCurriculumScopeId, ScopePract
     template(EnglishLevel.B1, ({ actionPast }) => `A writer ${actionPast} more carefully.`, (meaning) => `書き手は ${meaning} を より慎重に 使った`),
   ],
   'noun-usage': [
-    template(EnglishLevel.A2, ({ nounPhrase }) => `${nounPhrase} has clear meaning.`, (meaning) => `${meaning} には 明確な 意味がある`),
+    template(EnglishLevel.A2, ({ subjectPhrase, bePresent }) => `${subjectPhrase} ${bePresent === 'are' ? 'have' : 'has'} clear meaning.`, (meaning) => `${meaning} には 明確な 意味がある`),
     template(EnglishLevel.B1, ({ nounPhrase }) => `A learner records ${nounPhrase} as information.`, (meaning) => `生徒は ${meaning} を 情報として 記録する`),
     template(EnglishLevel.B1, ({ nounPhrase }) => `This note gives advice about ${nounPhrase}.`, (meaning) => `このメモは ${meaning} について 助言を 与える`),
   ],
@@ -475,10 +681,13 @@ const selectScopePracticeTemplate = (
   scopeId: GrammarCurriculumScopeId,
   seed: string,
   userLevel?: EnglishLevel,
+  usageRole?: PracticeTermRole,
 ): ScopePracticeSentenceTemplate => {
   const scope = getGrammarCurriculumScope(scopeId);
   const levelCeiling = userLevel ?? scope.levelMin;
-  const templates = SCOPE_PRACTICE_SENTENCE_POOLS[scopeId];
+  const templates = scopeId === 'passive-voice' && usageRole === 'verb'
+    ? SCOPE_PRACTICE_SENTENCE_POOLS[scopeId].slice(0, 3)
+    : SCOPE_PRACTICE_SENTENCE_POOLS[scopeId];
   const eligibleTemplates = templates.filter((item) => isEnglishLevelAtLeast(levelCeiling, item.levelMin));
   const pool = eligibleTemplates.length > 0 ? eligibleTemplates : templates;
   const random = createSeededRandom(`${seed}:${scopeId}:template`);
@@ -494,10 +703,23 @@ const createScopePracticeSentence = (
   const term = normalizeTermForSentence(word.word);
   const meaning = normalizeDefinitionForSentence(word.definition);
   const usage = buildPracticeTermUsage(word);
-  const selectedTemplate = selectScopePracticeTemplate(scopeId, `${seed}:${word.id}:${term}`, userLevel);
+  const selectedTemplate = selectScopePracticeTemplate(
+    scopeId,
+    `${seed}:${word.id}:${term}`,
+    userLevel,
+    usage.role,
+  );
+  const japanesePracticeMeaning = usage.role === 'verb' ? `${meaning}こと` : meaning;
+  const rawJapaneseAnswerText = selectedTemplate.japaneseAnswerText(
+    japanesePracticeMeaning,
+    usage,
+    meaning,
+  );
+  const japaneseAnswerText = rawJapaneseAnswerText
+    ?.replace(/\s+([はがをにへと])(?=\s|$)/g, '$1');
   return {
     sentence: selectedTemplate.sentence(usage),
-    japaneseAnswerText: selectedTemplate.japaneseAnswerText(meaning),
+    japaneseAnswerText,
     source: 'fallback',
   };
 };
@@ -687,34 +909,36 @@ const maskStudyWord = (sentence: string, word: string): { clozeSentence: string;
 
 const buildWordFormOptions = (answer: string, seed: string, sourceWord?: WordData): string[] => {
   const normalized = normalizeWhitespace(answer);
-  const lower = normalized.toLowerCase();
   const role = sourceWord ? inferPracticeTermRole(sourceWord) : 'verb';
+  const base = sourceWord ? normalizeTermForSentence(sourceWord.word) : normalized;
   const variants = role === 'adjective'
     ? [
       normalized,
-      `${normalized}ly`,
-      `${normalized}ness`,
-      `more ${normalized}`,
+      `${base}ly`,
+      `${base}ness`,
+      `more ${base}`,
     ]
     : role === 'noun'
       ? [
         normalized,
-        lower.endsWith('s') ? normalized.slice(0, -1) : `${normalized}s`,
-        `a ${normalized}`,
-        `the ${normalized}`,
+        base.toLowerCase().endsWith('s') ? base.slice(0, -1) : `${base}s`,
+        `a ${base}`,
+        `the ${base}`,
       ]
       : role === 'adverb'
         ? [
           normalized,
-          lower.endsWith('ly') ? normalized.slice(0, -2) : `${normalized}ly`,
-          `more ${normalized}`,
-          `${normalized}er`,
+          base.toLowerCase().endsWith('ly') ? base.slice(0, -2) : `${base}ly`,
+          `more ${base}`,
+          `${base}er`,
         ]
         : [
           normalized,
-          toPresentParticiple(normalized),
-          toThirdPersonSingular(normalized),
-          toRegularPast(normalized),
+          base,
+          toPresentParticiple(base),
+          toThirdPersonSingular(base),
+          toRegularPast(base),
+          toPastParticiple(base),
         ];
   const unique = [...new Set(variants.filter(Boolean))].slice(0, 4);
   return deterministicShuffle(unique, seed);
@@ -741,6 +965,8 @@ const grammarClozeTargetSpecs: Partial<Record<GrammarCurriculumScopeId, GrammarC
   'be-verb': [
     { answerPattern: /\bis\b/i, answer: 'is', options: ['is', 'are', 'am', 'be'] },
     { answerPattern: /\bare\b/i, answer: 'are', options: ['is', 'are', 'am', 'be'] },
+    { answerPattern: /\bwas\b/i, answer: 'was', options: ['was', 'were', 'is', 'are'] },
+    { answerPattern: /\bwere\b/i, answer: 'were', options: ['was', 'were', 'is', 'are'] },
   ],
   'basic-tense': [
     { answerPattern: /\bwill\b/i, answer: 'will', options: ['will', 'did', 'has', 'is'] },
@@ -754,10 +980,13 @@ const grammarClozeTargetSpecs: Partial<Record<GrammarCurriculumScopeId, GrammarC
   'modal-base-verb': [
     { answerPattern: /\bcan\b/i, answer: 'can', options: ['can', 'should', 'must', 'will'] },
     { answerPattern: /\bshould\b/i, answer: 'should', options: ['can', 'should', 'must', 'will'] },
+    { answerPattern: /\bmust\b/i, answer: 'must', options: ['can', 'should', 'must', 'will'] },
   ],
   'time-preposition-phrase': [
     { answerPattern: /\bbefore\b/i, answer: 'before', options: ['before', 'during', 'after', 'in'] },
     { answerPattern: /\bduring\b/i, answer: 'during', options: ['before', 'during', 'after', 'at'] },
+    { answerPattern: /\bafter\b/i, answer: 'after', options: ['before', 'during', 'after', 'since'] },
+    { answerPattern: /\bsince\b/i, answer: 'since', options: ['since', 'for', 'during', 'until'] },
   ],
   'to-infinitive': [
     { answerPattern: /\bto review\b/i, answer: 'to review', options: ['review', 'to review', 'reviewing', 'reviewed'] },
@@ -846,6 +1075,37 @@ const grammarClozeTargetSpecs: Partial<Record<GrammarCurriculumScopeId, GrammarC
   ],
 };
 
+const maskWordAwareGrammarTarget = (
+  sentence: string,
+  scopeId: GrammarCurriculumScopeId,
+  word: WordData,
+  seed: string,
+): GrammarClozeMask | null => {
+  if (scopeId !== 'passive-voice' || inferPracticeTermRole(word) !== 'verb') return null;
+
+  const base = normalizeTermForSentence(word.word);
+  const participle = toPastParticiple(base);
+  for (const auxiliary of ['is', 'are', 'was', 'were'] as const) {
+    const answer = `${auxiliary} ${participle}`;
+    const match = sentence.match(getWordPattern(answer));
+    if (!match?.[2] || typeof match.index !== 'number') continue;
+
+    const answerStart = match.index + match[1].length;
+    const clozeSentence = normalizeWhitespace(
+      `${sentence.slice(0, answerStart)}____${sentence.slice(answerStart + match[2].length)}`,
+    );
+    const options = deterministicShuffle([
+      answer,
+      participle,
+      toThirdPersonSingular(base),
+      `${auxiliary} ${toPresentParticiple(base)}`,
+    ], `${seed}:${scopeId}:${answer}`);
+    return { clozeSentence, answer, options };
+  }
+
+  return null;
+};
+
 const maskGrammarTarget = (
   sentence: string,
   scopeId: GrammarCurriculumScopeId,
@@ -874,7 +1134,8 @@ const createGrammarClozeItem = (
   grammarScope: GrammarScopeSelection,
   seed: string,
 ): GrammarClozePracticeItem | null => {
-  const grammarMasked = maskGrammarTarget(sentence, grammarScope.scopeId, seed);
+  const grammarMasked = maskWordAwareGrammarTarget(sentence, grammarScope.scopeId, word, seed)
+    ?? maskGrammarTarget(sentence, grammarScope.scopeId, seed);
   const masked: GrammarClozeMask | null = grammarMasked ?? maskStudyWord(sentence, word.word);
   if (!masked) return null;
   const id = `${word.id}:grammar-cloze`;
@@ -906,12 +1167,14 @@ export const buildGrammarPracticeItemsForWord = (
   const canBuildJapaneseItem = !options.requestedScopeId
     || isGrammarScopeCompatibleWithMode(options.requestedScopeId, japaneseQuestionMode);
   const english = resolveEnglishSentence(word, options.requestedScopeId, seed, options.userLevel);
+  const hasScopedJapaneseAnswer = !options.requestedScopeId
+    || english.japaneseAnswerText !== undefined;
   const englishGrammarScope = resolveGrammarScopeSelection({
     mode: 'EN_WORD_ORDER',
     requestedScopeId: options.requestedScopeId,
     sentence: english.sentence,
   });
-  const japaneseGrammarScope = canBuildJapaneseItem
+  const japaneseGrammarScope = canBuildJapaneseItem && hasScopedJapaneseAnswer
     ? resolveGrammarScopeSelection({
       mode: japaneseQuestionMode,
       requestedScopeId: options.requestedScopeId,

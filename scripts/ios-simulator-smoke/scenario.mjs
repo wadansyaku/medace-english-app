@@ -3,7 +3,7 @@ import {
   MOBILE_FLOW_SCENARIOS,
   MOBILE_FLOW_TEST_IDS,
   MOBILE_FLOW_WRITING,
-} from '../../config/mobileFlow.js';
+} from '../_shared/mobile-flow.mjs';
 
 export const createScenarioRunner = ({
   appUrl,

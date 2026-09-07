@@ -1,3 +1,5 @@
+> 履歴資料（2026-09-07に整理）。現行の計画と検証状態は [再構築計画](./analysis/rebuild-plan-2026-09-07.md) を参照。この文書の完了・本番数値は記録当時のものです。
+
 # Parallel Workstreams Phase 2
 
 ## Goal
@@ -44,7 +46,7 @@
 - Primary files:
   - `components/AdminPanel.tsx`
   - `components/admin/AdminContentImportView.tsx`
-  - `utils/nounWorkbookImport.js`
+  - `scripts/_shared/noun-workbook-import.mjs` (test/operations-only parser; moved out of the production graph)
   - `tests/nounWorkbookImport.test.ts`
   - `functions/_shared/catalog-import.ts`
   - `functions/_shared/storage-book-actions.ts`

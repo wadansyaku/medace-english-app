@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   WRITING_UPLOAD_MAX_BYTES,
+  WRITING_UPLOAD_MAX_TOTAL_BYTES,
   resolveWritingUploadMimeType,
   validateWritingSubmissionFiles,
 } from '../utils/writingSubmissionValidation';
@@ -96,6 +97,18 @@ describe('writing submission file validation', () => {
     ])).toMatchObject({
       valid: false,
       message: '画像は最大4枚まで提出できます。',
+    });
+  });
+
+  it('rejects a multi-image submission whose aggregate size exceeds the OCR memory budget', () => {
+    const halfPlusOne = Math.floor(WRITING_UPLOAD_MAX_TOTAL_BYTES / 2) + 1;
+
+    expect(validateWritingSubmissionFiles([
+      makeFile({ name: 'page-1.png', size: halfPlusOne }),
+      makeFile({ name: 'page-2.png', size: halfPlusOne }),
+    ])).toEqual({
+      valid: false,
+      message: '提出ファイルの合計を 20MB 以下にしてください。',
     });
   });
 });

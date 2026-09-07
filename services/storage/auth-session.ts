@@ -19,6 +19,7 @@ import {
   type StoredSessionRecord,
 } from './idb-support';
 import type { PasswordRecoveryResponse, PasswordResetConfirmResponse } from '../../contracts/storage';
+import { isValidStudySessionXp, MAX_STUDY_SESSION_XP, resolveXpProgress } from '../../shared/xp';
 
 export interface AuthSessionContext {
   getStore: GetStore;
@@ -128,18 +129,17 @@ export const addXP = async (
   user: UserProfile,
   amount: number,
 ): Promise<{ user: UserProfile; leveledUp: boolean; }> => {
+  if (!isValidStudySessionXp(amount)) {
+    throw new Error(`XP は 1 から ${MAX_STUDY_SESSION_XP} までの整数で指定してください。`);
+  }
   if (!user.stats) user.stats = { xp: 0, level: 1, currentStreak: 1, lastLoginDate: getTodayDateKey() };
 
-  let { xp, level } = user.stats;
-  xp += amount;
-  const xpToNextLevel = level * 100;
-  let leveledUp = false;
-
-  if (xp >= xpToNextLevel) {
-    xp -= xpToNextLevel;
-    level += 1;
-    leveledUp = true;
+  const progress = resolveXpProgress(user.stats.level, user.stats.xp, amount);
+  if (!progress) {
+    throw new Error('XP状態が安全な数値範囲を超えています。');
   }
+  const { xp, level } = progress;
+  const leveledUp = level > user.stats.level;
 
   const updatedUser = {
     ...user,

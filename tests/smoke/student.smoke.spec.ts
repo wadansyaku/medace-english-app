@@ -83,11 +83,17 @@ test('desktop student dashboard keeps the command center calm and above the fold
     const ctaStyle = cta ? window.getComputedStyle(cta) : null;
     return {
       centerBackground: centerStyle.backgroundColor,
+      centerBackgroundImage: centerStyle.backgroundImage,
       ctaBackground: ctaStyle?.backgroundColor || '',
+      ctaForeground: ctaStyle?.color || '',
     };
   });
   expect(palette.centerBackground).toBe('rgb(255, 255, 255)');
-  expect(palette.ctaBackground).toBe('rgb(255, 122, 0)');
+  expect(palette.centerBackgroundImage).toBe('none');
+  expect(palette.ctaBackground).toBe('rgb(15, 118, 110)');
+  expect(palette.ctaForeground).toBe('rgb(255, 255, 255)');
+  await expect(page.getByTestId('app-shell')).toHaveCSS('background-color', 'rgb(244, 248, 247)');
+  await expect(page.getByTestId('app-shell')).toHaveCSS('background-image', 'none');
 
   await page.setViewportSize({ width: 1024, height: 768 });
   await expect(commandCenter).toBeVisible();
@@ -114,10 +120,15 @@ test('desktop student dashboard keeps the command center calm and above the fold
   expect(offenders).toEqual([]);
 
   await page.getByTestId('dashboard-task-reference-library').click();
+  const libraryReachableTop = await page.getByTestId('dashboard-library-section').evaluate((element) => (
+    element.getBoundingClientRect().top + window.scrollY
+      - Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
+  ));
   await expect.poll(async () => {
     const box = await page.getByTestId('dashboard-library-section').boundingBox();
     return box?.y ?? 9999;
-  }).toBeLessThanOrEqual(260);
+  }).toBeLessThanOrEqual(Math.max(260, libraryReachableTop + 1));
+  await expect(page.getByTestId('dashboard-library-section')).toBeInViewport();
 
   const announcementsShortcut = page.getByTestId('dashboard-task-reference-announcements');
   if (await announcementsShortcut.count()) {

@@ -9,9 +9,11 @@ import {
   ENGLISH_PRACTICE_ATTEMPT_MODES,
   ENGLISH_PRACTICE_LANE_IDS,
 } from '../../../shared/englishPractice';
+import { MAX_STUDY_SESSION_XP } from '../../../shared/xp';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
 import { expectBoolean, expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalEnum, expectOptionalNumber, expectOptionalObject, expectOptionalString, expectString } from '../request-validation';
+import { expectIntegerInRange } from '../validators';
 import {
   handleAddXP,
   handleGetActivityLogs,
@@ -32,7 +34,13 @@ export const learningStorageActionDefinitions = {
   addXP: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
-      return { amount: expectNumber(record, 'amount') };
+      return {
+        amount: expectIntegerInRange(record, 'amount', {
+          label: 'XP',
+          min: 1,
+          max: MAX_STUDY_SESSION_XP,
+        }) as number,
+      };
     },
     execute: ({ env, user }, payload) => handleAddXP(env, user, payload.amount),
   }),
@@ -40,17 +48,18 @@ export const learningStorageActionDefinitions = {
     parse: expectEmptyPayload,
     execute: ({ env, user }) => handleGetDueCount(env, user),
   }),
-  saveSRSHistory: defineStorageAction({
+  saveSRSHistory: defineStorageAction<'saveSRSHistory'>({
     parse: (payload) => {
       const record = expectObject(payload);
-      expectObject(record.word, 'word');
+      const word = expectObject(record.word, 'word');
       return {
-        word: record.word,
-        rating: expectNumber(record, 'rating'),
+        word: { id: expectString(word, 'id'), bookId: expectString(word, 'bookId') },
+        rating: expectIntegerInRange(record, 'rating', { min: 0, max: 3 }) as number,
         responseTimeMs: expectOptionalNumber(record, 'responseTimeMs') || 0,
         missionAssignmentId: expectOptionalString(record, 'missionAssignmentId'),
-        taskIntentType: expectOptionalString(record, 'taskIntentType') as never,
-      } as never;
+        taskIntentType: expectOptionalEnum(record.taskIntentType, Object.values(LearningTaskIntentType), 'taskIntentType'),
+        clientAttemptId: record.clientAttemptId === undefined ? undefined : expectString(record, 'clientAttemptId'),
+      };
     },
     execute: async ({ env, user }, payload) => {
       await handleSaveSrsHistory(
@@ -61,6 +70,7 @@ export const learningStorageActionDefinitions = {
         payload.responseTimeMs,
         payload.missionAssignmentId,
         payload.taskIntentType,
+        payload.clientAttemptId,
       );
       return null;
     },

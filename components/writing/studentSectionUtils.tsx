@@ -54,11 +54,19 @@ export const canSubmitWritingAssignment = (assignment: WritingAssignment): boole
   assignment.status === 'ISSUED' || assignment.status === 'REVISION_REQUESTED'
 );
 
-export const canOpenWritingFeedback = (assignment: WritingAssignment): boolean => (
-  Boolean(assignment.latestSubmissionId)
-  && (assignment.status === 'RETURNED'
+export const getWritingFeedbackSubmissionId = (assignment: WritingAssignment): string | undefined => (
+  assignment.latestReleasedSubmissionId
+  || ((assignment.status === 'RETURNED'
     || assignment.status === 'REVISION_REQUESTED'
-    || assignment.status === 'COMPLETED')
+    || assignment.status === 'COMPLETED') ? assignment.latestSubmissionId : undefined)
+);
+
+export const canOpenWritingFeedback = (assignment: WritingAssignment): boolean => (
+  Boolean(getWritingFeedbackSubmissionId(assignment))
+);
+
+export const isWritingSubmissionPending = (assignment: WritingAssignment): boolean => (
+  assignment.status === 'SUBMITTED' || assignment.status === 'REVIEW_READY'
 );
 
 export const getWritingAssignmentPhase = (

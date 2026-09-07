@@ -16,7 +16,6 @@ type LearningCatalogSurface = Pick<CatalogClient,
   | 'getWordsByBook'
   | 'reportWord'
   | 'updateWord'
-  | 'updateWordCache'
   | 'generateWordHintAsset'
 >;
 
@@ -66,12 +65,11 @@ export const learningService: LearningService = {
   recordEnglishPracticeAttempt: (uid, payload) => learningClient.recordEnglishPracticeAttempt(uid, payload),
   reviewAiGeneratedProblem: (payload) => learningClient.reviewAiGeneratedProblem(payload),
   reportWord: (wordId, reason) => catalogClient.reportWord(wordId, reason),
-  saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType) => (
-    learningClient.saveSRSHistory(uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType)
+  saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId) => (
+    learningClient.saveSRSHistory(uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId)
   ),
   generateWordHintAsset: (payload) => catalogClient.generateWordHintAsset(payload),
   updateWord: (word) => catalogClient.updateWord(word),
-  updateWordCache: (wordId, sentence, translation) => catalogClient.updateWordCache(wordId, sentence, translation),
 };
 
 export default learningService;

@@ -66,7 +66,6 @@ import {
   getWordsByBookLocal,
   prepareBookExamplesLocal,
   reportWordLocal,
-  updateWordCacheLocal,
   updateWordLocal,
   type LocalCatalogStorageContext,
 } from './storage/catalog-local';
@@ -216,6 +215,7 @@ export class IndexedDBStorageService implements IStorageService {
 
   private getLearningHistoryContext(): LearningHistoryContext {
     return {
+      getDb: () => this.dbPromise,
       getStore: this.getStore.bind(this),
       getBooks: this.getBooks.bind(this),
       getWordsByBook: this.getWordsByBook.bind(this),
@@ -325,10 +325,6 @@ export class IndexedDBStorageService implements IStorageService {
     return reportWordLocal(this.getLocalCatalogStorageContext(), wordId, reason);
   }
 
-  async updateWordCache(wordId: string, sentence: string, translation: string): Promise<void> {
-    return updateWordCacheLocal(this.getLocalCatalogStorageContext(), wordId, sentence, translation);
-  }
-
   async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
     return generateWordHintAssetLocal(this.getLocalCatalogStorageContext(), payload);
   }
@@ -356,6 +352,7 @@ export class IndexedDBStorageService implements IStorageService {
     responseTimeMs = 0,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    clientAttemptId?: string,
   ): Promise<void> {
     return saveSrsHistoryFromHistory(
       this.getLearningHistoryContext(),
@@ -365,6 +362,7 @@ export class IndexedDBStorageService implements IStorageService {
       responseTimeMs,
       missionAssignmentId,
       taskIntentType,
+      clientAttemptId,
     );
   }
 
@@ -501,6 +499,7 @@ export class IndexedDBStorageService implements IStorageService {
         STORES.PREFERENCES,
         STORES.ASSIGNMENTS,
         STORES.INTERACTION_EVENTS,
+        STORES.STUDY_ATTEMPT_RECEIPTS,
         STORES.WEAKNESS_SIGNALS,
         STORES.COMMERCIAL_REQUESTS,
         STORES.PRODUCT_ANNOUNCEMENTS,
@@ -516,6 +515,7 @@ export class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.PREFERENCES).clear();
     tx.objectStore(STORES.ASSIGNMENTS).clear();
     tx.objectStore(STORES.INTERACTION_EVENTS).clear();
+    tx.objectStore(STORES.STUDY_ATTEMPT_RECEIPTS).clear();
     tx.objectStore(STORES.WEAKNESS_SIGNALS).clear();
     tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
     tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();

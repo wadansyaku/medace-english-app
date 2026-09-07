@@ -74,7 +74,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
       </div>
 
       {controller.refreshing && !controller.loading && (
-        <div data-testid="writing-refresh-status" className="mt-4 inline-flex items-center gap-2 rounded-full border border-medace-100 bg-medace-50 px-4 py-2 text-xs font-bold text-medace-700">
+        <div role="status" aria-live="polite" data-testid="writing-refresh-status" className="mt-4 inline-flex items-center gap-2 rounded-full border border-medace-100 bg-medace-50 px-4 py-2 text-xs font-bold text-medace-700">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           最新の課題と返却状況を確認中
         </div>
@@ -112,7 +112,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
       )}
 
       {controller.notice && (
-        <div className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-bold ${
+        <div role={controller.notice.tone === 'error' ? 'alert' : 'status'} aria-live="polite" className={`mt-5 rounded-2xl border px-4 py-3 text-sm font-bold ${
           controller.notice.tone === 'success'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
             : 'border-red-200 bg-red-50 text-red-700'
@@ -122,7 +122,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
       )}
 
       {controller.loading ? (
-        <div className="mt-8 flex min-h-[16vh] items-center justify-center text-slate-500">
+        <div role="status" aria-label="自由英作文課題を読み込み中" className="mt-8 flex min-h-[16vh] items-center justify-center text-slate-500">
           <Loader2 className="h-8 w-8 animate-spin text-medace-500" />
         </div>
       ) : (
@@ -157,10 +157,8 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
         <WritingStudentFeedbackSheet
           feedbackDetail={controller.feedbackDetail}
           isMobileViewport={isMobileViewport}
-          selectedEvaluationId={controller.selectedEvaluationId}
           selectedEvaluation={controller.selectedEvaluation}
           feedbackCommentExpanded={controller.feedbackCommentExpanded}
-          onSelectEvaluation={controller.setSelectedEvaluationId}
           onToggleFeedbackCommentExpanded={controller.toggleFeedbackCommentExpanded}
           onClose={controller.closeFeedback}
           onPrintFeedback={controller.handlePrintFeedback}

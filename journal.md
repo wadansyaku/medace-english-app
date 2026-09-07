@@ -1,42 +1,17 @@
-# Development Journal
+# 開発記録
 
-## Current State
-- Cloudflare Pages Functions + D1 を正本とする運用に寄せています。
-- IndexedDB は demo / offline fallback とし、business workspace と writing workflow は Cloudflare 側を正史にしています。
-- `/api/storage` は共有 `StorageActionMap` 契約を使う構成へ寄せつつ、巨大 facade の分割を継続しています。
-- 教材 import は Cloudflare path で server 側 validator により正規化・検証済みです。
-- B2B 向けには、担当変更履歴 `student_instructor_assignment_events` と組織ダッシュボード KPI の監査性を優先しています。
-- browser smoke は core / writing / idb mode まで green に戻し、直近の writing 導線 blocker は解消しました。
-- `名詞 workbook import` は B2B/storage refactor と混ぜず、server-side guardrail と reviewed exception 台帳で閉じる段階です。
-- 実際の hotspot は `services/storage.ts`、`services/storage/organization-read-model.ts`、`types.ts`、storage/writing actions 群で、`BusinessAdminDashboardSections` は最優先の分割対象ではなくなっています。
-- 2026-04-26 時点の次 batch は、schema-heavy な商用CRM化や import atomic 化ではなく、既存の B2B activation loop を実操作としてつなげる UI/read-model 改善を優先します。
+## 2026-09-07 — 学習・保存・保守基盤の再構築（第1段階）
 
-## Implemented
-- `student_instructor_assignment_events` migration を追加。
-- `assignStudentInstructor` で担当更新と履歴記録を同時実行。
-- 組織ダッシュボードへ `reactivatedStudents7d` / `reactivationRate7d` / `assignmentEvents` を追加。
-- `StudentSummary.assignmentUpdatedAt` を追加し、講師・管理者 UI へ表示。
-- `services/cloudflare.ts` で demo login / email auth 後の `/api/session` 復元待機と、profile update 前の session 確認を追加し、client state と server session のズレを抑制した。
-- API integration tests に、business student の `demo login -> onboarding/profile save -> /api/session -> writing assignments load` 回帰確認を追加した。
-- API client に HTML / non-JSON response guard を追加し、`wrangler pages dev dist` 前提を明示。
-- `storage-actions` を dispatcher 化し、books / learning / organization / dashboard の module へ分割。
-- `Dashboard` は data hook と hero / plan / library / settings / account / progress section を分離、`AdminPanel` は dashboard view と content import view を分離。
-- Playwright smoke を local Pages Functions + D1 migration 前提で安定化し、GitHub Actions に browser smoke workflow を追加。
-- deploy workflow に `cf:doctor` を組み込み、GitHub / Cloudflare 設定差分を deploy 前に検知できるようにした。
-- API integration tests に、phrasebook の owner-only 可視性、duplicate row skip、cross-org assignment 拒否、worksheet access 権限制御を追加した。
-- ログイン前ホームと公開説明ページに live Motivation Board を追加し、`/api/public/motivation` からリアルタイム更新の公開 snapshot を取得できるようにした。
-- `public/manifest.webmanifest` を追加し、PWA icon / theme-color / standalone metadata を `index.html` と同期した。
-- noun workbook import の CSV/XLSX UI、D1/IndexedDB provenance 保存、server-side profile validation、4列シート/ヘッダーなし索引対応、監査済み mismatch/duplicate 台帳を追加した。
-- `output/spreadsheet/noun_workbook_analysis_revised.txt` を更新し、実 workbook は 932 words / categories 10 / unreviewed mismatch 0 / unreviewed duplicate 0 の状態で確認した。
+ユーザー依頼に基づき、既存機能を前提から監査し、主要な状態管理と保存契約を作り直した。前回から存在した未コミット変更109パスを保全し、今回の成果と区別した。
 
-## In Progress
-- Cloudflare / GitHub 運用手順の継続整理。
-- `services/storage.ts` と `services/storage/organization-read-model.ts` の分割計画。
-- Thread A の PR / preview deployment / main 統合。
-- Business Admin の導入進捗モデル化と、生徒 Writing の reload 不要な再取得・提出バリデーション。
+初期のmigration/到達性/型/110ファイル598テストは成功。監査では、取得失敗の0化、重複した行動判断、回答連打、SRSの非原子保存、missionの重複・丸め誤完了、client→server逆依存、CI二重実行、依存脆弱性を確認した。
 
-## Next Focus
-- `todo.md` の High priority に合わせ、割当運用の履歴化、cohort 単位運用、B2B KPI の継続検証を先に固める。
-- workbook import と B2B/storage refactor は別 branch で進め、shared contract の衝突を避ける。
-- `services/storage.ts` と `services/storage/organization-read-model.ts` の分割を優先し、B2B 導線の変更コストを下げる。
-- オフライン同期や touch gesture / native wrapper は B2B 運用基盤の安定化後に進める。
+学習ホームと主行動の一元化、通信失敗からの復旧、SRS receiptと原子的保存、mission競合制御、境界gateとCI整理を実装。ホームはニュートラル背景と深い青緑の主操作へ整理した。最終unit675件、API、build、全browser58件が成功し、配色変更後の関連browser15件も成功。ローカル対象外のpreview専用2件は区別した。不要な再生成物2ディレクトリ・109ファイル（2,130,480 bytes）を清掃し、追加の削除候補0を確認した。本番配備は実施していない。
+
+対応は [今回の監査・計画](./docs/analysis/rebuild-plan-2026-09-07.md) に一本化。最終結果は同文書の「完了時の検証記録」を正本とする。ここには本番配備や事業効果の未確認情報を完了として残さない。
+
+以前の記録は [2026-04-26までのjournal](./docs/archive/journal-through-2026-04-26.md) を参照。
+
+## 2026-09-07 — 本番反映（第2段階）
+
+本番まで変更する指示を受け、PR #51と必須CI・独立previewを通して反映する。公開QA証拠を本文なしの集計へ限定し、migration前の復旧bookmark記録、配備後テスト名の追随を追加。レビューで見つかった作文返却の後処理回復、再提出中の過去返却閲覧、長い学習セッションのXPと端末内の出題語数上限を修正する。実配備の成否は[リリース記録](./docs/analysis/production-rebuild-release-2026-09-07.md)へ記録する。

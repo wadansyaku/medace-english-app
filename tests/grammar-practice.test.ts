@@ -9,13 +9,13 @@ import {
 } from '../utils/grammarPractice';
 
 const createWord = (overrides: Partial<WordData> = {}): WordData => ({
-  id: 'word-stabilize',
-  bookId: 'book-medical',
+  id: 'word-organize',
+  bookId: 'book-core',
   number: 12,
-  word: 'stabilize',
-  definition: '安定させる',
-  exampleSentence: 'Doctors stabilize the patient before surgery.',
-  exampleMeaning: '医師は 手術前に 患者を 安定させる。',
+  word: 'organize',
+  definition: '整理する',
+  exampleSentence: 'Students organize their notes before class.',
+  exampleMeaning: '生徒は 授業前に ノートを 整理する。',
   ...overrides,
 });
 
@@ -31,38 +31,38 @@ describe('grammar practice helpers', () => {
 
     const english = items.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
     expect(english?.source).toBe('example');
-    expect(english?.sourceSentence).toBe('Doctors stabilize the patient before surgery.');
+    expect(english?.sourceSentence).toBe('Students organize their notes before class.');
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'doctors',
-      'stabilize',
-      'the',
-      'patient',
+      'students',
+      'organize',
+      'their',
+      'notes',
       'before',
-      'surgery',
+      'class',
     ]);
     expect(english?.chips.map((chip) => chip.text)).not.toEqual([
-      'doctors',
-      'stabilize',
-      'the',
-      'patient',
+      'students',
+      'organize',
+      'their',
+      'notes',
       'before',
-      'surgery',
+      'class',
     ]);
     expect(english?.chips.some((chip) => /^[A-Z]/.test(chip.text) || /[.!?。]$/.test(chip.text))).toBe(false);
 
     const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
     expect(japanese?.source).toBe('example');
-    expect(japanese?.answerText).toBe('医師は 手術前に 患者を 安定させる');
+    expect(japanese?.answerText).toBe('生徒は 授業前に ノートを 整理する');
     expect(japanese?.correctChipIds.map((id) => japanese.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      '医師は',
-      '手術前に',
-      '患者を',
-      '安定させる',
+      '生徒は',
+      '授業前に',
+      'ノートを',
+      '整理する',
     ]);
 
     const cloze = items.find((item) => item.kind === 'GRAMMAR_CLOZE');
     expect(cloze?.source).toBe('example');
-    expect(cloze?.clozeSentence).toBe('Doctors stabilize the patient ____ surgery.');
+    expect(cloze?.clozeSentence).toBe('Students organize their notes ____ class.');
     expect(cloze?.answer).toBe('before');
     expect(cloze?.grammarFocus).toBe('時を表す副詞句');
     expect(cloze?.options).toContain('before');
@@ -171,7 +171,7 @@ describe('grammar practice helpers', () => {
 
     const english = lowLevelItems.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
 
-    expect(english?.sourceSentence).toBe('Teachers ask learners to monitor the process.');
+    expect(english?.sourceSentence).toBe('Teachers ask learners to monitor the material.');
     expect(english?.sourceSentence).not.toMatch(/\b(?:word|term)\s+monitor\b/i);
     expect(english?.grammarScope).toMatchObject({
       scopeId: 'verb-patterns',
@@ -184,8 +184,8 @@ describe('grammar practice helpers', () => {
       id: 'word-protect',
       word: 'protect',
       definition: '守る',
-      exampleSentence: 'Doctors protect the patient before the operation.',
-      exampleMeaning: '医師は 患者を 守る。',
+      exampleSentence: 'Students protect the project before the presentation.',
+      exampleMeaning: '生徒は 発表前に プロジェクトを 守る。',
     }), { seed: 'duplicate-token' });
 
     const english = items.find((item) => item.kind === 'ENGLISH_WORD_ORDER');
@@ -212,22 +212,82 @@ describe('grammar practice helpers', () => {
       source: 'EXPLICIT',
       labelJa: '受け身',
     });
-    expect(english?.sourceSentence).toBe('monitoring the process is checked by teachers today.');
+    expect(english?.sourceSentence).toBe('The material is monitored by teachers today.');
     expect(english?.sourceSentence).not.toMatch(/\b(?:word|term)\s+monitor\b/i);
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toEqual([
-      'monitoring',
       'the',
-      'process',
+      'material',
       'is',
-      'checked',
+      'monitored',
       'by',
       'teachers',
       'today',
     ]);
-    expect(japanese?.answerText).toBe('観察する は 今日 先生に 確認される');
+    expect(japanese?.answerText).toBe('教材は 今日 先生に 観察される');
     expect(cloze?.grammarFocus).toBe('受け身');
-    expect(cloze?.clozeSentence).toBe('monitoring the process ____ by teachers today.');
-    expect(cloze?.answer).toBe('is checked');
+    expect(cloze?.clozeSentence).toBe('The material ____ by teachers today.');
+    expect(cloze?.answer).toBe('is monitored');
+  });
+
+  it.each([
+    { word: 'monitor', definition: '観察する', passive: '観察される' },
+    { word: 'write', definition: '書く', passive: '書かれる' },
+    { word: 'protect', definition: '守る', passive: '守られる' },
+  ])('keeps a natural Japanese passive translation for $word', ({ word, definition, passive }) => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      id: `word-${word}`,
+      word,
+      definition,
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), {
+      seed: `japanese-passive-${word}`,
+      requestedScopeId: 'passive-voice',
+      userLevel: EnglishLevel.A2,
+    });
+    const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
+
+    expect(japanese?.answerText).toBe(`教材は 今日 先生に ${passive}`);
+    expect(japanese?.answerText).not.toMatch(/ことは.+確認される/);
+  });
+
+  it('keeps the Japanese passive tense aligned with a past fallback sentence', () => {
+    const pastVariant = Array.from({ length: 40 }, (_, index) => (
+      buildGrammarPracticeItemsForWord(createWord({
+        id: 'word-monitor-past-passive',
+        word: 'monitor',
+        definition: '観察する',
+        exampleSentence: null,
+        exampleMeaning: null,
+      }), {
+        seed: `japanese-passive-past-${index}`,
+        requestedScopeId: 'passive-voice',
+        userLevel: EnglishLevel.B1,
+      })
+    )).find((items) => items.some((item) => (
+      item.kind === 'ENGLISH_WORD_ORDER' && item.sourceSentence.includes('yesterday')
+    )));
+
+    expect(pastVariant).toBeDefined();
+    expect(pastVariant?.find((item) => item.kind === 'JAPANESE_WORD_ORDER')).toMatchObject({
+      answerText: '教材は 昨日 生徒に 観察された',
+    });
+  });
+
+  it('does not invent a Japanese passive form for a non-passivizable definition', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      id: 'word-understand',
+      word: 'understand',
+      definition: '理解できる',
+      exampleSentence: null,
+      exampleMeaning: null,
+    }), {
+      seed: 'japanese-passive-unsupported',
+      requestedScopeId: 'passive-voice',
+      userLevel: EnglishLevel.A2,
+    });
+
+    expect(items.some((item) => item.kind === 'JAPANESE_WORD_ORDER')).toBe(false);
   });
 
   it('does not create Japanese order items for an explicit scope that does not support ordering', () => {
@@ -283,7 +343,7 @@ describe('grammar practice helpers', () => {
   it('filters records that cannot produce vocabulary-backed grammar practice', () => {
     const invalidWords = [
       createWord({ id: 'missing-word', word: '', definition: '安定させる' }),
-      createWord({ id: 'missing-definition', word: 'stabilize', definition: '' }),
+      createWord({ id: 'missing-definition', word: 'organize', definition: '' }),
       createWord({ id: 'unsupported-word', word: '安定', definition: '安定させる' }),
     ];
 

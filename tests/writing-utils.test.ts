@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WritingEvaluation } from '../types';
+import {
+  WritingExamCategory,
+  type WritingEvaluation,
+  type WritingPromptSnapshot,
+} from '../types';
 import {
   appendWritingSideEffectWarning,
+  buildPrintableFeedbackHtml,
   buildRubric,
   choosePreferredEvaluation,
   decodeSubmissionMarker,
@@ -56,6 +61,60 @@ describe('writing utils', () => {
 
     expect(rubric.map((item) => item.key)).toEqual(['task', 'organization', 'vocabulary', 'grammar']);
     expect(rubric.every((item) => item.score >= 1 && item.score <= item.maxScore)).toBe(true);
+  });
+
+  it('escapes every dynamic printable feedback value and hides provider metadata', () => {
+    const injection = `<script>alert("student" & 'peer')</script>`;
+    const imageInjection = `<img src=x onerror="alert('review')">`;
+    const snapshot: WritingPromptSnapshot = {
+      templateId: 'template-1',
+      examCategory: WritingExamCategory.EIKEN,
+      templateType: 'OPINION',
+      title: `<b title="topic">${injection}</b>`,
+      promptText: `<svg onload="alert('prompt')">${injection}</svg>`,
+      guidance: `Use "quotes" & 'apostrophes' ${imageInjection}`,
+      wordCountMin: 50,
+      wordCountMax: 60,
+      submissionCode: 'ABC123',
+      markerValue: 'marker',
+    };
+    const evaluation = makeEvaluation({
+      provider: 'OPENAI',
+      rubric: [{
+        key: 'task',
+        label: `<em>${injection}</em>`,
+        score: 4,
+        maxScore: 5,
+        comment: imageInjection,
+      }],
+      strengths: [injection],
+      improvementPoints: [imageInjection],
+      sentenceCorrections: [{
+        before: injection,
+        after: imageInjection,
+        reason: `"quoted" & 'reason'`,
+      }],
+      correctedDraft: injection,
+      modelAnswer: imageInjection,
+    });
+
+    const html = buildPrintableFeedbackHtml(
+      snapshot,
+      evaluation,
+      imageInjection,
+      injection,
+      injection,
+    );
+
+    expect(html).not.toMatch(/<(?:script|img|svg|b|em)\b/i);
+    expect(html).toContain('&lt;script&gt;alert(&quot;student&quot; &amp; &#39;peer&#39;)&lt;/script&gt;');
+    expect(html).toContain('&lt;img src=x onerror=&quot;alert(&#39;review&#39;)&quot;&gt;');
+    expect(html).toContain('&quot;quoted&quot; &amp; &#39;reason&#39;');
+    expect(html).toContain('講師確認済み');
+    expect(html).not.toContain('OpenAI');
+    expect(html).not.toContain('OPENAI');
+    expect(html).not.toContain('Gemini');
+    expect(html).not.toContain('Cloudflare');
   });
 
   it('returns no warning when writing side effects were persisted successfully', () => {

@@ -76,7 +76,6 @@ export interface CatalogStorageService {
   getWordsByBook(bookId: string): Promise<WordData[]>;
   updateWord(word: WordData): Promise<void>;
   reportWord(wordId: string, reason: string): Promise<void>;
-  updateWordCache(wordId: string, sentence: string, translation: string): Promise<void>;
   generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData>;
   prepareBookExamples(bookId: string): Promise<PrepareBookExamplesResult>;
 }
@@ -92,6 +91,7 @@ export interface LearningStorageService {
     responseTimeMs?: number,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    clientAttemptId?: string,
   ): Promise<void>;
   recordQuizAttempt(
     uid: string,

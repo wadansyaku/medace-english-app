@@ -61,7 +61,7 @@ export const expectNullableString = (record: RecordValue, key: string): string |
 
 export const expectNumber = (record: RecordValue, key: string, label = key): number => {
   const value = record[key];
-  if (typeof value !== 'number' || Number.isNaN(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw createValidationError(`${label} は数値である必要があります。`);
   }
   return value;
@@ -70,7 +70,7 @@ export const expectNumber = (record: RecordValue, key: string, label = key): num
 export const expectOptionalNumber = (record: RecordValue, key: string): number | undefined => {
   const value = record[key];
   if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value !== 'number' || Number.isNaN(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw createValidationError(`${key} は数値である必要があります。`);
   }
   return value;

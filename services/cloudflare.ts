@@ -177,13 +177,6 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async updateWordCache(wordId: string, sentence: string, translation: string): Promise<void> {
-    await this.callStorage({
-      action: 'updateWordCache',
-      payload: { wordId, sentence, translation },
-    });
-  }
-
   async generateWordHintAsset(payload: GenerateWordHintAssetPayload): Promise<WordData> {
     return this.callStorage({
       action: 'generateWordHintAsset',
@@ -223,10 +216,11 @@ export class CloudflareStorageService implements IStorageService {
     responseTimeMs = 0,
     missionAssignmentId?: string,
     taskIntentType?: LearningTaskIntentType,
+    clientAttemptId?: string,
   ): Promise<void> {
     await this.callStorage({
       action: 'saveSRSHistory',
-      payload: { word, rating, responseTimeMs, missionAssignmentId, taskIntentType },
+      payload: { word: { id: word.id, bookId: word.bookId }, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId },
     });
   }
 

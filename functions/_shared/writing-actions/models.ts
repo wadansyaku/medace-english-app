@@ -53,6 +53,7 @@ export interface DbWritingAssignmentLikeRow {
   instructor_name: string;
   student_name: string;
   latest_submission_id?: string | null;
+  latest_released_submission_id?: string | null;
 }
 
 export interface DbWritingAssignmentRow extends DbWritingAssignmentLikeRow {}
@@ -233,6 +234,7 @@ export const toAssignment = (
   row: DbWritingAssignmentLikeRow,
   options: {
     latestSubmissionId?: string;
+    latestReleasedSubmissionId?: string;
     latestSubmission?: WritingSubmission;
   } = {},
 ): WritingAssignment => ({
@@ -261,6 +263,7 @@ export const toAssignment = (
   lastSubmittedAt: Number(row.last_submitted_at || 0) || undefined,
   lastReturnedAt: Number(row.last_returned_at || 0) || undefined,
   latestSubmissionId: options.latestSubmissionId || options.latestSubmission?.id,
+  latestReleasedSubmissionId: options.latestReleasedSubmissionId,
   latestSubmission: options.latestSubmission,
 });
 

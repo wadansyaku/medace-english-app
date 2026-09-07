@@ -8,6 +8,7 @@ import {
   MissionNextActionType,
   SubscriptionPlan,
   type BookMetadata,
+  type LearningHistory,
   type LearningPlan,
   type LearningPreference,
   type UserProfile,
@@ -18,6 +19,7 @@ import {
 } from '../types';
 import { type StoredLearningHistoryRecord } from '../services/storage/idb-support';
 import {
+  buildBookSessionWords,
   getBookProgressFromHistoryRecords,
   getDueCountFromHistoryRecords,
   getMasteryDistributionFromHistoryRecords,
@@ -193,6 +195,31 @@ const createDashboardReadModelContext = ({
   getLearningPreference: async () => learningPreference,
   getAllStudentsProgress: async () => [],
   getCoachNotifications: async () => [],
+});
+
+describe('IndexedDB book session limits', () => {
+  it.each([
+    { selectionPolicy: 'BOOK_DEFAULT' as const, dueCount: 25, limit: 10, expectedCount: 10 },
+    { selectionPolicy: 'BOOK_REVIEW_ONLY' as const, dueCount: 25, limit: 10, expectedCount: 10 },
+    { selectionPolicy: 'BOOK_DEFAULT' as const, dueCount: 125, limit: 101, expectedCount: 100 },
+    { selectionPolicy: 'BOOK_REVIEW_ONLY' as const, dueCount: 125, limit: 101, expectedCount: 100 },
+  ])('selects $expectedCount of $dueCount due words for $selectionPolicy with limit $limit', ({
+    selectionPolicy, dueCount, limit, expectedCount,
+  }) => {
+    const words: WordData[] = Array.from({ length: dueCount }, (_, index) => ({
+      id: `due-${index}`, bookId: 'book-1', number: index + 1, word: `word-${index}`, definition: '定義',
+    }));
+    const histories: LearningHistory[] = words.map((word) => ({
+      wordId: word.id, bookId: word.bookId, status: 'learning',
+      lastStudiedAt: now - 100, nextReviewDate: now - 1, interval: 4, easeFactor: 2.5,
+      correctCount: 1, attemptCount: 1, totalResponseTimeMs: 500, interactionSource: 'STUDY',
+    }));
+
+    const session = buildBookSessionWords({ words, histories, limit, now, selectionPolicy });
+
+    expect(session).toHaveLength(expectedCount);
+    expect(session.map((word) => word.id)).toEqual(words.slice(0, expectedCount).map((word) => word.id));
+  });
 });
 
 describe('storage read model helpers', () => {

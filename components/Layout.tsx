@@ -109,7 +109,7 @@ const Layout: React.FC<LayoutProps> = ({
   }, [forceNoIndex, isPreviewDeployment]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-medace-100 font-sans">
+    <div data-testid="app-shell" className="flex min-h-screen flex-col bg-steady-canvas font-sans">
       {showOfflineBlocker && (
         <div
           data-testid="offline-blocking-banner"
@@ -153,7 +153,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header className={`sticky top-0 z-50 border-b border-medace-200 bg-white/92 shadow-[0_8px_22px_rgba(154,52,18,0.06)] backdrop-blur-xl ${
+      <header className={`sticky top-0 z-50 border-b border-slate-200 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.04)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (

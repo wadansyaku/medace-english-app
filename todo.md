@@ -1,46 +1,34 @@
+# 実装・運用バックログ
 
-# Todo List
+更新日: 2026-09-07。プロダクト方針は [project](./project.md)、根拠と全体WBSは [再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)。完了は実装と検証が揃った項目だけに付ける。
 
-## 1. Current Focus: B2B Ops & Stability
-**Priority: High** (B2B運用基盤の安定化を優先)
-- [ ] **Activation Loop UX**: Business Admin の導入チェックを進捗モデル化し、cohort→担当→ミッション→通知→writing の次アクションを overview から直接実行できるようにする。
-- [ ] **Student Writing Awareness**: 生徒側 Writing 課題を focus / visibility / polling で再取得し、提出ファイルの事前バリデーションを UI に出す。
-- [ ] **Assignment Ops**: 担当講師割当の履歴化を UI / 運用フローまで仕上げ、cohort 単位権限へ拡張する。
-- [ ] **BtoB KPI**: 通知後再開率、割当率、学習プラン浸透率を継続計測できるようにし、監査性も強化する。
-- [ ] **Cloudflare Data Sync**: Cloudflare を正史として session / storage の整合性確認を継続し、IndexedDB は demo / offline fallback に限定する。
-- [ ] **Storage Hotspot Split**: `services/storage.ts` と `services/storage/organization-read-model.ts` を優先して薄くし、`types.ts` / `contracts/storage.ts` の shared contract 変更は最小に保つ。
-- [x] **Workbook Import Guardrails**: 名詞 workbook import は generic XLSX import として広げず、mismatch 可視化・停止条件・fixture 回帰・server-side reject を固めた。
+## 今回: 学習と保存の基盤を再構築
 
-## 2. Next Up: Mobile App Experience
-- [ ] **Touch Gestures**: Study Modeでのスワイプ操作（Tinder風UI）の導入検討。
-- [ ] **Leaderboard Logic**: 個人向け週間ランキングのロジック（DBスキーマ変更含む）は B2B 安定化後に再開する。
+- [x] **R0 現状確定**: 既存109パス保全、初期110ファイル/598テスト、不要ソースとartifact候補の確認。
+- [x] **R1 学習ホーム**: アカウントごとの取得状態、失敗・再試行、単一command、主行動と次の1件へ整理。
+- [x] **R2 学習セッション**: 連打排除、読込失敗再試行、同じ回答の再送、保存済みとXP未確認の分離。
+- [x] **R3 データ保存**: D1/IDBのSRS receipt、履歴+eventの原子commit、missionの厳密達成と競合更新。
+- [x] **R4 品質基盤**: 依存境界・循環gate、CI重複除去、依存脆弱性更新。
+- [x] **R5 統合**: MD整理、unit/API/browser/build/auditの全検証、生成物清掃と独立レビュー。
 
-## 3. Completed Features (Done)
-### Visual Polish & Social Features
-- [x] **Graph Improvement**: 週間学習記録に「目標ライン」と「目標達成カラー」を追加。
-- [x] **Leaderboard Enhancement**: ユーザーレベルに応じた「リーグ（Bronze/Silver/Gold）」バッジの実装。
-- [x] **Mobile App Basics**: PWA用メタタグ（theme-color, apple-touch-icon）と `public/manifest.webmanifest` の設定。
+## 次に必要なこと
 
-### UX / UI Polish
-- [x] **UI Localization**: Dashboard, StudyModeの日本語化完了。
-- [x] **Mobile Responsiveness**: Study Modeのカードサイズ調整。
-- [x] **Streak Visuals**: ダッシュボードでのストリーク演出強化。
+| 優先 | 作業 | 受入条件 |
+| --- | --- | --- |
+| P1 | quiz / English practice / XPのreceipt・サーバー算出報酬 | 同時回答・再送・通信断で履歴と報酬が二重にならない |
+| P1 | B2B導入と週次運用をoverviewから一周できるようにする | cohort→担当→課題→通知→提出→講師返却→再開を実操作で検証 |
+| P1 | 教材・AIの費用予約、監査待ち滞留、golden set | 予算超過・重複課金・未承認公開を防ぎ、滞留を観測 |
+| P1 | 認証abuseとWritingの処理claim/lease | rate limit、session lifecycle、OCR前claim、失効予約回復のnegative test |
+| P1 | SRS派生集計の自動修復・receipt保持方針 | outboxと再構築の運用、教材/利用者削除時の保持仕様を検証 |
+| P2 | IDB教材削除後の孤立履歴/receipt、missionの永続化、投影競合 | 孤立した進捗を数えず、更新失敗を0化しない |
+| P2 | storage/organization巨大モジュールとquiz状態を分割 | domain境界を維持し、契約同値を回帰で確認 |
+| P2 | キーボード/読み上げ、実iOS PWA、性能予算 | 実機証拠と性能計測。未検証を実装完了に含めない |
 
-### Core Stability & Logic
-- [x] **Noun Workbook Import Safety**: 4列シート/ヘッダーなし索引/監査シート除外/実 workbook の reviewed exception 台帳を追加し、未確認 mismatch だけを停止条件にした。
-- [x] **Progress Logic Fix**: 学習開始直後から1%の進捗を表示するよう修正。
-- [x] **Fix Learning Algorithm**: 学習コース進捗ロジック修正。
-- [x] **AI Content Persistence**: 例文・訳のDB保存とキャッシュ。
-- [x] **Error Handling**: Gemini API 429エラー対策。
-- [x] **Writing Smoke Stabilization**: `demo login -> onboarding/profile save -> writing section` の session persistence を固定し、 browser smoke / API integration の回帰確認を追加。
+## 本番へ進むための条件
 
-### Personalization & Content
-- [x] **Dynamic Learning Plan**: プラン作成後の編集機能実装済み。
-- [x] **Personal Content OS UI**: My Phrasebook作成フローの改善。
-- [x] **Multi-modal Input**: PDF/画像からの単語抽出。
-- [x] **Adaptive Personalization**: 学年・英語レベル管理。
-- [x] **Diagnostic Test**: 初回レベル診断機能（Basic + Advanced）。
+- [ ] 今回の0042を含むpreview migration、deployed smoke、owner review。
+- [x] remote-readonlyの構成・教材・台帳・B2B整合性gate（2026-09-07、エラー0）。
+- [ ] 本番への変更差分をレビュー可能なPRへまとめ、必須checkを確認。
+- [ ] production bookmark、配備、公開URLのlive smokeを記録。
 
-## 4. Future Roadmap
-- [ ] **Native App Wrapper**: PWA化またはCapacitor等でのアプリ化検討。
-- [ ] **Advanced Ghost Teacher**: 生徒への自動メール/LINE通知連携。
+本番反映の承認を受けてPR #51で進行中。最新の検証・配備状態は[本番リリース記録](./docs/analysis/production-rebuild-release-2026-09-07.md)を参照する。外部通知・料金・権限の事業判断は別の確認を要する。以前の完了項目と検討履歴は [過去バックログ](./docs/archive/todo-through-2026-07-11.md) に保存した。

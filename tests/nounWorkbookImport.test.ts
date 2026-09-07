@@ -6,7 +6,7 @@ import {
   evaluateNounWorkbookImportGuardrails,
   parseNounWorkbookSheets,
   workbookToSheetEntries,
-} from '../utils/nounWorkbookImport';
+} from '../scripts/_shared/noun-workbook-import.mjs';
 import {
   createNounWorkbookGuardrailFailureSheets,
   nounWorkbookFixtureExpectedSummary,

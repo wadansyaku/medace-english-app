@@ -4,7 +4,7 @@ import XLSXImport from 'xlsx';
 import {
   parseNounWorkbookSheets,
   workbookToSheetEntries,
-} from '../utils/nounWorkbookImport.js';
+} from './_shared/noun-workbook-import.mjs';
 
 const inputPath = process.argv[2];
 

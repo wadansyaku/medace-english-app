@@ -42,7 +42,13 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   onDelete,
   onPrepareExamples,
   onSelect,
-}) => (
+}) => books.length === 0 && myBooks.length === 0 ? (
+  <section data-testid="dashboard-library-empty" className="rounded-lg border border-slate-200 bg-white p-5">
+    <h3 className="text-base font-bold text-slate-900">教材</h3>
+    <p className="mt-2 text-sm font-bold text-slate-700">まだMy単語帳がありません</p>
+    <p className="mt-1 text-sm leading-relaxed text-slate-500">最初の教材を作ると、ここに単語帳と進捗が表示されます。</p>
+  </section>
+) : (
   <div className={isCompact ? 'space-y-5' : 'space-y-7 md:space-y-10'}>
     <div className="min-h-[200px]">
       <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">

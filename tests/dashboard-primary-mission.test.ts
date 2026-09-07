@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildDashboardPrimaryMission,
   type DashboardSuggestedPrimaryMissionBuilder,
-} from '../functions/_shared/dashboard-primary-mission';
+} from '../shared/dashboardPrimaryMission';
 import {
   EnglishLevel,
   LearningPreferenceIntensity,

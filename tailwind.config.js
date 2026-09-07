@@ -30,6 +30,9 @@ export default {
           canvas: colorVar('--color-canvas'),
           panel: colorVar('--color-panel'),
           line: colorVar('--color-line'),
+          action: colorVar('--color-action'),
+          'action-hover': colorVar('--color-action-hover'),
+          'on-action': colorVar('--color-on-action'),
         },
         signal: {
           amber: colorVar('--color-signal-amber'),

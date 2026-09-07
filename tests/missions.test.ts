@@ -36,6 +36,43 @@ const makeMissionUser = (overrides: Partial<UserProfile> = {}): UserProfile => (
 });
 
 describe('missions', () => {
+  it('keeps a mission incomplete when a rounded percentage would hide the final required word', () => {
+    const progress = buildMissionProgress({
+      startedAt: 100,
+      dueAt: 10_000,
+      newWordsCompleted: 199,
+      newWordsTarget: 200,
+      reviewWordsCompleted: 0,
+      reviewWordsTarget: 0,
+      quizCompletedCount: 0,
+      quizTargetCount: 0,
+      writingRequired: false,
+      writingCompleted: false,
+      now: 1_000,
+    });
+    expect(progress.status).toBe(WeeklyMissionStatus.IN_PROGRESS);
+    expect(progress.completionRate).toBe(99);
+    expect(progress.blockers).toContain('新出 1語');
+  });
+
+  it('does not classify a manually completed mission as overdue', () => {
+    const progress = buildMissionProgress({
+      completedAt: 500,
+      dueAt: 1_000,
+      newWordsCompleted: 0,
+      newWordsTarget: 20,
+      reviewWordsCompleted: 0,
+      reviewWordsTarget: 0,
+      quizCompletedCount: 0,
+      quizTargetCount: 0,
+      writingRequired: false,
+      writingCompleted: false,
+      now: 2_000,
+    });
+    expect(progress.status).toBe(WeeklyMissionStatus.COMPLETED);
+    expect(progress.overdue).toBe(false);
+  });
+
   it('keeps untouched missions in ASSIGNED until the first action happens', () => {
     const progress = buildMissionProgress({
       assignedAt: 1_000,

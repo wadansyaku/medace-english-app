@@ -485,6 +485,29 @@ const deleteExpiredSessions = async (env: AppEnv): Promise<void> => {
   await env.DB.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(Date.now()).run();
 };
 
+export const deleteExpiredDemoUsers = async (
+  env: AppEnv,
+  expiredBefore: number = Date.now() - DEMO_RETENTION_TTL_MS,
+): Promise<void> => {
+  await env.DB.batch([
+    env.DB.prepare(`
+      UPDATE password_reset_tokens
+      SET created_by = NULL
+      WHERE created_by IN (
+        SELECT id
+        FROM users
+        WHERE email GLOB 'demo_*@medace.app'
+          AND created_at < ?
+      )
+    `).bind(expiredBefore),
+    env.DB.prepare(`
+      DELETE FROM users
+      WHERE email GLOB 'demo_*@medace.app'
+        AND created_at < ?
+    `).bind(expiredBefore),
+  ]);
+};
+
 export const createSession = async (
   env: AppEnv,
   request: Request,
@@ -572,11 +595,7 @@ export const requireOrganizationRole = (row: DbUserRow, roles: OrganizationRole[
 
 export const ensureDemoUser = async (env: AppEnv, role: UserRole, organizationRole?: OrganizationRole): Promise<DbUserRow> => {
   await deleteExpiredSessions(env);
-  await env.DB.prepare(`
-    DELETE FROM users
-    WHERE email GLOB 'demo_*@medace.app'
-      AND created_at < ?
-  `).bind(Date.now() - DEMO_RETENTION_TTL_MS).run();
+  await deleteExpiredDemoUsers(env);
 
   const email = buildDemoEmail(role, organizationRole);
   const displayName = getDemoDisplayName(role, organizationRole);

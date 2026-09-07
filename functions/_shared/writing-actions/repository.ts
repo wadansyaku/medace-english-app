@@ -80,7 +80,17 @@ export const readAssignmentRowsForScope = async (
        WHERE s.assignment_id = a.id
        ORDER BY s.submitted_at DESC, s.attempt_no DESC, s.id DESC
        LIMIT 1
-     ) AS latest_submission_id
+     ) AS latest_submission_id,
+     (
+       SELECT s.id
+       FROM writing_submissions s
+       JOIN writing_teacher_reviews review ON review.submission_id = s.id
+       JOIN writing_ai_evaluations evaluation
+         ON evaluation.id = review.selected_evaluation_id AND evaluation.submission_id = s.id
+       WHERE s.assignment_id = a.id AND review.released_at > 0
+       ORDER BY s.attempt_no DESC, review.released_at DESC, s.id DESC
+       LIMIT 1
+     ) AS latest_released_submission_id
    FROM writing_assignments a
    JOIN users instructor ON instructor.id = a.instructor_user_id
    JOIN users student ON student.id = a.student_user_id
@@ -135,6 +145,19 @@ export const readSubmissionRowByAssignmentAttempt = async (
      AND attempt_no = ?`,
   assignmentId,
   attemptNo,
+);
+
+export const readLatestSubmissionRowForAssignment = async (
+  env: AppEnv,
+  assignmentId: string,
+): Promise<DbWritingSubmissionRow | null> => readFirst(
+  env,
+  `SELECT *
+   FROM writing_submissions
+   WHERE assignment_id = ?
+   ORDER BY submitted_at DESC, attempt_no DESC, id DESC
+   LIMIT 1`,
+  assignmentId,
 );
 
 export const readSubmissionDetailBaseRow = async (

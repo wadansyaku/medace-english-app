@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WordHintAssetType, type WordData } from '../types';
+import { GeneratedAssetAuditStatus, WordHintAssetType, type WordData } from '../types';
 
 const {
   generateGeminiSentenceMock,
@@ -75,7 +75,7 @@ describe('IndexedDBStorageService word hints', () => {
     generateWordImageMock.mockReset();
   });
 
-  it('persists generated example hints after async generation completes', async () => {
+  it('persists pending examples for audit but returns a learner-safe copy', async () => {
     const storedWord = createWord();
     const putMock = vi.fn((value: WordData) => createRequest(value));
     const readStore = {
@@ -107,8 +107,102 @@ describe('IndexedDBStorageService word hints', () => {
       id: 'word-1',
       exampleSentence: 'The patient reported acute pain.',
       exampleMeaning: '患者は鋭い痛みを訴えた。',
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
     });
-    expect(result.exampleSentence).toBe('The patient reported acute pain.');
+    expect(result).toMatchObject({
+      exampleSentence: null,
+      exampleMeaning: null,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    });
+  });
+
+  it('persists pending images for audit but never returns their URL to learners', async () => {
+    const storedWord = createWord();
+    const putMock = vi.fn((value: WordData) => createRequest(value));
+    const readStore = {
+      get: vi.fn(() => createRequest(storedWord)),
+    } as unknown as IDBObjectStore;
+    const writeStore = {
+      put: putMock,
+      transaction: createCompletingTransaction(),
+    } as unknown as IDBObjectStore;
+    const getStoreMock = vi.fn(async (_storeName: string, mode: IDBTransactionMode = 'readonly') => (
+      mode === 'readwrite' ? writeStore : readStore
+    ));
+    generateWordImageMock.mockResolvedValueOnce('data:image/png;base64,pending-image');
+
+    const service = new IndexedDBStorageService({ getStore: getStoreMock });
+    const result = await service.generateWordHintAsset({
+      wordId: 'word-1',
+      assetType: WordHintAssetType.IMAGE,
+    });
+
+    expect(putMock.mock.calls[0]?.[0]).toMatchObject({
+      id: 'word-1',
+      exampleImageUrl: 'data:image/png;base64,pending-image',
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    });
+    expect(result).toMatchObject({
+      exampleImageUrl: null,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    });
+  });
+
+  it('withholds pending stored hints when a local book is read again', async () => {
+    const pendingWord: WordData = {
+      ...createWord(),
+      exampleSentence: 'Stored pending example.',
+      exampleMeaning: '保存済みの承認待ち例文。',
+      exampleGeneratedAt: 1_000,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+      exampleImageUrl: 'data:image/png;base64,stored-pending-image',
+      exampleImageGeneratedAt: 1_000,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    };
+    const store = {
+      index: vi.fn(() => ({
+        getAll: vi.fn(() => createRequest([pendingWord])),
+      })),
+    } as unknown as IDBObjectStore;
+    const service = new IndexedDBStorageService({
+      getStore: vi.fn(async () => store),
+    });
+
+    const [result] = await service.getWordsByBook('book-1');
+
+    expect(result).toMatchObject({
+      exampleSentence: null,
+      exampleMeaning: null,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+      exampleImageUrl: null,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    });
+  });
+
+  it('withholds a local audited example when generation provenance is missing', async () => {
+    const missingProvenanceWord: WordData = {
+      ...createWord(),
+      exampleSentence: 'A generated example with lost provenance.',
+      exampleMeaning: '生成履歴が欠けた例文。',
+      exampleGeneratedAt: null,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    };
+    const store = {
+      index: vi.fn(() => ({
+        getAll: vi.fn(() => createRequest([missingProvenanceWord])),
+      })),
+    } as unknown as IDBObjectStore;
+    const service = new IndexedDBStorageService({
+      getStore: vi.fn(async () => store),
+    });
+
+    const [result] = await service.getWordsByBook('book-1');
+
+    expect(result).toMatchObject({
+      exampleSentence: null,
+      exampleMeaning: null,
+      exampleAuditStatus: GeneratedAssetAuditStatus.REVIEW_REQUIRED,
+    });
   });
 
   it('round-trips noun workbook import metadata through the IndexedDB fallback', async () => {

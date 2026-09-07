@@ -40,6 +40,7 @@ import {
   BookAccessScope,
   BookCatalogSource,
   EnglishLevel,
+  GeneratedAssetAuditStatus,
   UserGrade,
   UserRole,
   type BookMetadata,
@@ -304,5 +305,37 @@ describe('daily session word selection', () => {
     }, 'student-1', 2, createTodayFocusTaskIntent());
 
     expect(words.map((word) => word.bookId).sort()).toEqual(['book-a', 'book-b']);
+  });
+
+  it('withholds pending generated hints from a cold-start local daily session', async () => {
+    const pendingWord: WordData = {
+      ...makeWord('book-a', 1),
+      exampleSentence: 'Pending local example.',
+      exampleMeaning: '承認待ちのローカル例文。',
+      exampleGeneratedAt: 1_000,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+      exampleImageUrl: 'data:image/png;base64,pending-local-image',
+      exampleImageGeneratedAt: 1_000,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    };
+    const recordsByStore = new Map<string, unknown[]>([
+      [STORES.HISTORY, [] satisfies StoredLearningHistoryRecord[]],
+      [STORES.WORDS, [pendingWord]],
+    ]);
+
+    const [word] = await getLocalDailySessionWords({
+      getStore: async (storeName) => makeRequestStore(recordsByStore.get(storeName) || []),
+      getBooks: async () => [makeBook('book-a')],
+      getWordsByBook: async () => [],
+      getSession: async () => makeUser(),
+    }, 'student-1', 1);
+
+    expect(word).toMatchObject({
+      exampleSentence: null,
+      exampleMeaning: null,
+      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
+      exampleImageUrl: null,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
+    });
   });
 });

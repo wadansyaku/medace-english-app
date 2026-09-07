@@ -110,6 +110,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   const PracticeIcon = PRACTICE_LANE_ICON[practiceRecommendation.lane] || Brain;
   const safeProgressPercent = clampPercent(todayProgressPercent);
   const isPracticePrimary = primaryLearningRouteId === 'englishPractice';
+  const showTaskMetrics = hasStudyBooks || Boolean(heroMetrics?.some((metric) => metric.icon === 'mission' || metric.icon === 'writing'));
   const fallbackMetrics: StudentDashboardHeroMetric[] = [
     {
       id: 'remaining',
@@ -138,7 +139,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   return (
     <section
       data-testid="dashboard-command-center"
-      className={`min-w-0 rounded-lg border border-medace-100 bg-white text-slate-950 shadow-[0_18px_48px_rgba(255,122,0,0.08)] ${
+      className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 shadow-[0_18px_48px_rgba(15,23,42,0.05)] ${
         isMobileCompact ? 'p-4' : 'p-5 md:p-6'
       }`}
     >
@@ -195,7 +196,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             <button
               onClick={onStartQuest}
               data-testid="student-hero-primary-cta"
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg bg-medace-600 font-black text-slate-950 transition-colors hover:bg-medace-700 sm:w-auto ${
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg bg-steady-action font-black text-steady-on-action transition-colors hover:bg-steady-action-hover sm:w-auto ${
                 isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-6 py-3.5 text-base'
               }`}
             >
@@ -223,7 +224,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
             ) : null}
           </div>
 
-          <div data-testid="dashboard-command-metrics" className={`mt-5 min-w-0 gap-2 ${isMobileCompact ? 'hidden' : 'grid sm:grid-cols-3'}`}>
+          {showTaskMetrics && <div data-testid="dashboard-command-metrics" className={`mt-5 min-w-0 gap-2 ${isMobileCompact ? 'hidden' : 'grid sm:grid-cols-3'}`}>
             {compactMetrics.map((metric, index) => {
               const MetricIcon = HERO_METRIC_ICON[metric.icon] || Target;
               return (
@@ -240,11 +241,11 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
 
         <aside className="grid min-w-0 gap-2.5">
-          <div className={`min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-4 ${isMobileCompact ? 'py-3' : 'py-3'}`}>
+          {hasStudyBooks && <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex items-end justify-between gap-3">
               <div>
                 <div className="text-xs font-black text-slate-500">今日の進捗</div>
@@ -267,7 +268,7 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           {(!isMobileCompact || isPracticePrimary) && (
             <div

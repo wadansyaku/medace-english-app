@@ -1,18 +1,17 @@
 import type {
   WritingAssignmentMutationResponse,
-  WritingSubmissionDetailResponse,
   WritingSideEffectJobResult,
 } from '../contracts/writing';
 
 type WritingSideEffectAwareResponse =
-  | Pick<WritingSubmissionDetailResponse, 'sideEffectJob'>
+  | { sideEffectJob?: Pick<WritingSideEffectJobResult, 'status'> }
   | Pick<WritingAssignmentMutationResponse, 'sideEffectJob'>
   | null
   | undefined;
 
 const hasFailedWritingSideEffectJob = (
-  job: WritingSideEffectJobResult | null | undefined,
-): job is WritingSideEffectJobResult => Boolean(job && job.status === 'FAILED');
+  job: Pick<WritingSideEffectJobResult, 'status'> | null | undefined,
+): boolean => Boolean(job && job.status === 'FAILED');
 
 export const getWritingSideEffectWarningMessage = (
   response: WritingSideEffectAwareResponse,

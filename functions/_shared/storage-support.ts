@@ -18,6 +18,9 @@ import {
   MASTERY_INTERACTION_SOURCE,
 } from '../../shared/learningHistory';
 import {
+  projectWordHintAssetsForLearner,
+} from '../../shared/wordHintAssets';
+import {
   evaluateMaterialQualityGate,
   isBookSelectableForToday,
   toMaterialLedgerSnapshot,
@@ -220,27 +223,37 @@ export const toBookMetadata = (row: DbBookRow): BookMetadata => {
   };
 };
 
-export const toWordData = (row: DbWordRow): WordData => ({
-  id: row.id,
-  bookId: row.book_id,
-  number: row.word_number,
-  word: row.word,
-  definition: row.definition,
-  searchKey: row.search_key || undefined,
-  ...(row.category ? { category: row.category } : {}),
-  ...(row.subcategory ? { subcategory: row.subcategory } : {}),
-  ...(row.section ? { section: row.section } : {}),
-  ...(row.source_sheet ? { sourceSheet: row.source_sheet } : {}),
-  ...(typeof row.source_entry_id === 'number' ? { sourceEntryId: row.source_entry_id } : {}),
-  exampleSentence: row.example_sentence,
-  exampleMeaning: row.example_meaning,
-  exampleGeneratedAt: row.example_generated_at,
-  exampleImageUrl: row.example_image_key ? buildWordHintImageUrl(row.id, row.example_image_generated_at) : null,
-  exampleImageGeneratedAt: row.example_image_generated_at,
-  exampleAuditStatus: (row.example_audit_status as GeneratedAssetAuditStatus | null) || null,
-  exampleImageAuditStatus: (row.example_image_audit_status as GeneratedAssetAuditStatus | null) || null,
-  isReported: Boolean(row.is_reported),
-});
+export const toWordData = (row: DbWordRow): WordData => {
+  const exampleAuditStatus = (row.example_audit_status as GeneratedAssetAuditStatus | null) || null;
+  const exampleImageAuditStatus = (row.example_image_audit_status as GeneratedAssetAuditStatus | null) || null;
+
+  return projectWordHintAssetsForLearner({
+    id: row.id,
+    bookId: row.book_id,
+    number: row.word_number,
+    word: row.word,
+    definition: row.definition,
+    searchKey: row.search_key || undefined,
+    ...(row.category ? { category: row.category } : {}),
+    ...(row.subcategory ? { subcategory: row.subcategory } : {}),
+    ...(row.section ? { section: row.section } : {}),
+    ...(row.source_sheet ? { sourceSheet: row.source_sheet } : {}),
+    ...(typeof row.source_entry_id === 'number' ? { sourceEntryId: row.source_entry_id } : {}),
+    exampleSentence: row.example_sentence,
+    exampleMeaning: row.example_meaning,
+    exampleGeneratedAt: row.example_generated_at,
+    exampleImageUrl: row.example_image_key
+      ? buildWordHintImageUrl(row.id, row.example_image_generated_at)
+      : null,
+    exampleImageGeneratedAt: row.example_image_generated_at,
+    exampleAuditStatus,
+    exampleImageAuditStatus,
+    isReported: Boolean(row.is_reported),
+  }, {
+    exampleAuditedAt: row.example_audited_at,
+    exampleImageAuditedAt: row.example_image_audited_at,
+  });
+};
 
 export const normalizeHistoryStatus = (interval: number): LearningHistory['status'] => {
   if (interval > 20) return 'graduated';

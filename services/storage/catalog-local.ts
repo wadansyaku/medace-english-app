@@ -13,7 +13,11 @@ import type {
   GenerateWordHintAssetPayload,
   PrepareBookExamplesResult,
 } from '../../contracts/storage';
-import { createLocalExampleHint, createWordImagePlaceholderDataUrl } from '../../shared/wordHintAssets';
+import {
+  createLocalExampleHint,
+  createWordImagePlaceholderDataUrl,
+  projectWordHintAssetsForLearner,
+} from '../../shared/wordHintAssets';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../../utils/bookAccess';
 import { generateGeminiSentence, generateWordImage } from '../gemini';
 import { createImportedBookId, normalizeCatalogImportRows } from './catalog-import';
@@ -235,7 +239,7 @@ export const deleteBookLocal = async (
   await transactionComplete;
 };
 
-export const getWordsByBookLocal = async (
+const readWordsByBookLocal = async (
   context: Pick<LocalCatalogStorageContext, 'getStore'>,
   bookId: string,
 ): Promise<WordData[]> => {
@@ -246,6 +250,13 @@ export const getWordsByBookLocal = async (
     request.onsuccess = () => resolve((request.result || []).sort((left: WordData, right: WordData) => left.number - right.number));
   });
 };
+
+export const getWordsByBookLocal = async (
+  context: Pick<LocalCatalogStorageContext, 'getStore'>,
+  bookId: string,
+): Promise<WordData[]> => (
+  (await readWordsByBookLocal(context, bookId)).map((word) => projectWordHintAssetsForLearner(word))
+);
 
 export const updateWordLocal = async (
   context: Pick<LocalCatalogStorageContext, 'getStore'>,
@@ -269,27 +280,6 @@ export const reportWordLocal = async (
       isReported: true,
     }),
     '単語の報告状態の保存に失敗しました。',
-  );
-};
-
-export const updateWordCacheLocal = async (
-  context: Pick<LocalCatalogStorageContext, 'getStore'>,
-  wordId: string,
-  sentence: string,
-  translation: string,
-): Promise<void> => {
-  const store = await context.getStore(STORES.WORDS, 'readwrite');
-  await mutateWordAndWaitForTransaction(
-    store,
-    wordId,
-    (word) => ({
-      ...word,
-      exampleSentence: sentence,
-      exampleMeaning: translation,
-      exampleGeneratedAt: Date.now(),
-      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
-    }),
-    '単語キャッシュの保存に失敗しました。',
   );
 };
 
@@ -325,7 +315,7 @@ export const generateWordHintAssetLocal = async (
   const nextWord: WordData = { ...word };
   if (payload.assetType === WordHintAssetType.EXAMPLE) {
     if (!payload.forceRefresh && nextWord.exampleSentence?.trim()) {
-      return nextWord;
+      return projectWordHintAssetsForLearner(nextWord);
     }
 
     const generatedAt = Date.now();
@@ -340,7 +330,7 @@ export const generateWordHintAssetLocal = async (
     nextWord.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
   } else {
     if (!payload.forceRefresh && nextWord.exampleImageUrl?.trim()) {
-      return nextWord;
+      return projectWordHintAssetsForLearner(nextWord);
     }
 
     const generatedAt = Date.now();
@@ -353,14 +343,14 @@ export const generateWordHintAssetLocal = async (
   }
 
   await writeWordRecordLocal(context, nextWord);
-  return nextWord;
+  return projectWordHintAssetsForLearner(nextWord);
 };
 
 export const prepareBookExamplesLocal = async (
   context: Pick<LocalCatalogStorageContext, 'getStore'>,
   bookId: string,
 ): Promise<PrepareBookExamplesResult> => {
-  const words = await getWordsByBookLocal(context, bookId);
+  const words = await readWordsByBookLocal(context, bookId);
   const targetWords = words.filter((word) => !word.exampleSentence?.trim());
   const store = await context.getStore(STORES.WORDS, 'readwrite');
   const transactionComplete = waitForTransaction(store.transaction);

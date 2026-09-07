@@ -23,7 +23,7 @@ Add a minimal D1-backed persistence layer:
 
 The first helper surface is intentionally server-side:
 
-- `services/storage/ai-cache-cbt.ts` owns deterministic cache keys and CBT state transition math.
+- `shared/aiCacheCbt.ts` owns deterministic cache keys and CBT state transition math for both storage adapters.
 - `functions/_shared/ai-cache-cbt.ts` owns D1 read/write helpers for generated content, reusable grammar problems, and CBT updates.
 - `functions/_shared/ai-actions.ts` reads reusable grammar problems before calling Gemini and writes successful normalized questions back to D1.
 - Quiz questions carry `generatedProblemId` when a generated/cached problem is known, allowing answer records to update CBT stats without exposing a separate public cache API.

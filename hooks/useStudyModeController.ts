@@ -1,13 +1,21 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { getSubscriptionPolicy } from '../config/subscription';
-import { WordHintAssetType, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
+import {
+  GeneratedAssetAuditStatus,
+  WordHintAssetType,
+  type LearningTaskIntent,
+  type UserProfile,
+  type WordData,
+} from '../types';
 import { learningService } from '../services/learning';
 import { type GeneratedContext } from '../services/gemini';
 import { ApiError } from '../services/apiClient';
-import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
+import { getSmartSessionConfig, normalizeStudySessionLimit } from '../shared/studySession';
+import { calculateStudySessionXp } from '../shared/xp';
 import { resolveExampleTranslation } from '../shared/wordHintAssets';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
+import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
 import useIsMobileViewport from './useIsMobileViewport';
 
 interface UseStudyModeControllerParams {
@@ -27,6 +35,12 @@ const getSupports3D = (): boolean => {
   return !reducedMotion && supports3D;
 };
 
+const isKnownAuditHold = (status?: GeneratedAssetAuditStatus | null): boolean => (
+  status === GeneratedAssetAuditStatus.PENDING
+  || status === GeneratedAssetAuditStatus.REVIEW_REQUIRED
+  || status === GeneratedAssetAuditStatus.FAILED
+);
+
 export const useStudyModeController = ({
   user,
   bookId,
@@ -40,6 +54,10 @@ export const useStudyModeController = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [rewardNotice, setRewardNotice] = useState<string | null>(null);
   const [isBookOwner, setIsBookOwner] = useState(false);
   const [aiContextLoading, setAiContextLoading] = useState(false);
   const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
@@ -50,14 +68,18 @@ export const useStudyModeController = ({
   const [showTranslation, setShowTranslation] = useState(false);
   const [showHints, setShowHints] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const [editWord, setEditWord] = useState('');
   const [editDef, setEditDef] = useState('');
   const [reportReason, setReportReason] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportNotice, setReportNotice] = useState<string | null>(null);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [isFinished, setIsFinished] = useState(false);
-  const [earnedXP, setEarnedXP] = useState(0);
-  const [streakBonusXP, setStreakBonusXP] = useState(0);
+  const [earnedXP, setEarnedXP] = useState<number | null>(null);
+  const [streakBonusXP, setStreakBonusXP] = useState<number | null>(null);
   const [leveledUp, setLeveledUp] = useState(false);
   const [updatedUser, setUpdatedUser] = useState<UserProfile | null>(null);
   const [reviewWords, setReviewWords] = useState<WordData[]>([]);
@@ -70,6 +92,16 @@ export const useStudyModeController = ({
   const canGenerateImageHint = subscriptionPolicy.allowedAiActions.includes('generateWordImage');
 
   const contextCache = useRef<Map<string, GeneratedContext | null>>(new Map());
+  const cardOperationsRef = useRef(createStudyCardOperations());
+  const sessionGenerationRef = useRef(0);
+  const ratingLockedRef = useRef(false);
+  const settledCardRef = useRef<number | null>(null);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAnswerRef = useRef<{
+    attemptId: string;
+    rating: number;
+    responseTimeMs: number;
+  } | null>(null);
   const cardStartedAtRef = useRef(Date.now());
   const shellRef = useRef<HTMLDivElement | null>(null);
   const actionBarRef = useRef<HTMLDivElement | null>(null);
@@ -96,7 +128,16 @@ export const useStudyModeController = ({
     window.setTimeout(apply, 220);
   };
 
+  const cancelCardOperations = () => {
+    cardOperationsRef.current.invalidate();
+    setAiContextLoading(false);
+    setAiImageLoading(false);
+    setIsSavingEdit(false);
+    setIsSubmittingReport(false);
+  };
+
   const resetCard = () => {
+    cancelCardOperations();
     setIsFlipped(false);
     setAiContext(null);
     setAiImage(null);
@@ -107,6 +148,11 @@ export const useStudyModeController = ({
     setShowTranslation(false);
     setShowHints(false);
     setIsEditing(false);
+    setEditError(null);
+    setReportError(null);
+    setReportReason('');
+    setShowReportModal(false);
+    setReportNotice(null);
   };
 
   useEffect(() => {
@@ -162,37 +208,72 @@ export const useStudyModeController = ({
   }, []);
 
   useEffect(() => {
+    const generation = ++sessionGenerationRef.current;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    setSaveError(null);
+    setRewardNotice(null);
+    setQueue([]);
+    setSessionWordCount(0);
+    setCurrentIndex(0);
+    setIsFinished(false);
+    setIsBookOwner(false);
+    setReviewWords([]);
+    setUpdatedUser(null);
+    setEarnedXP(null);
+    setStreakBonusXP(null);
+    setLeveledUp(false);
+    setIsAdvancingCard(false);
+    contextCache.current.clear();
+    ratingLockedRef.current = false;
+    settledCardRef.current = null;
+    pendingAnswerRef.current = null;
+    resetCard();
+
     const loadWords = async () => {
       try {
-        let data: WordData[] = [];
         const smartSession = getSmartSessionConfig(bookId);
-        if (smartSession) {
-          data = await learningService.getDailySessionWords(user.uid, taskIntent?.limit || smartSession.limit, taskIntent || undefined);
-          setIsBookOwner(false);
-        } else {
-          data = await learningService.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined);
-          const books = await learningService.getBooks();
-          const currentBook = books.find((book) => book.id === bookId);
-          if (currentBook) {
-            try {
-              const isMine = (currentBook.description?.includes(user.uid))
-                || (JSON.parse(currentBook.description || '{}').createdBy === user.uid);
-              setIsBookOwner(Boolean(isMine));
-            } catch {
-              setIsBookOwner(false);
-            }
-          }
-        }
+        const limit = normalizeStudySessionLimit(taskIntent?.limit, smartSession?.limit ?? 10);
+        const data = smartSession
+          ? await learningService.getDailySessionWords(user.uid, limit, taskIntent || undefined)
+          : await learningService.getBookSession(user.uid, bookId, limit, taskIntent || undefined);
+        if (cancelled || generation !== sessionGenerationRef.current) return;
         setQueue(data);
         setSessionWordCount(data.length);
-      } catch (err) {
-        console.error(err);
-      } finally {
+        setLoading(false);
+
+        // Editing permission is optional context; its failure must not hide a loaded lesson.
+        if (!smartSession) {
+          try {
+            const books = await learningService.getBooks();
+            if (cancelled || generation !== sessionGenerationRef.current) return;
+            const currentBook = books.find((book) => book.id === bookId);
+            let isMine = false;
+            try {
+              isMine = JSON.parse(currentBook?.description || '{}').createdBy === user.uid;
+            } catch {
+              // A legacy free-text description is not proof of ownership.
+            }
+            setIsBookOwner(isMine);
+          } catch {
+            // Server authorization remains authoritative; editing stays disabled.
+          }
+        }
+      } catch {
+        if (cancelled || generation !== sessionGenerationRef.current) return;
+        setLoadError('学習する単語を読み込めませんでした。通信を確認して、もう一度お試しください。');
         setLoading(false);
       }
     };
     void loadWords();
-  }, [bookId, taskIntent, user.uid]);
+    return () => {
+      cancelled = true;
+      sessionGenerationRef.current += 1;
+      cardOperationsRef.current.invalidate();
+      if (advanceTimerRef.current !== null) clearTimeout(advanceTimerRef.current);
+    };
+  }, [bookId, taskIntent, user.uid, loadAttempt]);
 
   useEffect(() => {
     if (queue.length === 0 || !showHints) return;
@@ -214,10 +295,6 @@ export const useStudyModeController = ({
     }
 
     setAiImage(current.exampleImageUrl || null);
-    setAiContextLoading(false);
-    setAiImageLoading(false);
-    setExampleError(null);
-    setImageError(null);
   }, [currentIndex, queue, showHints]);
 
   useEffect(() => {
@@ -253,12 +330,16 @@ export const useStudyModeController = ({
     return fallback;
   };
 
-  const replaceCurrentWord = (nextWord: WordData) => {
-    setQueue((previous) => previous.map((word, index) => (index === currentIndex ? nextWord : word)));
+  const replaceCurrentWord = (operation: StudyCardOperation, patch: Partial<WordData>) => {
+    setQueue((previous) => cardOperationsRef.current.isCurrent(operation)
+      ? previous.map((word, index) => index === operation.index && word.id === operation.wordId ? { ...word, ...patch } : word)
+      : previous);
   };
 
   const generateExampleHint = async (forceRefresh = false) => {
-    if (!currentWord || aiContextLoading) return;
+    if (!currentWord || loading || isFinished || ratingLockedRef.current || isEditing) return;
+    const operation = cardOperationsRef.current.begin('example', currentWord.id, currentIndex);
+    if (!operation) return;
     setAiContextLoading(true);
     setExampleError(null);
 
@@ -268,7 +349,14 @@ export const useStudyModeController = ({
         assetType: WordHintAssetType.EXAMPLE,
         forceRefresh,
       });
-      replaceCurrentWord(updated);
+      if (!cardOperationsRef.current.isCurrent(operation)) return;
+      if (updated.id !== operation.wordId) throw new Error('生成対象の単語を確認できませんでした。');
+      replaceCurrentWord(operation, {
+        exampleSentence: updated.exampleSentence,
+        exampleMeaning: updated.exampleMeaning,
+        exampleGeneratedAt: updated.exampleGeneratedAt,
+        exampleAuditStatus: updated.exampleAuditStatus,
+      });
 
       if (updated.exampleSentence?.trim()) {
         const nextContext = {
@@ -280,17 +368,21 @@ export const useStudyModeController = ({
         setShowTranslation(false);
       } else {
         setAiContext(null);
-        setExampleError('例文は作成できませんでした。');
+        setExampleError(isKnownAuditHold(updated.exampleAuditStatus)
+          ? null
+          : '例文は作成できませんでした。');
       }
     } catch (error) {
-      setExampleError(resolveHintError(error, '例文は作成できませんでした。'));
+      if (cardOperationsRef.current.isCurrent(operation)) setExampleError(resolveHintError(error, '例文は作成できませんでした。'));
     } finally {
-      setAiContextLoading(false);
+      if (cardOperationsRef.current.finish(operation)) setAiContextLoading(false);
     }
   };
 
   const generateImageHint = async (forceRefresh = false) => {
-    if (!currentWord || aiImageLoading) return;
+    if (!currentWord || loading || isFinished || ratingLockedRef.current || isEditing) return;
+    const operation = cardOperationsRef.current.begin('image', currentWord.id, currentIndex);
+    if (!operation) return;
     setAiImageLoading(true);
     setImageError(null);
 
@@ -300,21 +392,32 @@ export const useStudyModeController = ({
         assetType: WordHintAssetType.IMAGE,
         forceRefresh,
       });
-      replaceCurrentWord(updated);
+      if (!cardOperationsRef.current.isCurrent(operation)) return;
+      if (updated.id !== operation.wordId) throw new Error('生成対象の単語を確認できませんでした。');
+      replaceCurrentWord(operation, {
+        exampleImageUrl: updated.exampleImageUrl,
+        exampleImageGeneratedAt: updated.exampleImageGeneratedAt,
+        exampleImageAuditStatus: updated.exampleImageAuditStatus,
+      });
       setAiImage(updated.exampleImageUrl || null);
       if (!updated.exampleImageUrl) {
-        setImageError('画像は作成できませんでした。');
+        setImageError(isKnownAuditHold(updated.exampleImageAuditStatus)
+          ? null
+          : '画像は作成できませんでした。');
       }
     } catch (error) {
-      setImageError(resolveHintError(error, '画像は作成できませんでした。'));
+      if (cardOperationsRef.current.isCurrent(operation)) setImageError(resolveHintError(error, '画像は作成できませんでした。'));
     } finally {
-      setAiImageLoading(false);
+      if (cardOperationsRef.current.finish(operation)) setAiImageLoading(false);
     }
   };
 
   const startEditing = (event: MouseEvent) => {
     event.stopPropagation();
-    if (!currentWord) return;
+    if (!currentWord || loading || isFinished || ratingLockedRef.current) return;
+    cancelCardOperations();
+    setEditError(null);
+    setReportError(null);
     if (!isBookOwner) {
       setReportReason('');
       setShowReportModal(true);
@@ -327,76 +430,129 @@ export const useStudyModeController = ({
 
   const cancelEditing = (event: MouseEvent) => {
     event.stopPropagation();
+    if (isSavingEdit) return;
     setIsEditing(false);
   };
 
   const saveEditing = async (event: MouseEvent) => {
     event.stopPropagation();
-    if (!currentWord || !editWord.trim() || !editDef.trim()) return;
+    if (!currentWord || !isBookOwner || !editWord.trim() || !editDef.trim()) return;
+    const operation = cardOperationsRef.current.begin('edit', currentWord.id, currentIndex);
+    if (!operation) return;
     const updated: WordData = { ...currentWord, word: editWord, definition: editDef };
-    await learningService.updateWord(updated);
-    const nextQueue = [...queue];
-    nextQueue[currentIndex] = updated;
-    setQueue(nextQueue);
-    setIsEditing(false);
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      await learningService.updateWord(updated);
+      if (!cardOperationsRef.current.isCurrent(operation)) return;
+      replaceCurrentWord(operation, { word: updated.word, definition: updated.definition });
+      setIsEditing(false);
+    } catch {
+      if (cardOperationsRef.current.isCurrent(operation)) setEditError('変更を保存できませんでした。内容を残したまま、もう一度保存できます。');
+    } finally {
+      if (cardOperationsRef.current.finish(operation)) setIsSavingEdit(false);
+    }
   };
 
   const submitReport = async () => {
     if (!currentWord || !reportReason.trim()) return;
-    await learningService.reportWord(currentWord.id, reportReason);
-    setShowReportModal(false);
-    setReportReason('');
-    setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
+    const operation = cardOperationsRef.current.begin('report', currentWord.id, currentIndex);
+    if (!operation) return;
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      await learningService.reportWord(currentWord.id, reportReason);
+      if (!cardOperationsRef.current.isCurrent(operation)) return;
+      setShowReportModal(false);
+      setReportReason('');
+      setReportNotice('報告ありがとうございます。講師・管理者が確認し、必要に応じて修正します。');
+    } catch {
+      if (cardOperationsRef.current.isCurrent(operation)) setReportError('報告の送信を確認できませんでした。入力内容は残っています。');
+    } finally {
+      if (cardOperationsRef.current.finish(operation)) setIsSubmittingReport(false);
+    }
   };
 
   const handleRating = async (rating: number) => {
-    if (!currentWord || isAdvancingCard) return;
-    await learningService.saveSRSHistory(
-      user.uid,
-      currentWord,
+    if (!currentWord || loading || isFinished || isEditing || showReportModal || ratingLockedRef.current || settledCardRef.current === currentIndex) return;
+    const generation = sessionGenerationRef.current;
+    const isCurrentSession = () => generation === sessionGenerationRef.current;
+    ratingLockedRef.current = true;
+    cancelCardOperations();
+    setIsAdvancingCard(true);
+    setSaveError(null);
+    const answer = pendingAnswerRef.current ?? {
+      attemptId: crypto.randomUUID(),
       rating,
-      Math.max(0, Date.now() - cardStartedAtRef.current),
-      taskIntent?.missionAssignmentId,
-      taskIntent?.intentType,
-    );
-    if (rating <= 1) {
-      setReviewWords((previous) => (
-        previous.some((word) => word.id === currentWord.id)
-          ? previous
-          : [...previous, currentWord]
-      ));
-    }
-    const shouldRequeueInSession = rating === 0;
-    if (shouldRequeueInSession) {
-      setQueue((previous) => [...previous, currentWord]);
-    }
-
-    if (currentIndex < queue.length - 1 || shouldRequeueInSession) {
-      setIsAdvancingCard(true);
-      window.setTimeout(() => {
-        resetCard();
-        setCurrentIndex((previous) => previous + 1);
-        setIsAdvancingCard(false);
-        resetStudyScrollPosition();
-      }, supports3D ? 180 : 0);
-    } else {
-      const baseXP = sessionWordCount * 10;
-      const currentStreak = user.stats?.currentStreak || 0;
-      const bonusMultiplier = Math.min(currentStreak, 10) * 0.1;
-      const bonusXP = Math.round(baseXP * bonusMultiplier);
-      const totalXP = baseXP + bonusXP;
-      const result = await learningService.addXP(user, totalXP);
-      try {
-        const snapshot = await learningService.getDashboardSnapshot(user.uid);
-        setWeaknessSummary(buildWeaknessSessionSummary(snapshot.weaknessProfile));
-      } catch {
-        setWeaknessSummary(buildWeaknessSessionSummary(null));
+      responseTimeMs: Math.min(3_600_000, Math.max(0, Date.now() - cardStartedAtRef.current)),
+    };
+    pendingAnswerRef.current = answer;
+    let advancing = false;
+    try {
+      await learningService.saveSRSHistory(
+        user.uid,
+        currentWord,
+        answer.rating,
+        answer.responseTimeMs,
+        taskIntent?.missionAssignmentId,
+        taskIntent?.intentType,
+        answer.attemptId,
+      );
+      if (!isCurrentSession()) return;
+      settledCardRef.current = currentIndex;
+      if (answer.rating <= 1) {
+        setReviewWords((previous) => (
+          previous.some((word) => word.id === currentWord.id)
+            ? previous
+            : [...previous, currentWord]
+        ));
       }
-      setEarnedXP(baseXP);
-      setStreakBonusXP(bonusXP);
-      setLeveledUp(result.leveledUp);
-      setUpdatedUser(result.user);
-      setIsFinished(true);
+      const shouldRequeueInSession = answer.rating === 0;
+      if (shouldRequeueInSession) setQueue((previous) => [...previous, currentWord]);
+
+      if (currentIndex < queue.length - 1 || shouldRequeueInSession) {
+        advancing = true;
+        advanceTimerRef.current = setTimeout(() => {
+          if (!isCurrentSession()) return;
+          resetCard();
+          pendingAnswerRef.current = null;
+          setCurrentIndex((previous) => previous + 1);
+          ratingLockedRef.current = false;
+          setIsAdvancingCard(false);
+          resetStudyScrollPosition();
+        }, supports3D ? 180 : 0);
+      } else {
+        try {
+          const { baseXP, bonusXP, totalXP } = calculateStudySessionXp(sessionWordCount, user.stats?.currentStreak ?? 0);
+          const result = await learningService.addXP(user, totalXP);
+          if (!isCurrentSession()) return;
+          setEarnedXP(baseXP);
+          setStreakBonusXP(bonusXP);
+          setLeveledUp(result.leveledUp);
+          setUpdatedUser(result.user);
+        } catch {
+          if (!isCurrentSession()) return;
+          // XP has no server receipt yet. A lost response must not trigger another award.
+          setRewardNotice('学習は保存済みです。XPの反映は確認できませんでした。ホームで確認できます。');
+        }
+        if (!isCurrentSession()) return;
+        setIsFinished(true);
+        try {
+          const snapshot = await learningService.getDashboardSnapshot(user.uid);
+          if (isCurrentSession()) setWeaknessSummary(buildWeaknessSessionSummary(snapshot.weaknessProfile));
+        } catch {
+          if (isCurrentSession()) setWeaknessSummary('学習傾向を取得できませんでした。ホームで確認できます。');
+        }
+      }
+    } catch {
+      if (isCurrentSession()) {
+        setSaveError('回答の保存を確認できませんでした。同じ回答をもう一度保存できます。');
+      }
+    } finally {
+      if (isCurrentSession() && !advancing) {
+        ratingLockedRef.current = false;
+        setIsAdvancingCard(false);
+      }
     }
   };
 
@@ -427,6 +583,7 @@ export const useStudyModeController = ({
     currentIndex,
     currentWord,
     editDef,
+    editError,
     editWord,
     earnedXP,
     exampleError,
@@ -440,11 +597,18 @@ export const useStudyModeController = ({
     isAdvancingCard,
     isBookOwner,
     isEditing,
+    isSavingEdit,
+    isSubmittingReport,
     isFinished,
     isFlipped,
     isMobileViewport,
     leveledUp,
     loading,
+    loadError,
+    retryLoad: () => setLoadAttempt((previous) => previous + 1),
+    saveError,
+    retrySave: () => handleRating(pendingAnswerRef.current?.rating ?? 0),
+    rewardNotice,
     mobileShellHeight,
     nextReviewMessage,
     onBackToDashboard: handleExit,
@@ -452,6 +616,7 @@ export const useStudyModeController = ({
     queue,
     reportDialogMode,
     reportNotice,
+    reportError,
     reportReason,
     resetCard,
     reviewPreview,
