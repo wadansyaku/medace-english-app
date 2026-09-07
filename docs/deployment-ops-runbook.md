@@ -100,3 +100,12 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 - service admin の本番操作デモを開ける日は、Pages runtime secret `ENABLE_ADMIN_DEMO=true` と GitHub production environment variable `VITE_ENABLE_ADMIN_DEMO=true` を両方設定し、deploy workflow で再 build します。解除するときは両方を `false` に戻して再 deploy してください。
 - `npm run cf:sync` は GitHub environment vars/secrets と preview DB の存在を揃えます。
 - preview 用 `ADMIN_DEMO_PASSWORD` を本番と分ける場合は、local で `ADMIN_DEMO_PASSWORD_PREVIEW` をセットしてから `npm run cf:sync` を実行します。
+
+
+## 配備切替の待機とローカル実行障害の診断
+
+2026-09-07の本番配備では、production aliasの切替直後に旧HTMLが参照するファイルだけが新しい配備で見つからず、HTML fallbackになる状態を検知した。外部URLもローカルと同じreadiness待機を使い、APIの期待SHA、HTMLから参照するJS/CSS、PWA manifest/iconの整合が揃うまで最大180秒待つ。期限超過・サーバー停止は失敗として扱い、その後に実画面テストを通常どおり実行する。画面テスト自体の再試行回数は増やさない。
+
+Wranglerの内部ログはローカル検証用の一時ディレクトリへ保存し、異常終了時に末尾最大256KiBから固定の分類だけを出力する。分類は `PROXY_CONNECTION_LOST`、`RUNTIME_CRASH`、`SQLITE_BUSY`、`UNKNOWN`。不明・読取不能を成功や0件に変えない。秘密値・本文・生の例外を公開artifactへコピーせず、一時ログは終了処理で削除する。利用者が要求した正常停止には障害診断を出さない。
+
+初回停止・単発再実行・実本番配備・独立live受入を分けた証拠は[本番リリース記録](./analysis/production-rebuild-release-2026-09-07.md)を参照する。

@@ -1,9 +1,16 @@
 import { access, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { getAvailablePort } from './_shared/ports.mjs';
+import {
+  extractAssetPaths,
+  extractHtmlPwaReferences,
+  extractManifestIconPaths,
+  verifyAppShellMetadata,
+  verifyPwaManifestMetadata,
+  waitForSmokeServer,
+} from './_shared/smoke-readiness.mjs';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
 
 const cwd = process.cwd();
@@ -103,117 +110,6 @@ const runCommandCapture = (command, args, env) => new Promise((resolve) => {
   });
 });
 
-const normalizeAssetPath = (assetPath) => {
-  try {
-    return new URL(assetPath, 'http://smoke.local').pathname;
-  } catch {
-    return assetPath.split('?')[0].split('#')[0];
-  }
-};
-
-const normalizeLocalStaticPath = (staticPath) => {
-  if (!staticPath || staticPath.startsWith('#') || staticPath.startsWith('data:')) {
-    return null;
-  }
-
-  try {
-    const url = new URL(staticPath, 'http://smoke.local');
-    if (url.origin !== 'http://smoke.local') {
-      return null;
-    }
-    return url.pathname;
-  } catch {
-    return staticPath.startsWith('/') ? staticPath : `/${staticPath}`;
-  }
-};
-
-const parseHtmlAttributes = (tag) => {
-  const attrs = {};
-  for (const match of tag.matchAll(/\s([^\s=]+)=["']([^"']*)["']/g)) {
-    attrs[match[1].toLowerCase()] = match[2];
-  }
-  return attrs;
-};
-
-const extractAssetPaths = (html) => {
-  const assetPaths = new Set();
-  for (const match of html.matchAll(/\b(?:src|href)=["']([^"']*\/assets\/[^"']+)["']/g)) {
-    assetPaths.add(normalizeAssetPath(match[1]));
-  }
-  return [...assetPaths];
-};
-
-const extractHtmlPwaReferences = (html) => {
-  const manifestPaths = new Set();
-  const iconPaths = new Set();
-
-  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
-    const attrs = parseHtmlAttributes(match[0]);
-    const href = normalizeLocalStaticPath(attrs.href);
-    if (!href) {
-      continue;
-    }
-
-    const relTokens = new Set((attrs.rel || '').toLowerCase().split(/\s+/).filter(Boolean));
-    if (relTokens.has('manifest')) {
-      manifestPaths.add(href);
-    }
-    if (relTokens.has('icon') || relTokens.has('apple-touch-icon') || relTokens.has('mask-icon')) {
-      iconPaths.add(href);
-    }
-  }
-
-  return {
-    manifestPaths: [...manifestPaths],
-    iconPaths: [...iconPaths],
-  };
-};
-
-const extractManifestIconPaths = (manifest) => {
-  if (!Array.isArray(manifest.icons)) {
-    return [];
-  }
-
-  return manifest.icons
-    .map((icon) => normalizeLocalStaticPath(icon?.src || ''))
-    .filter(Boolean);
-};
-
-const verifyAppShellMetadata = (html, locationLabel) => {
-  if (!/<html\b[^>]*\blang=["']ja["']/i.test(html)) {
-    throw new Error(`[smoke] ${locationLabel} is missing html lang="ja"`);
-  }
-  if (!/<title>\s*Steady Study \| 英単語学習スペース\s*<\/title>/i.test(html)) {
-    throw new Error(`[smoke] ${locationLabel} is missing the Steady Study app title`);
-  }
-  if (!/name=["']apple-mobile-web-app-title["']\s+content=["']Steady Study["']/i.test(html)) {
-    throw new Error(`[smoke] ${locationLabel} is missing the iOS PWA app title`);
-  }
-};
-
-const verifyPwaManifestMetadata = (manifest, locationLabel) => {
-  const failures = [];
-  if (manifest.name !== 'Steady Study') {
-    failures.push(`name=${JSON.stringify(manifest.name)}`);
-  }
-  if (manifest.short_name !== 'Steady Study') {
-    failures.push(`short_name=${JSON.stringify(manifest.short_name)}`);
-  }
-  if (manifest.display !== 'standalone') {
-    failures.push(`display=${JSON.stringify(manifest.display)}`);
-  }
-  if (manifest.start_url !== '/') {
-    failures.push(`start_url=${JSON.stringify(manifest.start_url)}`);
-  }
-  if (!extractManifestIconPaths(manifest).length) {
-    failures.push('icons=[]');
-  }
-
-  if (failures.length) {
-    throw new Error(`[smoke] ${locationLabel} has invalid PWA metadata: ${failures.join(', ')}`);
-  }
-};
-
 const assertBuiltStaticFilesExist = async (paths, contextLabel) => {
   const missing = [];
   await Promise.all(paths.map(async (staticPath) => {
@@ -279,110 +175,6 @@ const verifyBuiltAssetReferences = async () => {
   await verifyBuiltPwaReferences(html);
 };
 
-const verifyServedAssetReferences = async (baseUrl, signal) => {
-  const rootResponse = await fetch(`${baseUrl}/`, { signal });
-  if (!rootResponse.ok) {
-    throw new Error(`[smoke] / returned ${rootResponse.status}`);
-  }
-
-  const rootContentType = rootResponse.headers.get('content-type') || '';
-  if (!rootContentType.includes('text/html')) {
-    throw new Error(`[smoke] / returned unexpected content-type "${rootContentType || '(missing)'}"`);
-  }
-
-  const html = await rootResponse.text();
-  if (!html.includes('id="root"')) {
-    throw new Error('[smoke] / did not return the app shell root element');
-  }
-  verifyAppShellMetadata(html, '/');
-
-  const assetPaths = extractAssetPaths(html);
-  if (!assetPaths.length) {
-    throw new Error('[smoke] / did not reference any /assets files');
-  }
-
-  const failures = [];
-  await Promise.all(assetPaths.map(async (assetPath) => {
-    const assetUrl = new URL(assetPath, baseUrl).toString();
-    try {
-      const response = await fetch(assetUrl, { signal });
-      const contentType = response.headers.get('content-type') || '';
-      if (!response.ok) {
-        failures.push(`${assetPath} -> HTTP ${response.status}`);
-        return;
-      }
-      if (contentType.includes('text/html')) {
-        failures.push(`${assetPath} -> HTML response instead of a static asset`);
-        return;
-      }
-      if (assetPath.endsWith('.js') && !/javascript|ecmascript/i.test(contentType)) {
-        failures.push(`${assetPath} -> unexpected JS content-type "${contentType || '(missing)'}"`);
-      }
-      if (assetPath.endsWith('.css') && !/text\/css/i.test(contentType)) {
-        failures.push(`${assetPath} -> unexpected CSS content-type "${contentType || '(missing)'}"`);
-      }
-    } catch (error) {
-      failures.push(`${assetPath} -> ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }));
-
-  if (failures.length) {
-    throw new Error(`[smoke] static asset readiness failed:\n${failures.sort().join('\n')}`);
-  }
-
-  await verifyServedPwaReferences(baseUrl, html, signal);
-};
-
-const verifyServedStaticFile = async (baseUrl, staticPath, expectedKind, signal) => {
-  const assetUrl = new URL(staticPath, baseUrl).toString();
-  const response = await fetch(assetUrl, { signal });
-  const contentType = response.headers.get('content-type') || '';
-
-  if (!response.ok) {
-    throw new Error(`${staticPath} -> HTTP ${response.status}`);
-  }
-  if (contentType.includes('text/html')) {
-    throw new Error(`${staticPath} -> HTML response instead of ${expectedKind}`);
-  }
-  if (expectedKind === 'image' && contentType && !/^image\//i.test(contentType) && !/octet-stream/i.test(contentType)) {
-    throw new Error(`${staticPath} -> unexpected image content-type "${contentType}"`);
-  }
-
-  return response;
-};
-
-const verifyServedPwaReferences = async (baseUrl, html, signal) => {
-  const { manifestPaths, iconPaths } = extractHtmlPwaReferences(html);
-  if (!manifestPaths.length) {
-    throw new Error('[smoke] / did not reference a web manifest');
-  }
-
-  const failures = [];
-  const manifestIconPaths = [];
-  await Promise.all(manifestPaths.map(async (manifestPath) => {
-    try {
-      const response = await verifyServedStaticFile(baseUrl, manifestPath, 'manifest', signal);
-      const manifest = await response.json();
-      verifyPwaManifestMetadata(manifest, manifestPath);
-      manifestIconPaths.push(...extractManifestIconPaths(manifest));
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }));
-
-  await Promise.all([...new Set([...iconPaths, ...manifestIconPaths])].map(async (iconPath) => {
-    try {
-      await verifyServedStaticFile(baseUrl, iconPath, 'image', signal);
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }));
-
-  if (failures.length) {
-    throw new Error(`[smoke] served PWA asset readiness failed:\n${failures.sort().join('\n')}`);
-  }
-};
-
 const getFilteredTestCount = async (suite, suiteEnv, baseUrl, outputDir, port) => {
   const playwrightListCommand = createNodeToolCommand('playwright', [
     'test',
@@ -412,42 +204,6 @@ const getFilteredTestCount = async (suite, suiteEnv, baseUrl, outputDir, port) =
   }
 
   throw new Error(`[smoke:${suite.name}] could not determine filtered test count:\n${combinedOutput.trim()}`);
-};
-
-const waitForServer = async (baseUrl, serverSignal) => {
-  const timeoutMs = Number(process.env.PLAYWRIGHT_SMOKE_SERVER_TIMEOUT_MS || '180000');
-  const deadline = Date.now() + timeoutMs;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const readinessSignal = serverSignal
-    ? AbortSignal.any([serverSignal, timeoutSignal])
-    : timeoutSignal;
-  let lastError = '';
-
-  while (Date.now() < deadline) {
-    serverSignal?.throwIfAborted();
-    try {
-      const response = await fetch(`${baseUrl}/api/session`, { signal: readinessSignal });
-      if (response.status === 200 || response.status === 204) {
-        await verifyServedAssetReferences(baseUrl, readinessSignal);
-        serverSignal?.throwIfAborted();
-        return;
-      }
-      lastError = `/api/session returned ${response.status}`;
-    } catch (error) {
-      serverSignal?.throwIfAborted();
-      lastError = error instanceof Error ? error.message : String(error);
-      // Retry until ready.
-    }
-    if (timeoutSignal.aborted) break;
-    try {
-      await delay(500, undefined, { signal: readinessSignal });
-    } catch {
-      serverSignal?.throwIfAborted();
-      break;
-    }
-  }
-
-  throw new Error(`Timed out waiting for smoke server at ${baseUrl} after ${timeoutMs}ms${lastError ? `; last error: ${lastError}` : ''}`);
 };
 
 const startServer = (port, env) => spawn(
@@ -660,10 +416,12 @@ for (const suite of suites) {
         PLAYWRIGHT_SMOKE_PORT: String(port),
       });
       serverMonitor = monitorServerProcess(server, suite.name);
-      await waitForServer(baseUrl, serverMonitor.signal);
-    } else {
-      await verifyServedAssetReferences(baseUrl);
     }
+    await waitForSmokeServer(baseUrl, {
+      expectedDeploymentSha: suiteEnv.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA || '',
+      timeoutMs: Number(suiteEnv.PLAYWRIGHT_SMOKE_SERVER_TIMEOUT_MS || '180000'),
+      serverSignal: serverMonitor?.signal,
+    });
 
     const playwrightCommand = createNodeToolCommand('playwright', [
       'test',
