@@ -480,6 +480,65 @@ describe('writing student response security boundaries', () => {
     expect(JSON.stringify(response)).not.toContain('Unselected corrected draft');
   });
 
+  it.each([
+    WritingAssignmentStatus.SUBMITTED,
+    WritingAssignmentStatus.REVIEW_READY,
+  ])('keeps a previously returned attempt readable while the next attempt is %s', async (status) => {
+    setSubmissionDetail({ status, released: true });
+    mocks.readSubmissionDetailBaseRow.mockResolvedValue({
+      ...createSubmissionBaseRow(status),
+      attempt_count: 2,
+    });
+
+    const detail = await handleGetWritingSubmissionDetail(createEnv(), student, SUBMISSION_ID);
+    const printable = await handleGetWritingPrintableFeedback(createEnv(), student, SUBMISSION_ID);
+
+    expect(detail.assignment.status).toBe(status);
+    expect(detail.submission.attemptNo).toBe(1);
+    expect(detail.submission.evaluations).toHaveLength(1);
+    expect(Object.keys(detail.submission.evaluations[0] || {}).sort()).toEqual(STUDENT_EVALUATION_KEYS);
+    expect(Object.keys(detail.submission).sort()).toEqual(STUDENT_RELEASED_SUBMISSION_KEYS);
+    expect(detail.submission.evaluations[0]).toMatchObject({ correctedDraft: 'Selected corrected draft' });
+    expect(printable.html).toContain('Selected corrected draft');
+    expect(printable.html).toContain('Two reasons are clear.');
+    for (const response of [JSON.stringify(detail), printable.html]) {
+      expect(response).not.toContain(PRIVATE_MEMO);
+      expect(response).not.toContain('Unselected corrected draft');
+    }
+  });
+
+  it.each(['unreleased review', 'missing selected evaluation', 'another student'])(
+    'keeps resubmission feedback protected with %s',
+    async (condition) => {
+      setSubmissionDetail({ status: WritingAssignmentStatus.REVIEW_READY, released: true });
+      const currentAttempt = {
+        ...createSubmissionBaseRow(WritingAssignmentStatus.REVIEW_READY),
+        submission_attempt_no: 2,
+        attempt_count: 2,
+      };
+      mocks.readSubmissionDetailBaseRow.mockResolvedValue(currentAttempt);
+      if (condition === 'unreleased review') {
+        mocks.readTeacherReviewRowsBySubmissionIds.mockResolvedValue(new Map([
+          [SUBMISSION_ID, { ...createReviewRow(), released_at: null }],
+        ]));
+      } else if (condition === 'missing selected evaluation') {
+        mocks.readSubmissionEvaluationRowsBySubmissionIds.mockResolvedValue(new Map([
+          [SUBMISSION_ID, evaluationRows.filter((evaluation) => evaluation.id !== SELECTED_EVALUATION_ID)],
+        ]));
+      } else {
+        mocks.readSubmissionDetailBaseRow.mockResolvedValue({
+          ...currentAttempt,
+          student_user_id: 'another-student',
+        });
+      }
+
+      await expect(handleGetWritingSubmissionDetail(createEnv(), student, SUBMISSION_ID))
+        .rejects.toMatchObject({ status: 403 });
+      await expect(handleGetWritingPrintableFeedback(createEnv(), student, SUBMISSION_ID))
+        .rejects.toMatchObject({ status: 403 });
+    },
+  );
+
   it('keeps full evaluation, OCR, and private review metadata for an authorized instructor', async () => {
     setSubmissionDetail({
       status: WritingAssignmentStatus.RETURNED,
@@ -724,7 +783,7 @@ describe('writing teacher review state machine', () => {
     expect(mocks.enqueueWritingActivitySideEffect).not.toHaveBeenCalled();
   });
 
-  it('keeps an exact approved-return retry idempotent without writes or side effects', async () => {
+  it('recovers exact approved-return retry side effects without rewriting the review', async () => {
     allowInstructorOrganizationAccess();
     setSubmissionDetail({
       status: WritingAssignmentStatus.RETURNED,
@@ -737,7 +796,13 @@ describe('writing teacher review state machine', () => {
     expect(result.assignment.status).toBe(WritingAssignmentStatus.RETURNED);
     expect(mocks.commitTeacherReviewDecision).not.toHaveBeenCalled();
     expect(mocks.recordProductEventForUser).not.toHaveBeenCalled();
-    expect(mocks.enqueueWritingActivitySideEffect).not.toHaveBeenCalled();
+    expect(mocks.enqueueWritingActivitySideEffect).toHaveBeenCalledWith(env, {
+      studentUid: STUDENT_ID,
+      writingAssignmentId: ASSIGNMENT_ID,
+      organizationId: 'org-a',
+      activityAt: 140,
+    });
+    expect(mocks.runSideEffectJobById).toHaveBeenCalledWith(env, 'job-1');
   });
 
   it('rejects a conflicting review after return without writes or side effects', async () => {

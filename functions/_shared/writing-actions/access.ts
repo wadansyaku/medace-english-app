@@ -38,6 +38,15 @@ export const isStudentFeedbackVisibleStatus = (status: string): boolean => (
   || status === AssignmentStatus.COMPLETED
 );
 
+const getReleasedSelectedEvaluation = (
+  submission: WritingSubmissionDetailResponse['submission'],
+) => {
+  const review = submission.teacherReview;
+  if (!review?.releasedAt) return undefined;
+  // A release belongs to this submission; the assignment status tracks newer attempts.
+  return submission.evaluations.find((evaluation) => evaluation.id === review.selectedEvaluationId);
+};
+
 export const guardWritingAccess = (user: DbUserRow): void => {
   if (
     user.role === UserRole.ADMIN
@@ -124,12 +133,7 @@ export const ensureSubmissionViewAccess = async (
 
   if (user.role !== UserRole.STUDENT) return;
 
-  const review = detail.submission.teacherReview;
-  const hasReleasedSelectedEvaluation = Boolean(
-    review?.releasedAt
-    && detail.submission.evaluations.some((evaluation) => evaluation.id === review.selectedEvaluationId),
-  );
-  if (!isStudentFeedbackVisibleStatus(detail.assignment.status) || !hasReleasedSelectedEvaluation) {
+  if (!getReleasedSelectedEvaluation(detail.submission)) {
     throw new HttpError(403, '講師確認後に返却された答案のみ閲覧できます。');
   }
 };
@@ -203,14 +207,8 @@ export const projectWritingDetailForViewer = (
   }
 
   const review = detail.submission.teacherReview;
-  const selectedEvaluation = review
-    ? detail.submission.evaluations.find((evaluation) => evaluation.id === review.selectedEvaluationId)
-    : undefined;
-  if (
-    !isStudentFeedbackVisibleStatus(detail.assignment.status)
-    || !review?.releasedAt
-    || !selectedEvaluation
-  ) {
+  const selectedEvaluation = getReleasedSelectedEvaluation(detail.submission);
+  if (!review || !selectedEvaluation) {
     throw new HttpError(403, '講師確認後に返却された答案のみ閲覧できます。');
   }
 

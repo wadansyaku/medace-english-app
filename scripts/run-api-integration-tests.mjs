@@ -547,6 +547,17 @@ const main = async () => {
     assert(nonFiniteXpAward.status === 400, 'non-finite XP awards must be rejected');
     const negativeXpAward = await freeStudent.storageRaw('addXP', { amount: -1_000_000 });
     assert(negativeXpAward.status === 400, 'negative XP awards must be rejected');
+    const excessiveXpAward = await freeStudent.storageRaw('addXP', { amount: 2001 });
+    assert(excessiveXpAward.status === 400, 'XP awards above the supported 100-word session maximum must be rejected');
+    const totalXp = (stats) => ((stats.level * (stats.level - 1) * 100) / 2) + stats.xp;
+    let priorXp = totalXp(freeStudentUser.stats);
+    for (const amount of [500, 2000]) {
+      const reward = await freeStudent.storage('addXP', { amount });
+      assert(totalXp(reward.user.stats) === priorXp + amount, 'supported long sessions must persist their entire XP award');
+      priorXp += amount;
+    }
+    const sessionAfterXp = await freeStudent.get('/api/session');
+    assert(totalXp(sessionAfterXp.stats) === priorXp, 'long-session XP must survive a new session read');
     const freeBooks = await freeStudent.storage('getBooks');
     const freeBookTitles = freeBooks.map((book) => book.title);
     assert(freeBookTitles.includes('Starter 120'), 'free student should see ALL_PLANS official books');

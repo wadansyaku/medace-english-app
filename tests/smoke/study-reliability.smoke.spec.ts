@@ -120,6 +120,47 @@ test.describe('study reliability', () => {
     expect(awardCount).toBe(1);
   });
 
+  test('requeued study cards preserve the original session XP award', async ({ page }) => {
+    const bookId = await prepareStudy(page);
+    const words = await loadFixtureWords(page, bookId);
+    expect(words).toHaveLength(2);
+    const streak = await page.evaluate(async () => {
+      const response = await fetch('/api/session');
+      if (!response.ok) throw new Error('Could not read the study fixture session');
+      const profile = await response.json();
+      return profile.stats?.currentStreak ?? 0;
+    });
+    expect(Number.isSafeInteger(streak)).toBeTruthy();
+    expect(streak).toBeGreaterThanOrEqual(0);
+    const expectedXp = 20 + Math.round(20 * Math.min(streak, 10) * 0.1);
+    const answers: Array<{ word: { id: string }; rating: number; clientAttemptId: string }> = [];
+    const awards: number[] = [];
+    await page.route('**/api/storage', async (route) => {
+      const body = route.request().postDataJSON();
+      if (body?.action === 'saveSRSHistory') answers.push(body.payload);
+      if (body?.action === 'addXP') awards.push(body.payload.amount);
+      await route.continue();
+    });
+
+    await page.getByTestId(`book-study-${bookId}`).click();
+    for (const [word, rating] of [[words[0], 0], [words[1], 3], [words[0], 3]] as const) {
+      await expect(page.getByTestId('study-card-front')).toContainText(word.word);
+      await page.getByTestId('study-flip-button').click();
+      await page.getByTestId(`study-rate-${rating}`).click();
+    }
+
+    await expect(page.getByTestId('study-finish-exit')).toBeVisible();
+    await expect(page.getByTestId('study-reward-unconfirmed')).toHaveCount(0);
+    expect(answers.map((answer) => answer.word.id)).toEqual([words[0].id, words[1].id, words[0].id]);
+    expect(answers.map((answer) => answer.rating)).toEqual([0, 3, 3]);
+    expect(new Set(answers.map((answer) => answer.clientAttemptId)).size).toBe(3);
+    expect(awards).toEqual([expectedXp]);
+    await page.getByTestId('study-finish-exit').click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    expect(answers).toHaveLength(3);
+    expect(awards).toEqual([expectedXp]);
+  });
+
   test('late hints cannot replace the next card or clear its pending hint', async ({ page }) => {
     const bookId = await prepareStudy(page);
     const words = await loadFixtureWords(page, bookId);

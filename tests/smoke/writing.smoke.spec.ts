@@ -122,6 +122,14 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.getByTestId('writing-submit-upload').click();
   await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
 
+  await studentPage.reload();
+  const previousFeedbackButton = studentPage.getByRole('button', { name: '前の添削結果を見る', exact: true });
+  await expect(previousFeedbackButton).toBeVisible();
+  await previousFeedbackButton.click();
+  await expect(studentPage.getByTestId('writing-feedback-comment')).toContainText('理由のつながりを整えて、もう一度書き直しましょう。');
+  await expect(studentPage.getByTestId('writing-feedback-approved-evaluation')).toHaveCount(1);
+  await expect(studentPage.getByText('AI比較', { exact: true })).toHaveCount(0);
+
   await adminPage.reload();
   await adminPage.getByTestId('workspace-tab-writing').click();
   await adminPage.getByRole('button', { name: '添削キュー', exact: true }).click();

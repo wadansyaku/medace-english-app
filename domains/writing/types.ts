@@ -192,6 +192,8 @@ export interface WritingAssignment {
   lastSubmittedAt?: number;
   lastReturnedAt?: number;
   latestSubmissionId?: string;
+  /** Most recent teacher-released attempt; independent of the current attempt's status. */
+  latestReleasedSubmissionId?: string;
   latestSubmission?: WritingSubmission;
 }
 

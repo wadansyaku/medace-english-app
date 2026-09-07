@@ -9,6 +9,7 @@ This directory keeps operational docs and historical design notes for Steady Stu
 - [Product charter](../project.md): 対象、価値、原則、観測する指標。
 - [Current backlog](../todo.md): 今回と次期の作業、受入条件、配備前の未完了事項。
 - [Rebuild audit and plan 2026-09-07](./analysis/rebuild-plan-2026-09-07.md): 課題・実装・削除根拠・検証記録。
+- [Production rebuild release 2026-09-07](./analysis/production-rebuild-release-2026-09-07.md): PR、migration、プレビュー・本番の実確認を段階別に記録。
 - [Architecture](./architecture.md): 依存方向、取得/行動/保存の契約と未完の境界。
 - [Environment setup](./environment-setup.md): ローカル教材投入、AI/R2、環境変数と設定の詳細。
 - [Deployment operations runbook](./deployment-ops-runbook.md): release gate、preview/prod、rollback。

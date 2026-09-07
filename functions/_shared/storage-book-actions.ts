@@ -6,6 +6,7 @@ import type {
 import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, LearningTaskIntentType, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
+import { normalizeStudySessionLimit } from '../../shared/studySession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
@@ -26,7 +27,6 @@ import {
   assertBookWriteAccess,
   buildInClause,
   createBookId,
-  ensurePositiveLimit,
   getMasterySourceSql,
   readAll,
   readFirst,
@@ -575,7 +575,7 @@ export const handleGetDailySessionWords = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
-  const limit = ensurePositiveLimit(limitInput, 20);
+  const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
   const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
@@ -704,7 +704,7 @@ export const handleGetBookSession = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
-  const limit = ensurePositiveLimit(limitInput, 20);
+  const limit = normalizeStudySessionLimit(limitInput);
   await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
 

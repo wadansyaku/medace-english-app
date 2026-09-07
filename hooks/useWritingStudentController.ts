@@ -19,6 +19,8 @@ import {
   canOpenWritingFeedback,
   canSubmitWritingAssignment,
   getWritingStudentAssignmentPriority,
+  getWritingFeedbackSubmissionId,
+  isWritingSubmissionPending,
 } from '../components/writing/studentSectionUtils';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
 import {
@@ -65,11 +67,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     [assignments],
   );
   const waitingAssignmentCount = useMemo(
-    () => assignments.filter((assignment) => (
-      !canSubmitWritingAssignment(assignment)
-      && !canOpenWritingFeedback(assignment)
-      && assignment.status !== 'COMPLETED'
-    )).length,
+    () => assignments.filter(isWritingSubmissionPending).length,
     [assignments],
   );
 
@@ -235,12 +233,13 @@ export const useWritingStudentController = (user: UserProfile) => {
   };
 
   const openFeedback = async (assignment: WritingAssignment) => {
-    if (!assignment.latestSubmissionId) return;
+    const submissionId = getWritingFeedbackSubmissionId(assignment);
+    if (!submissionId) return;
     const requestVersion = feedbackRequestVersionRef.current + 1;
     feedbackRequestVersionRef.current = requestVersion;
-    setOpeningFeedbackId(assignment.latestSubmissionId);
+    setOpeningFeedbackId(submissionId);
     try {
-      const detail = await getStudentWritingSubmissionDetail(assignment.latestSubmissionId);
+      const detail = await getStudentWritingSubmissionDetail(submissionId);
       if (feedbackRequestVersionRef.current !== requestVersion) return;
       setFeedbackDetail(detail);
       setFeedbackCommentExpanded(false);

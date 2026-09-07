@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_STUDY_SESSION_XP } from '../shared/xp';
 import { STORAGE_ACTIONS, type StorageAction } from '../contracts/storage';
 import { CommercialRequestStatus, OrganizationRole, SubscriptionPlan, UserRole } from '../types';
 import {
@@ -117,8 +118,10 @@ describe('storage action contract', () => {
   it('rejects non-finite and out-of-range XP awards before execution', () => {
     const definition = resolveStorageActionDefinition('addXP');
 
-    expect(definition.parse({ amount: 400 })).toEqual({ amount: 400 });
-    for (const amount of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 0, 401, 1.5]) {
+    for (const amount of [400, 500, MAX_STUDY_SESSION_XP]) {
+      expect(definition.parse({ amount })).toEqual({ amount });
+    }
+    for (const amount of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 0, MAX_STUDY_SESSION_XP + 1, 1.5]) {
       expect(() => definition.parse({ amount })).toThrow();
     }
   });

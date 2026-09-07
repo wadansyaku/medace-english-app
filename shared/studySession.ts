@@ -1,5 +1,19 @@
 export const DEFAULT_SMART_SESSION_ID = 'smart-session';
 export const DEFAULT_SMART_SESSION_LIMIT = 20;
+export const MAX_STUDY_SESSION_WORDS = 100;
+
+export const normalizeStudySessionLimit = (
+  value: unknown,
+  fallback = DEFAULT_SMART_SESSION_LIMIT,
+): number => {
+  const candidate = typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
+  const safeCandidate = Number.isFinite(candidate) && candidate > 0
+    ? candidate
+    : DEFAULT_SMART_SESSION_LIMIT;
+  return Math.max(1, Math.min(MAX_STUDY_SESSION_WORDS, Math.floor(safeCandidate)));
+};
 export const WEAKNESS_FOCUS_SESSION_ID = 'smart-session-focus';
 export const WEAKNESS_FOCUS_SESSION_LIMIT = 10;
 

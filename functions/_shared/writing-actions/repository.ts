@@ -80,7 +80,17 @@ export const readAssignmentRowsForScope = async (
        WHERE s.assignment_id = a.id
        ORDER BY s.submitted_at DESC, s.attempt_no DESC, s.id DESC
        LIMIT 1
-     ) AS latest_submission_id
+     ) AS latest_submission_id,
+     (
+       SELECT s.id
+       FROM writing_submissions s
+       JOIN writing_teacher_reviews review ON review.submission_id = s.id
+       JOIN writing_ai_evaluations evaluation
+         ON evaluation.id = review.selected_evaluation_id AND evaluation.submission_id = s.id
+       WHERE s.assignment_id = a.id AND review.released_at > 0
+       ORDER BY s.attempt_no DESC, review.released_at DESC, s.id DESC
+       LIMIT 1
+     ) AS latest_released_submission_id
    FROM writing_assignments a
    JOIN users instructor ON instructor.id = a.instructor_user_id
    JOIN users student ON student.id = a.student_user_id

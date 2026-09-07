@@ -1,6 +1,6 @@
 # Steady Study 再構築計画・現状監査
 
-更新日: 2026-09-07。対象: この作業ツリー。R0〜R5はローカル実装・検証済み。本番配備と次期P1〜P3は別工程。
+更新日: 2026-09-07。対象: この作業ツリー。R0〜R5はローカル実装・検証済み。本番反映はユーザー承認を受けて進行中。次期P1〜P3は継続バックログ。配備証拠は[本番リリース記録](./production-rebuild-release-2026-09-07.md)に分離する。
 
 ## 判断
 
@@ -81,7 +81,7 @@
 
 今回: migration replay、source/boundary gate、typecheck、全unit、build、API integration、Cloudflare/IDB browser smoke、PC/モバイル実画面。追加変更ごとに対象テスト、統合後に全検証。
 
-本番配備は別工程。remote-readonly確認→PRの必須check→previewのmigration/build/deployed smoke→review→production→live smoke。新しいmigrationの本番適用は未実施として明示する。
+本番反映はremote-readonly確認→PRの必須check→previewのmigration/build/deployed smoke→review→production→live smokeの順で進める。最新の適用状態・配備SHAは[本番リリース記録](./production-rebuild-release-2026-09-07.md)を参照する。
 
 ## 削除・整理台帳
 
@@ -93,7 +93,7 @@
 | dist / test-results | 検証で再生成可能・追跡ファイル0 | 証拠退避後に2ディレクトリ・109ファイル・2,130,480 bytesを削除 | dry-run → apply → 残り候補0 |
 | 教材・学習DB・ブラウザ記録・個別成果物 | 固有データ、または用途未確定 | 保持 | 保護境界 |
 
-## 完了時の検証記録
+## 第1段階: ローカル再構築完了時の検証記録
 
 今回の差分は開始時の未コミット状態を基準に89パス（新規26・更新62・shared移動に伴う削除1）。開始前から存在した変更・削除はこの件数に含めない。
 

@@ -706,6 +706,54 @@ export const handleFinalizeWritingSubmission = async (
   return projectWritingDetailForViewer(user, detailWithSideEffect, 'receipt');
 };
 
+const reconcileTeacherReviewSideEffects = async (
+  env: AppEnv,
+  detail: WritingSubmissionDetailResponse,
+): Promise<WritingSubmissionDetailResponse> => {
+  const review = detail.submission.teacherReview;
+  if (!review) throw new HttpError(500, '保存済みの講師評価を確認できませんでした。');
+
+  // Recover a missing event after commit without duplicating an event whose
+  // response was lost. Attribution and time belong to the committed review,
+  // including when another authorized instructor sends the exact retry.
+  await env.DB.prepare(`
+    INSERT INTO product_events (
+      event_name, feature_area, user_id, organization_id, subscription_plan, user_role,
+      subject_type, subject_id, status, used_ai, estimated_cost_milli_yen, metadata_json, created_at
+    )
+    SELECT 'writing_review_completed', 'writing', review.reviewer_user_id, ?,
+      reviewer.subscription_plan, reviewer.role, 'writing_submission', review.submission_id,
+      review.review_decision, 0, 0, ?, COALESCE(review.released_at, review.updated_at)
+    FROM writing_teacher_reviews review
+    LEFT JOIN users reviewer ON reviewer.id = review.reviewer_user_id
+    WHERE review.id = ? AND review.submission_id = ?
+      AND NOT EXISTS (
+        SELECT 1 FROM product_events event
+        WHERE event.event_name = 'writing_review_completed'
+          AND event.subject_type = 'writing_submission'
+          AND event.subject_id = review.submission_id
+          AND event.status = review.review_decision
+      )
+  `).bind(
+    detail.assignment.organizationId || null,
+    JSON.stringify({
+      assignmentId: detail.assignment.id,
+      organizationId: detail.assignment.organizationId,
+      selectedEvaluationId: review.selectedEvaluationId,
+    }),
+    review.id,
+    detail.submission.id,
+  ).run();
+
+  const sideEffectJob = await flushWritingActivitySideEffect(env, {
+    studentUid: detail.assignment.studentUid,
+    writingAssignmentId: detail.assignment.id,
+    organizationId: detail.assignment.organizationId,
+    activityAt: review.releasedAt ?? review.updatedAt,
+  });
+  return sideEffectJob ? { ...detail, sideEffectJob } : detail;
+};
+
 const applyTeacherReview = async (
   env: AppEnv,
   user: DbUserRow,
@@ -741,7 +789,7 @@ const applyTeacherReview = async (
     && (existingReview.privateMemo || '') === (payload.privateMemo?.trim() || '')
   );
   if (detail.assignment.status !== AssignmentStatus.REVIEW_READY) {
-    if (isExactRetry) return detail;
+    if (isExactRetry) return reconcileTeacherReviewSideEffects(env, detail);
     throw new HttpError(409, '現在の状態では提出を返却できません。');
   }
 
@@ -763,26 +811,8 @@ const applyTeacherReview = async (
     assignmentStatus: nextStatus,
     now,
   });
-  await recordProductEventForUser(env, user, {
-    eventName: 'writing_review_completed',
-    subjectType: 'writing_submission',
-    subjectId: submissionId,
-    status: decision,
-    metadata: {
-      assignmentId: detail.assignment.id,
-      organizationId: detail.assignment.organizationId,
-      selectedEvaluationId: payload.selectedEvaluationId,
-    },
-  });
-  const sideEffectJob = await flushWritingActivitySideEffect(env, {
-    studentUid: detail.assignment.studentUid,
-    writingAssignmentId: detail.assignment.id,
-    organizationId: detail.assignment.organizationId,
-    activityAt: now,
-  });
-
   const nextDetail = (await readSubmissionContext(env, submissionId)).detail;
-  return sideEffectJob ? { ...nextDetail, sideEffectJob } : nextDetail;
+  return reconcileTeacherReviewSideEffects(env, nextDetail);
 };
 
 export const handleApproveWritingReturn = async (

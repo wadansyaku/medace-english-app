@@ -27,8 +27,8 @@
 ## 本番へ進むための条件
 
 - [ ] 今回の0042を含むpreview migration、deployed smoke、owner review。
-- [ ] remote-readonlyの構成・教材・台帳・B2B整合性gate。
+- [x] remote-readonlyの構成・教材・台帳・B2B整合性gate（2026-09-07、エラー0）。
 - [ ] 本番への変更差分をレビュー可能なPRへまとめ、必須checkを確認。
 - [ ] production bookmark、配備、公開URLのlive smokeを記録。
 
-今回は本番配備を実施していない。外部通知・料金・権限の事業判断は別の確認を要する。以前の完了項目と検討履歴は [過去バックログ](./docs/archive/todo-through-2026-07-11.md) に保存した。
+本番反映の承認を受けてPR #51で進行中。最新の検証・配備状態は[本番リリース記録](./docs/analysis/production-rebuild-release-2026-09-07.md)を参照する。外部通知・料金・権限の事業判断は別の確認を要する。以前の完了項目と検討履歴は [過去バックログ](./docs/archive/todo-through-2026-07-11.md) に保存した。

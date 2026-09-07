@@ -26,6 +26,7 @@ import {
   isStudyInteractionSource,
 } from '../../shared/learningHistory';
 import { buildSrsHistory, studyAttemptFingerprint, validateStudyAttempt } from '../../shared/srs';
+import { normalizeStudySessionLimit } from '../../shared/studySession';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
@@ -179,6 +180,7 @@ export const buildBookSessionWords = ({
   now: number;
   selectionPolicy?: LearningTaskIntent['selectionPolicy'];
 }): WordData[] => {
+  limit = normalizeStudySessionLimit(limit);
   const historyMap = new Map<string, LearningHistory>();
   histories.forEach((history) => {
     if (isMasteryHistoryRecord(history)) {
@@ -206,7 +208,7 @@ export const buildBookSessionWords = ({
     return newWords.slice(0, limit);
   }
 
-  let session = [...due];
+  let session = due.slice(0, limit);
   if (selectionPolicy === 'BOOK_REVIEW_ONLY') {
     ahead.sort((left, right) => {
       const leftHistory = historyMap.get(left.id);
@@ -237,6 +239,7 @@ export const getDailySessionWords = async (
   limit: number,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
+  limit = normalizeStudySessionLimit(limit);
   const historyStore = await context.getStore(STORES.HISTORY);
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);

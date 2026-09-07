@@ -9,6 +9,8 @@ import {
   canSubmitWritingAssignment,
   formatWritingDateTime,
   getWritingAssignmentPhase,
+  getWritingFeedbackSubmissionId,
+  isWritingSubmissionPending,
 } from './studentSectionUtils';
 
 interface WritingStudentAssignmentListProps {
@@ -53,7 +55,9 @@ const getDecisionCopy = (assignment: WritingAssignment) => {
       return {
         label: WRITING_ASSIGNMENT_STATUS_LABELS[assignment.status],
         title: '講師確認待ち',
-        body: '答案は処理中です。返却されると添削結果を開けます。',
+        body: canOpenWritingFeedback(assignment)
+          ? '新しい答案は確認待ちです。待っている間も、前の添削結果を確認できます。'
+          : '答案は処理中です。返却されると添削結果を開けます。',
         icon: <Clock3 className="h-4 w-4" />,
       };
   }
@@ -76,6 +80,7 @@ const WritingStudentAssignmentCard: React.FC<{
   const decision = getDecisionCopy(assignment);
   const canSubmit = canSubmitWritingAssignment(assignment);
   const canOpenFeedback = canOpenWritingFeedback(assignment);
+  const feedbackSubmissionId = getWritingFeedbackSubmissionId(assignment);
   const showFeedbackFirst = assignment.status === 'REVISION_REQUESTED' || (canOpenFeedback && !canSubmit);
   const submitButton = canSubmit ? (
     <button
@@ -95,8 +100,8 @@ const WritingStudentAssignmentCard: React.FC<{
       onClick={() => onOpenFeedback(assignment)}
       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
     >
-      {openingFeedbackId === assignment.latestSubmissionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-      添削結果を見る
+      {openingFeedbackId === feedbackSubmissionId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+      {isWritingSubmissionPending(assignment) ? '前の添削結果を見る' : '添削結果を見る'}
     </button>
   ) : null;
 

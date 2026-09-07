@@ -11,7 +11,8 @@ import {
 import { learningService } from '../services/learning';
 import { type GeneratedContext } from '../services/gemini';
 import { ApiError } from '../services/apiClient';
-import { getSmartSessionConfig } from '../shared/studySession';
+import { getSmartSessionConfig, normalizeStudySessionLimit } from '../shared/studySession';
+import { calculateStudySessionXp } from '../shared/xp';
 import { resolveExampleTranslation } from '../shared/wordHintAssets';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
@@ -233,9 +234,10 @@ export const useStudyModeController = ({
     const loadWords = async () => {
       try {
         const smartSession = getSmartSessionConfig(bookId);
+        const limit = normalizeStudySessionLimit(taskIntent?.limit, smartSession?.limit ?? 10);
         const data = smartSession
-          ? await learningService.getDailySessionWords(user.uid, taskIntent?.limit || smartSession.limit, taskIntent || undefined)
-          : await learningService.getBookSession(user.uid, bookId, taskIntent?.limit || 10, taskIntent || undefined);
+          ? await learningService.getDailySessionWords(user.uid, limit, taskIntent || undefined)
+          : await learningService.getBookSession(user.uid, bookId, limit, taskIntent || undefined);
         if (cancelled || generation !== sessionGenerationRef.current) return;
         setQueue(data);
         setSessionWordCount(data.length);
@@ -520,11 +522,9 @@ export const useStudyModeController = ({
           resetStudyScrollPosition();
         }, supports3D ? 180 : 0);
       } else {
-        const baseXP = sessionWordCount * 10;
-        const currentStreak = user.stats?.currentStreak || 0;
-        const bonusXP = Math.round(baseXP * Math.min(currentStreak, 10) * 0.1);
         try {
-          const result = await learningService.addXP(user, baseXP + bonusXP);
+          const { baseXP, bonusXP, totalXP } = calculateStudySessionXp(sessionWordCount, user.stats?.currentStreak ?? 0);
+          const result = await learningService.addXP(user, totalXP);
           if (!isCurrentSession()) return;
           setEarnedXP(baseXP);
           setStreakBonusXP(bonusXP);

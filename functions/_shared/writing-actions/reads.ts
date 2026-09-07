@@ -141,11 +141,15 @@ export const handleListWritingAssignments = async (
         if (!visibleStudentIds.has(row.student_user_id)) return null;
         if (user.role === UserRole.STUDENT && scope === 'organization') return null;
         if (user.role === UserRole.STUDENT && row.status === AssignmentStatus.DRAFT) return null;
-        if (!row.latest_submission_id) return toAssignment(row);
-        if (user.role === UserRole.STUDENT && !isStudentFeedbackVisibleStatus(row.status)) {
-          return toAssignment(row);
-        }
-        return toAssignment(row, { latestSubmissionId: row.latest_submission_id });
+        const releasedSubmissionId = row.latest_released_submission_id || undefined;
+        const canExposeLatestSubmission = user.role !== UserRole.STUDENT || (
+          isStudentFeedbackVisibleStatus(row.status)
+          && row.latest_submission_id === releasedSubmissionId
+        );
+        return toAssignment(row, {
+          latestSubmissionId: canExposeLatestSubmission ? row.latest_submission_id || undefined : undefined,
+          latestReleasedSubmissionId: releasedSubmissionId,
+        });
       })
       .filter(Boolean) as WritingAssignment[],
   };
