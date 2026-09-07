@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
 import { createLocalWranglerProject } from './_shared/local-wrangler-project.mjs';
+import { readSmokeServerDiagnostic } from './_shared/smoke-server-diagnostics.mjs';
 
 const cwd = process.cwd();
 const args = process.argv.slice(2);
@@ -17,6 +18,7 @@ const readArg = (name, fallback) => {
 
 const port = readArg('port', process.env.PLAYWRIGHT_SMOKE_PORT || '41731');
 const persistDir = await mkdtemp(path.join(os.tmpdir(), 'medace-smoke-'));
+const wranglerLogPath = path.join(persistDir, 'wrangler-debug.log');
 
 const runCommand = (command, commandArgs, env = baseEnv, stdio = 'inherit') => new Promise((resolve, reject) => {
   const child = spawn(command, commandArgs, {
@@ -150,6 +152,9 @@ try {
     env: {
       ...baseEnv,
       CI: '1',
+      WRANGLER_LOG_PATH: wranglerLogPath,
+      WRANGLER_LOG: 'info',
+      WRANGLER_LOG_SANITIZE: 'true',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
@@ -170,6 +175,9 @@ try {
   console[requestedExitSignal ? 'log' : 'error'](
     `[smoke-server] Wrangler ${requestedExitSignal ? 'stopped' : 'exited unexpectedly'} (code=${code ?? 'null'}, signal=${signal ?? 'none'}).`,
   );
+  if (!requestedExitSignal) {
+    console.error(JSON.stringify(await readSmokeServerDiagnostic(wranglerLogPath)));
+  }
   await cleanup();
   process.exit(requestedExitSignal
     ? (requestedExitSignal === 'SIGINT' ? 130 : 143)
