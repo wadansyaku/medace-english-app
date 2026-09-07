@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ExternalLink, Eye, FileDown, Printer } from 'lucide-react';
 import type { WritingAssignment } from '../types';
+import { escapeHtmlText } from '../utils/html';
 import { buildSubmissionQrSvg, encodeSubmissionMarker } from '../utils/writing';
 import ModalOverlay from './ModalOverlay';
 
@@ -10,7 +11,7 @@ interface WritingPrintLauncherProps {
   buttonClassName?: string;
 }
 
-const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => {
+export const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => {
   const attemptNo = Math.min(assignment.attemptCount + 1, assignment.maxAttempts);
   const markerValue = encodeSubmissionMarker(assignment.id, assignment.submissionCode, attemptNo);
   const qrSvg = buildSubmissionQrSvg(markerValue);
@@ -19,7 +20,7 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
   <html lang="ja">
     <head>
       <meta charset="UTF-8" />
-      <title>${assignment.studentName} - ${assignment.promptTitle}</title>
+      <title>${escapeHtmlText(assignment.studentName)} - ${escapeHtmlText(assignment.promptTitle)}</title>
       <style>
         :root {
           --ink: #0f172a;
@@ -57,31 +58,31 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
       <div class="page">
         <section class="hero">
           <div class="eyebrow">Writing Assignment</div>
-          <h1 class="title">${assignment.promptTitle}</h1>
+          <h1 class="title">${escapeHtmlText(assignment.promptTitle)}</h1>
           <div class="meta-grid">
             <div class="meta-card">
               <div class="meta-label">Student</div>
-              <div class="meta-value">${assignment.studentName}</div>
+              <div class="meta-value">${escapeHtmlText(assignment.studentName)}</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">語数</div>
-              <div class="meta-value">${assignment.wordCountMin} - ${assignment.wordCountMax} words</div>
+              <div class="meta-value">${escapeHtmlText(assignment.wordCountMin)} - ${escapeHtmlText(assignment.wordCountMax)} words</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">提出コード</div>
-              <div class="meta-value">${assignment.submissionCode}</div>
+              <div class="meta-value">${escapeHtmlText(assignment.submissionCode)}</div>
             </div>
             <div class="meta-card">
               <div class="meta-label">提出回数</div>
-              <div class="meta-value">${attemptNo} / ${assignment.maxAttempts}</div>
+              <div class="meta-value">${escapeHtmlText(attemptNo)} / ${escapeHtmlText(assignment.maxAttempts)}</div>
             </div>
           </div>
         </section>
         <section class="layout">
           <div class="panel">
             <h2 class="panel-title">設問</h2>
-            <div class="prompt">${assignment.promptText}</div>
-            <div class="note">${assignment.guidance}</div>
+            <div class="prompt">${escapeHtmlText(assignment.promptText)}</div>
+            <div class="note">${escapeHtmlText(assignment.guidance)}</div>
             <div class="lines">
               ${Array.from({ length: 10 }).map(() => '<div class="line"></div>').join('')}
             </div>
@@ -89,15 +90,15 @@ const buildPrintableAssignmentHtml = (assignment: WritingAssignment): string => 
           <div class="panel">
             <h2 class="panel-title">提出マーカー</h2>
             <div class="qr">${qrSvg}</div>
-            <div class="code">${markerValue}</div>
+            <div class="code">${escapeHtmlText(markerValue)}</div>
             <div class="note">
               生徒スマホまたは校舎スキャナーで提出するときは、この提出コードが一致する答案として扱われます。
             </div>
           </div>
         </section>
         <div class="footer">
-          <span>${assignment.organizationName}</span>
-          <span>Instructor: ${assignment.instructorName}</span>
+          <span>${escapeHtmlText(assignment.organizationName)}</span>
+          <span>Instructor: ${escapeHtmlText(assignment.instructorName)}</span>
         </div>
       </div>
     </body>
@@ -110,6 +111,7 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
   buttonClassName = 'inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50',
 }) => {
   const [open, setOpen] = useState(false);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const printableHtml = useMemo(() => (assignment ? buildPrintableAssignmentHtml(assignment) : ''), [assignment]);
 
   const handleDownload = () => {
@@ -128,8 +130,15 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
     const blob = new Blob([printableHtml], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const win = window.open(url, '_blank', 'noopener,noreferrer,width=1200,height=900');
-    if (!win) return;
+    if (!win) {
+      URL.revokeObjectURL(url);
+      return;
+    }
     win.addEventListener('beforeunload', () => URL.revokeObjectURL(url), { once: true });
+  };
+
+  const handlePrint = () => {
+    previewFrameRef.current?.contentWindow?.print();
   };
 
   return (
@@ -168,9 +177,9 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
                 <ExternalLink className="h-4 w-4" />
                 別タブで開く
               </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
+                <button
+                  type="button"
+                  onClick={handlePrint}
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
               >
                 <Eye className="h-4 w-4" />
@@ -189,7 +198,8 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
 
           <div className="mt-5 overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50">
             <iframe
-              title="Writing print preview"
+              ref={previewFrameRef}
+              title="英作文課題の印刷プレビュー"
               srcDoc={printableHtml}
               className="min-h-[72vh] w-full bg-white"
             />

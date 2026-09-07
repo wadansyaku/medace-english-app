@@ -2,7 +2,7 @@ import {
   NOUN_WORKBOOK_BOOK_DESCRIPTION,
   NOUN_WORKBOOK_BOOK_TITLE,
   NOUN_WORKBOOK_SOURCE_CONTEXT,
-} from '../../utils/nounWorkbookImport.js';
+} from '../../scripts/_shared/noun-workbook-import.mjs';
 
 const BALANCED_SHEETS = [
   {

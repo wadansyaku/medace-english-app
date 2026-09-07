@@ -1,278 +1,69 @@
 # Steady Study
 
-Steady Study は、塾・教室向け運用SaaSを主軸にした英単語学習プラットフォームです。個人学習アプリはサブ導線として残しつつ、講師フォロー、担当割当、教材権限、個別学習プランまでを Cloudflare 上で一体運用します。
+塾・教室での英語学習を、教材配布から毎日の復習、講師のフォローまでつなぐアプリです。生徒は「今日やること」を選んですぐに始められ、講師は担当生徒の学習と提出を確認できます。個人学習にも対応します。リポジトリ名は MedAce、画面上の名称は Steady Study です。
 
-## 事業前提
+## まず読む
 
-- メイン顧客: 塾・教室・小規模スクール
-- サブ顧客: 個人学習ユーザー
-- 初回診断: AI生成ではなく、静的な12問バンクで開始レベルを判定
-- AIの役割: 例文生成、クイズ生成、学習プラン生成、講師フォロー文面の下書き
-- 権限設計: グループ管理者は組織全体、講師は同一 cohort または直接担当している生徒を運用
+- [プロダクトの方針・対象・指標](./project.md)
+- [現在の実装計画と残課題](./todo.md)
+- [2026-09-07 現状監査・再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)
+- [構成とデータ契約](./docs/architecture.md)
+- [全ドキュメントの索引](./docs/README.md)
 
-## 料金モデル
+## ローカルで動かす
 
-- `TOC_FREE`: 個人フリー。広告付きセルフサーブ
-- `TOC_PAID`: 個人有料。広告なし個人拡張
-- `TOB_FREE`: 教室導入前の無料トライアル
-- `TOB_PAID`: 教室規模に応じた個別見積。導入費と管理・アップデート費は現時点では未定
-
-商用プラン定義は [`./config/subscription.ts`](./config/subscription.ts) にあります。
-
-## 教材カタログ戦略
-
-- 公式スターター教材（原本）: オリジナル単語データベースを `Steady Study Original` として配布
-- ビジネス版公式教材（ライセンス）: 現在のライセンス取得済み教材データベースを `LICENSED_PARTNER` として配布
-- 個人/ユーザー作成教材: `USER_GENERATED`
-- 公開範囲:
-  - `ALL_PLANS`: 全プランで利用可
-  - `BUSINESS_ONLY`: ビジネス本導入 (`TOB_PAID`) のみ利用可
-
-2026-03-06 時点の実装方針として、ライセンス教材は `BUSINESS_ONLY` を維持しつつ、`Steady Study Original` は個人フリーを含むスターター導線として `ALL_PLANS` でも投入できるようにします。
-
-## 技術構成
-
-- Frontend: Vite / React 19
-- Backend: Cloudflare Pages Functions
-- Database: Cloudflare D1 (`medace-db`)
-- Offline fallback: IndexedDB
-- AI: Gemini API を Functions 経由で利用
-
-秘密情報はクライアントに埋め込まず、認証・教材データ・学習履歴・AI呼び出しは `/api/*` 経由で処理します。Supabase 前提の構成は廃止済みです。
-
-## 開発コマンド
-
-詳細な文書索引は [`./docs/README.md`](./docs/README.md)、release / deploy の運用手順は [`./docs/deployment-ops-runbook.md`](./docs/deployment-ops-runbook.md) を参照してください。
+Node **22.13以上、23未満** を使います。バージョンは `.node-version` / `.nvmrc`、依存は `package-lock.json` で固定します。
+保存の原子性テストで使う組み込みSQLiteは、[Node 22.13からフラグなしで利用できます](https://nodejs.org/en/blog/release/v22.13.0)。
 
 ```bash
-npm install
-npm run release:gate:local-only:dry
-npm run release:gate:local-only
-npm run release:gate:remote-readonly:dry
-npm run release:gate:remote-readonly
-npm run release:gate:dry
-npm run release:gate
-npm run verify:fast
-npm run security:audit
-npm run typecheck
-npm run test:unit
-npm run build
-npm run test:api
-npm run test:smoke
-npm run cf:doctor
-npm run cf:sync
-npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json
-npm run content:source-ledger:d1 -- --remote --database medace-db
-npm run ops:b2b-activation:d1 -- --remote --database medace-db
-npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json
+npm ci
+npm run db:migrate:local
 npm run cf:preview
 ```
 
-- Gate は `local-only` / `remote-readonly` / `release` に分けます。
-  - `local-only` は local files、一時 D1、local build、local test server だけで完結する確認です。
-  - `remote-readonly` は GitHub / Cloudflare / remote D1 を読みますが、preview / production を変更しません。
-  - `release` は remote migration、Pages deploy、deployed smoke、rollback bookmark など preview / production を進める手順で、GitHub Actions の release workflow を正規経路にします。
-- `npm run release:gate` は deploy 前に手元で起動する full release gate です。remote migration / Pages deploy は実行しませんが、release blocker を先に見つけるために local-only checks と remote-readonly checks の両方を直列で確認します。既存互換の `npm run release:gate:local` も同じ full release gate を指します。
-  - `npm run release:gate:local-only` は migration filename check / 一時 D1 migration replay / npm security audit / typecheck / unit tests / build / API integration tests / full smoke suite / deploy artifact build を確認します。
-  - `npm run release:gate:remote-readonly` は `cf:doctor` / remote D1 content QA / source ledger gate / B2B activation integrity gate を読み取り専用で確認します。
-  - `npm run release:gate:dry`、`npm run release:gate:local-only:dry`、`npm run release:gate:remote-readonly:dry` は実行予定の順序だけを表示します。
-  - `cf:doctor` は GitHub / Cloudflare の read-only inventory を見るため、`gh` 認証と `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要です。
-  - content QA gate は remote D1 の公式/配信教材を読み取り、必須語義の空欄、`[未抽出]` などの sentinel、空教材を release-blocking error として扱います。
-  - source ledger gate は公式/配信教材に `material_source_ledger` 行があること、content QA blocker がないこと、Today Focus に使える承認済み教材が最低1冊あることを必須条件にします。重複 headword や source coverage 不足は既定では warning として出力し、必要な release では `--max-warning-books 0` で厳格化できます。
-  - B2B activation integrity gate は organization membership、cohort、担当割当、mission、通知、writing assignment/submission/review の参照整合性を release-blocking error として扱います。cohort なし、通知なし、作文未配布、B2B product event の telemetry 不整合は既定では warning として出力し、必要な release では `--max-activation-warning-orgs 0` / `--max-product-event-warning-rows 0` / `--require-active-b2b-loop` で、初回作文の講師返却まで到達した組織があることを厳格化できます。
-- `npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json` は本番 D1 の read-only baseline report です。大きな product / B2B /教材判断の前後に保存し、query failure は non-zero exit として扱います。データ上の activation gap を release blocker にしたい場合は baseline ではなく `ops:b2b-activation:d1` の hardening flag を使います。
-- 推奨ローカル実行: `npm run cf:preview`
-  - `vite build` 後に `wrangler pages dev dist` を起動し、Pages Functions と D1 を含めて確認します。
-- `npm run preview` は静的アセット確認専用です。
-  - `/api/session` などの Functions は起動しないため、認証や教材 API の検証には使えません。
-- `npm run test:smoke` は Playwright で `wrangler pages dev dist` を自前起動し、D1 migration 適用後の demo login / onboarding / 組織運用導線まで確認します。
-  - `node scripts/run-smoke-tests.mjs --suite sentinel` は PR の高速回帰用です。
-  - `node scripts/run-smoke-tests.mjs --suite full` は release 必須の full smoke です。
-  - `PLAYWRIGHT_BASE_URL=... node scripts/run-smoke-tests.mjs --suite sentinel --grep "..."` は deploy 後の公開 URL smoke で、公開 asset / PWA 参照も同じ runner で確認します。
-- `npm run cf:doctor` は GitHub secrets / variables と Cloudflare Pages / D1 / Pages secrets の整合を確認します。
-  - release gate では `cf:doctor` の `Summary` が `error=0` であることを必須条件にします。`warn` は deferred AI key など明示的に延期できる項目に限ります。Cloudflare native Git auto-deploy、`*-git` mirror Pages project、Pages project 設定の検査不能は二重 deploy の原因になるため `error` として扱い、1 件でも残る場合は deploy しません。
-- `npm run cf:sync` は `wrangler.jsonc` を基準に GitHub variables、Cloudflare Pages secrets、R2 バケットを同期します。R2 がアカウントで未有効化の場合はここで停止します。
+`cf:preview` はビルド後に Pages Functions とローカルD1を起動します。`npm run dev` はフロントエンド開発用、`npm run preview` は静的アセット確認用です。APIを含む確認には `cf:preview` を使います。ローカル変数は `.dev.vars.example` を参考に `.dev.vars` へ設定します。
 
-## Storage Mode Policy
+教材CSVの投入、AI/R2、各環境の設定は [環境構築](./docs/environment-setup.md) にまとめています。教材や学習DBを削除して初期化する操作は通常の起動手順に含めません。
 
-- 既定の運用モードは Cloudflare です。`/api/storage`、`/api/writing`、D1、R2 を含む本番相当の挙動確認は `npm run cf:preview` または `npm run test:api` / `npm run test:smoke` を基準にしてください。
-- `VITE_STORAGE_MODE=idb` は demo / offline 学習の最小導線向けです。個人学習の session、教材閲覧、学習履歴のローカル検証には使えますが、学校・教室向け workspace の正史ではありません。
-- business dashboard、missions、commercial request、announcements、writing は Cloudflare 側を正史とし、新規 business 機能では IndexedDB の並行実装を追加しない方針です。
-- frontend からは `services/storage.ts` の巨大 facade へ直接依存を増やさず、`services/session.ts`、`services/dashboard.ts`、`services/workspace.ts`、`services/writing.ts` の薄い adapter を優先してください。
-
-## Cloudflare ローカル確認
-
-`Steady Study` はブラウザ URL ルーティングではなく、アプリ内の view state で画面を切り替えます。そのため Pages 向けの SPA fallback rewrite は不要で、ローカル確認も `wrangler pages dev dist` を基準にします。
-
-1. D1 マイグレーションを適用
+## 変更を検証する
 
 ```bash
-npx wrangler d1 migrations apply medace-db --local
-```
-
-2. 原本教材 + ライセンス教材を seed SQL 化
-
-```bash
-node scripts/build-seed-sql.mjs \
-  --original-access-scope ALL_PLANS \
-  --original-csv /path/to/original_wordbank/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
-  --licensed-csv /path/to/licensed_catalog/MASTER_DATABASE_REFINED.csv \
-  ./tmp/d1-seed.sql
-```
-
-このスクリプトは入力CSVの形式を自動判定します。`--original-csv` はオリジナル単語データベースの原本CSVを学年帯別教材へ再編し、`--licensed-csv` は既存の単語帳CSVをそのまま教材化します。`--original-access-scope` / `--licensed-access-scope` で公開範囲を個別に切り替えられます。`TOEFLテスト英単語3800` はデフォルトで除外され、追加除外は `--exclude-book "書名"` で指定できます。
-
-3. ローカル D1 に投入
-
-```bash
-npx wrangler d1 execute medace-db --local --file=./tmp/d1-seed.sql
-```
-
-4. Functions を含めて確認
-
-```bash
+npm run verify:fast
+npm run security:audit
 npm run build
-npx wrangler pages dev dist
+npm run test:api
+npm run test:smoke
 ```
 
-静的レンダリングだけを確認したい場合だけ、別ターミナルで `npm run preview` を使ってください。API は返らないので、セッション復元や `/api/storage` の確認には向きません。
+- `verify:fast`: マイグレーション名・一時D1への適用、未使用ソース、依存境界・循環、型、単体テスト。
+- `test:api`: 独立したローカルD1で権限・保存・APIの整合性を確認。
+- `test:smoke`: CloudflareモードとIDBモードの実ブラウザ検証。必要なブラウザは `node node_modules/playwright/cli.js install chromium` で用意。
+- `release:gate:local-only`: 上記のローカル検証をまとめて実行。依存脆弱性照会にはnpmレジストリへ通信する。
+- `release:gate:remote-readonly`: GitHub/Cloudflare/remote D1の読み取り検査。
+- `release:gate` / `release:gate:local`: ローカル検証とremote-readonly検査を実行する配備前gate。remote migrationや配備は実行しない。各コマンドの `:dry` で実行順を確認できる。
 
-## Cloudflare 本番
+本番配備の条件は、`cf:doctor` の `Summary` が `error=0` で、教材・権利台帳・B2B整合性gateに `release-blocking error` がないことです。Cloudflare native Git auto-deploy は無効のままにし、`Deployments paused` を見ただけで `Resume deployments` を操作しません。正式な配備とrollbackは [運用手順](./docs/deployment-ops-runbook.md) に従います。
 
-作成済みリソース:
+## 構成
 
-- Pages Project: `medace-english-app`
-- Production URL: [https://medace-english-app.pages.dev](https://medace-english-app.pages.dev)
-- D1 Database: `medace-db`
-- D1 Database ID: `1b1c8b71-764c-4593-8a20-32a75b77ab11`
+| 場所 | 責務 |
+| --- | --- |
+| `components/`, `hooks/` | 画面、操作、取得・保存状態 |
+| `services/` | 認証・学習・教室等のクライアント窓口 |
+| `shared/`, `contracts/` | 純粋な判定、クライアント/サーバー間の契約 |
+| `functions/` | 認可、D1/R2、AIのサーバー処理 |
+| `migrations/` | 追加型のDB変更。過去ファイルは変更しない |
+| `scripts/`, `tests/` | 運用・品質gate・回帰検証 |
 
-### 本番マイグレーション
+React 19 / Vite / Tailwind、Cloudflare Pages Functions / D1 / R2を使います。Cloudflareが教室運用の正本です。IndexedDBは個人デモ・ローカル学習向けで、完全なオフライン同期を提供するものではありません。
+
+## 不要ファイルの整理
+
+`npm run quality:unused` は本番エントリからのソース到達性、`npm run quality:architecture` は依存方向と循環を確認します。ファイル名や更新日の古さだけで削除しません。
 
 ```bash
-npx wrangler d1 migrations apply medace-db --remote
+npm run clean:artifacts
+npm run clean:artifacts:apply
 ```
 
-### 本番 seed
-
-remote D1 では `BEGIN TRANSACTION` を含む SQL を使えないため、`--remote` を付けます。
-
-```bash
-node scripts/build-seed-sql.mjs --remote \
-  --original-access-scope ALL_PLANS \
-  --original-csv /path/to/original_wordbank/ORIGINAL_WORDBANK_JHS_HS_FINAL_CONFIRMED.csv \
-  --licensed-csv /path/to/licensed_catalog/MASTER_DATABASE_REFINED.csv \
-  ./tmp/d1-seed-remote.sql
-
-npx wrangler d1 execute medace-db --remote --file=./tmp/d1-seed-remote.sql
-```
-
-### Pages Secrets
-
-最低限、管理者デモ用パスワード、Writing AI mode、内部ジョブ用 secret を設定してください。AI文法問題生成は Cloudflare Workers AI binding を優先し、品質補完用に Gemini key へフォールバックできます。
-
-```bash
-echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app
-echo 'hybrid' | npx wrangler pages secret put WRITING_AI_MODE --project-name medace-english-app
-echo 'your-internal-job-secret' | npx wrangler pages secret put INTERNAL_JOB_SECRET --project-name medace-english-app
-echo 'AUTO' | npx wrangler pages secret put AI_GRAMMAR_PROVIDER --project-name medace-english-app
-echo '@cf/meta/llama-3.1-8b-instruct' | npx wrangler pages secret put CLOUDFLARE_AI_GRAMMAR_MODEL --project-name medace-english-app
-echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app
-```
-
-Workers AI binding は runtime secret ではなく `AI` binding として設定します。`wrangler.jsonc` には `ai.binding = "AI"` を置いていますが、Pages Functions では Cloudflare Dashboard 側でも production / preview の binding を確認してください。AI Gateway を使う場合だけ `CLOUDFLARE_AI_GATEWAY_ID` を追加します。Cloudflare Workers AI の無料 allocation を前提に `AUTO` を既定にしていますが、無料枠超過時は Cloudflare 側の制限または課金に従います。
-
-自由英作文の外部 AI を本番接続する場合は、必要な provider だけ追加してください。
-
-```bash
-echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --project-name medace-english-app
-```
-
-preview 環境も使う場合は、`ADMIN_DEMO_PASSWORD` を preview 専用値に分ける前提で `--env preview` 付きで追加してください。
-
-```bash
-echo 'your-admin-password' | npx wrangler pages secret put ADMIN_DEMO_PASSWORD --project-name medace-english-app --env preview
-echo 'hybrid' | npx wrangler pages secret put WRITING_AI_MODE --project-name medace-english-app --env preview
-echo 'your-internal-job-secret' | npx wrangler pages secret put INTERNAL_JOB_SECRET --project-name medace-english-app --env preview
-echo 'AUTO' | npx wrangler pages secret put AI_GRAMMAR_PROVIDER --project-name medace-english-app --env preview
-echo '@cf/meta/llama-3.1-8b-instruct' | npx wrangler pages secret put CLOUDFLARE_AI_GRAMMAR_MODEL --project-name medace-english-app --env preview
-echo 'your-gemini-api-key' | npx wrangler pages secret put GEMINI_API_KEY --project-name medace-english-app --env preview
-echo 'your-openai-api-key' | npx wrangler pages secret put OPENAI_API_KEY --project-name medace-english-app --env preview
-```
-
-### R2 Buckets
-
-自由英作文の答案原本は R2 を使います。Cloudflare アカウントで R2 を有効化したうえで、次のバケットを用意してください。
-
-- production: `medace-writing-assets`
-- preview: `medace-writing-assets-preview`
-
-D1 は production の `medace-db` に加えて preview 専用の `medace-db-preview` を使います。Pages の preview deployment では `wrangler.jsonc` の `env.preview.d1_databases` と `env.preview.r2_buckets` を使うので、GitHub `preview` environment の `CLOUDFLARE_D1_DATABASE` も `medace-db-preview` に揃えてください。
-
-CLI で同期する場合は `npm run cf:sync` を使います。R2 がまだ未有効化のアカウントでは Cloudflare API が `code: 10042` を返すため、その場合は先に Dashboard で R2 を有効化してください。
-
-### GitHub Variables / Secrets
-
-GitHub Actions 側では次を使います。
-
-- Secrets:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
-  - `INTERNAL_JOB_SECRET`
-- Variables:
-  - `CLOUDFLARE_PAGES_PROJECT`
-  - `CLOUDFLARE_D1_DATABASE`
-  - `WRITING_AI_MODE`
-
-Variables 未設定時は workflow 側で `medace-english-app` / `medace-db` / `hybrid` を既定値として使います。
-
-`INTERNAL_JOB_SECRET` は GitHub scheduled workflow が内部 endpoint を呼ぶための repository secret であり、同じ値を Pages production / preview secret にも設定してください。`npm run cf:doctor` は GitHub 側の scheduled secret と Pages runtime secret の両方を検査します。
-
-deploy workflow は GitHub の `production` / `preview` environment を参照します。repo-level secret / variable は CI と local doctor の fallback に残しつつ、実運用の deploy では environment-scoped config を優先してください。
-
-ローカルから接続状態を確認する場合は `npm run cf:doctor` を使ってください。`GEMINI_API_KEY` は未設定でも warning 扱いで、GitHub / Cloudflare の接続と Pages / D1 の疎通を先に確認できます。なお、学習プラン生成は key 未設定時でも標準ロジックで継続でき、AI教材化だけが停止します。
-
-GitHub Actions を正史の配信経路にする前提では、Cloudflare の Git 直接連携や `*-git` の mirror Pages project を併用しないでください。preview / production が二重作成され、PR コメントや確認URLが分岐します。
-`cf:doctor` はこの状態を release-blocking error として検出します。既に Git 連携が残っている場合は `npm run cf:sync` で Cloudflare native Git auto-deploy を無効化し、不要な mirror project は Cloudflare Dashboard 側で削除してください。
-Cloudflare Dashboard で `Deployments paused` / `デプロイを一時停止` と表示される場合は、GitHub Actions 以外の native Git auto-deploy だけが停止していることを確認してください。このプロジェクトではその表示が期待状態です。`Resume deployments` を押すと migration / release gate より前に Cloudflare が直接 deploy する可能性があるため、`npm run cf:doctor` が `error=0` で live `/api/session` の `x-deployment-sha` が最新なら解除しないでください。
-
-設定の反映を自動化したい場合は `npm run cf:sync` を使ってから `npm run cf:doctor` で検証してください。
-
-### One-off scripts
-
-`scripts/` に置く tracked script は、product operations、QA、release、または再利用可能な content workflow に限ります。個別調査用の one-off script は、入力・出力・失敗時の扱い・owner が文書化され、repeatable workflow として昇格するまで `package.json` に接続しません。
-
-### Frontend Environment Variables
-
-フリープランの広告枠を実配信するには、Vite の公開環境変数に AdSense 情報を設定します。
-
-```bash
-VITE_ADSENSE_CLIENT_ID=ca-pub-xxxxxxxxxxxxxxxx
-VITE_ADSENSE_SLOT_DEFAULT=1234567890
-VITE_ADSENSE_SLOT_DASHBOARD_INLINE=1234567890
-VITE_ADSENSE_SLOT_DASHBOARD_SECONDARY=1234567890
-```
-
-### デプロイ
-
-```bash
-npm run release:gate:local
-```
-
-この local gate は remote D1 migration と Pages deploy を実行しません。Cloudflare への正式 deploy は GitHub Actions を正規経路とし、次の流れで確認してから Cloudflare へ流します。
-
-- `browser-smoke.yml`: PR 向け。Playwright smoke を実行
-- `deploy-pages-preview.yml`: preview deploy 前に `npm run release:gate:local` 相当の `security:audit` / `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / content QA gate / source ledger gate / B2B activation integrity gate / Pages deploy / deployed preview smoke へ進む
-- `deploy-pages.yml`: production deploy 前に `npm run release:gate:local` 相当の `security:audit` / `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / content QA gate / source ledger gate / B2B activation integrity gate / Pages deploy / deployed production smoke へ進む
-- `analytics-snapshots.yml`: 毎日 03:40 JST に本番 `/api/internal/analytics-snapshots/run` を叩き、プロダクト KPI の日次 snapshot を保存
-- `word-hint-audit.yml`: 毎日 03:30 JST に本番 `/api/internal/word-hint-audits/run` を叩き、保存済みの例文・画像ヒントを小さなバッチで再監査
-
-運用 runbook は [`./docs/deployment-ops-runbook.md`](./docs/deployment-ops-runbook.md) を参照してください。
-
-migration prefix では `0019` だけが順序固定済みの既知例外です。`0019_commercial_request_teaching_format.sql` と `0019_weekly_missions.sql` 以外の重複は `npm run verify:fast` で失敗します。
-
-## 補足
-
-- 初回診断は静的12問で運用し、AI診断を主導線には置かない
-- 講師通知は `instructor_notifications` に保存され、生徒ダッシュボードへ表示
-- 学習条件は `learning_preferences`、担当割当は `student_instructor_assignments`、割当履歴は `student_instructor_assignment_events` で管理
-- 公式教材の公開範囲は `catalog_source` / `access_scope` で制御
+最初は削除予定の表示だけです。applyは種類まで一致した `dist/`、`_worker.bundle`、`test-results/`、`test-results-rerun/` と小さな再生成キャッシュを削除します。`node_modules`、`.wrangler`、`tmp`、`output`、`.playwright*`、symlinkは保護します。証拠・成果物を残す場合は先に作業外へ保全します。

@@ -110,6 +110,16 @@ const createLocalOnlySteps = (d1PersistDir) => {
       args: ['scripts/check-npm-audit.mjs'],
     },
     {
+      label: 'Production source reachability',
+      command: process.execPath,
+      args: ['scripts/check-unused-source.mjs'],
+    },
+    {
+      label: 'Architecture boundaries and circular imports',
+      command: process.execPath,
+      args: ['scripts/check-architecture.mjs'],
+    },
+    {
       label: 'TypeScript typecheck',
       command: process.execPath,
       args: ['node_modules/typescript/bin/tsc', '--noEmit'],
@@ -162,6 +172,7 @@ const createRemoteReadonlySteps = (contentQaReportPath, sourceLedgerReportPath, 
         '--output',
         contentQaReportPath,
         '--compact',
+        '--summary-only',
       ],
     },
     {

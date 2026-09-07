@@ -10,7 +10,7 @@ import type {
 import type { WeaknessInteractionEvent } from '../../shared/weakness';
 
 export const DB_NAME = 'MedAceDB';
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export const STORES = {
   BOOKS: 'books',
@@ -21,6 +21,7 @@ export const STORES = {
   PREFERENCES: 'preferences',
   ASSIGNMENTS: 'assignments',
   INTERACTION_EVENTS: 'interactionEvents',
+  STUDY_ATTEMPT_RECEIPTS: 'studyAttemptReceipts',
   WEAKNESS_SIGNALS: 'weaknessSignals',
   COMMERCIAL_REQUESTS: 'commercialRequests',
   PRODUCT_ANNOUNCEMENTS: 'productAnnouncements',
@@ -48,6 +49,14 @@ export interface StoredInteractionEventRecord {
   data: WeaknessInteractionEvent;
 }
 
+export interface StoredStudyAttemptReceipt {
+  id: string;
+  uid: string;
+  clientAttemptId: string;
+  fingerprint: string;
+  committedAt: number;
+}
+
 export interface StoredWeaknessSignalRecord {
   id: string;
   uid: string;
@@ -64,7 +73,15 @@ export type GetStore = (storeName: string, mode?: IDBTransactionMode) => Promise
 
 export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
   const request = indexedDB.open(DB_NAME, DB_VERSION);
-  request.onerror = () => reject(request.error);
+  let abandoned = false;
+  request.onerror = () => {
+    abandoned = true;
+    reject(request.error || new Error('ローカル保存を開けませんでした。ページを再読み込みしてください。'));
+  };
+  request.onblocked = () => {
+    abandoned = true;
+    reject(new Error('ローカル保存を更新できません。ほかの Steady Study タブやウィンドウを閉じて、このページを再読み込みしてください。保存済みの学習記録は保持されます。'));
+  };
   request.onupgradeneeded = () => {
     const db = request.result;
     if (!db.objectStoreNames.contains(STORES.BOOKS)) db.createObjectStore(STORES.BOOKS, { keyPath: 'id' });
@@ -78,12 +95,25 @@ export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, r
     if (!db.objectStoreNames.contains(STORES.PREFERENCES)) db.createObjectStore(STORES.PREFERENCES, { keyPath: 'userUid' });
     if (!db.objectStoreNames.contains(STORES.ASSIGNMENTS)) db.createObjectStore(STORES.ASSIGNMENTS, { keyPath: 'studentUid' });
     if (!db.objectStoreNames.contains(STORES.INTERACTION_EVENTS)) db.createObjectStore(STORES.INTERACTION_EVENTS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORES.STUDY_ATTEMPT_RECEIPTS)) db.createObjectStore(STORES.STUDY_ATTEMPT_RECEIPTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.WEAKNESS_SIGNALS)) db.createObjectStore(STORES.WEAKNESS_SIGNALS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.COMMERCIAL_REQUESTS)) db.createObjectStore(STORES.COMMERCIAL_REQUESTS, { keyPath: 'id', autoIncrement: true });
     if (!db.objectStoreNames.contains(STORES.PRODUCT_ANNOUNCEMENTS)) db.createObjectStore(STORES.PRODUCT_ANNOUNCEMENTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.ANNOUNCEMENT_RECEIPTS)) db.createObjectStore(STORES.ANNOUNCEMENT_RECEIPTS, { keyPath: 'id' });
   };
-  request.onsuccess = () => resolve(request.result);
+  request.onsuccess = () => {
+    const db = request.result;
+    // An open request cannot be cancelled after blocked. If it later succeeds,
+    // release its connection: the rejected caller has no way to close it.
+    if (abandoned) {
+      db.close();
+      return;
+    }
+    // Allow another tab to upgrade. Reads on this closed connection must reject
+    // through getObjectStore rather than become an empty learning history.
+    db.onversionchange = () => db.close();
+    resolve(db);
+  };
 });
 
 export const getObjectStore = async (
@@ -103,8 +133,8 @@ export const requestToPromise = <T>(request: IDBRequest<T>): Promise<T> => new P
 
 export const waitForTransaction = (tx: IDBTransaction): Promise<void> => new Promise((resolve, reject) => {
   tx.oncomplete = () => resolve();
-  tx.onerror = () => reject(tx.error);
-  tx.onabort = () => reject(tx.error);
+  tx.onerror = () => reject(tx.error || new Error('ローカル保存に失敗しました。'));
+  tx.onabort = () => reject(tx.error || new Error('ローカル保存が中断されました。'));
 });
 
 export const readStoreRecord = async <T>(

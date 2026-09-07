@@ -1,5 +1,4 @@
 import {
-  WRITING_AI_PROVIDER_LABELS,
   WRITING_RUBRIC_LABELS,
   WritingEvaluation,
   WritingPromptSnapshot,
@@ -7,6 +6,7 @@ import {
   WritingRubricScore,
   WritingSentenceCorrection,
 } from '../types';
+import { escapeHtmlText } from './html';
 
 const MARKER_PREFIX = 'medace-writing';
 
@@ -181,18 +181,18 @@ export const buildPrintableFeedbackHtml = (
 ): string => {
   const rubricMarkup = evaluation.rubric.map((item) => `
     <div class="rubric-card">
-      <div class="rubric-label">${item.label}</div>
-      <div class="rubric-score">${item.score} / ${item.maxScore}</div>
-      <div class="rubric-comment">${item.comment}</div>
+      <div class="rubric-label">${escapeHtmlText(item.label)}</div>
+      <div class="rubric-score">${escapeHtmlText(item.score)} / ${escapeHtmlText(item.maxScore)}</div>
+      <div class="rubric-comment">${escapeHtmlText(item.comment)}</div>
     </div>
   `).join('');
-  const strengthsMarkup = evaluation.strengths.map((item) => `<li>${item}</li>`).join('');
-  const improvementMarkup = evaluation.improvementPoints.map((item) => `<li>${item}</li>`).join('');
+  const strengthsMarkup = evaluation.strengths.map((item) => `<li>${escapeHtmlText(item)}</li>`).join('');
+  const improvementMarkup = evaluation.improvementPoints.map((item) => `<li>${escapeHtmlText(item)}</li>`).join('');
   const correctionMarkup = evaluation.sentenceCorrections.map((item) => `
     <tr>
-      <td>${item.before}</td>
-      <td>${item.after}</td>
-      <td>${item.reason}</td>
+      <td>${escapeHtmlText(item.before)}</td>
+      <td>${escapeHtmlText(item.after)}</td>
+      <td>${escapeHtmlText(item.reason)}</td>
     </tr>
   `).join('');
 
@@ -200,7 +200,7 @@ export const buildPrintableFeedbackHtml = (
   <html lang="ja">
     <head>
       <meta charset="UTF-8" />
-      <title>${studentName} 添削結果</title>
+      <title>${escapeHtmlText(studentName)} 添削結果</title>
       <style>
         :root { --ink: #0f172a; --muted: #475569; --line: #dbe4ef; --accent: #f66d0b; --soft: #fff7ed; }
         body { margin: 0; font-family: "Hiragino Sans", "Noto Sans JP", sans-serif; color: var(--ink); background: white; }
@@ -223,7 +223,7 @@ export const buildPrintableFeedbackHtml = (
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
         th, td { border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
         th { background: #f8fafc; }
-        .provider-chip { display: inline-flex; border-radius: 999px; padding: 6px 10px; background: var(--soft); color: #9a3412; font-size: 12px; font-weight: 800; }
+        .status-chip { display: inline-flex; border-radius: 999px; padding: 6px 10px; background: var(--soft); color: #9a3412; font-size: 12px; font-weight: 800; }
         .mono { white-space: pre-wrap; font-family: "SFMono-Regular", "Menlo", monospace; line-height: 1.55; }
       </style>
     </head>
@@ -231,24 +231,24 @@ export const buildPrintableFeedbackHtml = (
       <div class="page">
         <section class="hero">
           <div class="eyebrow">Writing Feedback</div>
-          <h1 class="title">${studentName} さんの自由英作文返却</h1>
+          <h1 class="title">${escapeHtmlText(studentName)} さんの自由英作文返却</h1>
           <div class="meta">
-            <div class="meta-card"><div class="eyebrow">課題</div><div>${snapshot.title}</div></div>
-            <div class="meta-card"><div class="eyebrow">語数</div><div>${snapshot.wordCountMin} - ${snapshot.wordCountMax} words</div></div>
-            <div class="meta-card"><div class="eyebrow">AI</div><div><span class="provider-chip">${WRITING_AI_PROVIDER_LABELS[evaluation.provider]}</span></div></div>
+            <div class="meta-card"><div class="eyebrow">課題</div><div>${escapeHtmlText(snapshot.title)}</div></div>
+            <div class="meta-card"><div class="eyebrow">語数</div><div>${escapeHtmlText(snapshot.wordCountMin)} - ${escapeHtmlText(snapshot.wordCountMax)} words</div></div>
+            <div class="meta-card"><div class="eyebrow">添削</div><div><span class="status-chip">講師確認済み</span></div></div>
           </div>
         </section>
         <section class="panel">
           <h2 class="section-title">講師コメント</h2>
-          <div>${reviewComment}</div>
+          <div>${escapeHtmlText(reviewComment)}</div>
         </section>
         <section class="panel">
           <h2 class="section-title">設問</h2>
-          <div>${snapshot.promptText}</div>
-          <div style="margin-top:8px;color:var(--muted);">${snapshot.guidance}</div>
+          <div>${escapeHtmlText(snapshot.promptText)}</div>
+          <div style="margin-top:8px;color:var(--muted);">${escapeHtmlText(snapshot.guidance)}</div>
         </section>
         <section class="panel">
-          <h2 class="section-title">総合評価 ${evaluation.overallScore} / 20</h2>
+          <h2 class="section-title">総合評価 ${escapeHtmlText(evaluation.overallScore)} / 20</h2>
           <div class="rubric-grid">${rubricMarkup}</div>
         </section>
         <section class="panel">
@@ -268,15 +268,15 @@ export const buildPrintableFeedbackHtml = (
         </section>
         <section class="panel">
           <h2 class="section-title">訂正文例</h2>
-          <div class="mono">${evaluation.correctedDraft}</div>
+          <div class="mono">${escapeHtmlText(evaluation.correctedDraft)}</div>
         </section>
         <section class="panel">
           <h2 class="section-title">模範例</h2>
-          <div class="mono">${evaluation.modelAnswer}</div>
+          <div class="mono">${escapeHtmlText(evaluation.modelAnswer)}</div>
         </section>
         <section class="panel">
           <h2 class="section-title">提出文</h2>
-          <div class="mono">${transcript}</div>
+          <div class="mono">${escapeHtmlText(transcript)}</div>
         </section>
       </div>
     </body>

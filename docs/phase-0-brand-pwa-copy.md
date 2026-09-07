@@ -1,6 +1,6 @@
 # Phase 0: Brand, PWA, Copy Direction
 
-Date: 2026-06-05
+初版: 2026-06-05。更新: 2026-09-07。現行のブランド・コピー方針。
 
 ## 決定事項
 
@@ -20,7 +20,7 @@ Date: 2026-06-05
 
 - 実装の一次情報は `config/brand.ts`, `styles.css`, `tailwind.config.js` に置く。
 - 強い orange gradient、purple dominance、dark slate dominance、過度な丸みは避ける。
-- Orange は product anchor と主CTAに限定し、green / red / blue は状態色として使う。
+- 学習ホームの主操作は `steady-action` の深い青緑と白文字、キャンバスはニュートラル、パネルは白に統一する。既存の `medace` 色は補助表示・既存画面の互換用として保持し、新しい主操作には action token を使う。色だけで状態を伝えない。
 - 学習ホームは landing page ではなく、実際の学習状態と次の行動を first viewport に出す。
 
 ## PWA Promise

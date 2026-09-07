@@ -52,13 +52,6 @@ exports[`storage action contract > matches the storage action contract snapshot 
     "roles": null,
   },
   {
-    "action": "updateWordCache",
-    "alias": "updateWordCache",
-    "domain": "catalog",
-    "requiresDestructiveAdminFlag": false,
-    "roles": null,
-  },
-  {
     "action": "generateWordHintAsset",
     "alias": "generateWordHintAsset",
     "domain": "catalog",

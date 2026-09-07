@@ -1,51 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { dashboardService } from '../services/dashboard';
-import type { DashboardSnapshot, LearningPlan, LearningPreference } from '../types';
+import type { LearningPlan, LearningPreference } from '../types';
+import { createDashboardResource } from '../utils/dashboardResource';
 
 export const useDashboardData = (uid?: string) => {
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    if (!uid) return;
-
-    try {
-      setLoading(true);
-      const nextSnapshot = await dashboardService.getDashboardSnapshot(uid);
-      setSnapshot(nextSnapshot);
-    } catch (error) {
-      console.error('Failed to load dashboard data', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [uid]);
+  const resource = useMemo(() => createDashboardResource(
+    () => dashboardService.getDashboardSnapshot(uid!),
+    Boolean(uid),
+  ), [uid]);
+  const state = useSyncExternalStore(resource.subscribe, resource.getSnapshot, resource.getSnapshot);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void resource.refresh();
+    return resource.cancel;
+  }, [resource]);
 
   const updateLearningPlan = useCallback((nextPlan: LearningPlan | null) => {
-    setSnapshot((previous) => (previous ? { ...previous, learningPlan: nextPlan } : previous));
-  }, []);
+    resource.update((previous) => ({ ...previous, learningPlan: nextPlan }));
+  }, [resource]);
 
   const updateLearningPreference = useCallback((nextPreference: LearningPreference | null) => {
-    setSnapshot((previous) => (previous ? { ...previous, learningPreference: nextPreference } : previous));
-  }, []);
+    resource.update((previous) => ({ ...previous, learningPreference: nextPreference }));
+  }, [resource]);
 
   const removeMyBook = useCallback((bookId: string) => {
-    setSnapshot((previous) => {
-      if (!previous) return previous;
-      return {
-        ...previous,
-        myBooks: previous.myBooks.filter((book) => book.id !== bookId),
-      };
-    });
-  }, []);
+    resource.update((previous) => ({
+      ...previous,
+      myBooks: previous.myBooks.filter((book) => book.id !== bookId),
+    }));
+  }, [resource]);
 
   return {
-    snapshot,
-    loading,
-    refresh,
+    ...state,
+    refresh: resource.refresh,
     updateLearningPlan,
     updateLearningPreference,
     removeMyBook,

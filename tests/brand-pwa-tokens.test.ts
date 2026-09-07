@@ -31,7 +31,7 @@ describe('MedAce Study Space brand tokens', () => {
     expect(BRAND_VISUAL_SYSTEM.palette.primary[600]).toBe('#ff7a00');
     expect(BRAND_VISUAL_SYSTEM.palette.primary[700]).toBe('#e65100');
     expect(BRAND_VISUAL_SYSTEM.palette.mark).toBe('#ff7a00');
-    expect(BRAND_VISUAL_SYSTEM.palette.neutral.canvas).toBe('#fff8f1');
+    expect(BRAND_VISUAL_SYSTEM.palette.neutral.canvas).toBe('#f4f8f7');
     expect(indexHtml).toContain('<html lang="ja">');
     expect(indexHtml).toContain('name="apple-mobile-web-app-title" content="Steady Study"');
     expect(manifest.name).toBe('Steady Study');
@@ -74,6 +74,22 @@ describe('MedAce Study Space brand tokens', () => {
         expect(fileText, `${path} should not use the old dark orange ramp`).not.toMatch(oldDarkOrangePattern);
       }
       expect(fileText, `${path} should use medace tokens instead of Tailwind orange utilities`).not.toMatch(/\b(?:bg|text|border|from|to|via|accent)-orange-/);
+    }
+  });
+
+  it('keeps primary action text readable in the normal and hover states', () => {
+    const luminance = (hex: string) => {
+      const channels = [1, 3, 5].map((start) => {
+        const channel = parseInt(hex.slice(start, start + 2), 16) / 255;
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const { action } = BRAND_VISUAL_SYSTEM.palette;
+    const foreground = luminance(action.foreground);
+    for (const background of [action.background, action.hover]) {
+      const surface = luminance(background);
+      expect((Math.max(foreground, surface) + 0.05) / (Math.min(foreground, surface) + 0.05)).toBeGreaterThanOrEqual(4.5);
     }
   });
 

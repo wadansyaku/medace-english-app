@@ -27,9 +27,14 @@ export const BRAND_VISUAL_SYSTEM = {
     neutral: {
       ink: '#111827',
       muted: '#475569',
-      canvas: '#fff8f1',
+      canvas: '#f4f8f7',
       panel: '#ffffff',
       line: '#e2e8f0',
+    },
+    action: {
+      background: '#0f766e',
+      hover: '#115e59',
+      foreground: '#ffffff',
     },
     signal: {
       amber: '#f3b80a',
@@ -49,7 +54,7 @@ export const BRAND_VISUAL_SYSTEM = {
   },
   principles: [
     'B2B workspace first: dense, calm, scannable screens over marketing decoration.',
-    'Use the MedAce Study Space direction: orange primary, warm off-white canvas, white panels, and restrained slate text.',
+    'Use a neutral canvas, white panels, deep teal primary actions with white text, and restrained slate text.',
     'Avoid orange gradients, purple-tinted canvases, blue dominance, and gradient-heavy surfaces in learner-facing home screens.',
     'Keep cards restrained; reserve pill shapes for chips, badges, and compact controls.',
     'Mobile screens must fit 320px width without horizontal scroll or overlapping text.',

@@ -5,6 +5,13 @@ import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/wea
 import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
 import { isBookSelectableForToday } from '../shared/materialQuality';
 import {
+  resolveStudentDashboardCommand,
+  type StudentDashboardCommand,
+  type StudentDashboardLearningRouteId,
+  type StudentDashboardTaskId,
+} from '../shared/studentDashboardCommand';
+export type { StudentDashboardLearningRouteId, StudentDashboardTaskId } from '../shared/studentDashboardCommand';
+import {
   EnglishLevel,
   INTERVENTION_KIND_LABELS,
   InterventionKind,
@@ -32,17 +39,6 @@ interface UseStudentDashboardViewModelParams {
   englishPracticeRecommendation?: EnglishPracticeRecommendation | null;
 }
 
-export type StudentDashboardLearningRouteId = 'today' | 'mission' | 'weakness' | 'englishPractice' | 'writing';
-export type StudentDashboardTaskId =
-  | StudentDashboardLearningRouteId
-  | 'coach'
-  | 'plan'
-  | 'library'
-  | 'progress'
-  | 'announcements'
-  | 'companion'
-  | 'motivation'
-  | 'account';
 export type StudentDashboardTaskGroup = 'primary' | 'urgent' | 'supporting' | 'reference';
 
 export interface StudentDashboardPrimaryTaskDecisionInput {
@@ -65,9 +61,9 @@ export const resolveStudentDashboardPrimaryLearningRouteId = ({
   hasWeaknessSignals,
   canShowWritingSection,
 }: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardLearningRouteId => {
-  if (!hasStudyBooks) return 'today';
   if (hasActionableWriting) return 'writing';
   if (hasActiveMission) return 'mission';
+  if (!hasStudyBooks) return 'today';
   if (shouldPrioritizePractice) return 'englishPractice';
   if (remainingWords > 0) return 'today';
   if (hasWeaknessSignals) return 'weakness';
@@ -85,9 +81,9 @@ export const resolveStudentDashboardPrimaryTaskId = ({
   hasWeaknessSignals,
   canShowWritingSection,
 }: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardTaskId => {
-  if (!hasStudyBooks) return 'today';
   if (hasActionableWriting) return 'writing';
   if (hasActiveMission) return 'mission';
+  if (!hasStudyBooks) return 'today';
   if (hasActionableCoachNotification) return 'coach';
   if (shouldPrioritizePractice) return 'englishPractice';
   if (remainingWords > 0) return 'today';
@@ -109,6 +105,7 @@ export interface StudentDashboardLearningRouteCard {
 
 export interface StudentDashboardTaskItem {
   id: StudentDashboardTaskId;
+  command: StudentDashboardCommand;
   routeId?: StudentDashboardLearningRouteId;
   title: string;
   body: string;
@@ -120,6 +117,8 @@ export interface StudentDashboardTaskItem {
   isPrimary: boolean;
   mobileLabel: string;
 }
+
+type StudentDashboardTaskDraft = Omit<StudentDashboardTaskItem, 'command'>;
 
 export interface StudentDashboardPracticeRecommendation {
   lane: EnglishPracticeLaneId;
@@ -332,11 +331,11 @@ export const useStudentDashboardViewModel = ({
     : '目標と使える時間を入れると、今日の量が決まります。';
 
   const canShowAccountDetails = Boolean(accountOverview || showAdSlots);
-  const latestCoachNotification = coachNotifications[0] || null;
   const latestActionableCoachNotification = coachNotifications.find((notification) => (
     !notification.interventionOutcome
       || notification.interventionOutcome === InterventionOutcome.PENDING
   )) || null;
+  const latestCoachNotification = latestActionableCoachNotification || coachNotifications[0] || null;
   const canShowWritingSection = currentPlan === SubscriptionPlan.TOB_PAID && Boolean(user.organizationName);
   const topWeakness = weaknessProfile?.topWeaknesses[0] || null;
   const hasWeaknessSignals = Boolean(weaknessProfile?.hasSufficientData && topWeakness);
@@ -372,7 +371,7 @@ export const useStudentDashboardViewModel = ({
       && primaryMission.status !== WeeklyMissionStatus.COMPLETED
       && primaryMission.completionRate < 100,
   );
-  const hasEnglishPracticeWeakness = Boolean(getEnglishPracticeLaneForWeakness(topWeakness));
+  const hasEnglishPracticeWeakness = hasWeaknessSignals && Boolean(getEnglishPracticeLaneForWeakness(topWeakness));
   const shouldPrioritizePractice = Boolean(
     hasStudyBooks
       && !hasActionableWriting
@@ -444,7 +443,11 @@ export const useStudentDashboardViewModel = ({
       body: hasActionableWriting
         ? 'ミッションの英作文が未提出です。'
         : '配布済み課題、提出、返却コメントを確認します。',
-      ctaLabel: hasActionableWriting ? (primaryMission?.nextActionLabel || '英作文を提出') : '英作文を確認',
+      ctaLabel: hasActionableWriting
+        ? primaryMission?.nextActionType === MissionNextActionType.OPEN_WRITING
+          ? primaryMission.nextActionLabel
+          : '英作文を提出'
+        : '英作文を確認',
       metricLabel: primaryMission?.writingPromptTitle || '講師課題',
       stateLabel: hasActionableWriting ? '未提出' : '確認',
       tone: 'writing' as const,
@@ -482,7 +485,7 @@ export const useStudentDashboardViewModel = ({
     return 'reference';
   };
 
-  const routeTaskItems: StudentDashboardTaskItem[] = learningRouteCards.map((card) => {
+  const routeTaskItems: StudentDashboardTaskDraft[] = learningRouteCards.map((card) => {
     const isPrimary = card.id === primaryTaskId;
     const taskTitle = card.id === 'englishPractice'
       ? practiceRecommendation.title
@@ -503,7 +506,7 @@ export const useStudentDashboardViewModel = ({
     };
   });
 
-  const coachTask: StudentDashboardTaskItem | null = latestActionableCoachNotification ? {
+  const coachTask: StudentDashboardTaskDraft | null = latestActionableCoachNotification ? {
     id: 'coach',
     title: '講師メッセージ',
     body: latestActionableCoachNotification.message,
@@ -518,7 +521,7 @@ export const useStudentDashboardViewModel = ({
     mobileLabel: '講師',
   } : null;
 
-  const referenceTaskItems: StudentDashboardTaskItem[] = [
+  const referenceTaskItems: StudentDashboardTaskDraft[] = [
     {
       id: 'plan',
       title: '学習プラン',
@@ -603,15 +606,28 @@ export const useStudentDashboardViewModel = ({
       isPrimary: false,
       mobileLabel: '告知',
     },
-  ].filter((task): task is StudentDashboardTaskItem => Boolean(task));
+  ].filter((task): task is StudentDashboardTaskDraft => Boolean(task));
 
   const allTasks = [
     ...routeTaskItems,
     ...(coachTask ? [coachTask] : []),
     ...referenceTaskItems,
-  ];
+  ].map((task): StudentDashboardTaskItem => ({
+    ...task,
+    command: resolveStudentDashboardCommand(task.id, {
+      hasStudyBooks,
+      canShowWritingSection,
+      hasActionableWriting,
+      primaryMission,
+      topWeakness,
+      preferredBookIds: plannedBooks.map((book) => book.id),
+      coachRecommendedActionType,
+      hasLearningPlan: Boolean(learningPlan),
+      practiceLane: practiceRecommendation.lane,
+    }),
+  }));
   const primaryTask = allTasks.find((task) => task.id === primaryTaskId)
-    || routeTaskItems.find((task) => task.id === 'today')
+    || allTasks.find((task) => task.id === 'today')
     || allTasks[0]
     || null;
   const urgentTasks = allTasks.filter((task) => task.group === 'urgent');
@@ -700,7 +716,7 @@ export const useStudentDashboardViewModel = ({
           id: 'writing-status',
           label: '英作文',
           value: hasActionableWriting ? '未提出' : '確認',
-          helper: primaryMission?.nextActionLabel || '講師課題',
+          helper: primaryTask.ctaLabel,
           icon: 'writing',
         },
         {

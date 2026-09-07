@@ -18,7 +18,7 @@ import {
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordDashboardStartTaskEvent } from './services/productEvents';
-import { createTaskIntentFromBookSelection, createTodayFocusTaskIntent, getTaskRouteBookId } from './shared/learningTask';
+import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
@@ -163,7 +163,6 @@ const App: React.FC = () => {
             user={user}
             initialLane={englishPracticeLane && englishPracticeLane !== 'overview' ? englishPracticeLane : 'grammar'}
             onBack={() => dispatchNavigation({ type: 'go-home', view: 'dashboard' })}
-            onStartVocabulary={() => openLearningTask(createTodayFocusTaskIntent())}
             onActiveLaneChange={(lane) => {
               if (lane !== 'overview') {
                 dispatchNavigation({ type: 'open-english-practice', lane, historyMode: 'replace' });

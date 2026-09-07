@@ -114,6 +114,15 @@ describe('storage action contract', () => {
     })).toThrow('questionMode が不正です。');
   });
 
+  it('rejects non-finite and out-of-range XP awards before execution', () => {
+    const definition = resolveStorageActionDefinition('addXP');
+
+    expect(definition.parse({ amount: 400 })).toEqual({ amount: 400 });
+    for (const amount of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 0, 401, 1.5]) {
+      expect(() => definition.parse({ amount })).toThrow();
+    }
+  });
+
   it('declares AI generated problem review actions for teacher/admin operation', () => {
     const listDefinition = resolveStorageActionDefinition('listAiGeneratedProblemReviewQueue');
     const reviewDefinition = resolveStorageActionDefinition('reviewAiGeneratedProblem');

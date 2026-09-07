@@ -489,37 +489,6 @@ export const handleReportWord = async (env: AppEnv, user: DbUserRow, wordId: str
   await env.DB.prepare('UPDATE words SET is_reported = 1, updated_at = ? WHERE id = ?').bind(Date.now(), wordId).run();
 };
 
-export const handleUpdateWordCache = async (
-  env: AppEnv,
-  user: DbUserRow,
-  wordId: string,
-  sentence: string,
-  translation: string,
-): Promise<void> => {
-  const word = await readFirst<{ book_id: string }>(env, 'SELECT book_id FROM words WHERE id = ?', wordId);
-  if (!word) throw new HttpError(404, '対象の単語が見つかりません。');
-  await assertBookReadAccess(env, user, word.book_id);
-
-  await env.DB.prepare(`
-    UPDATE words
-    SET example_sentence = ?,
-        example_meaning = ?,
-        example_generated_at = ?,
-        example_audit_status = ?,
-        example_audit_note = NULL,
-        example_audited_at = NULL,
-        updated_at = ?
-    WHERE id = ?
-  `).bind(
-    sentence,
-    translation,
-    Date.now(),
-    GeneratedAssetAuditStatus.PENDING,
-    Date.now(),
-    wordId,
-  ).run();
-};
-
 export const handlePrepareBookExamples = async (
   env: AppEnv,
   user: DbUserRow,

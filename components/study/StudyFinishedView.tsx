@@ -8,8 +8,9 @@ interface StudyFinishedViewProps {
   isMobileViewport: boolean;
   leveledUp: boolean;
   sessionWordCount: number;
-  earnedXP: number;
-  streakBonusXP: number;
+  earnedXP: number | null;
+  streakBonusXP: number | null;
+  rewardNotice?: string | null;
   nextReviewMessage: string;
   weaknessSummary: string;
   reviewPreview: WordData[];
@@ -23,12 +24,23 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
   sessionWordCount,
   earnedXP,
   streakBonusXP,
+  rewardNotice,
   nextReviewMessage,
   weaknessSummary,
   reviewPreview,
   onStartSpellingCheck,
   onExit,
 }) => {
+  const reward = earnedXP !== null && streakBonusXP !== null ? (
+    <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
+      +{earnedXP + streakBonusXP} XP
+      {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
+    </div>
+  ) : (
+    <p role="status" data-testid="study-reward-unconfirmed" className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+      {rewardNotice || 'XPの反映は未確認です。ホームで確認できます。'}
+    </p>
+  );
   if (isMobileViewport) {
     return (
       <div className="bg-[#fff8f1] px-1 pb-28 pt-1">
@@ -47,10 +59,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
               <p className="mt-2 text-sm leading-relaxed text-slate-500">
                 {sessionWordCount}語を進めました。次に直すところだけ見れば十分です。
               </p>
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
-                +{earnedXP + streakBonusXP} XP
-                {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
-              </div>
+              {reward}
             </div>
           </section>
 
@@ -118,9 +127,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
           </div>
           <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
           <p className="mt-2 text-sm text-slate-500">{sessionWordCount}語を進めました。次に直すところだけ見れば十分です。</p>
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
-            +{earnedXP + streakBonusXP} XP {streakBonusXP > 0 && <span className="text-medace-500">連続学習ボーナス込み</span>}
-          </div>
+          {reward}
         </div>
 
         <div className="mt-8 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">

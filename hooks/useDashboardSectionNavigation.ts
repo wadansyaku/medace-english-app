@@ -70,7 +70,13 @@ export const useDashboardSectionNavigation = ({
   ]), [fallbackQuickNavTarget, missionQuickNavTarget, writingQuickNavTarget]);
 
   const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const element = ref.current;
+    if (!element) return;
+    const details = element.closest('details');
+    if (details) details.open = true;
+    window.requestAnimationFrame(() => {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }, []);
 
   React.useEffect(() => {

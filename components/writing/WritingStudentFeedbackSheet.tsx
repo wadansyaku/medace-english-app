@@ -1,12 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, FileDown, MessageSquareText, X } from 'lucide-react';
+import React from 'react';
+import { CheckCircle2, FileDown, MessageSquareText, X } from 'lucide-react';
 
-import type { WritingSubmissionDetailResponse } from '../../contracts/writing';
-import {
-  WRITING_AI_PROVIDER_LABELS,
-  WRITING_ASSIGNMENT_STATUS_LABELS,
-  WRITING_SUBMISSION_SOURCE_LABELS,
-} from '../../types';
+import type { WritingStudentSubmissionDetailResponse } from '../../contracts/writing';
+import { WRITING_ASSIGNMENT_STATUS_LABELS, WRITING_SUBMISSION_SOURCE_LABELS } from '../../types';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import {
@@ -15,12 +11,10 @@ import {
 } from './studentSectionUtils';
 
 interface WritingStudentFeedbackSheetProps {
-  feedbackDetail: WritingSubmissionDetailResponse;
+  feedbackDetail: WritingStudentSubmissionDetailResponse;
   isMobileViewport: boolean;
-  selectedEvaluationId: string;
-  selectedEvaluation?: WritingSubmissionDetailResponse['submission']['evaluations'][number];
+  selectedEvaluation?: WritingStudentSubmissionDetailResponse['submission']['evaluations'][number];
   feedbackCommentExpanded: boolean;
-  onSelectEvaluation: (evaluationId: string) => void;
   onToggleFeedbackCommentExpanded: () => void;
   onClose: () => void;
   onPrintFeedback: () => void;
@@ -29,20 +23,12 @@ interface WritingStudentFeedbackSheetProps {
 const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = ({
   feedbackDetail,
   isMobileViewport,
-  selectedEvaluationId,
   selectedEvaluation,
   feedbackCommentExpanded,
-  onSelectEvaluation,
   onToggleFeedbackCommentExpanded,
   onClose,
   onPrintFeedback,
 }) => {
-  const [aiComparisonOpen, setAiComparisonOpen] = useState(!isMobileViewport);
-
-  useEffect(() => {
-    setAiComparisonOpen(!isMobileViewport);
-  }, [feedbackDetail.submission.id, isMobileViewport]);
-
   return (
     <MobileSheetDialog
       onClose={onClose}
@@ -54,6 +40,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
         <button
           type="button"
           onClick={onClose}
+          aria-label="添削フィードバックを閉じる"
           className="absolute right-4 top-4 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
         >
           <X className="h-5 w-5" />
@@ -120,6 +107,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
               )}
             </div>
             <div
+              id="writing-feedback-public-comment"
               className="mt-3 text-sm leading-relaxed text-slate-700"
               style={isMobileViewport && !feedbackCommentExpanded
                 ? {
@@ -135,6 +123,8 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             {isMobileViewport && (feedbackDetail.submission.teacherReview?.publicComment?.length ?? 0) > 80 && (
               <button
                 type="button"
+                aria-expanded={feedbackCommentExpanded}
+                aria-controls="writing-feedback-public-comment"
                 onClick={onToggleFeedbackCommentExpanded}
                 className="mt-3 text-sm font-bold text-medace-700"
               >
@@ -143,58 +133,23 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             )}
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
+          {selectedEvaluation && (
+            <div
+              data-testid="writing-feedback-approved-evaluation"
+              className="flex items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4"
+            >
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">AI比較</div>
-                <div className="mt-1 text-sm text-slate-500">
-                  {isMobileViewport ? '必要なときだけ開いて比較します。' : '見やすい添削を選びながら確認できます。'}
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">講師が確認した添削</div>
+                <div className="mt-1 text-sm leading-relaxed text-slate-600">
+                  講師が返却用に選んだ内容だけを表示しています。
                 </div>
               </div>
-              {selectedEvaluation && (
-                <div className="shrink-0 rounded-2xl border border-medace-200 bg-medace-50 px-3 py-2 text-right">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-700">選択中</div>
-                  <div className="mt-1 text-sm font-black text-medace-950">{selectedEvaluation.overallScore} / 20</div>
-                </div>
-              )}
+              <div className="shrink-0 rounded-2xl border border-medace-200 bg-medace-50 px-3 py-2 text-right">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-medace-700">確定スコア</div>
+                <div className="mt-1 text-sm font-black text-medace-950">{selectedEvaluation.overallScore} / 20</div>
+              </div>
             </div>
-
-            {isMobileViewport && (
-              <button
-                type="button"
-                onClick={() => setAiComparisonOpen((current) => !current)}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700"
-              >
-                {aiComparisonOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                {aiComparisonOpen ? 'AI比較を閉じる' : 'AI比較を開く'}
-              </button>
-            )}
-
-            {(!isMobileViewport || aiComparisonOpen) && (
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                {feedbackDetail.submission.evaluations.map((evaluation) => (
-                  <button
-                    key={evaluation.id}
-                    data-testid={`writing-feedback-provider-${evaluation.provider.toLowerCase()}`}
-                    type="button"
-                    onClick={() => onSelectEvaluation(evaluation.id)}
-                    className={`shrink-0 rounded-3xl border text-left ${
-                      selectedEvaluationId === evaluation.id
-                        ? 'border-medace-300 bg-medace-50/80'
-                        : 'border-slate-200 bg-slate-50 hover:border-medace-200'
-                    } ${isMobileViewport ? 'min-w-[124px] px-3 py-3' : 'min-w-[170px] px-4 py-4'}`}
-                  >
-                    <div className={`${isMobileViewport ? 'text-xs' : 'text-sm'} font-bold text-slate-900`}>
-                      {WRITING_AI_PROVIDER_LABELS[evaluation.provider]}
-                    </div>
-                    <div className={`font-black text-slate-950 ${isMobileViewport ? 'mt-1.5 text-lg' : 'mt-3 text-2xl'}`}>
-                      {evaluation.overallScore} / 20
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {selectedEvaluation && (
             isMobileViewport ? (

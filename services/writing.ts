@@ -9,6 +9,8 @@ import type {
   RequestWritingRevisionRequest,
   WritingAssignmentListResponse,
   WritingReviewQueueResponse,
+  WritingStudentSubmissionDetailResponse,
+  WritingStudentSubmissionReceiptResponse,
   WritingSubmissionDetailResponse,
   WritingTemplateListResponse,
 } from '../contracts/writing';
@@ -89,9 +91,15 @@ export const uploadWritingAsset = async (
   }
 };
 
-export const finalizeWritingSubmission = async (
+export const finalizeStaffWritingSubmission = async (
   request: FinalizeWritingSubmissionRequest,
 ): Promise<WritingSubmissionDetailResponse> => {
+  return apiPost('/api/writing/submissions/finalize', request);
+};
+
+export const finalizeStudentWritingSubmission = async (
+  request: FinalizeWritingSubmissionRequest,
+): Promise<WritingStudentSubmissionReceiptResponse> => {
   return apiPost('/api/writing/submissions/finalize', request);
 };
 
@@ -101,7 +109,13 @@ export const listWritingReviewQueue = async (
   return apiGet(`/api/writing/review-queue${buildQuery({ scope })}`);
 };
 
-export const getWritingSubmissionDetail = async (submissionId: string): Promise<WritingSubmissionDetailResponse> => {
+export const getStaffWritingSubmissionDetail = async (submissionId: string): Promise<WritingSubmissionDetailResponse> => {
+  return apiGet(`/api/writing/submissions/${submissionId}`);
+};
+
+export const getStudentWritingSubmissionDetail = async (
+  submissionId: string,
+): Promise<WritingStudentSubmissionDetailResponse> => {
   return apiGet(`/api/writing/submissions/${submissionId}`);
 };
 

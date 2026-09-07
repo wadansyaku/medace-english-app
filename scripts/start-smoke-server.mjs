@@ -27,17 +27,19 @@ const runCommand = (command, commandArgs, env = baseEnv, stdio = 'inherit') => n
   });
 
   child.on('error', reject);
-  child.on('close', (code) => {
-    if (code === 0) {
+  child.on('close', (code, signal) => {
+    if (code === 0 && !signal) {
       resolve();
       return;
     }
-    reject(new Error(`${command} ${commandArgs.join(' ')} failed with code ${code}`));
+    reject(new Error(`${command} ${commandArgs.join(' ')} failed (code=${code ?? 'null'}, signal=${signal ?? 'none'})`));
   });
 });
 
 let server;
 let localWranglerProject;
+let cleanupPromise;
+let requestedExitSignal;
 
 const signalProcessTree = (child, signal) => {
   if (!child?.pid) return;
@@ -49,15 +51,19 @@ const signalProcessTree = (child, signal) => {
 };
 
 const stopServerProcess = async (child, graceMs = 2_000) => {
-  if (!child || child.exitCode !== null) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
 
   await new Promise((resolve) => {
     let settled = false;
+    let forceKillTimer;
+    let settleTimer;
     const finish = () => {
       if (settled) return;
       settled = true;
+      clearTimeout(forceKillTimer);
+      clearTimeout(settleTimer);
       child.removeListener('close', onClose);
       resolve();
     };
@@ -72,8 +78,8 @@ const stopServerProcess = async (child, graceMs = 2_000) => {
       return;
     }
 
-    const forceKillTimer = setTimeout(() => {
-      if (child.exitCode === null) {
+    forceKillTimer = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) {
         try {
           signalProcessTree(child, 'SIGKILL');
         } catch {
@@ -83,18 +89,20 @@ const stopServerProcess = async (child, graceMs = 2_000) => {
     }, graceMs);
     forceKillTimer.unref?.();
 
-    const settleTimer = setTimeout(() => finish(), graceMs + 1_000);
+    settleTimer = setTimeout(() => finish(), graceMs + 1_000);
     settleTimer.unref?.();
   });
 };
 
-const cleanup = async () => {
+const cleanup = () => cleanupPromise ??= (async () => {
   await stopServerProcess(server);
   await localWranglerProject?.cleanup();
   await rm(persistDir, { recursive: true, force: true });
-};
+})();
 
 const handleExitSignal = async (signal) => {
+  if (requestedExitSignal) return;
+  requestedExitSignal = signal;
   await cleanup();
   process.exit(signal === 'SIGINT' ? 130 : 143);
 };
@@ -146,6 +154,10 @@ try {
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
   });
+  const serverExit = new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.once('close', (code, signal) => resolve({ code, signal }));
+  });
 
   server.stdout?.on('data', (chunk) => {
     process.stdout.write(chunk);
@@ -154,11 +166,14 @@ try {
     process.stderr.write(chunk);
   });
 
-  server.on('close', async (code) => {
-    server = undefined;
-    await cleanup();
-    process.exit(code ?? 0);
-  });
+  const { code, signal } = await serverExit;
+  console[requestedExitSignal ? 'log' : 'error'](
+    `[smoke-server] Wrangler ${requestedExitSignal ? 'stopped' : 'exited unexpectedly'} (code=${code ?? 'null'}, signal=${signal ?? 'none'}).`,
+  );
+  await cleanup();
+  process.exit(requestedExitSignal
+    ? (requestedExitSignal === 'SIGINT' ? 130 : 143)
+    : (code || 1));
 } catch (error) {
   await cleanup();
   throw error;

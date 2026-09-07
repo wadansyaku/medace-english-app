@@ -61,7 +61,7 @@ describe('grammar scope curriculum helpers', () => {
   });
 
   it('infers scope from sentence when the scope is not explicit', () => {
-    expect(inferGrammarScopeIdFromSentence('Doctors stabilize the patient before surgery.'))
+    expect(inferGrammarScopeIdFromSentence('Students organize their notes before class.'))
       .toBe('time-preposition-phrase');
     expect(inferGrammarScopeIdFromSentence('Students can review words after class.'))
       .toBe('modal-base-verb');
@@ -99,7 +99,7 @@ describe('grammar scope curriculum helpers', () => {
     expect(resolveGrammarScopeSelection({
       mode: 'JA_TRANSLATION_INPUT',
       requestedScopeId: 'be-verb',
-      sentence: 'The term stabilize is useful today.',
+      sentence: 'The term organize is useful today.',
     })).toMatchObject({
       scopeId: 'be-verb',
       isExplicitScope: true,

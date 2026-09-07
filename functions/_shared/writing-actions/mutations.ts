@@ -20,6 +20,10 @@ import {
   encodeSubmissionMarker,
 } from '../../../utils/writing';
 import {
+  WRITING_UPLOAD_MAX_BYTES,
+  WRITING_UPLOAD_MAX_IMAGE_FILES,
+  WRITING_UPLOAD_MAX_TOTAL_BYTES,
+  WRITING_UPLOAD_PDF_MIME_TYPE,
   resolveWritingUploadMimeType,
   validateWritingUploadPolicy,
 } from '../../../shared/writingUploadPolicy';
@@ -38,6 +42,7 @@ import {
   getVisibleStudentIds,
   guardTeacher,
   guardWritingAccess,
+  projectWritingDetailForViewer,
   requireWritingOrganizationContext,
 } from './access';
 import {
@@ -51,6 +56,7 @@ import {
   readSubmissionAssetRowByUploadToken,
   readSubmissionAssetRowsByIdsForAttempt,
   readSubmissionAssetRowsForAttempt,
+  readLatestSubmissionRowForAssignment,
   readSubmissionRowByAssignmentAttempt,
   readTemplateRow,
 } from './repository';
@@ -83,6 +89,53 @@ const encodeBase64 = (buffer: ArrayBuffer): string => {
   }
 
   return btoa(binary);
+};
+
+const parseWritingUploadContentLength = (request: Request): number | null => {
+  const rawValue = request.headers.get('Content-Length');
+  if (rawValue === null) return null;
+  const normalized = rawValue.trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new HttpError(400, 'Content-Length が不正です。');
+  }
+  const value = Number(normalized);
+  if (!Number.isSafeInteger(value)) {
+    throw new HttpError(400, 'Content-Length が不正です。');
+  }
+  if (value > WRITING_UPLOAD_MAX_BYTES) {
+    throw new HttpError(413, `アップロードは ${WRITING_UPLOAD_MAX_BYTES} bytes 以下にしてください。`);
+  }
+  return value;
+};
+
+const readWritingUploadBody = async (request: Request, maxBytes: number): Promise<ArrayBuffer> => {
+  if (!request.body) return new ArrayBuffer(0);
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      totalBytes += chunk.byteLength;
+      if (totalBytes > maxBytes || totalBytes > WRITING_UPLOAD_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new HttpError(413, 'アップロードサイズが上限を超えています。');
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
 };
 
 const flushWritingActivitySideEffect = async (
@@ -167,7 +220,6 @@ const getAssignmentRowOrThrow = async (env: AppEnv, assignmentId: string) => {
 
 const isUploadReservationActive = (row: DbWritingAssetRow, now: number): boolean => {
   if (row.uploaded_at) return true;
-  if (row.upload_consumed_at) return false;
   return Number(row.upload_expires_at || 0) > now;
 };
 
@@ -297,30 +349,38 @@ export const handleIssueWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  if (row.status === AssignmentStatus.ISSUED && row.issued_at) {
+    return readAssignmentResponse(env, assignmentId);
+  }
+  if (row.status !== AssignmentStatus.DRAFT) {
+    throw new HttpError(409, '現在の状態では課題を配布できません。');
+  }
   const now = Date.now();
 
-  await env.DB.prepare(`
+  const updateResult = await env.DB.prepare(`
     UPDATE writing_assignments
     SET status = ?, issued_at = COALESCE(issued_at, ?), updated_at = ?
-    WHERE id = ?
+    WHERE id = ? AND status = ?
   `).bind(
     AssignmentStatus.ISSUED,
     now,
     now,
     assignmentId,
+    AssignmentStatus.DRAFT,
   ).run();
-  if (row.status === AssignmentStatus.DRAFT || !row.issued_at) {
-    await recordProductEventForUser(env, user, {
-      eventName: 'writing_assignment_issued',
-      subjectType: 'writing_assignment',
-      subjectId: assignmentId,
-      status: AssignmentStatus.ISSUED,
-      metadata: {
-        studentUid: row.student_user_id,
-        templateId: row.template_id,
-      },
-    });
+  if ((updateResult.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, '課題の状態が別の操作で更新されました。最新状態でやり直してください。');
   }
+  await recordProductEventForUser(env, user, {
+    eventName: 'writing_assignment_issued',
+    subjectType: 'writing_assignment',
+    subjectId: assignmentId,
+    status: AssignmentStatus.ISSUED,
+    metadata: {
+      studentUid: row.student_user_id,
+      templateId: row.template_id,
+    },
+  });
 
   return readAssignmentResponse(env, assignmentId);
 };
@@ -364,11 +424,37 @@ export const handleCreateWritingUploadUrl = async (
   const r2Key = `writing-submissions/${assignmentRow.organization_id || 'org-unknown'}/${request.assignmentId}/attempt-${attemptNo}/${assetId}-${safeName}`;
   const expiresAt = now + WRITING_UPLOAD_URL_TTL_MS;
 
-  await env.DB.prepare(`
+  const isPdfUpload = mimeType === WRITING_UPLOAD_PDF_MIME_TYPE ? 1 : 0;
+  const insertResult = await env.DB.prepare(`
     INSERT INTO writing_submission_assets (
       id, assignment_id, submission_id, attempt_no, asset_order, file_name, mime_type, byte_size, expected_byte_size,
       expected_sha256_base64, r2_key, upload_token, upload_expires_at, created_at, updated_at
-    ) VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+    )
+    SELECT ?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?
+    FROM (
+      SELECT
+        COUNT(*) AS active_count,
+        COALESCE(SUM(
+          CASE
+            WHEN uploaded_at IS NOT NULL THEN byte_size
+            ELSE COALESCE(expected_byte_size, NULLIF(byte_size, 0), 0)
+          END
+        ), 0) AS active_bytes,
+        COALESCE(SUM(CASE WHEN mime_type = ? THEN 1 ELSE 0 END), 0) AS active_pdf_count
+      FROM writing_submission_assets
+      WHERE assignment_id = ?
+        AND attempt_no = ?
+        AND (uploaded_at IS NOT NULL OR COALESCE(upload_expires_at, 0) > ?)
+    ) AS active
+    WHERE active.active_bytes + ? <= ?
+      AND (
+        (? = 1 AND active.active_count = 0)
+        OR (
+          ? = 0
+          AND active.active_pdf_count = 0
+          AND active.active_count < ?
+        )
+      )
   `).bind(
     assetId,
     request.assignmentId,
@@ -383,7 +469,19 @@ export const handleCreateWritingUploadUrl = async (
     expiresAt,
     now,
     now,
+    WRITING_UPLOAD_PDF_MIME_TYPE,
+    request.assignmentId,
+    attemptNo,
+    now,
+    request.byteSize,
+    WRITING_UPLOAD_MAX_TOTAL_BYTES,
+    isPdfUpload,
+    isPdfUpload,
+    WRITING_UPLOAD_MAX_IMAGE_FILES,
   ).run();
+  if ((insertResult.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, '別のアップロード予約が先に更新されました。ファイルを確認してやり直してください。');
+  }
 
   return {
     assetId,
@@ -418,40 +516,90 @@ export const handleWritingAssetUpload = async (
     throw new HttpError(503, 'WRITING_ASSETS が設定されていません。');
   }
 
-  const body = await request.arrayBuffer();
   const contentType = request.headers.get('Content-Type');
   if (contentType && contentType !== assetRow.mime_type) {
     throw new HttpError(400, '予約時と異なる MIME type ではアップロードできません。');
   }
-  if (assetRow.expected_byte_size && body.byteLength !== Number(assetRow.expected_byte_size || 0)) {
+  const expectedByteSize = Number(assetRow.expected_byte_size || 0);
+  const contentLength = parseWritingUploadContentLength(request);
+  if (contentLength !== null && expectedByteSize > 0 && contentLength !== expectedByteSize) {
     throw new HttpError(400, '予約時と異なるファイルサイズではアップロードできません。');
   }
-  const uploadedSha256Base64 = encodeBase64(await crypto.subtle.digest('SHA-256', body));
-  if (
-    assetRow.expected_sha256_base64
-    && uploadedSha256Base64 !== assetRow.expected_sha256_base64
-  ) {
-    throw new HttpError(400, 'アップロードファイルのチェックサムが一致しません。');
-  }
-  const object = await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
-    httpMetadata: {
-      contentType: assetRow.mime_type,
-    },
-  });
 
-  await env.DB.prepare(`
+  const reservationResult = await env.DB.prepare(`
     UPDATE writing_submission_assets
-    SET byte_size = ?, uploaded_at = ?, upload_consumed_at = ?, uploaded_etag = ?, uploaded_sha256_base64 = ?, updated_at = ?
+    SET upload_consumed_at = ?, updated_at = ?
     WHERE id = ?
+      AND upload_consumed_at IS NULL
+      AND uploaded_at IS NULL
+      AND upload_expires_at > ?
   `).bind(
-    body.byteLength,
     now,
-    now,
-    object?.etag || null,
-    uploadedSha256Base64,
     now,
     assetRow.id,
+    now,
   ).run();
+  if ((reservationResult.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, 'このアップロードURLは使用中または使用済みです。');
+  }
+
+  let releaseReservation = true;
+  try {
+    const bodyLimit = expectedByteSize > 0
+      ? Math.min(expectedByteSize, WRITING_UPLOAD_MAX_BYTES)
+      : WRITING_UPLOAD_MAX_BYTES;
+    const body = await readWritingUploadBody(request, bodyLimit);
+    if (body.byteLength === 0 || (expectedByteSize > 0 && body.byteLength !== expectedByteSize)) {
+      throw new HttpError(400, '予約時と異なるファイルサイズではアップロードできません。');
+    }
+    const uploadedSha256Base64 = encodeBase64(await crypto.subtle.digest('SHA-256', body));
+    if (
+      assetRow.expected_sha256_base64
+      && uploadedSha256Base64 !== assetRow.expected_sha256_base64
+    ) {
+      throw new HttpError(400, 'アップロードファイルのチェックサムが一致しません。');
+    }
+    const object = await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
+      httpMetadata: {
+        contentType: assetRow.mime_type,
+      },
+    });
+    const uploadedAt = Date.now();
+
+    const finalizeResult = await env.DB.prepare(`
+      UPDATE writing_submission_assets
+      SET byte_size = ?, uploaded_at = ?, uploaded_etag = ?, uploaded_sha256_base64 = ?, updated_at = ?
+      WHERE id = ?
+        AND upload_consumed_at = ?
+        AND uploaded_at IS NULL
+    `).bind(
+      body.byteLength,
+      uploadedAt,
+      object?.etag || null,
+      uploadedSha256Base64,
+      uploadedAt,
+      assetRow.id,
+      now,
+    ).run();
+    if ((finalizeResult.meta.changes ?? 0) !== 1) {
+      releaseReservation = false;
+      throw new HttpError(409, 'アップロード状態が別の操作で更新されました。');
+    }
+    releaseReservation = false;
+  } catch (error) {
+    if (releaseReservation) {
+      await env.DB.prepare(`
+        UPDATE writing_submission_assets
+        SET upload_consumed_at = NULL, updated_at = ?
+        WHERE id = ?
+          AND upload_consumed_at = ?
+          AND uploaded_at IS NULL
+      `).bind(Date.now(), assetRow.id, now).run().catch((releaseError) => {
+        console.error('Failed to release writing upload reservation.', releaseError);
+      });
+    }
+    throw error;
+  }
 
   return noContent();
 };
@@ -461,7 +609,7 @@ export const handleFinalizeWritingSubmission = async (
   user: DbUserRow,
   request: FinalizeWritingSubmissionRequest & { manualTranscript?: string },
   logContext?: AiUsageLogContext,
-): Promise<WritingSubmissionDetailResponse> => {
+): Promise<ReturnType<typeof projectWritingDetailForViewer>> => {
   guardWritingAccess(user);
   const assignmentRow = await getAssignmentRowOrThrow(env, request.assignmentId);
   await ensureAssignmentAccess(env, user, assignmentRow);
@@ -554,7 +702,8 @@ export const handleFinalizeWritingSubmission = async (
   });
 
   const detail = (await readSubmissionContext(env, submissionId)).detail;
-  return sideEffectJob ? { ...detail, sideEffectJob } : detail;
+  const detailWithSideEffect = sideEffectJob ? { ...detail, sideEffectJob } : detail;
+  return projectWritingDetailForViewer(user, detailWithSideEffect, 'receipt');
 };
 
 const applyTeacherReview = async (
@@ -569,6 +718,33 @@ const applyTeacherReview = async (
   const detail = existingDetail || (await readSubmissionContext(env, submissionId)).detail;
   await ensureAssignmentAccess(env, user, detail.assignment);
 
+  const latestSubmission = await readLatestSubmissionRowForAssignment(env, detail.assignment.id);
+  if (
+    !latestSubmission
+    || latestSubmission.assignment_id !== detail.assignment.id
+    || latestSubmission.id !== submissionId
+  ) {
+    throw new HttpError(409, 'この提出は最新版ではありません。最新の提出を開き直してください。');
+  }
+
+  const nextStatus = resolveAssignmentStatusForTeacherDecision(
+    decision,
+    detail.submission.attemptNo,
+    detail.assignment.maxAttempts,
+  );
+  const existingReview = detail.submission.teacherReview;
+  const isExactRetry = (
+    detail.assignment.status === nextStatus
+    && existingReview?.reviewDecision === decision
+    && existingReview.selectedEvaluationId === payload.selectedEvaluationId
+    && existingReview.publicComment === payload.publicComment.trim()
+    && (existingReview.privateMemo || '') === (payload.privateMemo?.trim() || '')
+  );
+  if (detail.assignment.status !== AssignmentStatus.REVIEW_READY) {
+    if (isExactRetry) return detail;
+    throw new HttpError(409, '現在の状態では提出を返却できません。');
+  }
+
   const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === payload.selectedEvaluationId);
   if (!selectedEvaluation) {
     throw new HttpError(400, '選択したAI評価が見つかりません。');
@@ -576,11 +752,6 @@ const applyTeacherReview = async (
 
   const now = Date.now();
   const reviewId = detail.submission.teacherReview?.id || crypto.randomUUID();
-  const nextStatus = resolveAssignmentStatusForTeacherDecision(
-    decision,
-    detail.submission.attemptNo,
-    detail.assignment.maxAttempts,
-  );
 
   await commitTeacherReviewDecision(env, {
     submissionId,
@@ -627,7 +798,9 @@ export const handleRequestWritingRevision = async (
   submissionId: string,
   payload: RequestWritingRevisionRequest,
 ): Promise<WritingSubmissionDetailResponse> => {
+  guardTeacher(user);
   const detail = (await readSubmissionContext(env, submissionId)).detail;
+  await ensureAssignmentAccess(env, user, detail.assignment);
   if (detail.submission.attemptNo >= detail.assignment.maxAttempts) {
     throw new HttpError(400, 'これ以上の再提出は設定できません。');
   }
@@ -643,6 +816,12 @@ export const handleCompleteWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  if (row.status === AssignmentStatus.COMPLETED) {
+    return readAssignmentResponse(env, assignmentId);
+  }
+  if (row.status !== AssignmentStatus.RETURNED) {
+    throw new HttpError(409, '現在の状態では課題を完了できません。');
+  }
   const now = Date.now();
 
   await setAssignmentCompleted(env, { assignmentId, now });

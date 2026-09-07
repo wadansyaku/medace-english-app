@@ -18,7 +18,7 @@ import {
   buildMissionProgress,
 } from '../../shared/missions';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
-import { buildDashboardPrimaryMission } from '../../functions/_shared/dashboard-primary-mission';
+import { buildDashboardPrimaryMission } from '../../shared/dashboardPrimaryMission';
 import { IDB_MOCK_ORGANIZATION_IDS } from './mockData';
 
 const now = Date.now();

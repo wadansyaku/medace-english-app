@@ -97,6 +97,26 @@ describe('negative route guards', () => {
     );
   });
 
+  it('keeps the retired updateWordCache action unreachable', async () => {
+    await expectHttpError(
+      handleStorageAction(
+        {} as never,
+        createUser(),
+        {
+          action: 'updateWordCache',
+          payload: {
+            wordId: 'official-word-1',
+            sentence: 'tampered sentence',
+            translation: '改ざん済み',
+          },
+        } as never,
+        new Request('https://medace-english-app.pages.dev/api/storage', { method: 'POST' }),
+      ),
+      404,
+      '未対応のストレージ操作です: updateWordCache',
+    );
+  });
+
   it('rejects cross-site public commercial requests before writing to storage', async () => {
     const request = new Request('https://medace-english-app.pages.dev/api/public/commercial-request', {
       method: 'POST',

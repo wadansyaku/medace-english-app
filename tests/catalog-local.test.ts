@@ -4,7 +4,6 @@ import { isBookSelectableForToday } from '../shared/materialQuality';
 import {
   batchImportWordsLocal,
   normalizeLocalCatalogBook,
-  updateWordCacheLocal,
   updateWordLocal,
   type LocalCatalogStorageContext,
 } from '../services/storage/catalog-local';
@@ -79,26 +78,6 @@ const createControlledWriteStore = <T>() => {
     request,
     transaction,
     store: {
-      put,
-      transaction: transaction.transaction,
-    } as unknown as IDBObjectStore,
-  };
-};
-
-const createControlledReadModifyWriteStore = () => {
-  const getRequest = createControlledRequest<WordData | undefined>();
-  const putRequest = createControlledRequest<IDBValidKey>();
-  const transaction = createControlledTransaction();
-  const get = vi.fn(() => getRequest.request);
-  const put = vi.fn(() => putRequest.request);
-  return {
-    get,
-    put,
-    getRequest,
-    putRequest,
-    transaction,
-    store: {
-      get,
       put,
       transaction: transaction.transaction,
     } as unknown as IDBObjectStore,
@@ -263,39 +242,4 @@ describe('local catalog write contracts', () => {
     await expect(updatePromise).rejects.toThrow('word put failed');
   });
 
-  it('waits for read-modify-write word cache updates to finish the put and transaction', async () => {
-    const writeStore = createControlledReadModifyWriteStore();
-    const getStore = vi.fn(async () => writeStore.store) as GetStore;
-    let resolved = false;
-
-    const updatePromise = updateWordCacheLocal(
-      { getStore },
-      'word-1',
-      'The nurse triaged the patient.',
-      '看護師は患者の優先順位を決めた。',
-    ).then(() => {
-      resolved = true;
-    });
-    await flushMicrotasks();
-
-    expect(writeStore.get).toHaveBeenCalledWith('word-1');
-    expect(resolved).toBe(false);
-
-    writeStore.getRequest.succeed(makeWord());
-    await flushMicrotasks();
-    expect(writeStore.put).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'word-1',
-      exampleSentence: 'The nurse triaged the patient.',
-      exampleMeaning: '看護師は患者の優先順位を決めた。',
-    }));
-    expect(resolved).toBe(false);
-
-    writeStore.putRequest.succeed('word-1');
-    await flushMicrotasks();
-    expect(resolved).toBe(false);
-
-    writeStore.transaction.complete();
-    await updatePromise;
-    expect(resolved).toBe(true);
-  });
 });

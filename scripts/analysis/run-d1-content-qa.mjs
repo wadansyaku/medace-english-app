@@ -30,6 +30,7 @@ export const parseCliArgs = (argv) => {
     accessScopes: [],
     titleLike: null,
     compact: false,
+    summaryOnly: false,
     help: false,
   };
 
@@ -73,6 +74,8 @@ export const parseCliArgs = (argv) => {
       options.titleLike = nextValue();
     } else if (arg === '--compact') {
       options.compact = true;
+    } else if (arg === '--summary-only') {
+      options.summaryOnly = true;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -91,6 +94,9 @@ export const parseCliArgs = (argv) => {
   }
   if (!Number.isFinite(options.detailLimit) || options.detailLimit < 1) {
     throw new Error('--detail-limit must be a positive number.');
+  }
+  if (options.summaryOnly && options.rawOutputPath) {
+    throw new Error('--summary-only cannot be combined with --raw-output.');
   }
 
   return options;
@@ -170,6 +176,8 @@ const runWranglerQuery = (options, sql) => {
   const raw = execFileSync(process.execPath, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
+    // Capture failures before summary-only mode replaces raw database output.
+    stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
       CI: '1',
@@ -282,6 +290,38 @@ export const fetchD1ContentRows = (options, runQuery = runWranglerQuery) => {
   };
 };
 
+// Public release evidence contains only these aggregate counts. Do not copy
+// whole objects: future report fields may contain material text or identifiers.
+const SUMMARY_METRICS = [
+  'bookCount',
+  'rowCount',
+  'wordCount',
+  'rowsWithAnyBlank',
+  'rowsWithRequiredBlank',
+  'sentinelValueCount',
+  'rowsWithSentinel',
+  'duplicateHeadwordCount',
+  'duplicateRowCount',
+];
+
+const requireCount = (value, label) => {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Content QA aggregate ${label} is missing or invalid.`);
+  }
+  return value;
+};
+
+export const toContentQaSummary = (report) => ({
+  generatedAt: report.generatedAt,
+  summary: Object.fromEntries(SUMMARY_METRICS.map((key) => [key, requireCount(report.summary?.[key], key)])),
+  source: {
+    database: report.source.database,
+    mode: report.source.mode,
+    bookCount: requireCount(report.source.bookCount, 'source.bookCount'),
+    wordCount: requireCount(report.source.wordCount, 'source.wordCount'),
+  },
+});
+
 const usage = () => `Usage: node scripts/analysis/run-d1-content-qa.mjs --remote|--local [--database medace-db] [--output report.json]
 
 Reads books/words from Cloudflare D1 with SELECT-only queries and emits the same JSON report as npm run content:qa.
@@ -301,23 +341,32 @@ Options:
   --sample-limit <number> Max blank/sentinel samples per book. Default: 20.
   --detail-limit <number> Max category/source/duplicate details per book. Default: 100.
   --compact               Print compact JSON.
+  --summary-only          Emit aggregate counts only for public release evidence. Disallows --raw-output.
   --help                  Show this help.
 `;
 
-export const runCli = async (argv = process.argv.slice(2)) => {
+export const runCli = async (argv = process.argv.slice(2), runQuery = runWranglerQuery) => {
   const options = parseCliArgs(argv);
   if (options.help) {
     process.stdout.write(usage());
     return 0;
   }
 
-  const rawPayload = fetchD1ContentRows(options);
+  let rawPayload;
+  try {
+    rawPayload = fetchD1ContentRows(options, runQuery);
+  } catch (error) {
+    if (options.summaryOnly) {
+      throw new Error('D1 content QA query failed; raw query output omitted in summary-only mode.');
+    }
+    throw error;
+  }
   const report = generateContentQaReport(rowsFromJsonPayload(rawPayload), {
     sampleLimit: options.sampleLimit,
     detailLimit: options.detailLimit,
   });
   report.source = rawPayload.metadata;
-  const json = JSON.stringify(report, null, options.compact ? 0 : 2);
+  const json = JSON.stringify(options.summaryOnly ? toContentQaSummary(report) : report, null, options.compact ? 0 : 2);
 
   if (options.rawOutputPath) {
     await fs.mkdir(path.dirname(options.rawOutputPath), { recursive: true });

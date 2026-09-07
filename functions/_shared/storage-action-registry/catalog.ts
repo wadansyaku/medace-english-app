@@ -11,7 +11,6 @@ import {
   handlePrepareBookExamples,
   handleReportWord,
   handleUpdateWord,
-  handleUpdateWordCache,
 } from '../storage-book-actions';
 import { handleGenerateWordHintAsset } from '../word-hint-assets';
 
@@ -70,20 +69,6 @@ export const catalogStorageActionDefinitions = {
       return null;
     },
   }),
-  updateWordCache: defineStorageAction({
-    parse: (payload) => {
-      const record = expectObject(payload);
-      return {
-        wordId: expectString(record, 'wordId'),
-        sentence: expectString(record, 'sentence'),
-        translation: expectString(record, 'translation'),
-      };
-    },
-    execute: async ({ env, user }, payload) => {
-      await handleUpdateWordCache(env, user, payload.wordId, payload.sentence, payload.translation);
-      return null;
-    },
-  }),
   generateWordHintAsset: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
@@ -131,7 +116,6 @@ export const catalogStorageActionDefinitions = {
   | 'getWordsByBook'
   | 'updateWord'
   | 'reportWord'
-  | 'updateWordCache'
   | 'generateWordHintAsset'
   | 'prepareBookExamples'
   | 'getDailySessionWords'

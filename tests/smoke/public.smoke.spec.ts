@@ -119,5 +119,19 @@ test('preview deployment supports demo login, D1 read, and Writing visibility', 
   await loginBusinessStudentDemo(page);
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  await expect(page.getByTestId('writing-student-section')).toBeVisible();
+  const writingDetails = page.getByTestId('dashboard-task-details-writing');
+  if (await writingDetails.count()) {
+    if (await writingDetails.getAttribute('open') === null) {
+      await writingDetails.locator('summary').click();
+    }
+    await expect(writingDetails).toHaveAttribute('open', '');
+  }
+  const writingSection = page.getByTestId('writing-student-section');
+  await writingSection.scrollIntoViewIfNeeded();
+  await expect(writingSection).toBeVisible();
+  await expect(writingSection).toBeInViewport();
+  await expect(writingSection.getByRole('heading', { name: '自由英作文', exact: true })).toBeVisible();
+  await expect(writingSection.getByTestId('writing-refresh-button')).toBeEnabled();
+  await expect(writingSection.getByTestId('writing-last-refreshed')).not.toContainText('未取得');
+  await expect(writingSection.getByRole('alert')).toHaveCount(0);
 });

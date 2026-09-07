@@ -25,6 +25,7 @@ import {
   guardTeacher,
   guardWritingAccess,
   isStudentFeedbackVisibleStatus,
+  projectWritingDetailForViewer,
   requireWritingOrganizationContext,
 } from './access';
 import {
@@ -139,6 +140,7 @@ export const handleListWritingAssignments = async (
       .map((row) => {
         if (!visibleStudentIds.has(row.student_user_id)) return null;
         if (user.role === UserRole.STUDENT && scope === 'organization') return null;
+        if (user.role === UserRole.STUDENT && row.status === AssignmentStatus.DRAFT) return null;
         if (!row.latest_submission_id) return toAssignment(row);
         if (user.role === UserRole.STUDENT && !isStudentFeedbackVisibleStatus(row.status)) {
           return toAssignment(row);
@@ -197,11 +199,11 @@ export const handleGetWritingSubmissionDetail = async (
   env: AppEnv,
   user: DbUserRow,
   submissionId: string,
-): Promise<WritingSubmissionDetailResponse> => {
+): Promise<ReturnType<typeof projectWritingDetailForViewer>> => {
   guardWritingAccess(user);
   const context = await readSubmissionContext(env, submissionId);
   await ensureSubmissionViewAccess(env, user, context.detail);
-  return context.detail;
+  return projectWritingDetailForViewer(user, context.detail, 'released');
 };
 
 export const handleGetWritingPrintableFeedback = async (

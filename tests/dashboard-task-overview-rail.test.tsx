@@ -7,6 +7,7 @@ import type { StudentDashboardTaskItem } from '../hooks/useStudentDashboardViewM
 
 const makeTask = (overrides: Partial<StudentDashboardTaskItem> = {}): StudentDashboardTaskItem => ({
   id: 'today',
+  command: { type: 'create_book' },
   routeId: 'today',
   title: '今日の学習',
   body: 'My単語帳を1冊作ると、学習を始められます。',
@@ -21,6 +22,28 @@ const makeTask = (overrides: Partial<StudentDashboardTaskItem> = {}): StudentDas
 });
 
 describe('DashboardTaskOverviewRail', () => {
+  it('offers one next action and keeps material and progress shortcuts ahead of optional detail', () => {
+    const rendered = renderToStaticMarkup(
+      <DashboardTaskOverviewRail
+        primaryTask={makeTask()}
+        urgentTasks={[makeTask({ id: 'mission', group: 'urgent', isPrimary: false })]}
+        supportingTasks={[makeTask({ id: 'weakness', group: 'supporting', isPrimary: false })]}
+        referenceTasks={(['weakness', 'announcements', 'plan', 'library', 'progress'] as const).map((id) => (
+          makeTask({ id, group: 'reference', isPrimary: false })
+        ))}
+        showPrimaryAction={false}
+        onSelectTask={() => undefined}
+        onSelectReferenceTask={() => undefined}
+        onStartPrimary={() => undefined}
+      />,
+    );
+    expect(rendered).toContain('dashboard-task-overview-mission');
+    expect(rendered).not.toContain('dashboard-task-overview-weakness');
+    expect(rendered).toContain('dashboard-task-reference-library');
+    expect(rendered).toContain('dashboard-task-reference-progress');
+    expect(rendered).not.toContain('dashboard-task-reference-announcements');
+  });
+
   it('can keep the first setup action in the hero only', () => {
     const rendered = renderToStaticMarkup(
       <DashboardTaskOverviewRail

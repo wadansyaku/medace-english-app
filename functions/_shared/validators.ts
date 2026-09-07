@@ -56,7 +56,7 @@ const expectNumberLikeOptional = (
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
-  if (typeof value !== 'number' || Number.isNaN(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw createValidationError(`${label} は数値である必要があります。`);
   }
   return value;

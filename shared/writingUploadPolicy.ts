@@ -1,4 +1,5 @@
 export const WRITING_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+export const WRITING_UPLOAD_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 export const WRITING_UPLOAD_MAX_IMAGE_FILES = 4;
 
 export const WRITING_UPLOAD_PDF_MIME_TYPE = 'application/pdf';
@@ -80,7 +81,7 @@ export const validateWritingUploadPolicy = (
     return { valid: false, message: '答案ファイルを選択してください。' };
   }
 
-  const invalidSize = files.find((file) => file.size <= 0);
+  const invalidSize = files.find((file) => !Number.isFinite(file.size) || file.size <= 0);
   if (invalidSize) {
     return { valid: false, message: `${invalidSize.name || '選択ファイル'} のサイズが空です。撮影または書き出しを確認してください。` };
   }
@@ -90,6 +91,14 @@ export const validateWritingUploadPolicy = (
     return {
       valid: false,
       message: `${tooLarge.name || '選択ファイル'} が ${formatWritingUploadBytes(WRITING_UPLOAD_MAX_BYTES)} を超えています。`,
+    };
+  }
+
+  const totalBytes = files.reduce((total, file) => total + file.size, 0);
+  if (!Number.isSafeInteger(totalBytes) || totalBytes > WRITING_UPLOAD_MAX_TOTAL_BYTES) {
+    return {
+      valid: false,
+      message: `提出ファイルの合計を ${formatWritingUploadBytes(WRITING_UPLOAD_MAX_TOTAL_BYTES)} 以下にしてください。`,
     };
   }
 

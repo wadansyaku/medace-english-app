@@ -16,7 +16,11 @@ import {
   Zap,
 } from 'lucide-react';
 
-import type { LearningTaskIntent, UserProfile } from '../types';
+import {
+  GeneratedAssetAuditStatus,
+  type LearningTaskIntent,
+  type UserProfile,
+} from '../types';
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { getHintAuditTone } from '../shared/wordHintAssets';
 import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
@@ -51,6 +55,42 @@ const RATING_OPTIONS = [
   { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
   { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
 ];
+
+const getHiddenHintReviewState = (
+  status: GeneratedAssetAuditStatus | null | undefined,
+  label: '例文' | '画像ヒント',
+): {
+  title: string;
+  description: string;
+  canRetry: boolean;
+  retryLabel: string;
+} | null => {
+  switch (status) {
+    case GeneratedAssetAuditStatus.PENDING:
+      return {
+        title: `${label}を確認中`,
+        description: '作成は終わりました。学習に使える内容か確認でき次第、ここに表示します。',
+        canRetry: false,
+        retryLabel: '',
+      };
+    case GeneratedAssetAuditStatus.REVIEW_REQUIRED:
+      return {
+        title: `${label}を見直し中`,
+        description: '内容に気になる点があったため、いまは表示していません。',
+        canRetry: true,
+        retryLabel: `別の${label}を作る`,
+      };
+    case GeneratedAssetAuditStatus.FAILED:
+      return {
+        title: `${label}を確認できませんでした`,
+        description: '確認処理を完了できなかったため、いまは表示していません。',
+        canRetry: true,
+        retryLabel: `もう一度${label}を作る`,
+      };
+    default:
+      return null;
+  }
+};
 
 const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask }) => {
   const controller = useStudyModeController({
@@ -110,6 +150,19 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     );
   }
 
+  if (controller.loadError) {
+    return (
+      <section role="alert" data-testid="study-load-error" className="mx-auto max-w-lg rounded-3xl border border-slate-200 bg-white p-6 text-center">
+        <h1 className="text-xl font-bold text-slate-900">単語を読み込めませんでした</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">{controller.loadError}</p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={controller.retryLoad} className="rounded-xl bg-medace-600 px-5 py-3 font-bold text-slate-950">もう一度読み込む</button>
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700">ダッシュボードに戻る</button>
+        </div>
+      </section>
+    );
+  }
+
   if (controller.queue.length === 0) {
     return (
       <div className="p-10 text-center">
@@ -123,6 +176,14 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
 
   const exampleAuditTone = getHintAuditTone(controller.currentWord.exampleAuditStatus);
   const imageAuditTone = getHintAuditTone(controller.currentWord.exampleImageAuditStatus);
+  const hiddenExampleReviewState = getHiddenHintReviewState(
+    controller.currentWord.exampleAuditStatus,
+    '例文',
+  );
+  const hiddenImageReviewState = getHiddenHintReviewState(
+    controller.currentWord.exampleImageAuditStatus,
+    '画像ヒント',
+  );
 
   if (controller.isFinished) {
     return (
@@ -132,6 +193,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         sessionWordCount={controller.sessionWordCount}
         earnedXP={controller.earnedXP}
         streakBonusXP={controller.streakBonusXP}
+        rewardNotice={controller.rewardNotice}
         nextReviewMessage={controller.nextReviewMessage}
         weaknessSummary={controller.weaknessSummary}
         reviewPreview={controller.reviewPreview}
@@ -147,6 +209,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     <section
       data-testid="study-card-front"
       aria-hidden={controller.isFlipped}
+      inert={controller.isFlipped}
       className="study-card-face border border-slate-200 bg-white px-5 py-5 shadow-xl transition-shadow hover:shadow-2xl sm:px-8 sm:py-8"
       onClick={controller.openBack}
     >
@@ -154,6 +217,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         <div className="flex items-center justify-between gap-3">
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
           <button
+            type="button"
+            aria-label="単語を読み上げる"
             onClick={(event) => controller.speakText(event, controller.currentWord.word)}
             className="rounded-full bg-medace-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
           >
@@ -176,6 +241,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
     <section
       data-testid="study-card-back"
       aria-hidden={!controller.isFlipped}
+      inert={!controller.isFlipped}
       className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
       onClick={controller.closeBack}
     >
@@ -187,6 +253,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
           </div>
           {!controller.isEditing ? (
             <button
+              type="button"
+              disabled={controller.isAdvancingCard}
+              aria-label={controller.isBookOwner ? '定義を編集' : '問題を報告する'}
               onClick={controller.startEditing}
               className={`rounded-full border border-medace-200 p-2 transition-colors ${controller.isBookOwner ? 'text-slate-950/70 hover:bg-medace-100 hover:text-slate-950' : 'text-slate-950/70 hover:bg-red-500/20 hover:text-red-100'}`}
               title={controller.isBookOwner ? '定義を編集' : '問題を報告する'}
@@ -195,8 +264,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
             </button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={controller.saveEditing} className="rounded-full border border-medace-200 p-2 text-green-200 transition-colors hover:bg-medace-100 hover:text-green-100"><Save className="h-4 w-4" /></button>
-              <button onClick={controller.cancelEditing} className="rounded-full border border-medace-200 p-2 text-red-200 transition-colors hover:bg-medace-100 hover:text-red-100"><X className="h-4 w-4" /></button>
+              <button type="button" aria-label="定義の変更を保存" disabled={controller.isSavingEdit} onClick={controller.saveEditing} className="rounded-full border border-medace-200 p-2 text-emerald-800 transition-colors hover:bg-medace-100 disabled:opacity-50">{controller.isSavingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}</button>
+              <button type="button" aria-label="定義の編集をキャンセル" disabled={controller.isSavingEdit} onClick={controller.cancelEditing} className="rounded-full border border-medace-200 p-2 text-red-700 transition-colors hover:bg-medace-100 disabled:opacity-50"><X className="h-4 w-4" /></button>
             </div>
           )}
         </div>
@@ -206,15 +275,20 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
               <input
                 type="text"
+                aria-label="単語"
+                disabled={controller.isSavingEdit}
                 value={controller.editWord}
                 onChange={(event) => controller.setEditWord(event.target.value)}
                 className="w-full rounded-2xl border border-medace-200 bg-white/80 p-3 text-slate-950"
               />
               <textarea
+                aria-label="単語の意味"
+                disabled={controller.isSavingEdit}
                 value={controller.editDef}
                 onChange={(event) => controller.setEditDef(event.target.value)}
                 className="h-28 w-full resize-none rounded-2xl border border-medace-200 bg-white/80 p-3 text-slate-950"
               />
+              {controller.editError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{controller.editError}</p>}
             </div>
           ) : (
             <p className="text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
@@ -241,6 +315,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                 <div className="flex items-center justify-between rounded-2xl border border-medace-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
                   <span>ヒントを表示中</span>
                   <button
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation();
                       controller.setShowHints(false);
@@ -253,7 +328,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
 
                 <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiContextLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-5 text-medace-800">
+                    <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-5 text-medace-800">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span className="text-xs">例文を作成中...</span>
                     </div>
@@ -270,8 +345,15 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                               {exampleAuditTone.label}
                             </span>
                           ) : null}
-                          <button onClick={(event) => controller.speakText(event, controller.aiContext!.english)} className="transition-colors hover:text-slate-950"><Volume2 className="h-4 w-4" /></button>
-                          {controller.canGenerateExampleHint ? (
+                          <button
+                            type="button"
+                            aria-label="例文を読み上げる"
+                            onClick={(event) => controller.speakText(event, controller.aiContext!.english)}
+                            className="transition-colors hover:text-slate-950"
+                          >
+                            <Volume2 className="h-4 w-4" />
+                          </button>
+                          {controller.canGenerateExampleHint && controller.isBookOwner ? (
                             <button
                               type="button"
                               onClick={(event) => {
@@ -291,6 +373,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                         <p className="animate-in fade-in border-t border-medace-200 pt-3 text-sm leading-relaxed text-slate-600 sm:text-base">{controller.aiContext.japanese}</p>
                       ) : (
                         <button
+                          type="button"
                           onClick={(event) => {
                             event.stopPropagation();
                             controller.setShowTranslation(true);
@@ -301,47 +384,64 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                         </button>
                       )}
                       {controller.exampleError ? (
-                        <p className="mt-3 rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                        <p role="alert" className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
                           {controller.exampleError}
                         </p>
                       ) : null}
                     </div>
                   ) : (
                     <div className="space-y-3 text-center">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">例文はまだありません</div>
+                      <div
+                        role={hiddenExampleReviewState ? 'status' : undefined}
+                        aria-live={hiddenExampleReviewState ? 'polite' : undefined}
+                        aria-label={hiddenExampleReviewState ? `${hiddenExampleReviewState.title}。${hiddenExampleReviewState.description}` : undefined}
+                        className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500"
+                      >
+                        {hiddenExampleReviewState?.title || '例文はまだありません'}
+                      </div>
+                      {hiddenExampleReviewState && exampleAuditTone ? (
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${exampleAuditTone.className}`}>
+                          {exampleAuditTone.label}
+                        </span>
+                      ) : null}
                       <p className="text-base font-semibold leading-relaxed text-slate-700 sm:text-lg">
-                        必要なときだけ、ここで新しく作れます。
+                        {hiddenExampleReviewState?.description || '必要なときだけ、ここで新しく作れます。'}
                       </p>
-                      <p className="text-sm leading-relaxed text-slate-500">
-                        「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
-                      </p>
+                      {!hiddenExampleReviewState ? (
+                        <p className="text-sm leading-relaxed text-slate-500">
+                          「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
+                        </p>
+                      ) : null}
                       {controller.exampleError ? (
-                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
                           {controller.exampleError}
                         </p>
                       ) : null}
-                      {controller.canGenerateExampleHint ? (
+                      {controller.canGenerateExampleHint && (
+                        !hiddenExampleReviewState
+                        || (hiddenExampleReviewState.canRetry && controller.isBookOwner)
+                      ) ? (
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void controller.generateExampleHint();
+                            void controller.generateExampleHint(Boolean(hiddenExampleReviewState?.canRetry));
                           }}
                           className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
                         >
                           <Sparkles className="h-4 w-4" />
-                          例文を作る
+                          {hiddenExampleReviewState?.retryLabel || '例文を作る'}
                         </button>
-                      ) : (
+                      ) : !hiddenExampleReviewState ? (
                         <p className="text-xs text-slate-500">このプランでは例文生成は利用できません。</p>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>
 
                 <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiImageLoading ? (
-                    <div className="flex flex-col items-center gap-2 py-6 text-medace-800">
+                    <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-6 text-medace-800">
                       <Loader2 className="h-5 w-5 animate-spin" />
                       <span className="text-xs text-center">画像ヒントを作成中...</span>
                     </div>
@@ -358,7 +458,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                               {imageAuditTone.label}
                             </span>
                           ) : null}
-                          {controller.canGenerateImageHint ? (
+                          {controller.canGenerateImageHint && controller.isBookOwner ? (
                             <button
                               type="button"
                               onClick={(event) => {
@@ -373,40 +473,55 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                         </div>
                       </div>
                       <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-white/70">
-                        <img src={controller.aiImage} alt="視覚的な記憶補助" className="h-full w-full object-contain" />
+                        <img src={controller.aiImage} alt={`「${controller.currentWord.word}」の画像ヒント`} className="h-full w-full object-contain" />
                       </div>
                       {controller.imageError ? (
-                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
                           {controller.imageError}
                         </p>
                       ) : null}
                     </div>
                   ) : (
                     <div className="space-y-3 text-center">
-                      <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">画像ヒントはまだありません</div>
+                      <div
+                        role={hiddenImageReviewState ? 'status' : undefined}
+                        aria-live={hiddenImageReviewState ? 'polite' : undefined}
+                        aria-label={hiddenImageReviewState ? `${hiddenImageReviewState.title}。${hiddenImageReviewState.description}` : undefined}
+                        className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500"
+                      >
+                        {hiddenImageReviewState?.title || '画像ヒントはまだありません'}
+                      </div>
+                      {hiddenImageReviewState && imageAuditTone ? (
+                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${imageAuditTone.className}`}>
+                          {imageAuditTone.label}
+                        </span>
+                      ) : null}
                       <p className="text-sm leading-relaxed text-slate-600">
-                        イメージで覚えたい単語だけ、ここで画像ヒントを作れます。
+                        {hiddenImageReviewState?.description || 'イメージで覚えたい単語だけ、ここで画像ヒントを作れます。'}
                       </p>
                       {controller.imageError ? (
-                        <p className="rounded-2xl border border-red-300/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
                           {controller.imageError}
                         </p>
                       ) : null}
-                      {controller.canGenerateImageHint ? (
+                      {controller.canGenerateImageHint && (
+                        !hiddenImageReviewState
+                        || (hiddenImageReviewState.canRetry && controller.isBookOwner)
+                      ) ? (
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void controller.generateImageHint();
+                            void controller.generateImageHint(Boolean(hiddenImageReviewState?.canRetry));
                           }}
                           className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
                         >
                           <ImageIcon className="h-4 w-4" />
-                          画像を作る
+                          {hiddenImageReviewState?.retryLabel || '画像を作る'}
                         </button>
-                      ) : (
+                      ) : !hiddenImageReviewState ? (
                         <p className="text-xs text-slate-500">画像ヒントは上位プランで利用できます。</p>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -425,14 +540,16 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         showReportModal={controller.showReportModal}
         reportReason={controller.reportReason}
         reportNotice={controller.reportNotice}
+        reportError={controller.reportError}
+        isSubmitting={controller.isSubmittingReport}
         onChangeReportReason={controller.setReportReason}
-        onCloseReportModal={() => controller.setShowReportModal(false)}
+        onCloseReportModal={() => { if (!controller.isSubmittingReport) controller.setShowReportModal(false); }}
         onSubmitReport={controller.submitReport}
         onCloseNotice={() => controller.setReportNotice(null)}
       />
 
       <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
-        <button onClick={onBack} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800">
+        <button type="button" aria-label="学習を中断してダッシュボードに戻る" onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
@@ -469,10 +586,16 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
       <MobileStickyActionBar
         className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4"
       >
-        {controller.isFlipped && !controller.isEditing ? (
+        {controller.saveError ? (
+          <div ref={controller.actionBarRef} role="alert" data-testid="study-save-error" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm text-slate-700">{controller.saveError}</p>
+            <button type="button" onClick={() => void controller.retrySave()} disabled={controller.isAdvancingCard} className="mt-3 min-h-12 w-full rounded-xl bg-medace-600 px-4 py-3 font-bold text-slate-950 disabled:opacity-60">同じ回答を保存する</button>
+          </div>
+        ) : controller.isFlipped && !controller.isEditing ? (
           <div
             ref={controller.actionBarRef}
             data-testid="study-rating-actions"
+            aria-busy={controller.isAdvancingCard}
             className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300"
           >
             {RATING_OPTIONS.map((option) => (
@@ -491,6 +614,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                 {option.icon}
               </button>
             ))}
+            {controller.isAdvancingCard && <p role="status" className="col-span-2 text-center text-xs text-slate-600 sm:col-span-4">回答を保存しています…</p>}
           </div>
         ) : (
           <div ref={controller.actionBarRef} className="flex justify-center">

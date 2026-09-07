@@ -36,7 +36,7 @@ import {
 } from '../../types';
 import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
-import { buildDashboardPrimaryMission } from './dashboard-primary-mission';
+import { buildDashboardPrimaryMission } from '../../shared/dashboardPrimaryMission';
 import { buildDashboardBookCollections, buildDashboardSnapshotModel } from './dashboard-snapshot-model';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
 import { handleGetCoachNotifications } from './organization-notification-actions';

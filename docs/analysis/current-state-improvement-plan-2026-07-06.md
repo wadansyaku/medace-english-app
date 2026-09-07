@@ -1,3 +1,5 @@
+> 履歴資料（2026-09-07に整理）。現行の計画と検証状態は [再構築計画](./rebuild-plan-2026-09-07.md) を参照。この文書の完了・本番数値は記録当時のものです。
+
 # Steady Study Current-State Review And Improvement Plan
 
 Date: 2026-07-06 JST

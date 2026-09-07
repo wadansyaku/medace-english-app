@@ -20,6 +20,7 @@ import {
 } from '../../shared/englishPractice';
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { isWorksheetQuestionMode } from '../../shared/worksheetQuestionMode';
+import { isValidStudySessionXp, MAX_STUDY_SESSION_XP, resolveXpProgress } from '../../shared/xp';
 import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
 import { getGrammarCurriculumScope } from '../../utils/grammarScope';
@@ -45,7 +46,6 @@ import {
   getLastTokyoDateKeys,
   getMasterySourceSql,
   getVisibleDueCount,
-  normalizeHistoryStatus,
   readAll,
   readFirst,
   readVisibleLearningBookRows,
@@ -53,6 +53,9 @@ import {
   type DbLearningPreferenceRow,
 } from './storage-support';
 import { HttpError } from './http';
+import { commitStudyAttempt } from './study-attempt-receipts';
+import { buildHistorySnapshotCondition } from './learning-history-state';
+import { validateStudyAttempt } from '../../shared/srs';
 import { recordCbtProblemAttempt, recordCbtScopeAttempt, recordJapaneseTranslationFeedbackEvent } from './ai-cache-cbt';
 
 const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
@@ -234,22 +237,38 @@ export const handleAddXP = async (
   user: DbUserRow,
   amount: number,
 ): Promise<{ user: UserProfile; leveledUp: boolean; }> => {
-  let xp = Number(user.stats_xp || 0);
-  let level = Number(user.stats_level || 1);
-  xp += amount;
-
-  let leveledUp = false;
-  while (xp >= level * 100) {
-    xp -= level * 100;
-    level += 1;
-    leveledUp = true;
+  if (!isValidStudySessionXp(amount)) {
+    throw new HttpError(400, `XP は 1 から ${MAX_STUDY_SESSION_XP} までの整数で指定してください。`);
   }
 
-  await env.DB.prepare(`
+  const currentXp = Number(user.stats_xp ?? 0);
+  const currentLevel = Number(user.stats_level ?? 1);
+  if (
+    !Number.isSafeInteger(currentXp)
+    || currentXp < 0
+    || !Number.isSafeInteger(currentLevel)
+    || currentLevel < 1
+    || !Number.isSafeInteger(currentLevel * 100)
+    || currentXp >= currentLevel * 100
+  ) {
+    throw new HttpError(500, 'XP状態が破損しています。');
+  }
+
+  const progress = resolveXpProgress(currentLevel, currentXp, amount);
+  if (!progress) {
+    throw new HttpError(500, 'XP状態が安全な数値範囲を超えています。');
+  }
+  const { xp, level } = progress;
+  const leveledUp = level > currentLevel;
+
+  const updateResult = await env.DB.prepare(`
     UPDATE users
     SET stats_xp = ?, stats_level = ?, updated_at = ?
-    WHERE id = ?
-  `).bind(xp, level, Date.now(), user.id).run();
+    WHERE id = ? AND stats_xp = ? AND stats_level = ?
+  `).bind(xp, level, Date.now(), user.id, currentXp, currentLevel).run();
+  if ((updateResult.meta.changes ?? 0) !== 1) {
+    throw new HttpError(409, 'XPが別のセッションで更新されました。最新状態でやり直してください。');
+  }
 
   const updated = await readFirst<DbUserRow>(env, 'SELECT * FROM users WHERE id = ?', user.id);
   if (!updated) throw new HttpError(500, 'XP更新後のユーザー取得に失敗しました。');
@@ -272,108 +291,49 @@ export const handleSaveSrsHistory = async (
   responseTimeMs = 0,
   missionAssignmentId?: string,
   taskIntentType?: LearningTaskIntentType,
-  generatedProblemId?: string,
-  grammarScopeId?: GrammarCurriculumScopeId,
-  translationFeedback?: JapaneseTranslationFeedback,
+  clientAttemptId?: string,
 ): Promise<void> => {
+  const input = { wordId: word?.id, bookId: word?.bookId, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId };
+  try { validateStudyAttempt(input); } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : '学習記録が不正です。');
+  }
   await assertBookLearningAccess(env, user, word.bookId);
   await assertWordBelongsToBook(env, word.id, word.bookId);
-  const now = Date.now();
-  const existing = await readFirst<DbHistoryRow>(
-    env,
-    'SELECT * FROM learning_histories WHERE user_id = ? AND word_id = ?',
-    user.id,
-    word.id,
-  );
-
-  let interval = existing?.interval_days || 0;
-  let easeFactor = existing?.ease_factor || 2.5;
-  const attemptCount = (existing?.attempt_count || 0) + 1;
-  const correctCount = (existing?.correct_count || 0) + (rating >= 2 ? 1 : 0);
-  const totalResponseTimeMs = (existing?.total_response_time_ms || 0) + Math.max(0, Math.round(responseTimeMs));
-
-  if (rating === 0) {
-    interval = 0;
-    easeFactor = Math.max(1.3, easeFactor - 0.2);
-  } else if (rating === 1) {
-    interval = 1;
-  } else if (rating === 2) {
-    interval = interval === 0 ? 1 : Math.ceil(interval * easeFactor);
-  } else if (rating === 3) {
-    interval = interval === 0 ? 3 : Math.ceil(interval * easeFactor * 1.3);
-    easeFactor += 0.15;
-  }
-
-  if (interval > 365) interval = 365;
-
-  const nextReviewDate = now + interval * DAY_MS;
-  const status = normalizeHistoryStatus(interval);
-
-  await env.DB.prepare(`
-    INSERT INTO learning_histories (
-      user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms, interaction_source
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id, word_id) DO UPDATE SET
-      book_id = excluded.book_id,
-      status = excluded.status,
-      last_studied_at = excluded.last_studied_at,
-      next_review_date = excluded.next_review_date,
-      interval_days = excluded.interval_days,
-      ease_factor = excluded.ease_factor,
-      correct_count = excluded.correct_count,
-      attempt_count = excluded.attempt_count,
-      total_response_time_ms = excluded.total_response_time_ms,
-      interaction_source = excluded.interaction_source
-  `).bind(
-    user.id,
-    word.id,
-    word.bookId,
-    status,
-    now,
-    nextReviewDate,
-    interval,
-    easeFactor,
-    correctCount,
-    attemptCount,
-    totalResponseTimeMs,
-    MASTERY_INTERACTION_SOURCE,
-  ).run();
-
   const [bookProgressionBand, missionAssignments] = await Promise.all([
     resolveBookProgressionBand(env, word.bookId),
     readMissionAssignmentsByStudent(env, [user.id]),
   ]);
+  if (missionAssignmentId) {
+    const ownedAssignment = await readFirst<{ id: string }>(env, `
+      SELECT a.id FROM weekly_mission_assignments a
+      JOIN weekly_missions m ON m.id = a.mission_id
+      WHERE a.id = ? AND a.student_user_id = ? AND (m.book_id IS NULL OR m.book_id = ?)
+    `, missionAssignmentId, user.id, word.bookId);
+    if (!ownedAssignment) throw new HttpError(400, '学習記録とミッションの組み合わせが一致しません。');
+  }
   const missionAssignment = missionAssignments.get(user.id);
   const effectiveMissionAssignmentId = missionAssignmentId || (
     !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === word.bookId
       ? missionAssignment?.id
       : undefined
   );
-  await appendLearningInteractionEvent(env, {
-    userId: user.id,
-    wordId: word.id,
-    bookId: word.bookId,
-    createdAt: now,
-    interactionSource: 'STUDY',
-    correct: rating >= 2,
-    rating,
-    responseTimeMs,
-    intervalDaysBefore: existing?.interval_days || 0,
-    bookProgressionBand,
+  const receipt = await commitStudyAttempt(env, user.id, input, {
     missionAssignmentId: effectiveMissionAssignmentId,
-    taskIntentType,
+    bookProgressionBand,
   });
+
+  // These derived views may be rebuilt safely after a lost response. The receipt
+  // preserves the original new/review classification and mission assignment.
   await rebuildWeaknessSignalsForUser(env, user.id, user);
-
-  await touchWeeklyMissionProgressFromStudy(env, user, {
-    wordId: word.id,
-    bookId: word.bookId,
-    assignmentId: effectiveMissionAssignmentId,
-    existingWasStudy: Boolean(existing?.interaction_source === MASTERY_INTERACTION_SOURCE),
-    studiedAt: now,
-  });
-
+  if (receipt.mission_assignment_id) {
+    await touchWeeklyMissionProgressFromStudy(env, user, {
+      wordId: receipt.word_id,
+      bookId: receipt.book_id,
+      assignmentId: receipt.mission_assignment_id || undefined,
+      existingWasStudy: Boolean(receipt.existing_was_study),
+      studiedAt: receipt.created_at,
+    });
+  }
   await rebuildOrganizationKpiForUser(env, user.id, getLastTokyoDateKeys(4));
 };
 
@@ -434,11 +394,12 @@ export const handleRecordQuizAttempt = async (
     now,
   });
 
-  await env.DB.prepare(`
+  const snapshot = buildHistorySnapshotCondition(user.id, wordId, existing);
+  const historyWrite = await env.DB.prepare(`
     INSERT INTO learning_histories (
       user_id, word_id, book_id, status, last_studied_at, next_review_date,
       interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms, interaction_source
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${snapshot.sql}
     ON CONFLICT(user_id, word_id) DO UPDATE SET
       book_id = excluded.book_id,
       status = excluded.status,
@@ -463,7 +424,11 @@ export const handleRecordQuizAttempt = async (
     nextHistory.attemptCount,
     nextHistory.totalResponseTimeMs,
     nextHistory.interactionSource || null,
+    ...snapshot.bindings,
   ).run();
+  if (historyWrite.meta.changes !== 1) {
+    throw new HttpError(409, '学習記録が別の操作で更新されました。最新状態でやり直してください。');
+  }
 
   const [bookProgressionBand, missionAssignments] = await Promise.all([
     resolveBookProgressionBand(env, bookId),
@@ -742,6 +707,7 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
     env.DB.prepare('DELETE FROM weekly_mission_assignments'),
     env.DB.prepare('DELETE FROM weekly_missions'),
     env.DB.prepare('DELETE FROM student_weakness_signals'),
+    env.DB.prepare('DELETE FROM study_attempt_receipts'),
     env.DB.prepare('DELETE FROM learning_interaction_events'),
     env.DB.prepare('DELETE FROM english_practice_attempts'),
     env.DB.prepare('DELETE FROM word_reports'),

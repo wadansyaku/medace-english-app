@@ -1,23 +1,18 @@
 import React from 'react';
 
 import {
-  MissionNextActionType,
-  MissionProgressEventType,
   RECOMMENDED_ACTION_TYPE_LABELS,
-  RecommendedActionType,
   UserGrade,
-  type LearningTaskIntent,
   type UserProfile,
 } from '../../types';
 import type { AnnouncementFeedController } from '../../hooks/useAnnouncementFeed';
 import type { useDashboardSectionNavigation } from '../../hooks/useDashboardSectionNavigation';
 import type { useStudentDashboardController } from '../../hooks/useStudentDashboardController';
 import type {
-  StudentDashboardLearningRouteId,
   StudentDashboardTaskId,
   useStudentDashboardViewModel,
 } from '../../hooks/useStudentDashboardViewModel';
-import { workspaceService } from '../../services/workspace';
+import type { StudentDashboardSectionId } from '../../shared/studentDashboardCommand';
 import StudyCompanion from '../StudyCompanion';
 import MotivationBoard from '../MotivationBoard';
 import WritingStudentSection from '../WritingStudentSection';
@@ -32,12 +27,7 @@ import DashboardPlanSection from './DashboardPlanSection';
 import DashboardProgressSection from './DashboardProgressSection';
 import DashboardTaskOverviewRail from './DashboardTaskOverviewRail';
 import DashboardWeaknessSection from './DashboardWeaknessSection';
-import {
-  createCoachTaskIntent,
-  createMissionTaskIntent,
-  createTodayFocusTaskIntent,
-  createWeaknessTaskIntent,
-} from '../../shared/learningTask';
+
 
 type StudentDashboardController = ReturnType<typeof useStudentDashboardController>;
 type StudentDashboardViewModel = ReturnType<typeof useStudentDashboardViewModel>;
@@ -52,9 +42,9 @@ interface StudentDashboardSectionsProps {
   isStudentMobileShell: boolean;
   navigation: StudentDashboardSectionNavigation;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
-  onSelectLearningRoute: (routeId: StudentDashboardLearningRouteId) => void;
+  onSelectTask: (taskId: StudentDashboardTaskId) => void;
+  onOpenSection: (sectionId: StudentDashboardSectionId) => void;
   onSelectPracticeLane: (lane: FocusedPracticeLane) => void;
-  onStartTask: (task: LearningTaskIntent) => void;
 }
 
 export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> = ({
@@ -65,153 +55,15 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   isStudentMobileShell,
   navigation,
   onSelectBook,
-  onSelectLearningRoute,
+  onSelectTask,
+  onOpenSection,
   onSelectPracticeLane,
-  onStartTask,
 }) => {
   const coachActionType = viewModel.coachRecommendedActionType;
   const primaryMission = viewModel.primaryMission;
-  const topWeakness = viewModel.weaknessProfile?.topWeaknesses[0] || null;
-  const todayPreferredBookIds = React.useMemo(
-    () => viewModel.plannedBooks.map((book) => book.id),
-    [viewModel.plannedBooks],
-  );
-  const todayTaskIntent = React.useMemo(
-    () => createTodayFocusTaskIntent({ preferredBookIds: todayPreferredBookIds }),
-    [todayPreferredBookIds],
-  );
-  const weaknessTaskIntent = React.useMemo(() => createWeaknessTaskIntent(topWeakness), [topWeakness]);
-  const missionTaskIntent = React.useMemo(
-    () => (primaryMission?.nextTaskIntent || (primaryMission ? createMissionTaskIntent(primaryMission) : null)),
-    [primaryMission],
-  );
-  const coachTaskIntent = React.useMemo(() => (
-    createCoachTaskIntent({
-      recommendedActionType: coachActionType,
-      hasLearningPlan: Boolean(viewModel.learningPlan),
-    })
-  ), [coachActionType, viewModel.learningPlan]);
-
-  const handlePrimaryMissionAction = React.useCallback(async () => {
-    if (primaryMission?.assignmentId) {
-      try {
-        await workspaceService.updateMissionProgress(primaryMission.assignmentId, MissionProgressEventType.OPENED);
-      } catch (missionError) {
-        console.error(missionError);
-      }
-    }
-
-    if (primaryMission?.nextActionType === MissionNextActionType.OPEN_PLAN) {
-      controller.setShowPlanEditModal(true);
-      return;
-    }
-    if (primaryMission?.nextActionType === MissionNextActionType.OPEN_WRITING) {
-      if (viewModel.canShowWritingSection) {
-        navigation.scrollToSection(navigation.writingSectionRef);
-        return;
-      }
-      controller.setShowPlanEditModal(true);
-      return;
-    }
-    if (!viewModel.hasStudyBooks) {
-      controller.setShowCreateModal(true);
-      return;
-    }
-    if (missionTaskIntent) {
-      onStartTask(missionTaskIntent);
-      return;
-    }
-    controller.setShowPlanEditModal(true);
-  }, [
-    controller,
-    missionTaskIntent,
-    navigation,
-    onStartTask,
-    primaryMission,
-    viewModel.canShowWritingSection,
-    viewModel.hasStudyBooks,
-  ]);
-
-  const handleCoachPrimaryAction = React.useCallback(() => {
-    if (coachActionType === RecommendedActionType.OPEN_PLAN) {
-      controller.setShowPlanEditModal(true);
-      return;
-    }
-    if (coachTaskIntent) {
-      onStartTask(coachTaskIntent);
-    }
-  }, [coachActionType, coachTaskIntent, controller, onStartTask]);
-
-  const scrollToDashboardElement = React.useCallback((testId: string) => {
-    const element = document.querySelector(`[data-testid="${testId}"]`);
-    if (element instanceof HTMLElement) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, []);
-  const scrollToDashboardElementAfterRender = React.useCallback((testId: string) => {
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(() => scrollToDashboardElement(testId));
-      return;
-    }
-    scrollToDashboardElement(testId);
-  }, [scrollToDashboardElement]);
-
-  const handlePrimaryTaskAction = React.useCallback(() => {
-    const primaryTask = viewModel.primaryTask;
-    if (!primaryTask) {
-      onSelectLearningRoute(viewModel.primaryLearningRouteId);
-      return;
-    }
-
-    if (primaryTask.id === 'coach') {
-      handleCoachPrimaryAction();
-      return;
-    }
-    if (primaryTask.id === 'mission') {
-      void handlePrimaryMissionAction();
-      return;
-    }
-    if (primaryTask.id === 'writing' && viewModel.hasActionableWriting) {
-      void handlePrimaryMissionAction();
-      return;
-    }
-
-    if (primaryTask.routeId) {
-      onSelectLearningRoute(primaryTask.routeId);
-      return;
-    }
-
-    if (primaryTask.id === 'plan') {
-      controller.setShowPlanEditModal(true);
-      return;
-    }
-    if (primaryTask.id === 'library') {
-      navigation.scrollToSection(navigation.librarySectionRef);
-      return;
-    }
-    if (primaryTask.id === 'progress') {
-      controller.setShowProgressDetails(true);
-      scrollToDashboardElementAfterRender('dashboard-progress-section');
-      return;
-    }
-    if (primaryTask.id === 'account') {
-      controller.setShowAccountDetails(true);
-      scrollToDashboardElementAfterRender('dashboard-account-section');
-      return;
-    }
-
-    onSelectLearningRoute(viewModel.primaryLearningRouteId);
-  }, [
-    controller,
-    handleCoachPrimaryAction,
-    handlePrimaryMissionAction,
-    navigation,
-    onSelectLearningRoute,
-    scrollToDashboardElementAfterRender,
-    viewModel.hasActionableWriting,
-    viewModel.primaryLearningRouteId,
-    viewModel.primaryTask,
-  ]);
+  const handlePrimaryMissionAction = () => onSelectTask('mission');
+  const handleCoachPrimaryAction = () => onSelectTask('coach');
+  const handlePrimaryTaskAction = () => onSelectTask(viewModel.primaryTask?.id || 'today');
 
   const weaknessSection = (
     <div
@@ -222,14 +74,8 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     >
       <DashboardWeaknessSection
         weaknessProfile={viewModel.weaknessProfile}
-        onStartFocusQuest={() => {
-          if (viewModel.hasStudyBooks) {
-            onStartTask(weaknessTaskIntent);
-            return;
-          }
-          controller.setShowCreateModal(true);
-        }}
-        onOpenPlan={() => controller.setShowPlanEditModal(true)}
+        onStartFocusQuest={() => onSelectTask('weakness')}
+        onOpenPlan={() => onSelectTask('plan')}
       />
     </div>
   );
@@ -271,9 +117,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         latestNotification={viewModel.latestCoachNotification}
         notifications={viewModel.coachNotifications}
         isCompact={isStudentMobileShell}
-        primaryActionLabel={coachTaskIntent?.label || (coachActionType
-          ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType]
-          : null)}
+        primaryActionLabel={coachActionType ? RECOMMENDED_ACTION_TYPE_LABELS[coachActionType] : null}
         onPrimaryAction={coachActionType
           ? handleCoachPrimaryAction
           : null}
@@ -297,7 +141,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         generatingPlan={controller.generatingPlan}
         hasStudyBooks={viewModel.hasStudyBooks}
         isCompact={isStudentMobileShell}
-        onEditPlan={() => controller.setShowPlanEditModal(true)}
+        onEditPlan={() => onSelectTask('plan')}
         onGeneratePlan={controller.handleGeneratePlan}
       />
     </div>
@@ -369,7 +213,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
       />
     </div>
   ) : null;
-  const announcementSection = !isStudentMobileShell ? (
+  const announcementSection = !isStudentMobileShell && announcementFeed.feed.announcements.length > 0 ? (
     <div key="announcement" data-testid="dashboard-announcements-section">
       <DashboardAnnouncementSection feed={announcementFeed.feed} />
     </div>
@@ -384,7 +228,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         dailyGoal={viewModel.todayWordGoal}
         weeklyGoal={viewModel.weeklyGoal}
         stabilizedWords={viewModel.stabilizedWords}
-        onStartQuest={() => onStartTask(todayTaskIntent)}
+        onStartQuest={() => onSelectTask('today')}
       />
     </div>
   ) : null;
@@ -397,7 +241,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   const sectionByTaskId: Partial<Record<StudentDashboardTaskId, React.ReactNode>> = {
     coach: coachSection,
     mission: missionSection,
-    weakness: weaknessSection,
+    weakness: viewModel.hasStudyBooks ? weaknessSection : null,
     writing: writingSection,
   };
   const usedPrimarySectionIds = new Set<StudentDashboardTaskId>();
@@ -410,17 +254,26 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     const section = sectionByTaskId[task.id];
     if (!section || usedPrimarySectionIds.has(task.id)) return [];
     usedPrimarySectionIds.add(task.id);
-    return [section];
+    if (task.id === viewModel.primaryTask?.id) return [section];
+    return [
+      <details key={task.id} data-testid={`dashboard-task-details-${task.id}`} className="group min-w-0 rounded-lg border border-slate-200 bg-white p-3">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-bold text-slate-800">
+          <span>{task.title}</span>
+          <span className="shrink-0 text-xs text-slate-500">{task.stateLabel}</span>
+        </summary>
+        <div className="mt-3">{section}</div>
+      </details>,
+    ];
   });
   const sectionByReferenceTaskId: Partial<Record<StudentDashboardTaskId, React.ReactNode>> = {
-    weakness: weaknessSection,
+    weakness: viewModel.hasStudyBooks ? weaknessSection : null,
     writing: writingSection,
-    plan: planSection,
+    plan: viewModel.hasStudyBooks ? planSection : null,
     library: librarySection,
-    progress: progressSection,
+    progress: viewModel.hasStudyBooks || viewModel.weekTotal > 0 ? progressSection : null,
     announcements: announcementSection,
     companion: companionSection,
-    motivation: motivationSection,
+    motivation: viewModel.hasStudyBooks ? motivationSection : null,
     account: isStudentMobileShell ? null : accountSection,
   };
   const referenceShortcutTasks = viewModel.referenceTasks.filter((task) => (
@@ -459,80 +312,11 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
   };
 
   const scrollToTaskSection = (taskId: StudentDashboardTaskId) => {
-    switch (taskId) {
-      case 'coach':
-        navigation.scrollToSection(navigation.coachSectionRef);
-        return;
-      case 'mission':
-        navigation.scrollToSection(navigation.missionSectionRef);
-        return;
-      case 'writing':
-        navigation.scrollToSection(navigation.writingSectionRef);
-        return;
-      case 'weakness':
-        navigation.scrollToSection(navigation.weaknessSectionRef);
-        return;
-      case 'plan':
-        navigation.scrollToSection(navigation.planSectionRef);
-        return;
-      case 'library':
-        navigation.scrollToSection(navigation.librarySectionRef);
-        return;
-      case 'englishPractice':
-        onSelectPracticeLane(viewModel.practiceRecommendation.lane);
-        return;
-      case 'progress':
-        controller.setShowProgressDetails(true);
-        scrollToDashboardElementAfterRender('dashboard-progress-section');
-        return;
-      case 'account':
-        controller.setShowAccountDetails(true);
-        scrollToDashboardElementAfterRender('dashboard-account-section');
-        return;
-      case 'announcements':
-        scrollToDashboardElement('dashboard-announcements-section');
-        return;
-      case 'companion':
-        scrollToDashboardElement('dashboard-companion-section');
-        return;
-      case 'motivation':
-        scrollToDashboardElement('dashboard-motivation-section');
-        return;
-      case 'today':
-        onSelectLearningRoute('today');
-        return;
-      default:
-        return;
-    }
-  };
-
-  const runOverviewTaskAction = (taskId: StudentDashboardTaskId) => {
-    const task = viewModel.allTasks.find((candidate) => candidate.id === taskId);
-    if (taskId === 'coach') {
-      handleCoachPrimaryAction();
+    if (taskId === 'today' || taskId === 'englishPractice') {
+      onSelectTask(taskId);
       return;
     }
-    if (taskId === 'mission') {
-      void handlePrimaryMissionAction();
-      return;
-    }
-    if (task?.routeId) {
-      onSelectLearningRoute(task.routeId);
-      return;
-    }
-    if (taskId === 'plan') {
-      controller.setShowPlanEditModal(true);
-      return;
-    }
-    if (taskId === 'progress') {
-      scrollToTaskSection(taskId);
-      return;
-    }
-    if (taskId === 'account') {
-      scrollToTaskSection(taskId);
-      return;
-    }
-    scrollToTaskSection(taskId);
+    onOpenSection(taskId);
   };
 
   const contextualTask = [
@@ -543,7 +327,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
       && task.id !== 'today'
       && task.id !== 'englishPractice'
       && Boolean(sectionByTaskId[task.id] || task.id === 'plan')
-  )) || viewModel.referenceTasks.find((task) => task.id === 'weakness');
+  )) || viewModel.referenceTasks.find((task) => task.id === 'weakness' && viewModel.hasStudyBooks);
 
   const contextualMobileAction: DashboardMobileQuickNavItem = contextualTask
     ? {
@@ -554,11 +338,11 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         onClick: () => scrollToTaskSection(contextualTask.id),
       }
     : {
-        id: 'weakness',
-        label: '弱点',
-        kind: 'weakness',
-        active: navigation.activeQuickNavId === 'weakness',
-        onClick: () => navigation.scrollToSection(navigation.weaknessSectionRef),
+        id: 'library',
+        label: '教材',
+        kind: 'library',
+        active: navigation.activeQuickNavId === 'library',
+        onClick: () => navigation.scrollToSection(navigation.librarySectionRef),
       };
 
   const primaryLauncherId = viewModel.primaryTask?.id || 'today';
@@ -633,7 +417,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
             : undefined}
           onStartQuest={handlePrimaryTaskAction}
           onSelectPracticeLane={onSelectPracticeLane}
-          onOpenPlan={() => controller.setShowPlanEditModal(true)}
+          onOpenPlan={() => onSelectTask('plan')}
           onGeneratePlan={controller.handleGeneratePlan}
         />
       </div>
@@ -647,8 +431,8 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         {hasPrimarySupportSections && (
           <div data-testid="dashboard-primary-stack" className="grid min-w-0 content-start gap-4">
             <div className="flex min-w-0 items-center justify-between gap-3 px-1">
-              <h2 className="text-sm font-black text-slate-950">今やること</h2>
-              <span className="text-xs font-bold text-slate-400">優先順</span>
+              <h2 className="text-sm font-black text-slate-950">課題とサポート</h2>
+              <span className="text-xs font-bold text-slate-400">必要な内容を開く</span>
             </div>
             {primarySupportSections}
           </div>
@@ -662,10 +446,12 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           <DashboardTaskOverviewRail
             primaryTask={viewModel.primaryTask}
             urgentTasks={viewModel.urgentTasks}
-            supportingTasks={viewModel.supportingTasks}
+            supportingTasks={viewModel.supportingTasks.filter((task) => (
+              isStudentMobileShell || task.id !== 'englishPractice'
+            ))}
             referenceTasks={referenceShortcutTasks}
             showPrimaryAction={false}
-            onSelectTask={runOverviewTaskAction}
+            onSelectTask={onSelectTask}
             onSelectReferenceTask={scrollToTaskSection}
             onStartPrimary={handlePrimaryTaskAction}
           />

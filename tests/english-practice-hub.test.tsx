@@ -20,7 +20,6 @@ describe('EnglishPracticeHub', () => {
       <EnglishPracticeHub
         user={createUser()}
         onBack={() => undefined}
-        onStartVocabulary={() => undefined}
       />,
     );
 
@@ -53,6 +52,8 @@ describe('EnglishPracticeHub', () => {
 
     expect(rendered).not.toContain('今日の英語演習');
     expect(rendered).not.toContain('英語演習のおすすめ');
+    expect(rendered).not.toContain('<main');
+    expect(rendered).toContain('aria-label="英語演習"');
   });
 
   it('keeps the stable lane test ids and orange brand classes on the route shell', () => {
@@ -60,7 +61,6 @@ describe('EnglishPracticeHub', () => {
       <EnglishPracticeHub
         user={createUser()}
         onBack={() => undefined}
-        onStartVocabulary={() => undefined}
       />,
     );
 
@@ -74,6 +74,7 @@ describe('EnglishPracticeHub', () => {
     });
 
     expect(rendered).not.toContain('data-testid="english-practice-lane-overview"');
+    expect(rendered).toMatch(/data-testid="english-practice-lane-grammar"[^>]*aria-pressed="true"/);
 
     [
       'border-medace-100',
@@ -90,7 +91,6 @@ describe('EnglishPracticeHub', () => {
       <EnglishPracticeHub
         user={createUser()}
         variant="embedded"
-        onStartVocabulary={() => undefined}
       />,
     );
 
@@ -111,7 +111,6 @@ describe('EnglishPracticeHub', () => {
         initialLane="grammar"
         closeLabel="ホームに戻る"
         onClose={() => undefined}
-        onStartVocabulary={() => undefined}
       />,
     );
 
@@ -130,7 +129,6 @@ describe('EnglishPracticeHub', () => {
         user={createUser()}
         initialLane="writing"
         onBack={() => undefined}
-        onStartVocabulary={() => undefined}
       />,
     );
 
@@ -139,5 +137,7 @@ describe('EnglishPracticeHub', () => {
     expect(rendered).toContain('意見論述');
     expect(rendered).toContain('eiken-writing-draft');
     expect(rendered).toContain('eiken-writing-word-count');
+    expect(rendered).toContain('aria-label="英検ライティング答案"');
+    expect(rendered).toContain('role="progressbar"');
   });
 });

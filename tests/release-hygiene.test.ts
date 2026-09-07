@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
@@ -45,6 +46,29 @@ const readWorkflowStep = (source: string, stepName: string): string => {
   if (start < 0) throw new Error(`Missing workflow step ${stepName}`);
   const next = source.indexOf('\n      - name:', start + 1);
   return source.slice(start, next < 0 ? source.length : next);
+};
+
+const readSmokeTestDeclarations = (relativePath: string) => {
+  const source = ts.createSourceFile(relativePath, readText(relativePath), ts.ScriptTarget.Latest, true);
+  const declarations: { title: string; body: string; file: string }[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && node.expression.text === 'test'
+      && node.arguments.length >= 2
+      && ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      declarations.push({
+        title: node.arguments[0].text,
+        body: node.getText(source),
+        file: relativePath,
+      });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return declarations;
 };
 
 type PackageJson = {
@@ -135,7 +159,7 @@ describe('release hygiene contracts', () => {
     ]);
   });
 
-  it('keeps CI sentinel smoke enabled for pull requests without Cloudflare credentials', () => {
+  it('runs PR sentinel once in the required verify check and keeps standalone smoke manual', () => {
     const ciWorkflow = readText('.github/workflows/ci.yml');
     const browserSmokeWorkflow = readText('.github/workflows/browser-smoke.yml');
     const installStep = readWorkflowStep(ciWorkflow, 'Install Playwright browser for sentinel smoke');
@@ -152,13 +176,47 @@ describe('release hygiene contracts', () => {
       'run: node scripts/run-smoke-tests.mjs --suite sentinel',
       'name: API integration tests',
     ]);
-    expect(installStep).not.toContain("if: github.event_name == 'push'");
-    expect(sentinelStep).not.toContain("if: github.event_name == 'push'");
+    expect(installStep).not.toContain('if:');
+    expect(sentinelStep).not.toContain('if:');
     expect(sentinelStep).not.toContain('CLOUDFLARE_API_TOKEN');
     expect(sentinelStep).not.toContain('CLOUDFLARE_ACCOUNT_ID');
     expect(sentinelStep).toContain("SMOKE_SKIP_BUILD: '1'");
-    expect(browserSmokeWorkflow).toMatch(/pull_request:\n\s+branches:/);
+    expect(ciWorkflow).toMatch(/^name: CI\n/);
+    expect(ciWorkflow).toMatch(/jobs:\n  verify:/);
+    expect(browserSmokeWorkflow).toMatch(/^name: Smoke Sentinel\n/);
+    expect(browserSmokeWorkflow).toMatch(/jobs:\n  smoke:/);
+    expect(browserSmokeWorkflow).not.toContain('pull_request:');
+    expect(browserSmokeWorkflow).toContain('workflow_dispatch:');
+    expect(readWorkflowStep(browserSmokeWorkflow, 'Run browser smoke tests')).not.toContain('if:');
     expect(browserSmokeWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite "${{ inputs.suite || \'sentinel\' }}"');
+    expect(ciWorkflow).toContain('group: ci-${{ github.event.pull_request.number || github.ref }}');
+    expect(browserSmokeWorkflow).toContain('group: browser-smoke-manual-${{ github.ref }}');
+  });
+
+  it('keeps remote credentials out of local verification steps', () => {
+    const workflows = [
+      '.github/workflows/ci.yml',
+      '.github/workflows/deploy-pages.yml',
+      '.github/workflows/deploy-pages-preview.yml',
+    ];
+    for (const workflowPath of workflows) {
+      const workflow = readText(workflowPath);
+      const jobHeader = workflow.slice(0, workflow.indexOf('\n    steps:'));
+      expect(jobHeader).not.toContain('GH_TOKEN:');
+      expect(jobHeader).not.toContain('${{ secrets.');
+      const localSteps = ['Install dependencies', 'Security audit', 'Fast verification gate', 'API integration tests'];
+      if (workflowPath !== '.github/workflows/ci.yml') localSteps.push('Full smoke suite');
+      for (const name of localSteps) {
+        expect(readWorkflowStep(workflow, name)).not.toContain('${{ secrets.');
+        expect(readWorkflowStep(workflow, name)).not.toContain('GH_TOKEN:');
+      }
+      const doctor = readWorkflowStep(workflow, 'Verify GitHub and Cloudflare configuration');
+      expect(doctor).toContain('GH_TOKEN: ${{ github.token }}');
+      expect(doctor).toContain('CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}');
+    }
+    const browserSmoke = readText('.github/workflows/browser-smoke.yml');
+    expect(browserSmoke).not.toContain('${{ secrets.');
+    expect(browserSmoke).not.toContain('GH_TOKEN:');
   });
 
   it('does not reuse a Cloudflare smoke build for the IDB fallback suite', () => {
@@ -189,6 +247,12 @@ describe('release hygiene contracts', () => {
     expect(packageJson.scripts['release:gate:local-only']).toBe('node scripts/run-release-gate-local.mjs --scope local-only');
     expect(packageJson.scripts['release:gate:remote-readonly']).toBe('node scripts/run-release-gate-local.mjs --scope remote-readonly');
     expect(packageJson.scripts['security:audit']).toBe('node scripts/check-npm-audit.mjs');
+    expect(packageJson.scripts['quality:unused']).toBe('node scripts/check-unused-source.mjs');
+    expect(packageJson.scripts['quality:architecture']).toBe('node scripts/check-architecture.mjs');
+    expect(packageJson.scripts['clean:artifacts']).toBe('node scripts/clean-local-artifacts.mjs');
+    expect(packageJson.scripts['clean:artifacts:apply']).toBe('node scripts/clean-local-artifacts.mjs --apply');
+    expect(packageJson.scripts['verify:fast']).toContain('npm run quality:unused');
+    expect(packageJson.scripts['verify:fast']).toContain('npm run quality:architecture');
     expect(packageJson.scripts['content:qa:gate']).toBe('node scripts/check-content-qa-report.mjs');
     expect(packageJson.scripts['content:source-ledger:d1']).toBe('node scripts/analysis/check-d1-material-source-ledger.mjs');
     expect(packageJson.scripts['ops:b2b-activation:d1']).toBe('node scripts/analysis/check-d1-b2b-activation.mjs');
@@ -200,6 +264,8 @@ describe('release hygiene contracts', () => {
     expect(localGate).toContain('CLOUDFLARE_D1_DATABASE');
     expect(localGate).toContain('CF_D1_DATABASE');
     expect(localGate).toContain("'scripts/check-npm-audit.mjs'");
+    expect(localGate).toContain("'scripts/check-unused-source.mjs'");
+    expect(localGate).toContain("'scripts/check-architecture.mjs'");
     expect(localGate).toContain("'scripts/run-smoke-tests.mjs', '--suite', 'full'");
     expect(localGate).toContain("'scripts/cf-doctor.mjs'");
     expect(localGate).toContain("'scripts/analysis/run-d1-content-qa.mjs'");
@@ -213,6 +279,8 @@ describe('release hygiene contracts', () => {
       'Migration filename check',
       'Local D1 migration replay',
       'npm security audit',
+      'Production source reachability',
+      'Architecture boundaries and circular imports',
       'TypeScript typecheck',
       'Vitest unit suite',
       'Build app for API integration tests',
@@ -298,9 +366,6 @@ describe('release hygiene contracts', () => {
     expect(previewWorkflow).toContain('name: preview-release-gate-evidence');
     expect(previewWorkflow).toContain('## Preview Release Gate Evidence');
     expect(productionWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
-    expect(productionWorkflow).toContain('public guide keeps the business role previews visible');
-    expect(productionWorkflow).toContain('public role pages always emit a noindex robots tag and service admin action stays safe');
-    expect(productionWorkflow).toContain('service admin dedicated access link resolves to the protected admin entrypoint');
     expect(productionWorkflow).toContain('name: Upload production deployed smoke artifacts');
     expect(productionWorkflow).toContain('name: production-deployed-smoke-artifacts');
     expect(previewWorkflow).toContain('run: node scripts/run-smoke-tests.mjs --suite sentinel --grep');
@@ -327,14 +392,15 @@ describe('release hygiene contracts', () => {
     expect(productionWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
     expect(previewWorkflow).not.toContain('node node_modules/playwright/cli.js test --config=playwright.smoke.config.ts --grep');
 
-    expect(readme).toContain('npm run release:gate:local');
-    expect(readme).toContain('npm security audit');
-    expect(readme).toContain('`security:audit`');
-    expect(readme).toContain('node scripts/run-smoke-tests.mjs --suite full');
-    expect(readme).toContain('content QA gate');
-    expect(readme).toContain('source ledger gate');
-    expect(readme).toContain('B2B activation integrity gate');
-    expect(readme).toContain('ops:production-baseline:d1');
+    // README is an entry point; detailed release instructions have one owner.
+    expect(readme).toContain('./docs/deployment-ops-runbook.md');
+    expect(readme).toContain('./docs/environment-setup.md');
+    expect(readme).toContain('release:gate:local-only');
+    expect(readme).toContain('release:gate:remote-readonly');
+    expect(readme).toContain('npm run security:audit');
+    const setupReference = readText('docs/environment-setup.md');
+    expect(setupReference).toContain('npm run release:gate:local');
+    expect(setupReference).toContain('node scripts/run-smoke-tests.mjs --suite full');
     expect(runbook).toContain('npm run release:gate:local');
     expect(runbook).toContain('`security:audit`');
     expect(runbook).toContain('node scripts/run-smoke-tests.mjs --suite full');
@@ -344,10 +410,49 @@ describe('release hygiene contracts', () => {
     expect(runbook).toContain('ops:production-baseline:d1');
   });
 
+  it.each([
+    {
+      environment: 'production',
+      workflow: '.github/workflows/deploy-pages.yml',
+      expectedCount: 5,
+      evidence: ['start-first-home', '/api/session', 'business-role-preview-instructor', 'business-role-preview-admin', 'business-role-preview-service-admin', 'admin-demo-password', '/admin-access'],
+    },
+    {
+      environment: 'preview',
+      workflow: '.github/workflows/deploy-pages-preview.yml',
+      expectedCount: 4,
+      evidence: ['start-first-home', '/api/session', 'preview-deployment-banner', 'writing-student-section'],
+    },
+  ])('selects every intended $environment deployed smoke from registered test declarations', ({ environment, workflow, expectedCount, evidence }) => {
+    const step = readWorkflowStep(readText(workflow), `Run deployed ${environment} smoke`);
+    expect(step).toContain('--suite sentinel');
+    const grep = step.match(/--grep "([^"\n]+)"/)?.[1];
+    expect(grep).toBeDefined();
+    const selectors = grep!.split('|');
+    expect(selectors).toHaveLength(expectedCount);
+    expect(new Set(selectors).size).toBe(expectedCount);
+
+    const registeredTests = readArrayConst(readText('scripts/run-smoke-tests.mjs'), 'sentinelFiles')
+      .flatMap(readSmokeTestDeclarations);
+    // Each alternative must select one real test; a partially stale grep must fail.
+    for (const selector of selectors) {
+      const matches = registeredTests.filter(({ title }) => new RegExp(selector).test(title));
+      expect(matches, `${environment} selector: ${selector}`).toHaveLength(1);
+    }
+    const selected = registeredTests.filter(({ title }) => new RegExp(grep!).test(title));
+    expect(selected).toHaveLength(expectedCount);
+    expect(selected.every(({ file }) => file === 'tests/smoke/public.smoke.spec.ts')).toBe(true);
+    // Keep the public role guards and preview read checks when tests are renamed.
+    const selectedBodies = selected.map(({ body }) => body).join('\n');
+    for (const marker of evidence) expect(selectedBodies).toContain(marker);
+  });
+
   it('keeps production and preview deploys on the protected main path with pre-deploy runtime metadata', () => {
     const productionWorkflow = readText('.github/workflows/deploy-pages.yml');
     const previewWorkflow = readText('.github/workflows/deploy-pages-preview.yml');
 
+    // A new main push must not interrupt a release between migration and deployment.
+    expect(productionWorkflow).toMatch(/group: pages-production\n\s+cancel-in-progress: false/);
     expect(productionWorkflow).toMatch(/branches:\n\s+- main\n/);
     expect(productionWorkflow).not.toMatch(/branches:\n(?:\s+- .+\n)*\s+- master\n/);
     expect(productionWorkflow).toContain("github.ref_name == 'main'");
@@ -368,6 +473,29 @@ describe('release hygiene contracts', () => {
     ]);
     expect(productionWorkflow).toContain('PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: ${{ github.sha }}');
     expect(previewWorkflow).toContain('PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: ${{ github.sha }}');
+  });
+
+  it('publishes only aggregate content QA evidence in each deployment environment', () => {
+    for (const [workflow, environment] of [
+      ['.github/workflows/deploy-pages.yml', 'production'],
+      ['.github/workflows/deploy-pages-preview.yml', 'preview'],
+    ]) {
+      const step = readWorkflowStep(readText(workflow), `Generate ${environment} content QA report`);
+      expect(step).toContain('--summary-only');
+      expect(step).not.toContain('--raw-output');
+    }
+  });
+
+  it('records the recovery bookmark before migration even if a later deployment step fails', () => {
+    const workflow = readText('.github/workflows/deploy-pages.yml');
+    const bookmarkStep = readWorkflowStep(workflow, 'Capture production D1 recovery bookmark');
+    expect(bookmarkStep).toContain('$GITHUB_STEP_SUMMARY');
+    expect(bookmarkStep).toContain('$bookmark');
+    expectTextInOrder(workflow, [
+      'name: Capture production D1 recovery bookmark',
+      '## Production D1 Recovery Bookmark',
+      'name: Apply remote D1 migrations',
+    ]);
   });
 
   it('keeps release scripts referenced by package.json tracked in git', () => {

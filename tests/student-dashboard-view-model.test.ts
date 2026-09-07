@@ -219,6 +219,18 @@ describe('useStudentDashboardViewModel', () => {
       primaryLearningRouteId: 'writing',
     },
     {
+      label: 'writing remains accessible without a vocabulary book',
+      input: { hasStudyBooks: false, hasActionableWriting: true },
+      primaryTaskId: 'writing',
+      primaryLearningRouteId: 'writing',
+    },
+    {
+      label: 'mission material correction remains accessible without a vocabulary book',
+      input: { hasStudyBooks: false, hasActiveMission: true },
+      primaryTaskId: 'mission',
+      primaryLearningRouteId: 'mission',
+    },
+    {
       label: 'active mission',
       input: { hasActiveMission: true, hasActionableCoachNotification: true },
       primaryTaskId: 'mission',
@@ -461,6 +473,41 @@ describe('useStudentDashboardViewModel', () => {
       metricLabel: 'スマホ学習の意見文',
       stateLabel: '未提出',
     });
+  });
+
+  it('keeps the writing label and command consistent while vocabulary remains in the mission', () => {
+    const viewModel = useStudentDashboardViewModel({
+      user: { ...baseUser, subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationName: 'School' },
+      snapshot: buildSnapshot({
+        accountOverview: null,
+        officialBooks: [makeBook('book-1', 'Core 1')],
+        primaryMission: makeMission({ writingRequired: true, writingPromptTitle: '意見文' }),
+      }),
+    });
+    expect(viewModel.primaryTask).toMatchObject({
+      id: 'writing', ctaLabel: '英作文を提出',
+      command: { type: 'open_section', sectionId: 'writing' },
+    });
+    expect(viewModel.allTasks.find((task) => task.id === 'mission')?.command).toMatchObject({
+      type: 'start_learning', task: { mode: 'study' },
+    });
+    expect(viewModel.heroMetrics[0].helper).toBe('英作文を提出');
+  });
+
+  it('uses the same actionable coach message for the hero, task, and detailed card', () => {
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot: buildSnapshot({
+        officialBooks: [makeBook('book-1', 'Core 1')],
+        coachNotifications: [
+          makeCoachNotification({ id: 2, message: '完了したメッセージ', interventionOutcome: InterventionOutcome.REACTIVATED }),
+          makeCoachNotification({ id: 1, message: '現在の復習アドバイス', interventionOutcome: InterventionOutcome.PENDING }),
+        ],
+      }),
+    });
+    expect(viewModel.latestCoachNotification?.message).toBe('現在の復習アドバイス');
+    expect(viewModel.primaryTask?.body).toBe(viewModel.latestCoachNotification?.message);
+    expect(viewModel.heroCopy).toBe(viewModel.primaryTask?.body);
   });
 
   it('keeps mission ahead of ordinary daily study when a non-writing mission is active', () => {

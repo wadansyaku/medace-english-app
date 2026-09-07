@@ -17,7 +17,7 @@
 
 Gate naming:
 
-- `local-only`: local files、一時 D1、local build output、local test server だけで完結する確認。migration filename check、local D1 migration replay、typecheck、unit tests、API integration tests、local smoke suites が該当します。
+- `local-only`: local files、一時 D1、local build output、local test server だけで完結する確認。migration filename check、local D1 migration replay、production source reachability、typecheck、unit tests、API integration tests、local smoke suites が該当します。
 - `remote-readonly`: GitHub、Cloudflare、remote D1 を読みますが、preview / production を変更しない確認。`cf:doctor`、remote D1 content QA、source ledger gate、B2B activation integrity gate、production baseline report が該当します。
 - `release`: preview / production の remote migration、Pages deploy、deployed smoke、rollback bookmark 採取など、remote state を進める手順。GitHub Actions の release workflow を正規経路にします。
 
@@ -27,7 +27,12 @@ Gate naming:
 4. `main` へ merge すると `Deploy Pages` が production bookmark を採取し、remote migration と Pages deploy を実行する。
 5. job summary に記録された production bookmark を DB rollback の起点として保存する。
 
+`verify:fast` は `quality:unused` と `quality:architecture`（依存境界と循環）を含みます。Vite の `index.tsx` または Pages Functions の `functions/api/[[path]].ts` から static internal import（relative import と `@/` alias）、re-export、type import、literal・同一ディレクトリ内 template dynamic import、`import.meta.glob`、`new URL(..., import.meta.url)` Worker 参照で到達しない production JS/TS source は release candidate に残しません。CSS / public assets はこの JS/TS graph の対象外です。local artifact cleanup は deploy gate と分離し、`clean:artifacts` の dry-run を確認してから `clean:artifacts:apply` を使います。cleanup は列挙済みの `dist/`、`_worker.bundle` file、`test-results/`、`test-results-rerun/` と保護領域外の小さなキャッシュだけを対象とし、symlink は追跡しません。`node_modules`、`.wrangler`、`tmp`、`output`、`.playwright*` は対象にしません。
+
 ## Production Baseline
+
+- 公開CIのContent QA証拠は `--summary-only` を指定し、教材名・単語・語義・例文・識別子を含めない集計だけを保存します。`--compact` 単独は整形の省略であり、秘匿化ではありません。品質判定は同じsummaryを用います。
+- production baselineの標準runnerは組織名・教材名も含みます。公開資料へ流用せず、配備前後の保存確認には個人値を含まないCOUNT集計を使います。
 
 - 大きな product / B2B /教材判断の前後では、`npm run ops:production-baseline:d1 -- --remote --database medace-db --output tmp/production-baseline.json` を実行して read-only baseline を保存します。
 - baseline runner は user mix、organization mix、catalog / hint coverage、learning activity、writing / mission / notification、integrity、recency marker をまとめて出力し、D1 query failure や schema drift は non-zero exit にします。
@@ -35,13 +40,25 @@ Gate naming:
 
 ## Smoke Suites
 
+- PR の sentinel は必須 `CI / verify` が担当します。`browser-smoke.yml` は `workflow_dispatch` のみで、手動の sentinel/full 追加確認に使います。preview/prod の full gate は配備候補ごとに維持します。
+- ローカル API/smoke step は Cloudflare credential を受け取りません。GitHub token は必要なdoctor stepへ限定します。
+- 2026-09-07追加: dashboard取得失敗の回復、Study読込失敗、連打、保存済み応答の喪失、XP未確認を実画面で検証します。
+
 - `sentinel`: PR の高速回帰。public / student の代表フローだけを短く確認します。
 - `full`: release 必須。public / student / organization / commercial / writing / mobile と local IDB fallback を確認します。
 - deployed smoke: preview / production の公開 URL に `PLAYWRIGHT_BASE_URL` を向け、`scripts/run-smoke-tests.mjs --suite sentinel --grep ...` 経由で asset / PWA / 公開URLの代表フローを確認します。
 
 ## B2B Storage/API Contract Checklist
 
+- SRS は0042の `study_attempt_receipts` と履歴・interaction eventを同一D1 batchでcommitします。配備はmigration→新APIの順に行います。旧クライアントの識別子なし呼び出しは互換経路であり、再送dedupを保証しません。
+- 同じ利用者/attempt IDの同内容再送で履歴を増やさず、異なる内容は409。認可・教材と単語の対応、mission本人/教材の整合性を確認します。サーバーreceiptの追加をquiz/XP/Writing全体の原子性と混同しません。
+- mission達成は丸めた割合でなく、一意語数と必須目標の厳密な条件で判断します。並行更新はCASと再読込で処理し、完了/アーカイブは古い要求で戻しません。
+
 - `tests/storage-action-contract.test.ts` で storage action の role gate と payload parse を確認します。
+- Writing の生徒向け提出確定レスポンスは AI 評価を含めず、返却後 detail は講師が選んだ評価 1 件だけを含めます。`privateMemo` はキー自体を生徒レスポンスへ出しません。講師・管理者向け review detail は全評価と private memo を維持します。
+- Writing の講師・管理者アクセスは、担当生徒の可視性に加えて assignment の `organizationId` が現在の組織と一致することを必須にします。転籍後も生徒本人の履歴ポリシーは変えません。
+- Writing の印刷 HTML は動的 text を必ず `escapeHtmlText` へ通し、学生向け返却物へ AI provider、内部評価指標、非公開メモを出しません。QR SVG は静的 builder 出力だけを markup として扱います。
+- Writing の完了 API は RETURNED からだけ遷移し、COMPLETED の再送は write-free な no-op、その他の状態は 409 にします。UI の状態判定だけを認可・状態機械の根拠にしません。
 - 生徒は自分の mission を `OPENED` できますが、`MANUAL_COMPLETE` は講師・管理者だけが使います。
 - commercial provision は admin 操作として扱い、status / target plan / organization role / linked user の payload validation を維持します。
 - organization assignment、cohort、mission 作成は Cloudflare/D1 正史で確認します。B2B acceptance は `cf:preview` または full smoke を基準にし、IDB fallback の画面確認だけで release 判定しません。
@@ -54,6 +71,10 @@ Gate naming:
 - preview deployment は rollback target ではなく、検証用 URL として扱います。
 
 ### DB rollback
+
+- 0041/0042は旧APIと共存する追加・互換migrationです。まず新スキーマを残してコードだけを安定版へ戻す方法を優先します。旧APIへ戻すとSRSの再送重複抑止は失われるため、保存動作を再確認します。
+- 0042より前へDBを復元するとreceipt tableがなくなります。新APIが稼働したままDBだけを復元してはいけません。影響する書き込みを停止し、互換コードへ切り替えたうえで復元・schema/API整合性確認・書き込み再開の順に行います。
+- DB復元はbookmark以後の正当な書き込みも巻き戻します。復元時点と影響範囲を記録し、移行成功を個別の学習記録の回復成功と混同しません。
 
 - production deploy job summary の `Recovery Bookmark` を使います。
 - 例:

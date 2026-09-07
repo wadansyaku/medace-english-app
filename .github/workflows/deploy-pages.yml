@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: pages-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -18,7 +18,6 @@ jobs:
       url: ${{ steps.deploy.outputs['project-url'] }}
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || 'medace-english-app' }}
       CLOUDFLARE_D1_DATABASE: ${{ vars.CLOUDFLARE_D1_DATABASE || 'medace-db' }}
       WRITING_AI_MODE: ${{ vars.WRITING_AI_MODE || 'hybrid' }}
@@ -53,19 +52,14 @@ jobs:
         run: npm run build
 
       - name: API integration tests
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run test:api
 
       - name: Full smoke suite
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/run-smoke-tests.mjs --suite full
 
       - name: Verify GitHub and Cloudflare configuration
         env:
+          GH_TOKEN: ${{ github.token }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npm run cf:doctor
@@ -95,6 +89,13 @@ jobs:
             exit 1
           fi
           echo "bookmark=$bookmark" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Production D1 Recovery Bookmark"
+            echo
+            echo "- Before migration: \`$bookmark\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Prefer a code rollback that preserves the additive schema."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Apply remote D1 migrations
         env:
@@ -106,7 +107,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact
+        run: node scripts/analysis/run-d1-content-qa.mjs --remote --database "$CLOUDFLARE_D1_DATABASE" --output tmp/content-qa/production-content-qa.json --compact --summary-only
 
       - name: Enforce production content QA gate
         run: npm run content:qa:gate -- --input tmp/content-qa/production-content-qa.json
@@ -179,7 +180,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home shows the live motivation board before login|public readonly session endpoint is reachable before login|public guide keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe|service admin dedicated access link resolves to the protected admin entrypoint"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home starts with the learner CTA and edge login before auth|public readonly session endpoint is reachable before login|public role link hub keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe|service admin dedicated access link resolves to the protected admin entrypoint"
 
       - name: Upload production deployed smoke artifacts
         if: failure()

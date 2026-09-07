@@ -120,7 +120,7 @@ const parseStringArray = (value: string | null | undefined): string[] => {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+    return Array.isArray(parsed) ? [...new Set(parsed.filter((item): item is string => typeof item === 'string'))] : [];
   } catch {
     return [];
   }
@@ -414,8 +414,8 @@ const updateAssignmentProgressRow = async ({
   lastActivityAt?: number;
   completedAt?: number;
   status: WeeklyMissionStatus;
-}): Promise<void> => {
-  await env.DB.prepare(`
+}): Promise<boolean> => {
+  const result = await env.DB.prepare(`
     UPDATE weekly_mission_assignments
     SET started_at = ?,
         restarted_at = ?,
@@ -427,6 +427,14 @@ const updateAssignmentProgressRow = async ({
         quiz_day_keys_json = ?,
         updated_at = ?
     WHERE id = ?
+      AND status = ?
+      AND started_at IS ?
+      AND restarted_at IS ?
+      AND last_activity_at IS ?
+      AND completed_at IS ?
+      AND new_word_ids_json IS ?
+      AND review_word_ids_json IS ?
+      AND quiz_day_keys_json IS ?
   `).bind(
     startedAt || null,
     restartedAt || null,
@@ -438,7 +446,16 @@ const updateAssignmentProgressRow = async ({
     stringifyUnique(nextQuizDayKeys),
     Date.now(),
     row.assignment_id,
+    row.assignment_status,
+    row.started_at,
+    row.restarted_at,
+    row.last_activity_at,
+    row.completed_at,
+    row.new_word_ids_json,
+    row.review_word_ids_json,
+    row.quiz_day_keys_json,
   ).run();
+  return result.meta.changes === 1;
 };
 
 const syncAssignmentProgress = async (
@@ -456,42 +473,56 @@ const syncAssignmentProgress = async (
     activityAt: number;
   },
 ): Promise<void> => {
-  const currentProgress = buildMissionProgress({
-    assignedAt: Number(row.assigned_at || 0),
-    startedAt: Number(row.started_at || 0) || undefined,
-    restartedAt: Number(row.restarted_at || 0) || undefined,
-    lastActivityAt: Number(row.last_activity_at || 0) || undefined,
-    completedAt: Number(row.completed_at || 0) || undefined,
-    dueAt: Number(row.due_at || 0),
-    newWordsCompleted: nextNewWordIds.length,
-    newWordsTarget: Number(row.new_words_target || 0),
-    reviewWordsCompleted: nextReviewWordIds.length,
-    reviewWordsTarget: Number(row.review_words_target || 0),
-    quizCompletedCount: nextQuizDayKeys.length,
-    quizTargetCount: Number(row.quiz_target_count || 0),
-    writingRequired: Boolean(row.writing_assignment_id),
-    writingCompleted: isWritingReturnedForMission(
-      row.writing_status && isWritingAssignmentStatus(row.writing_status) ? row.writing_status : undefined,
-    ),
-    now: activityAt,
-  });
+  let currentRow = row;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (!(ACTIVE_ASSIGNMENT_STATUSES as readonly string[]).includes(currentRow.assignment_status)) return;
+    const uniqueNewWordIds = [...new Set([...parseStringArray(currentRow.new_word_ids_json), ...nextNewWordIds])];
+    const uniqueReviewWordIds = [...new Set([...parseStringArray(currentRow.review_word_ids_json), ...nextReviewWordIds])];
+    const uniqueQuizDayKeys = [...new Set([...parseStringArray(currentRow.quiz_day_keys_json), ...nextQuizDayKeys])];
+    const nextActivityAt = Math.max(Number(currentRow.last_activity_at || 0), activityAt);
+    const currentProgress = buildMissionProgress({
+      assignedAt: Number(currentRow.assigned_at || 0),
+      startedAt: Number(currentRow.started_at || 0) || undefined,
+      restartedAt: Number(currentRow.restarted_at || 0) || undefined,
+      lastActivityAt: nextActivityAt,
+      completedAt: Number(currentRow.completed_at || 0) || undefined,
+      dueAt: Number(currentRow.due_at || 0),
+      newWordsCompleted: uniqueNewWordIds.length,
+      newWordsTarget: Number(currentRow.new_words_target || 0),
+      reviewWordsCompleted: uniqueReviewWordIds.length,
+      reviewWordsTarget: Number(currentRow.review_words_target || 0),
+      quizCompletedCount: uniqueQuizDayKeys.length,
+      quizTargetCount: Number(currentRow.quiz_target_count || 0),
+      writingRequired: Boolean(currentRow.writing_assignment_id),
+      writingCompleted: isWritingReturnedForMission(
+        currentRow.writing_status && isWritingAssignmentStatus(currentRow.writing_status) ? currentRow.writing_status : undefined,
+      ),
+      now: nextActivityAt,
+    });
 
-  const nextStartedAt = Number(row.started_at || 0) || activityAt;
-  const nextRestartedAt = Number(row.restarted_at || 0) || activityAt;
-  await updateAssignmentProgressRow({
-    env,
-    row,
-    nextNewWordIds,
-    nextReviewWordIds,
-    nextQuizDayKeys,
-    startedAt: nextStartedAt,
-    restartedAt: nextRestartedAt,
-    lastActivityAt: activityAt,
-    completedAt: currentProgress.status === WeeklyMissionStatus.COMPLETED
-      ? Number(row.completed_at || 0) || activityAt
-      : undefined,
-    status: currentProgress.status,
-  });
+    const nextStartedAt = Number(currentRow.started_at || 0) || activityAt;
+    const nextRestartedAt = Number(currentRow.restarted_at || 0) || activityAt;
+    const saved = await updateAssignmentProgressRow({
+      env,
+      row: currentRow,
+      nextNewWordIds: uniqueNewWordIds,
+      nextReviewWordIds: uniqueReviewWordIds,
+      nextQuizDayKeys: uniqueQuizDayKeys,
+      startedAt: nextStartedAt,
+      restartedAt: nextRestartedAt,
+      lastActivityAt: nextActivityAt,
+      completedAt: currentProgress.status === WeeklyMissionStatus.COMPLETED
+        ? Number(currentRow.completed_at || 0) || nextActivityAt
+        : undefined,
+      status: currentProgress.status,
+    });
+    if (saved) return;
+    const refreshedRows = await readActiveMissionProgressRowsForStudent(env, row.student_uid);
+    const refreshedRow = refreshedRows.find((candidate) => candidate.assignment_id === row.assignment_id);
+    if (!refreshedRow) return;
+    currentRow = refreshedRow;
+  }
+  throw new HttpError(409, 'ミッションが別の学習操作で更新されました。もう一度保存してください。');
 };
 
 const readActiveMissionProgressRowsForStudent = async (
@@ -969,6 +1000,10 @@ export const handleUpdateMissionProgress = async (
     }
   }
 
+  if (row.assignment_status === WeeklyMissionStatus.ARCHIVED) {
+    throw new HttpError(409, '終了したミッションは更新できません。');
+  }
+
   const now = Date.now();
   const nextNewWordIds = parseStringArray(row.new_word_ids_json);
   const nextReviewWordIds = parseStringArray(row.review_word_ids_json);
@@ -995,7 +1030,7 @@ export const handleUpdateMissionProgress = async (
     now,
   });
 
-  await updateAssignmentProgressRow({
+  const saved = await updateAssignmentProgressRow({
     env,
     row,
     nextNewWordIds,
@@ -1013,13 +1048,17 @@ export const handleUpdateMissionProgress = async (
       ? WeeklyMissionStatus.COMPLETED
       : nextProgress.status,
   });
+  if (!saved) {
+    throw new HttpError(409, 'ミッションが別の操作で更新されました。最新状態でやり直してください。');
+  }
   if (row.organization_id) {
     await rebuildOrganizationKpiSnapshots(env, row.organization_id, {
       dateKeys: [toTokyoDateKey(now)],
     });
   }
 
-  const [updated] = await readMissionBoardRows(env, currentUser, { studentUid: row.student_uid });
+  const updatedRows = await readMissionBoardRows(env, currentUser, { studentUid: row.student_uid });
+  const updated = updatedRows.find((candidate) => candidate.assignment_id === assignmentId);
   if (!updated) {
     throw new HttpError(500, '更新後のミッション取得に失敗しました。');
   }

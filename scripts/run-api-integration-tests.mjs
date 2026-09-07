@@ -50,6 +50,22 @@ const uploadWritingAsset = async (baseUrl, upload, body, mimeType) => fetch(`${b
   body,
 });
 
+const uploadWritingAssetChunked = async (baseUrl, upload, body, mimeType) => fetch(`${baseUrl}${upload.uploadUrl}`, {
+  method: 'PUT',
+  headers: {
+    'Content-Type': mimeType,
+    'Origin': baseUrl,
+    'X-Content-SHA256': toSha256Base64(body),
+  },
+  body: new ReadableStream({
+    start(controller) {
+      controller.enqueue(body);
+      controller.close();
+    },
+  }),
+  duplex: 'half',
+});
+
 const runCommand = (command, args, options = {}) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
     cwd,
@@ -387,6 +403,24 @@ const executeLocalSql = async (persistDir, sql) => {
   await runCommand(wranglerExecute.command, wranglerExecute.args);
 };
 
+const queryLocalSql = async (persistDir, sql) => {
+  const wranglerExecute = createNodeToolCommand('wrangler', [
+    'd1',
+    'execute',
+    'medace-db',
+    '--local',
+    '--persist-to',
+    persistDir,
+    '--command',
+    sql,
+    '--json',
+  ]);
+  const { stdout } = await runCommand(wranglerExecute.command, wranglerExecute.args);
+  const payload = JSON.parse(stdout);
+  return (Array.isArray(payload) ? payload : [payload])
+    .flatMap((entry) => entry?.results || []);
+};
+
 const executeLocalSqlFile = async (persistDir, filePath) => {
   const wranglerExecute = createNodeToolCommand('wrangler', [
     'd1',
@@ -447,6 +481,20 @@ const main = async () => {
     const adminUser = await admin.demoLogin('ADMIN', undefined, 'admin');
     assert(adminUser.role === 'ADMIN', 'admin session did not return an admin user');
 
+    const expiredDemoUserId = 'expired-demo-reset-token-creator';
+    const retainedResetTokenHash = 'integration-demo-retention-token';
+    const expiredDemoCreatedAt = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    await executeLocalSql(
+      persistDir,
+      `INSERT INTO users (id, email, display_name, role, created_at, updated_at)
+       VALUES ('${expiredDemoUserId}', 'demo_student_expired_retention@medace.app', 'Expired Demo', 'STUDENT', ${expiredDemoCreatedAt}, ${expiredDemoCreatedAt})`,
+    );
+    await executeLocalSql(
+      persistDir,
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_by, created_at)
+       VALUES ('${adminUser.uid}', '${retainedResetTokenHash}', ${Date.now() + 60_000}, '${expiredDemoUserId}', ${Date.now()})`,
+    );
+
     await importOfficialCatalog(admin, 'Starter 120', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL');
     await importOfficialCatalog(admin, 'Business 500', 'BUSINESS_ONLY', 'LICENSED_PARTNER');
     await importOfficialCatalogFromLegacyCsv(admin, 'Legacy CSV 4-col', 'BUSINESS_ONLY', 'LICENSED_PARTNER');
@@ -456,11 +504,87 @@ const main = async () => {
     await importOfficialCatalog(admin, 'レベル4', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
 
     const freeStudentUser = await freeStudent.demoLogin('STUDENT');
+    const retainedResetTokens = await queryLocalSql(
+      persistDir,
+      `SELECT created_by
+       FROM password_reset_tokens
+       WHERE token_hash = '${retainedResetTokenHash}'`,
+    );
+    const expiredDemoUsers = await queryLocalSql(
+      persistDir,
+      `SELECT id FROM users WHERE id = '${expiredDemoUserId}'`,
+    );
+    const passwordResetTokenForeignKeys = await queryLocalSql(
+      persistDir,
+      "PRAGMA foreign_key_list('password_reset_tokens')",
+    );
+    assert(
+      retainedResetTokens.length === 1 && retainedResetTokens[0].created_by === null,
+      'expired demo cleanup should preserve reset tokens while clearing their creator reference',
+    );
+    assert(expiredDemoUsers.length === 0, 'expired demo cleanup should delete the expired demo user');
+    assert(
+      passwordResetTokenForeignKeys.some((foreignKey) => (
+        foreignKey.table === 'users'
+        && foreignKey.from === 'created_by'
+        && foreignKey.on_delete === 'SET NULL'
+      )),
+      'password reset token creator foreign key should use ON DELETE SET NULL',
+    );
+    const retiredWordCacheUpdate = await freeStudent.storageRaw('updateWordCache', {
+      wordId: 'official-word-1',
+      sentence: 'tampered sentence',
+      translation: '改ざん済み',
+    });
+    assert(
+      retiredWordCacheUpdate.status === 404,
+      'retired updateWordCache action must remain unreachable',
+    );
+    const nonFiniteXpAward = await freeStudent.request('/api/storage', {
+      method: 'POST',
+      body: '{"action":"addXP","payload":{"amount":1e400}}',
+    });
+    assert(nonFiniteXpAward.status === 400, 'non-finite XP awards must be rejected');
+    const negativeXpAward = await freeStudent.storageRaw('addXP', { amount: -1_000_000 });
+    assert(negativeXpAward.status === 400, 'negative XP awards must be rejected');
     const freeBooks = await freeStudent.storage('getBooks');
     const freeBookTitles = freeBooks.map((book) => book.title);
     assert(freeBookTitles.includes('Starter 120'), 'free student should see ALL_PLANS official books');
     assert(!freeBookTitles.includes('Business 500'), 'free student should not see BUSINESS_ONLY official books');
     assert(freeBookTitles.includes('レベル3'), 'free student should see indexed level books for cold-start calibration');
+
+    const starterHintBook = freeBooks.find((book) => book.title === 'Starter 120');
+    assert(starterHintBook, 'Starter 120 should be available for shared hint authorization checks');
+    const [starterWord] = await freeStudent.storage('getWordsByBook', { bookId: starterHintBook.id });
+    assert(starterWord, 'Starter 120 should contain a word for shared hint authorization checks');
+    const approvedAt = Date.now();
+    await executeLocalSql(
+      persistDir,
+      `UPDATE words
+       SET example_sentence = 'Approved shared example.',
+           example_meaning = '承認済みの共有例文。',
+           example_generated_at = ${approvedAt - 1},
+           example_audit_status = 'APPROVED',
+           example_audited_at = ${approvedAt},
+           updated_at = ${approvedAt}
+       WHERE id = '${starterWord.id}'`,
+    );
+    const forbiddenSharedHintRefresh = await freeStudent.storageRaw('generateWordHintAsset', {
+      wordId: starterWord.id,
+      assetType: 'EXAMPLE',
+      forceRefresh: true,
+    });
+    assert(
+      forbiddenSharedHintRefresh.status === 403,
+      'a learner must not force-refresh an existing shared official hint',
+    );
+    const starterWordsAfterRejectedRefresh = await freeStudent.storage('getWordsByBook', { bookId: starterHintBook.id });
+    const starterWordAfterRejectedRefresh = starterWordsAfterRejectedRefresh.find((word) => word.id === starterWord.id);
+    assert(
+      starterWordAfterRejectedRefresh?.exampleSentence === 'Approved shared example.'
+        && starterWordAfterRejectedRefresh?.exampleAuditStatus === 'APPROVED',
+      'a rejected learner refresh must preserve the approved shared hint and audit state',
+    );
 
     const updatedFreeProfile = await freeStudent.post('/api/profile', {
       user: {
@@ -1045,11 +1169,43 @@ const main = async () => {
       'new students should start without a populated weakness focus',
     );
 
-    await orgStudent.storage('saveSRSHistory', {
-      word: reviewWords[0],
+    console.log('Verifying SRS receipt retries, input boundaries, and mission ownership...');
+    const firstStudyAttempt = {
+      word: { id: reviewWords[0].id, bookId: reviewBook.id },
       rating: 3,
       responseTimeMs: 1200,
+      clientAttemptId: 'api-srs-first',
+    };
+    await Promise.all(Array.from({ length: 3 }, () => orgStudent.storage('saveSRSHistory', firstStudyAttempt)));
+    await orgStudent.storage('saveSRSHistory', firstStudyAttempt);
+    const firstStudyRows = await queryLocalSql(persistDir, `
+      SELECT h.attempt_count, h.interval_days,
+        (SELECT COUNT(*) FROM study_attempt_receipts r WHERE r.user_id = h.user_id AND r.word_id = h.word_id) AS receipts,
+        (SELECT COUNT(*) FROM learning_interaction_events e WHERE e.user_id = h.user_id AND e.word_id = h.word_id) AS events
+      FROM learning_histories h WHERE h.user_id = '${orgStudentUser.uid}' AND h.word_id = '${reviewWords[0].id}'
+    `);
+    assert(firstStudyRows[0]?.attempt_count === 1 && firstStudyRows[0]?.interval_days === 3,
+      'lost-response retries must preserve the original SRS attempt and schedule');
+    assert(firstStudyRows[0]?.receipts === 1 && firstStudyRows[0]?.events === 1,
+      'parallel retries must produce one receipt and one interaction event');
+    const changedStudyRetry = await orgStudent.storageRaw('saveSRSHistory', { ...firstStudyAttempt, rating: 0 });
+    assert(changedStudyRetry.status === 409, 'reusing a study attempt id with another answer must return 409');
+    const unauthenticatedStudy = await publicClient.storageRaw('saveSRSHistory', firstStudyAttempt);
+    assert(unauthenticatedStudy.status === 401, 'anonymous callers must not create or inspect a study receipt');
+    for (const invalid of [
+      { rating: -1 }, { rating: 4 }, { rating: 1.5 },
+      { responseTimeMs: -1 }, { responseTimeMs: 3_600_001 },
+      { clientAttemptId: '' }, { clientAttemptId: 'x'.repeat(161) },
+      { word: { id: reviewWords[0].id } },
+      { taskIntentType: 'UNDECLARED_INTENT' },
+    ]) {
+      const response = await orgStudent.storageRaw('saveSRSHistory', { ...firstStudyAttempt, ...invalid });
+      assert(response.status === 400, 'invalid SRS inputs must fail before any study mutation');
+    }
+    const foreignMissionStudy = await cohortStudent.storageRaw('saveSRSHistory', {
+      ...firstStudyAttempt, clientAttemptId: 'api-srs-foreign-mission', missionAssignmentId: assignedMission.id,
     });
+    assert(foreignMissionStudy.status === 400, 'a student must not bind their study event to another student mission');
 
     orgSnapshot = await groupAdmin.storage('getOrganizationDashboardSnapshot');
     const todayTrendAfterStudy = findTrendPoint(orgSnapshot, todayDateKey);
@@ -1063,7 +1219,8 @@ const main = async () => {
     const missionBoardAfterStudy = await orgStudent.storage('getWeeklyMissionBoard');
     const studiedMission = missionBoardAfterStudy.assignments.find((assignment) => assignment.id === assignedMission.id);
     assert(studiedMission, 'student mission board should keep the assigned mission after study');
-    assert((studiedMission?.progress.newWordsCompleted || 0) >= 1, 'studying the mission book should advance mission new-word progress');
+    assert(studiedMission?.progress.newWordsCompleted === 1, 'SRS receipt retries must preserve one mission new-word credit');
+    assert(studiedMission?.progress.reviewWordsCompleted === 0, 'retrying a new-word receipt must not credit it as review');
 
     const studentDashboardAfterMissionStudy = await orgStudent.storage('getDashboardSnapshot');
     assert(studentDashboardAfterMissionStudy.weaknessProfile?.signals?.length === 8, 'student dashboard should materialize weakness signals after study');
@@ -1139,6 +1296,39 @@ const main = async () => {
       'backfill migration should restore legacy study rows to mastery eligibility',
     );
 
+    console.log('Verifying distinct concurrent study attempts and quiz/SRS races...');
+    const readStudyConcurrencyCounts = async () => {
+      const rows = await queryLocalSql(persistDir, `
+        SELECT h.attempt_count,
+          (SELECT COUNT(*) FROM learning_interaction_events e WHERE e.user_id = h.user_id AND e.word_id = h.word_id) AS events
+        FROM learning_histories h WHERE h.user_id = '${orgStudentUser.uid}' AND h.word_id = '${reviewWords[0].id}'
+      `);
+      return rows[0];
+    };
+    const beforeConcurrentStudies = await readStudyConcurrencyCounts();
+    await Promise.all(Array.from({ length: 3 }, (_, index) => orgStudent.storage('saveSRSHistory', {
+      ...firstStudyAttempt, rating: 2, clientAttemptId: `api-srs-parallel-${index}`,
+    })));
+    const afterConcurrentStudies = await readStudyConcurrencyCounts();
+    assert(afterConcurrentStudies.attempt_count === beforeConcurrentStudies.attempt_count + 3,
+      'distinct parallel study receipts must preserve every answer in canonical history');
+    assert(afterConcurrentStudies.events === beforeConcurrentStudies.events + 3,
+      'distinct parallel study receipts must append exactly one event per answer');
+    const [racingStudy, racingQuiz] = await Promise.all([
+      orgStudent.storageRaw('saveSRSHistory', { ...firstStudyAttempt, clientAttemptId: 'api-srs-quiz-race' }),
+      orgStudent.storageRaw('recordQuizAttempt', {
+        wordId: reviewWords[0].id, bookId: reviewBook.id, correct: true, questionMode: 'JA_TO_EN', responseTimeMs: 600,
+      }),
+    ]);
+    assert(racingStudy.status === 204, `an SRS receipt must survive a concurrent quiz write (status ${racingStudy.status})`);
+    assert(racingQuiz.status === 204 || racingQuiz.status === 409, `a stale quiz may conflict but must not overwrite SRS (status ${racingQuiz.status})`);
+    const afterQuizRace = await readStudyConcurrencyCounts();
+    const acceptedRaceAttempts = racingQuiz.status === 204 ? 2 : 1;
+    assert(afterQuizRace.attempt_count === afterConcurrentStudies.attempt_count + acceptedRaceAttempts,
+      'quiz/SRS concurrency must retain all accepted history changes');
+    assert(afterQuizRace.events === afterConcurrentStudies.events + acceptedRaceAttempts,
+      'quiz/SRS concurrency must keep accepted attempt and event counts aligned');
+
     const writingTemplates = await groupAdmin.get('/api/writing/templates');
     assert(writingTemplates.templates.length >= 2, 'writing templates should be available');
 
@@ -1208,11 +1398,85 @@ const main = async () => {
       notes: 'integration test assignment',
     });
     assert(generatedAssignment.status === 'DRAFT', 'generated writing assignment should start as DRAFT');
+    const studentAssignmentsBeforeIssue = await orgStudent.get('/api/writing/assignments?scope=mine');
+    assert(
+      !studentAssignmentsBeforeIssue.assignments.some((assignment) => assignment.id === generatedAssignment.id),
+      'student assignment lists must not expose teacher drafts before issue',
+    );
 
     const issuedAssignment = await groupAdmin.post('/api/writing/assignments/issue', {
       assignmentId: generatedAssignment.id,
     });
     assert(issuedAssignment.status === 'ISSUED', 'writing assignment should move to ISSUED');
+
+    const aggregateLimitAssignment = await groupAdmin.post('/api/writing/assignments/generate', {
+      studentUid: orgStudentUser.uid,
+      templateId: writingTemplates.templates[0].id,
+      topicHint: 'aggregate upload limit',
+      notes: 'upload aggregate security regression',
+    });
+    await groupAdmin.post('/api/writing/assignments/issue', {
+      assignmentId: aggregateLimitAssignment.id,
+    });
+    await orgStudent.post('/api/writing/upload-url', {
+      assignmentId: aggregateLimitAssignment.id,
+      fileName: 'large-page-1.png',
+      mimeType: 'image/png',
+      byteSize: 12 * 1024 * 1024,
+      assetOrder: 1,
+      attemptNo: 1,
+    });
+    const aggregateLimitResponse = await orgStudent.request('/api/writing/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({
+        assignmentId: aggregateLimitAssignment.id,
+        fileName: 'large-page-2.png',
+        mimeType: 'image/png',
+        byteSize: 9 * 1024 * 1024,
+        assetOrder: 2,
+        attemptNo: 1,
+      }),
+    });
+    assert(aggregateLimitResponse.status === 400, 'writing upload reservations must enforce a 20MB aggregate limit');
+
+    const concurrentReservationAssignment = await groupAdmin.post('/api/writing/assignments/generate', {
+      studentUid: orgStudentUser.uid,
+      templateId: writingTemplates.templates[0].id,
+      topicHint: 'concurrent upload reservation limit',
+      notes: 'upload reservation CAS regression',
+    });
+    await groupAdmin.post('/api/writing/assignments/issue', {
+      assignmentId: concurrentReservationAssignment.id,
+    });
+    const concurrentReservations = await Promise.all([
+      orgStudent.request('/api/writing/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          assignmentId: concurrentReservationAssignment.id,
+          fileName: 'concurrent-large-page-1.png',
+          mimeType: 'image/png',
+          byteSize: 12 * 1024 * 1024,
+          assetOrder: 1,
+          attemptNo: 1,
+        }),
+      }),
+      orgStudent.request('/api/writing/upload-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          assignmentId: concurrentReservationAssignment.id,
+          fileName: 'concurrent-large-page-2.png',
+          mimeType: 'image/png',
+          byteSize: 12 * 1024 * 1024,
+          assetOrder: 2,
+          attemptNo: 1,
+        }),
+      }),
+    ]);
+    assert(
+      concurrentReservations.filter((response) => response.status === 200).length === 1
+        && concurrentReservations.filter((response) => response.status === 400 || response.status === 409).length === 1,
+      'concurrent upload-url reservations must not exceed the aggregate byte limit',
+    );
 
     const studentAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
     const assignedWriting = studentAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
@@ -1251,16 +1515,60 @@ const main = async () => {
     const replayedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, replayedFirstUploadBody, 'image/png');
     assert(replayedFirstUploadResponse.status === 409, 'replayed upload token should return 409');
 
+    const boundedUploadBody = Buffer.from('size');
+    const boundedUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
+      assignmentId: issuedAssignment.id,
+      fileName: 'bounded-attempt-1.png',
+      mimeType: 'image/png',
+      assetOrder: 2,
+      attemptNo: 1,
+    }, boundedUploadBody);
+    const oversizedChunkedUpload = await uploadWritingAssetChunked(
+      baseUrl,
+      boundedUpload,
+      Buffer.concat([boundedUploadBody, Buffer.from('!')]),
+      'image/png',
+    );
+    assert(oversizedChunkedUpload.status === 413, 'chunked writing upload must enforce the actual byte limit');
+    const retriedBoundedUpload = await uploadWritingAsset(baseUrl, boundedUpload, boundedUploadBody, 'image/png');
+    assert(retriedBoundedUpload.status === 204, 'failed size validation should release the upload reservation for retry');
+
+    const concurrentUploadBody = Buffer.alloc(256 * 1024, 7);
+    const concurrentUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
+      assignmentId: issuedAssignment.id,
+      fileName: 'concurrent-attempt-1.png',
+      mimeType: 'image/png',
+      assetOrder: 3,
+      attemptNo: 1,
+    }, concurrentUploadBody);
+    const concurrentUploadResponses = await Promise.all([
+      uploadWritingAsset(baseUrl, concurrentUpload, concurrentUploadBody, 'image/png'),
+      uploadWritingAsset(baseUrl, concurrentUpload, concurrentUploadBody, 'image/png'),
+    ]);
+    assert(
+      concurrentUploadResponses.filter((response) => response.status === 204).length === 1
+        && concurrentUploadResponses.filter((response) => response.status === 409).length === 1,
+      'concurrent upload token use must produce exactly one success and one conflict',
+    );
+
     const firstFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
       assignmentId: issuedAssignment.id,
       source: 'STUDENT_MOBILE',
       assetIds: [firstUpload.assetId],
       attemptNo: 1,
     });
-    assert(firstFinalize.submission.evaluations.length === 3, 'writing submission should persist evaluations from 3 providers');
-    assert(firstFinalize.submission.ocrProvider === 'OPENAI', 'writing OCR should rerun with OPENAI when fallback confidence is low');
-    assert(firstFinalize.submission.ocrMeta?.mode === 'fixture', 'fixture mode should expose OCR provenance');
-    assert(firstFinalize.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'writing evaluations should expose provenance');
+    assert(firstFinalize.submission.evaluations.length === 0, 'student finalize receipt should not expose provider evaluations');
+    assert(!Object.hasOwn(firstFinalize.submission, 'selectedEvaluationId'), 'student finalize receipt should not expose the selected evaluation id');
+    assert(!Object.hasOwn(firstFinalize.submission, 'teacherReview'), 'student finalize receipt should not expose teacher review data');
+    assert(
+      JSON.stringify(Object.keys(firstFinalize.assignment).sort()) === JSON.stringify(['id', 'promptTitle', 'status']),
+      'student finalize receipt should expose only the minimal assignment summary',
+    );
+    assert(!Object.hasOwn(firstFinalize.submission, 'ocrProvider'), 'student finalize receipt should not expose the OCR provider');
+    assert(!Object.hasOwn(firstFinalize.submission, 'ocrMeta'), 'student finalize receipt should not expose OCR provenance');
+    assert(!Object.hasOwn(firstFinalize.submission, 'transcriptConfidence'), 'student finalize receipt should not expose OCR confidence');
+    assert(!Object.hasOwn(firstFinalize.submission, 'processingState'), 'student finalize receipt should not expose internal processing state');
+    assert(!Object.hasOwn(firstFinalize.submission, 'submittedByUid'), 'student finalize receipt should not expose the submitter uid');
     const duplicateFinalize = await orgStudent.request('/api/writing/submissions/finalize', {
       method: 'POST',
       body: JSON.stringify({
@@ -1271,6 +1579,11 @@ const main = async () => {
       }),
     });
     assert(duplicateFinalize.status === 409, 'duplicate finalize retry should return 409');
+    const reviewReadyReissue = await groupAdmin.request('/api/writing/assignments/issue', {
+      method: 'POST',
+      body: JSON.stringify({ assignmentId: issuedAssignment.id }),
+    });
+    assert(reviewReadyReissue.status === 409, 'REVIEW_READY assignment must not be rewound to ISSUED');
 
     const renamedSettings = await groupAdmin.storage('updateOrganizationProfile', {
       displayName: 'Phase 4 Academy Renamed',
@@ -1301,6 +1614,9 @@ const main = async () => {
 
     const queueDetail = await groupAdmin.get(`/api/writing/submissions/${queueItem.submissionId}`);
     assert(queueDetail.submission.evaluations.length === 3, 'teacher detail should expose all provider evaluations');
+    assert(queueDetail.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'teacher evaluations should expose provenance');
+    assert(queueDetail.submission.ocrProvider === 'OPENAI', 'teacher detail should show that OCR reran with OPENAI when fallback confidence was low');
+    assert(queueDetail.submission.ocrMeta?.mode === 'fixture', 'teacher detail should expose OCR provenance');
 
     const revisionDecision = await groupAdmin.post(`/api/writing/submissions/${queueItem.submissionId}/request-revision`, {
       selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,
@@ -1317,6 +1633,10 @@ const main = async () => {
     assert(
       retriedRevisionDecision.submission.teacherReview?.id === revisionDecision.submission.teacherReview?.id,
       'teacher review retry should reuse the same review row for revision requests',
+    );
+    assert(
+      revisionDecision.submission.teacherReview?.privateMemo === 'integration test revision',
+      'teacher review response should retain its private memo',
     );
 
     const revisedAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
@@ -1341,22 +1661,67 @@ const main = async () => {
       attemptNo: 2,
       manualTranscript: 'I agree that students should use tablets in class because they can review lessons quickly and share ideas more easily. For example, they can check notes at home and ask better questions in class. However, teachers should give clear rules so students do not lose focus.',
     });
-    assert(secondFinalize.submission.transcriptConfidence >= 0.9, 'manual transcript should produce high OCR confidence on the second attempt');
-    assert(secondFinalize.submission.ocrMeta?.notes === 'manual-transcript', 'manual transcripts should be labeled in OCR provenance');
+    assert(secondFinalize.submission.evaluations.length === 0, 'student retry receipt should not expose provider evaluations');
+    assert(!Object.hasOwn(secondFinalize.submission, 'transcriptConfidence'), 'student retry receipt should not expose OCR confidence');
+    assert(!Object.hasOwn(secondFinalize.submission, 'ocrMeta'), 'student retry receipt should not expose OCR provenance');
+    const staleFirstSubmissionReview = await groupAdmin.request(
+      `/api/writing/submissions/${queueItem.submissionId}/approve-return`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,
+          publicComment: '古い提出は返却できません。',
+          privateMemo: 'stale submission regression',
+        }),
+      },
+    );
+    assert(staleFirstSubmissionReview.status === 409, 'stale writing submissions must not be reviewable');
 
     const secondQueue = await groupAdmin.get('/api/writing/review-queue?scope=QUEUE');
     const secondQueueItem = secondQueue.items.find((item) => item.assignmentId === issuedAssignment.id);
     assert(secondQueueItem?.attemptNo === 2, 'second attempt should re-enter the teacher review queue');
 
     const secondDetail = await groupAdmin.get(`/api/writing/submissions/${secondQueueItem.submissionId}`);
+    assert(secondDetail.submission.transcriptConfidence >= 0.9, 'teacher detail should show high OCR confidence for a manual transcript');
+    assert(secondDetail.submission.ocrMeta?.notes === 'manual-transcript', 'teacher detail should label manual transcript OCR provenance');
+    const selectedSecondEvaluation = secondDetail.submission.evaluations.find((evaluation) => (
+      evaluation.id === secondDetail.submission.selectedEvaluationId
+    )) || secondDetail.submission.evaluations[0];
+    await executeLocalSql(
+      persistDir,
+      `UPDATE writing_assignments
+       SET organization_id = 'org-writing-former-owner'
+       WHERE id = '${issuedAssignment.id}'`,
+    );
+    const forbiddenFormerOrganizationRevision = await groupAdmin.request(
+      `/api/writing/submissions/${secondQueueItem.submissionId}/request-revision`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          selectedEvaluationId: selectedSecondEvaluation.id,
+          publicComment: '再提出上限でも組織境界を先に検証します。',
+          privateMemo: 'former organization access regression',
+        }),
+      },
+    );
+    assert(
+      forbiddenFormerOrganizationRevision.status === 403,
+      'visible student old-organization writing revision should return 403 before max-attempt validation',
+    );
+    await executeLocalSql(
+      persistDir,
+      `UPDATE writing_assignments
+       SET organization_id = '${groupAdminUser.organizationId}'
+       WHERE id = '${issuedAssignment.id}'`,
+    );
     const finalReturn = await groupAdmin.post(`/api/writing/submissions/${secondQueueItem.submissionId}/approve-return`, {
-      selectedEvaluationId: secondDetail.submission.selectedEvaluationId || secondDetail.submission.evaluations[0].id,
+      selectedEvaluationId: selectedSecondEvaluation.id,
       publicComment: '構成が安定しました。次回は語彙の幅も意識しましょう。',
       privateMemo: 'integration test final return',
     });
     assert(finalReturn.assignment.status === 'COMPLETED', 'second approved return should complete the assignment');
     const retriedFinalReturn = await groupAdmin.post(`/api/writing/submissions/${secondQueueItem.submissionId}/approve-return`, {
-      selectedEvaluationId: secondDetail.submission.selectedEvaluationId || secondDetail.submission.evaluations[0].id,
+      selectedEvaluationId: selectedSecondEvaluation.id,
       publicComment: '構成が安定しました。次回は語彙の幅も意識しましょう。',
       privateMemo: 'integration test final return',
     });
@@ -1365,11 +1730,40 @@ const main = async () => {
       retriedFinalReturn.submission.teacherReview?.id === finalReturn.submission.teacherReview?.id,
       'teacher review retry should reuse the same review row for approved returns',
     );
+    assert(
+      finalReturn.submission.teacherReview?.privateMemo === 'integration test final return',
+      'teacher approved-return response should retain its private memo',
+    );
+    const completedReissue = await groupAdmin.request('/api/writing/assignments/issue', {
+      method: 'POST',
+      body: JSON.stringify({ assignmentId: issuedAssignment.id }),
+    });
+    assert(completedReissue.status === 409, 'COMPLETED assignment must not be rewound to ISSUED');
 
     const finalAssignments = await orgStudent.get('/api/writing/assignments?scope=mine');
     const completedAssignment = finalAssignments.assignments.find((assignment) => assignment.id === issuedAssignment.id);
     assert(completedAssignment?.status === 'COMPLETED', 'student should see the writing assignment as completed');
     assert(completedAssignment?.latestSubmissionId, 'student should receive visible submission detail after teacher approval');
+
+    const returnedStudentDetail = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}`);
+    assert(returnedStudentDetail.submission.evaluations.length === 1, 'student returned detail should expose one teacher-selected evaluation');
+    assert(
+      returnedStudentDetail.submission.evaluations[0].correctedDraft === selectedSecondEvaluation.correctedDraft,
+      'student returned detail should expose the exact teacher-selected evaluation content',
+    );
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'id'), 'student returned evaluation should omit its internal id');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'provider'), 'student returned evaluation should omit provider identity');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'provenance'), 'student returned evaluation should omit provider provenance');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'costMilliYen'), 'student returned evaluation should omit internal cost');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'latencyMs'), 'student returned evaluation should omit internal latency');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.evaluations[0], 'selectionScore'), 'student returned evaluation should omit internal selection score');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.teacherReview, 'privateMemo'), 'student returned detail should omit the private memo key');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.teacherReview, 'selectedEvaluationId'), 'student returned review should omit the selected evaluation id');
+    assert(!Object.hasOwn(returnedStudentDetail.submission.teacherReview, 'reviewerUid'), 'student returned review should omit the reviewer uid');
+    assert(
+      JSON.stringify(Object.keys(returnedStudentDetail.assignment).sort()) === JSON.stringify(['id', 'promptTitle', 'status']),
+      'student returned detail should expose only the minimal assignment summary',
+    );
 
     const printableFeedback = await orgStudent.get(`/api/writing/submissions/${completedAssignment.latestSubmissionId}/printable-feedback`);
     assert(printableFeedback.html.includes('自由英作文返却'), 'printable feedback should contain the feedback HTML');

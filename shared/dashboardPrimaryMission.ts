@@ -11,13 +11,20 @@ import {
   type PrimaryMissionSnapshot,
   type UserGrade,
   UserRole,
-} from '../../types';
+} from '../types';
 import {
   buildMissionProgress,
   buildSuggestedMissionDraft,
   toPrimaryMissionSnapshot,
-} from '../../shared/missions';
-import type { DbUserRow } from './types';
+} from './missions';
+
+// This projection is shared by the cloud and local adapters; it does not need a database row.
+export interface DashboardPrimaryMissionUser {
+  id: string;
+  role: string;
+  grade: string | null;
+  english_level: string | null;
+}
 
 export type DashboardPrimaryMissionBook = {
   id: string;
@@ -29,7 +36,7 @@ export type DashboardPrimaryMissionBook = {
 };
 
 export type DashboardSuggestedPrimaryMissionBuilder = (input: {
-  user: Pick<DbUserRow, 'id' | 'grade' | 'english_level'>;
+  user: Omit<DashboardPrimaryMissionUser, 'role'>;
   books: DashboardPrimaryMissionBook[];
   learningPlan?: { dailyWordGoal: number; selectedBookIds: string[] } | null;
   learningPreference?: {
@@ -47,7 +54,7 @@ export type DashboardSuggestedPrimaryMissionBuilder = (input: {
 }) => PrimaryMissionSnapshot;
 
 export interface DashboardPrimaryMissionInput {
-  user: Pick<DbUserRow, 'id' | 'role' | 'grade' | 'english_level'>;
+  user: DashboardPrimaryMissionUser;
   todaySelectableBooks: DashboardPrimaryMissionBook[];
   learningPlan: LearningPlan | null;
   learningPreference: LearningPreference | null;

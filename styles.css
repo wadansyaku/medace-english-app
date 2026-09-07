@@ -26,9 +26,12 @@
     --color-medace-950: 67 20 7;
     --color-ink: 17 24 39;
     --color-muted: 71 85 105;
-    --color-canvas: 255 248 241;
+    --color-canvas: 244 248 247;
     --color-panel: 255 255 255;
     --color-line: 226 232 240;
+    --color-action: 15 118 110;
+    --color-action-hover: 17 94 89;
+    --color-on-action: 255 255 255;
     --color-signal-amber: 243 184 10;
     --color-signal-coral: 224 35 35;
     --color-signal-blue: 37 99 235;

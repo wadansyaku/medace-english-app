@@ -299,10 +299,6 @@ export interface StorageActionMap {
     payload: { wordId: string; reason: string };
     response: null;
   };
-  updateWordCache: {
-    payload: { wordId: string; sentence: string; translation: string };
-    response: null;
-  };
   generateWordHintAsset: {
     payload: GenerateWordHintAssetPayload;
     response: WordData;
@@ -349,11 +345,12 @@ export interface StorageActionMap {
   };
   saveSRSHistory: {
     payload: {
-      word: WordData;
+      word: Pick<WordData, 'id' | 'bookId'>;
       rating: number;
       responseTimeMs: number;
       missionAssignmentId?: string;
       taskIntentType?: LearningTaskIntentType;
+      clientAttemptId?: string;
     };
     response: null;
   };
@@ -549,7 +546,6 @@ export const STORAGE_ACTIONS = [
   'getWordsByBook',
   'updateWord',
   'reportWord',
-  'updateWordCache',
   'generateWordHintAsset',
   'prepareBookExamples',
   'getDailySessionWords',

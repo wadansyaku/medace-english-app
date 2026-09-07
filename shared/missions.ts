@@ -286,10 +286,17 @@ export const buildMissionProgress = ({
     + Math.min(quizCompletedCount, safeQuizTarget)
     + (writingRequired && writingCompleted ? 1 : 0);
   const targetUnits = safeNewTarget + safeReviewTarget + safeQuizTarget + (writingRequired ? 1 : 0);
-  const completionRate = targetUnits > 0 ? Math.min(100, Math.round((completedUnits / targetUnits) * 100)) : 0;
-  const overdue = completionRate < 100 && now > dueAt;
+  const meetsAllTargets = targetUnits > 0
+    && newWordsCompleted >= safeNewTarget
+    && reviewWordsCompleted >= safeReviewTarget
+    && quizCompletedCount >= safeQuizTarget
+    && (!writingRequired || writingCompleted);
+  const completionRate = targetUnits > 0
+    ? Math.min(meetsAllTargets ? 100 : 99, Math.round((completedUnits / targetUnits) * 100))
+    : 0;
+  const overdue = !completedAt && !meetsAllTargets && now > dueAt;
   const hasStarted = Boolean(startedAt || restartedAt || lastActivityAt || completedUnits > 0 || (writingRequired && writingCompleted));
-  const status: WeeklyMissionStatus = completedAt || completionRate >= 100
+  const status: WeeklyMissionStatus = completedAt || meetsAllTargets
     ? WeeklyMissionStatusEnum.COMPLETED
     : overdue
       ? WeeklyMissionStatusEnum.OVERDUE

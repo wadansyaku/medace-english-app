@@ -4,7 +4,7 @@ import {
   MOBILE_FLOW_BUTTON_LABELS,
   MOBILE_FLOW_TEST_IDS,
   MOBILE_FLOW_WRITING,
-} from '../../config/mobileFlow.js';
+} from '../../scripts/_shared/mobile-flow.mjs';
 import {
   PUBLIC_BUSINESS_ROLE_KEYS,
   getPublicBusinessRoleConfig,
@@ -22,21 +22,20 @@ export const toUploadBuffer = (value: string): Buffer => Buffer.from(value);
 
 export const finishStudySession = async (page: Page, maxCards = 12) => {
   const finishButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFinishExit);
-  const dashboardReturnButton = page.getByRole('button', { name: 'ダッシュボードに戻る' });
   const flipButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyFlipButton);
   const rateButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyRate3);
+  const studyError = page.getByTestId('study-load-error').or(page.getByTestId('study-save-error'));
   const quizRunningView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
   const quizResultView = page.getByTestId(MOBILE_FLOW_TEST_IDS.quizResultView);
   const studentDashboard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard);
 
   for (let index = 0; index < maxCards * 2; index += 1) {
+    // A navigation/empty/error exit is not evidence that any answer was saved.
+    if (await studyError.isVisible().catch(() => false)) {
+      throw new Error(`Study session could not complete: ${await studyError.innerText()}`);
+    }
     if (await finishButton.isVisible().catch(() => false)) {
       await finishButton.click();
-      await expect(studentDashboard).toBeVisible();
-      return;
-    }
-    if (await dashboardReturnButton.isVisible().catch(() => false)) {
-      await dashboardReturnButton.click();
       await expect(studentDashboard).toBeVisible();
       return;
     }
@@ -46,7 +45,7 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
       return;
     }
     if (await studentDashboard.isVisible().catch(() => false)) {
-      return;
+      throw new Error('Study session returned to the dashboard before its completion screen was confirmed.');
     }
     if (await quizRunningView.isVisible().catch(() => false)) {
       await answerSeededQuizQuestion(page);
@@ -57,14 +56,11 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
       continue;
     }
     if (await rateButton.isVisible().catch(() => false)) {
+      await expect(rateButton).toBeEnabled();
       await rateButton.click();
-      await Promise.race([
-        finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-        quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-        quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-        studentDashboard.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-        flipButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-      ]);
+      // The controls remain visible but disabled while this answer is saving.
+      // Wait for that card to leave instead of attempting the disabled rating again.
+      await expect(rateButton).toBeHidden();
       continue;
     }
     if (await flipButton.isVisible().catch(() => false)) {
@@ -72,7 +68,6 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
       await Promise.race([
         rateButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
         finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-        dashboardReturnButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
         quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
         quizResultView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
         studentDashboard.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
@@ -82,7 +77,7 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
 
     await Promise.race([
       finishButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
-      dashboardReturnButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
+      studyError.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
       flipButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
       rateButton.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
       quizRunningView.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => null),
@@ -96,11 +91,6 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
     await expect(studentDashboard).toBeVisible();
     return;
   }
-  if (await dashboardReturnButton.isVisible().catch(() => false)) {
-    await dashboardReturnButton.click();
-    await expect(studentDashboard).toBeVisible();
-    return;
-  }
   if (await quizResultView.isVisible().catch(() => false)) {
     await page.getByRole('button', { name: MOBILE_FLOW_BUTTON_LABELS.quizResultBack }).click();
     await expect(studentDashboard).toBeVisible();
@@ -110,7 +100,7 @@ export const finishStudySession = async (page: Page, maxCards = 12) => {
     throw new Error('Study session switched into quiz mode but did not finish within the smoke helper step budget.');
   }
   if (await studentDashboard.isVisible().catch(() => false)) {
-    return;
+    throw new Error('Study session returned to the dashboard before its completion screen was confirmed.');
   }
   throw new Error('Study session did not reach a finishable state within the smoke helper step budget.');
 };

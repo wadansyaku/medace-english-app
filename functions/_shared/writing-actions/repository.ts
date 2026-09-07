@@ -137,6 +137,19 @@ export const readSubmissionRowByAssignmentAttempt = async (
   attemptNo,
 );
 
+export const readLatestSubmissionRowForAssignment = async (
+  env: AppEnv,
+  assignmentId: string,
+): Promise<DbWritingSubmissionRow | null> => readFirst(
+  env,
+  `SELECT *
+   FROM writing_submissions
+   WHERE assignment_id = ?
+   ORDER BY submitted_at DESC, attempt_no DESC, id DESC
+   LIMIT 1`,
+  assignmentId,
+);
+
 export const readSubmissionDetailBaseRow = async (
   env: AppEnv,
   submissionId: string,

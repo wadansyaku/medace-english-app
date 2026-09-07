@@ -1,3 +1,6 @@
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
@@ -126,14 +129,65 @@ test('group admin and business student can complete the writing workflow with on
   await adminPage.getByTestId('writing-review-public-comment').fill('構成が安定しました。次は語彙の幅も意識しましょう。');
   await adminPage.getByTestId('writing-approve-return').click();
   await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
-  await adminPage.getByRole('button', { name: '返却履歴' }).click();
+  await adminPage.getByRole('button', { name: '返却履歴', exact: true }).click();
   await expect(adminPage.locator('[data-testid^="writing-review-item-"]').first()).toBeVisible();
 
   await studentPage.reload();
   await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
   await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
   await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
+  await expect(studentPage.getByTestId('writing-feedback-approved-evaluation')).toHaveCount(1);
+  await expect(studentPage.getByText('AI比較', { exact: true })).toHaveCount(0);
+  await expect(studentPage.locator('[data-testid^="writing-feedback-provider-"]')).toHaveCount(0);
   await expect(studentPage.getByText('訂正文例', { exact: true })).toBeVisible();
+
+  const feedbackViewports = [
+    { width: 320, height: 568, label: 'phone-320' },
+    { width: 390, height: 844, label: 'phone-390' },
+    { width: 430, height: 932, label: 'phone-430' },
+    { width: 640, height: 800, label: 'small-tablet-640' },
+    { width: 767, height: 900, label: 'tablet-767' },
+    { width: 844, height: 390, label: 'phone-landscape' },
+    { width: 1024, height: 768, label: 'chromebook-1024' },
+    { width: 1440, height: 900, label: 'desktop-1440' },
+  ];
+  const screenshotOutputDir = process.env.WRITING_SMOKE_SCREENSHOT_DIR;
+  if (screenshotOutputDir) {
+    await mkdir(screenshotOutputDir, { recursive: true });
+  }
+  for (const viewport of feedbackViewports) {
+    await studentPage.setViewportSize({ width: viewport.width, height: viewport.height });
+    await expect(studentPage.getByTestId('writing-feedback-approved-evaluation')).toBeVisible();
+    const horizontalOverflow = await studentPage.evaluate(() => (
+      Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - window.innerWidth
+    ));
+    expect(horizontalOverflow, `${viewport.label} should not overflow horizontally`).toBeLessThanOrEqual(1);
+    const screenshot = await studentPage.screenshot(screenshotOutputDir
+      ? { path: join(screenshotOutputDir, `writing-feedback-${viewport.label}.png`) }
+      : undefined);
+    await test.info().attach(`writing-feedback-${viewport.label}`, {
+      body: screenshot,
+      contentType: 'image/png',
+    });
+  }
+
+  await studentPage.setViewportSize({ width: 640, height: 800 });
+  await studentPage.evaluate(() => document.documentElement.style.setProperty('zoom', '2'));
+  const zoomedApprovedEvaluation = studentPage.getByTestId('writing-feedback-approved-evaluation');
+  await zoomedApprovedEvaluation.scrollIntoViewIfNeeded();
+  await expect(zoomedApprovedEvaluation).toBeInViewport();
+  const zoomScreenshot = await studentPage.screenshot(screenshotOutputDir
+    ? { path: join(screenshotOutputDir, 'writing-feedback-200-percent-zoom.png') }
+    : undefined);
+  await test.info().attach('writing-feedback-200-percent-zoom', {
+    body: zoomScreenshot,
+    contentType: 'image/png',
+  });
+  await studentPage.evaluate(() => document.documentElement.style.removeProperty('zoom'));
+
+  const closeFeedbackButton = studentPage.getByRole('button', { name: '添削フィードバックを閉じる' });
+  await closeFeedbackButton.focus();
+  await expect(closeFeedbackButton).toBeFocused();
 
   await adminContext.close();
   await studentContext.close();
