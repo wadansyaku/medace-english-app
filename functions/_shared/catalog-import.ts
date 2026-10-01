@@ -1,4 +1,5 @@
 export {
+  catalogRowsAreEquivalent,
   normalizeCatalogImport,
 } from '../../shared/catalogImport';
 export type {

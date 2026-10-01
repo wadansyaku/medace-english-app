@@ -304,7 +304,7 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
               </div>
             <button
               onClick={onStartQuest}
-              className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+              className="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover"
             >
               <Zap className="h-4 w-4" /> クエストへ進む
             </button>

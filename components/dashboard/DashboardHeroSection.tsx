@@ -13,7 +13,6 @@ import {
   Target,
   type LucideIcon,
 } from 'lucide-react';
-import { BRAND } from '../../config/brand';
 import { GRADE_LABELS, type LearningPlan, type UserGrade } from '../../types';
 import type {
   StudentDashboardHeroMetric,
@@ -137,176 +136,46 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   const compactMetrics = (heroMetrics && heroMetrics.length > 0 ? heroMetrics : fallbackMetrics).slice(0, 3);
 
   return (
-    <section
-      data-testid="dashboard-command-center"
-      className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 shadow-[0_18px_48px_rgba(15,23,42,0.05)] ${
-        isMobileCompact ? 'p-4' : 'p-5 md:p-6'
-      }`}
-    >
-      <div className={`min-w-0 gap-3 border-b border-slate-100 pb-4 ${
-        isMobileCompact
-          ? 'grid grid-cols-[minmax(0,1fr)_auto] items-start'
-          : 'flex flex-wrap items-center justify-between'
-      }`}>
+    <section data-testid="dashboard-command-center" className="study-focus-panel min-w-0 overflow-hidden rounded-panel border border-medace-200 bg-white shadow-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-medace-100 px-5 py-4 sm:px-7">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className={`rounded-md border border-medace-200 bg-medace-50 font-black text-medace-700 ${
-            isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
-          }`}>
-            {BRAND.productLabel}
-          </span>
-          <span className={`rounded-md border border-medace-100 bg-white font-bold text-slate-600 ${
-            isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
-          }`}>
-            {GRADE_LABELS[grade]} / {englishLevel || '未診断'}
-          </span>
-          {gameLeagueBadge && (
-            <span className={`rounded-md border font-bold ${gameLeagueBadge.color} ${
-              isMobileCompact ? 'px-2.5 py-1 text-[10px]' : 'px-3 py-1.5 text-xs'
-            }`}>
-              {gameLeagueBadge.name}
-            </span>
-          )}
+          <span className="inline-flex items-center gap-2 text-xs font-black tracking-wide text-medace-900"><span className="h-2 w-2 rounded-full bg-medace-500" />{heroEyebrow}</span>
+          <span className="rounded-full bg-medace-50 px-2.5 py-1 text-[11px] font-bold text-steady-muted">{GRADE_LABELS[grade]} / {englishLevel || '未診断'}</span>
+          {gameLeagueBadge && <span className={'rounded-full border px-2.5 py-1 text-[11px] font-bold ' + gameLeagueBadge.color}>{gameLeagueBadge.name}</span>}
         </div>
-        <button
-          onClick={onOpenSettings}
-          data-testid="student-hero-settings"
-          aria-label="設定"
-          className={`flex items-center gap-2 rounded-lg border border-slate-200 bg-white font-bold text-slate-600 transition-colors hover:border-medace-200 hover:bg-medace-50 ${
-            isMobileCompact ? 'h-11 w-11 justify-center p-0' : 'px-4 py-2 text-sm'
-          }`}
-        >
-          <Settings className="h-4 w-4" />
-          <span className={isMobileCompact ? 'sr-only' : ''}>設定</span>
-        </button>
+        <button type="button" onClick={onOpenSettings} data-testid="student-hero-settings" aria-label="学習の設定を開く" className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl border border-medace-100 bg-white text-steady-muted transition-colors hover:bg-medace-50"><Settings className="h-4 w-4" aria-hidden="true" /></button>
       </div>
-
-      <div className={`grid min-w-0 gap-4 ${isMobileCompact ? 'mt-4' : 'mt-5 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start'}`}>
+      <div className="grid min-w-0 gap-6 px-5 py-6 sm:px-7 sm:py-8 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-10">
         <div className="min-w-0">
-          <div className="min-w-0 border-l-4 border-medace-500 pl-4">
-            <p className="text-xs font-black text-medace-700">{heroEyebrow}</p>
-            <h2 className={`mt-2 font-black leading-tight text-slate-950 ${isMobileCompact ? 'text-[1.55rem] min-[360px]:text-[1.85rem]' : 'text-3xl md:text-4xl'}`}>
-              {heroTitle}
-            </h2>
-            <p className={`mt-3 max-w-2xl leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-2 text-sm' : 'text-base'}`}>
-              {heroCopy}
-            </p>
-          </div>
-
-          <div className="mt-5 flex min-w-0 flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <button
-              onClick={onStartQuest}
-              data-testid="student-hero-primary-cta"
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg bg-steady-action font-black text-steady-on-action transition-colors hover:bg-steady-action-hover sm:w-auto ${
-                isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-6 py-3.5 text-base'
-              }`}
-            >
-              <Play className="h-4 w-4 fill-current" /> {questButtonLabel}
+          <p className="text-[11px] font-black tracking-[0.16em] text-medace-800">YOUR NEXT STEP</p>
+          <h2 className="mt-3 text-[1.85rem] font-black leading-[1.28] tracking-tight text-steady-ink sm:text-4xl lg:text-[2.65rem]">{heroTitle}</h2>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-steady-muted sm:text-base">{heroCopy}</p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={onStartQuest} data-testid="student-hero-primary-cta" className="study-primary-action inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-ui bg-steady-action px-6 py-3.5 text-base font-black text-steady-on-action transition-colors hover:bg-steady-action-hover sm:w-auto">
+              <Play className="h-4 w-4 fill-current" aria-hidden="true" /><span>{questButtonLabel}</span><ArrowRight className="ml-3 h-5 w-5" aria-hidden="true" />
             </button>
-            {!isMobileCompact && hasStudyBooks && learningPlan ? (
-              <button
-                onClick={onOpenPlan}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 sm:w-auto ${
-                  isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
-                }`}
-              >
-                <BookOpenText className="h-4 w-4" /> 今日のプラン
-              </button>
-            ) : !isMobileCompact && hasStudyBooks ? (
-              <button
-                onClick={onGeneratePlan}
-                disabled={generatingPlan}
-                className={`inline-flex w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white font-bold text-slate-700 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700 disabled:opacity-50 sm:w-auto ${
-                  isMobileCompact ? 'min-h-12 px-4 py-3 text-sm' : 'px-5 py-3 text-sm'
-                }`}
-              >
-                プランを作る
-              </button>
-            ) : null}
+            {!isMobileCompact && hasStudyBooks && <button type="button" onClick={learningPlan ? onOpenPlan : onGeneratePlan} disabled={!learningPlan && generatingPlan} className="inline-flex min-h-11 items-center gap-2 rounded-ui px-3 py-2 text-sm font-bold text-steady-muted transition-colors hover:bg-medace-50 disabled:opacity-60"><BookOpenText className="h-4 w-4" aria-hidden="true" />{learningPlan ? '学習プラン' : generatingPlan ? 'プランを作成中…' : 'プランを作る'}</button>}
           </div>
-
-          {showTaskMetrics && <div data-testid="dashboard-command-metrics" className={`mt-5 min-w-0 gap-2 ${isMobileCompact ? 'hidden' : 'grid sm:grid-cols-3'}`}>
-            {compactMetrics.map((metric, index) => {
-              const MetricIcon = HERO_METRIC_ICON[metric.icon] || Target;
-              return (
-                <div
-                  key={metric.id}
-                  className={`min-w-0 rounded-lg border border-medace-100 bg-medace-50 px-3 py-3 ${isMobileCompact && index === 2 ? 'col-span-2 sm:col-span-1' : ''}`}
-                >
-                  <div className="flex items-center gap-2 text-[11px] font-black text-slate-500">
-                    <MetricIcon className="h-3.5 w-3.5" />
-                    <span>{metric.label}</span>
-                  </div>
-                  <div className="mt-1 truncate text-base font-black text-slate-950">{metric.value}</div>
-                  <div className="truncate text-xs font-bold text-slate-500">{metric.helper}</div>
-                </div>
-              );
+          {showTaskMetrics && <div data-testid="dashboard-command-metrics" className="mt-6 grid min-w-0 grid-cols-3 gap-2 border-t border-medace-100 pt-5 sm:mt-8 sm:gap-4">
+            {compactMetrics.map((metric) => {
+              const Icon = HERO_METRIC_ICON[metric.icon] || Target;
+              return <div key={metric.id} className="min-w-0"><div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold leading-relaxed text-steady-muted sm:text-xs"><Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>{metric.label}</span></div><p className="mt-1.5 break-words text-lg font-black text-steady-ink sm:text-2xl">{metric.value}</p><p className="mt-0.5 text-[10px] leading-relaxed text-steady-muted sm:text-xs">{metric.helper}</p></div>;
             })}
           </div>}
         </div>
-
-        <aside className="grid min-w-0 gap-2.5">
-          {hasStudyBooks && <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <div className="text-xs font-black text-slate-500">今日の進捗</div>
-                <div className="mt-1 text-2xl font-black text-slate-950">{safeProgressPercent}%</div>
-              </div>
-              <div className="text-right text-xs font-bold text-slate-500">
-                {todayCount} / {todayWordGoal}語
-              </div>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-medace-100">
-              <div className="h-full rounded-full bg-medace-500" style={{ width: `${safeProgressPercent}%` }} />
-            </div>
-            {isMobileCompact && (
-              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200 pt-3 text-center">
-                {compactMetrics.map((metric) => (
-                  <div key={metric.id} className="min-w-0">
-                    <div className="truncate text-[11px] font-black text-slate-500">{metric.label}</div>
-                    <div className="mt-0.5 truncate text-sm font-black text-slate-950">{metric.value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
+        <aside className="grid min-w-0 content-start gap-3">
+          {hasStudyBooks && <div className="rounded-card border border-medace-100 bg-medace-50 p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold text-steady-muted">今日の積み上げ</p><p className="mt-2 text-3xl font-black tracking-tight text-steady-ink">{todayCount}<span className="ml-1.5 text-sm font-bold text-steady-muted">/ {todayWordGoal}語</span></p></div><span className="flex h-10 w-10 items-center justify-center rounded-full border border-medace-200 bg-white text-medace-800"><CheckCircle2 className="h-5 w-5" aria-hidden="true" /></span></div>
+            <div role="progressbar" aria-label="今日の学習目標" aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeProgressPercent} aria-valuetext={todayWordGoal + '語の目標に対して' + todayCount + '語、' + safeProgressPercent + '%'} className="mt-4 h-2.5 overflow-hidden rounded-full bg-medace-100"><div className="h-full rounded-full bg-medace-500 transition-[width]" style={{ width: safeProgressPercent + '%' }} /></div>
+            <p className="mt-3 text-xs leading-relaxed text-steady-muted">{safeProgressPercent >= 100 ? '今日の目標達成。おつかれさまでした！' : todayCount > 0 ? '今日の一歩が、次の「わかる」に。' : 'まずは一語。小さな一歩から始めよう。'}</p>
           </div>}
-
-          {(!isMobileCompact || isPracticePrimary) && (
-            <div
-              ref={practiceAnchorRef}
-              data-testid="dashboard-english-practice-entry"
-              style={practiceAnchorStyle}
-              className={`min-w-0 rounded-lg border border-slate-200 bg-white text-slate-950 ${isMobileCompact ? 'p-3' : 'p-4'}`}
-            >
-              <div data-testid="dashboard-practice-dock" className="min-w-0">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-medace-100 bg-medace-50 text-medace-700">
-                    <PracticeIcon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-black text-slate-500">英語演習</p>
-                    <h3 className="mt-1 text-base font-black leading-tight text-slate-950">{practiceRecommendation.title}</h3>
-                    <p className={`mt-1 text-sm font-bold leading-relaxed text-slate-600 ${isMobileCompact ? 'line-clamp-1' : 'line-clamp-2'}`}>{practiceRecommendation.body}</p>
-                  </div>
-                </div>
-                {!isPracticePrimary && (
-                  <button
-                    type="button"
-                    data-testid={`dashboard-practice-lane-${practiceRecommendation.lane}`}
-                    onClick={() => onSelectPracticeLane(practiceRecommendation.lane)}
-                    className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-medace-100 bg-white px-4 py-3 text-sm font-black text-slate-800 transition-colors hover:border-medace-300 hover:bg-medace-50 hover:text-medace-700"
-                  >
-                    {practiceRecommendation.ctaLabel}
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
-                )}
-                <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs font-black">
-                  <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-700">{practiceRecommendation.metricLabel}</span>
-                  <span className="rounded-md border border-medace-100 bg-medace-50 px-2.5 py-1 text-slate-600">{practiceRecommendation.stateLabel}</span>
-                </div>
-              </div>
+          {(!isMobileCompact || isPracticePrimary) && <div ref={practiceAnchorRef} data-testid="dashboard-english-practice-entry" style={practiceAnchorStyle} className="rounded-card border border-medace-100 bg-white p-4 sm:p-5">
+            <div data-testid="dashboard-practice-dock">
+              <div className="flex items-start gap-3"><PracticeIcon className="mt-0.5 h-5 w-5 shrink-0 text-medace-800" aria-hidden="true" /><div className="min-w-0"><p className="text-[11px] font-bold text-steady-muted">単語から、使える英語へ</p><h3 className="mt-1 text-sm font-black text-steady-ink">{practiceRecommendation.title}</h3><p className="mt-2 text-xs leading-relaxed text-steady-muted">{practiceRecommendation.body}</p></div></div>
+              {!isPracticePrimary && <button type="button" data-testid={'dashboard-practice-lane-' + practiceRecommendation.lane} onClick={() => onSelectPracticeLane(practiceRecommendation.lane)} className="mt-3 inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-xl bg-medace-50 px-3 py-2 text-xs font-black text-medace-900 transition-colors hover:bg-medace-100">{practiceRecommendation.ctaLabel}<ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}
+              <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-bold text-steady-muted"><span>{practiceRecommendation.metricLabel}</span><span>{practiceRecommendation.stateLabel}</span></div>
             </div>
-          )}
-
+          </div>}
         </aside>
       </div>
     </section>

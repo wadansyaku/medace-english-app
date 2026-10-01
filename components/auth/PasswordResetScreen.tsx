@@ -154,7 +154,7 @@ const PasswordResetScreen: React.FC<PasswordResetScreenProps> = ({
                   <button
                     type="submit"
                     disabled={!hasToken || loading}
-                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-medace-600 px-4 py-3 text-sm font-black text-slate-950 shadow-sm transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-4 py-3 text-sm font-black text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
                     パスワードを更新

@@ -102,7 +102,9 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
         errorMsg={controller.errorMsg}
         canUseSelectedCreateMode={canUseSelectedCreateMode}
         currentPlanLabel={viewModel.currentPlanPolicy.label}
-        onClose={() => controller.setShowCreateModal(false)}
+        onClose={() => {
+          if (!controller.creating) controller.setShowCreateModal(false);
+        }}
         onChangeMode={controller.setCreateMode}
         onChangeRawText={controller.setRawText}
         onChangeTitle={controller.setNewBookTitle}

@@ -450,7 +450,7 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('dashboard-task-reference-plan').click();
     await expect(page.getByTestId('dashboard-plan-anchor')).toBeInViewport();
     await page.getByTestId('dashboard-quicknav-library').click();
-    await page.getByRole('button', { name: '公式コースをもっと見る', exact: true }).click();
+    await page.getByRole('button', { name: /配布教材をもっと見る|すべての配布教材を見る/ }).click();
     await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。')).toBeVisible();
 
     const offenders = await findUnexpectedHorizontalOverflow(page);

@@ -570,9 +570,9 @@ export const getInstructorSegmentLabel = (student: {
 }) => {
   const missionOverdue = Boolean(student.missionOverdue || student.primaryMissionStatus === 'OVERDUE');
   const missionUnstarted = student.primaryMissionStatus === 'ASSIGNED';
-  if (missionOverdue) return '要即対応';
+  if (missionOverdue) return '今日フォロー';
   if (student.latestInterventionOutcome === 'REACTIVATED') {
-    return missionUnstarted ? '再開待ち' : '再開済み';
+    return missionUnstarted ? '経過を確認' : '再開を確認';
   }
   if (
     student.needsFollowUpNow
@@ -581,9 +581,9 @@ export const getInstructorSegmentLabel = (student: {
       && (!student.latestInterventionAt || Number(student.latestInterventionAt) <= 0)
     )
   ) {
-    return '要即対応';
+    return '今日フォロー';
   }
-  return '再開待ち';
+  return '経過を確認';
 };
 
 export const emailAuth = async (

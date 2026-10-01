@@ -273,7 +273,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
               isMobileViewport
                 ? 'border border-slate-200 bg-white text-slate-700'
-                : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
+                : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
             }`}
           >
             <FileDown className="h-4 w-4" />

@@ -13,34 +13,37 @@
     --safe-right: env(safe-area-inset-right, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
-    --color-medace-50: 255 248 237;
-    --color-medace-100: 255 239 216;
-    --color-medace-200: 255 214 168;
-    --color-medace-300: 255 183 107;
-    --color-medace-400: 255 152 47;
-    --color-medace-500: 255 122 0;
-    --color-medace-600: 255 122 0;
-    --color-medace-700: 230 81 0;
-    --color-medace-800: 200 76 6;
-    --color-medace-900: 138 53 16;
-    --color-medace-950: 67 20 7;
-    --color-ink: 17 24 39;
-    --color-muted: 71 85 105;
-    --color-canvas: 244 248 247;
+    /* Official MedAse website CSS: primary #F66D0B, text #2F1609,
+       warm brown #66321A, accent #FFBF52, cream #FDF3ED.
+       Intermediate ramp shades are interface derivatives. */
+    --color-medace-50: 253 243 237;
+    --color-medace-100: 252 227 209;
+    --color-medace-200: 249 198 161;
+    --color-medace-300: 255 191 82;
+    --color-medace-400: 248 151 75;
+    --color-medace-500: 246 109 11;
+    --color-medace-600: 232 93 0;
+    --color-medace-700: 157 62 5;
+    --color-medace-800: 125 52 12;
+    --color-medace-900: 102 50 26;
+    --color-medace-950: 47 22 9;
+    --color-ink: 47 22 9;
+    --color-muted: 102 50 26;
+    --color-canvas: 253 243 237;
     --color-panel: 255 255 255;
     --color-line: 226 232 240;
-    --color-action: 15 118 110;
-    --color-action-hover: 17 94 89;
-    --color-on-action: 255 255 255;
+    --color-action: 246 109 11;
+    --color-action-hover: 232 93 0;
+    --color-on-action: 47 22 9;
     --color-signal-amber: 243 184 10;
     --color-signal-coral: 224 35 35;
     --color-signal-blue: 37 99 235;
-    --radius-card: 0.75rem;
-    --radius-panel: 1rem;
-    --radius-control: 0.75rem;
+    --radius-card: 20px;
+    --radius-panel: 24px;
+    --radius-control: 14px;
     --radius-chip: 9999px;
-    --shadow-panel: 0 16px 42px rgba(15, 23, 42, 0.08);
-    --shadow-raised: 0 24px 60px rgba(255, 122, 0, 0.14);
+    --shadow-panel: 0 8px 28px rgba(102, 50, 26, 0.055);
+    --shadow-raised: 0 16px 42px rgba(102, 50, 26, 0.12);
     --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   }
 
@@ -117,8 +120,14 @@
   textarea:focus-visible,
   select:focus-visible,
   a:focus-visible {
-    outline: 3px solid rgba(246, 109, 11, 0.26);
-    outline-offset: 2px;
+    outline: 3px solid rgb(var(--color-medace-900));
+    outline-offset: 3px;
+  }
+
+  summary:focus-visible {
+    outline: 3px solid rgb(var(--color-medace-900));
+    outline-offset: 3px;
+    border-radius: var(--radius-control);
   }
 
   *,
@@ -143,6 +152,32 @@
 }
 
 @layer components {
+  .skip-to-content {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    border-radius: var(--radius-control);
+    padding: 0.75rem 1rem;
+    color: rgb(var(--color-ink));
+    background: white;
+    font-weight: 700;
+  }
+
+  .skip-to-content:focus {
+    transform: translateY(0);
+  }
+
+  .study-primary-action {
+    box-shadow: 0 4px 0 rgba(102, 50, 26, 0.13);
+  }
+
+  .study-primary-action:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 0 rgba(102, 50, 26, 0.13);
+  }
+
   .ui-panel {
     @apply border border-slate-200 bg-white p-6;
     border-radius: var(--radius-panel);
@@ -230,7 +265,7 @@
   }
 
   .ui-button-primary {
-    @apply bg-medace-600 text-slate-950 shadow-sm hover:bg-medace-700;
+    @apply bg-steady-action text-steady-on-action shadow-sm hover:bg-steady-action-hover;
   }
 
   .ui-button-secondary {
@@ -465,9 +500,9 @@
     --ui-font-size: 16px;
     --ui-line-height: 1.6;
     --ui-control-min-height: 2.85rem;
-    --radius-panel: 0.875rem;
-    --radius-card: 0.625rem;
-    --radius-control: 0.625rem;
+    --radius-panel: 20px;
+    --radius-card: 16px;
+    --radius-control: 12px;
   }
 
   .ui-panel,

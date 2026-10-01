@@ -41,7 +41,7 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
         data-testid="onboarding-start-button"
         onClick={onStart}
         disabled={!selfAssessment}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-50 md:mx-auto md:max-w-sm"
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-base font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:opacity-50 md:mx-auto md:max-w-sm"
       >
         診断を始める <ChevronRight className="h-5 w-5" />
       </button>

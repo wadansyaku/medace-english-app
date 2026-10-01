@@ -36,7 +36,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
             type="button"
             data-testid="weakness-focus-cta"
             onClick={onStartFocusQuest}
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover"
           >
             {buildWeaknessEmptyStateLabel()}
           </button>
@@ -62,7 +62,7 @@ const DashboardWeaknessSection: React.FC<DashboardWeaknessSectionProps> = ({
             type="button"
             data-testid="weakness-focus-cta"
             onClick={handlePrimaryAction}
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover"
           >
             {topWeakness.nextActionLabel}
           </button>

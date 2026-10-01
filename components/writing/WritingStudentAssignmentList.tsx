@@ -87,7 +87,7 @@ const WritingStudentAssignmentCard: React.FC<{
       type="button"
       data-testid={`writing-open-submit-${assignment.id}`}
       onClick={() => onOpenSubmit(assignment)}
-      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
     >
       <Send className="h-4 w-4" />
       {assignment.status === 'REVISION_REQUESTED' ? '書き直して再提出する' : 'スマホで提出する'}

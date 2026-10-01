@@ -24,6 +24,21 @@ const createUser = (role: UserRole): UserProfile => ({
 });
 
 describe('app navigation paths', () => {
+  it('falls back safely for malformed encoded IDs and preserves valid encoded IDs', () => {
+    const fallback = parseNavigationPath('/');
+    for (const path of ['/study/%', '/quiz/%E0%A4%A']) {
+      expect(() => parseNavigationPath(path)).not.toThrow();
+      expect(parseNavigationPath(path)).toEqual(fallback);
+    }
+    for (const view of ['study', 'quiz'] as const) {
+      for (const bookId of ['日本語の教材', 'two words', 'part/one']) {
+        const state = parseNavigationPath(`/${view}/${encodeURIComponent(bookId)}`);
+        expect(getTaskRouteBookId(state.selectedTask!)).toBe(bookId);
+        const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+        expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+      }
+    }
+  });
   it('parses top-level and book detail routes', () => {
     expect(parseNavigationPath('/public')).toEqual({
       currentView: 'publicInfo',

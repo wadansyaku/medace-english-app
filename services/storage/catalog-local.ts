@@ -20,7 +20,7 @@ import {
 } from '../../shared/wordHintAssets';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../../utils/bookAccess';
 import { generateGeminiSentence, generateWordImage } from '../gemini';
-import { createImportedBookId, normalizeCatalogImportRows } from './catalog-import';
+import { catalogRowsAreEquivalent, createImportedBookId, normalizeCatalogImportRows } from './catalog-import';
 import { putStoreRecord, STORES, type GetStore, waitForTransaction } from './idb-support';
 import { isBookOwnedByUser } from './mockData';
 
@@ -146,7 +146,7 @@ export const batchImportWordsLocal = async (
     const bookGroup = bookGroups.get(groupKey);
     if (!bookGroup) continue;
 
-    const duplicate = bookGroup.words.some((candidate) => candidate.word === word && candidate.definition === definition);
+    const duplicate = bookGroup.words.some((candidate) => catalogRowsAreEquivalent(candidate, row));
     if (duplicate) {
       skippedRowCount += 1;
       issues.push({ code: 'DUPLICATE_ROW', message: '重複行をスキップしました。', rowNumber: index + 2 });
@@ -160,6 +160,10 @@ export const batchImportWordsLocal = async (
       word,
       definition,
       searchKey: word.toLowerCase(),
+      ...(row.partOfSpeech ? { partOfSpeech: row.partOfSpeech } : {}),
+      ...(row.inflections ? { inflections: row.inflections } : {}),
+      ...(row.pronunciation ? { pronunciation: row.pronunciation } : {}),
+      ...(row.sourceNote ? { sourceNote: row.sourceNote } : {}),
       ...(row.category?.trim() ? { category: row.category.trim() } : {}),
       ...(row.subcategory?.trim() ? { subcategory: row.subcategory.trim() } : {}),
       ...(row.section?.trim() ? { section: row.section.trim() } : {}),

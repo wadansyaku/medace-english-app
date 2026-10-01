@@ -1,17 +1,21 @@
-import React, { useMemo } from 'react';
-import { Bell, FileStack, ScanText } from 'lucide-react';
-
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
-  InstructorWorkspaceView,
-  type UserProfile,
-} from '../types';
+  BookOpen,
+  FileStack,
+  LayoutDashboard,
+  Loader2,
+  RefreshCw,
+  ScanText,
+  Users,
+} from 'lucide-react';
+
+import { InstructorWorkspaceView, type UserProfile } from '../types';
 import { useInstructorDashboardData } from '../hooks/useInstructorDashboardData';
 import { useInstructorDashboardController } from '../hooks/useInstructorDashboardController';
 import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import InstructorDashboardModals from './dashboard/InstructorDashboardModals';
 import InstructorDashboardSections from './dashboard/InstructorDashboardSections';
-import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
 
 interface InstructorDashboardProps {
   user: UserProfile;
@@ -20,33 +24,36 @@ interface InstructorDashboardProps {
   onChangeView: (view: InstructorWorkspaceView) => void;
 }
 
-const VIEW_COPY: Record<InstructorWorkspaceView, { eyebrow: string; title: string; body: string }> = {
+const VIEW_COPY: Record<InstructorWorkspaceView, { title: string; body: string }> = {
   [InstructorWorkspaceView.OVERVIEW]: {
-    eyebrow: '講師ダッシュボード',
-    title: '今日の介入対象と運用状況を先に掴む',
-    body: '最優先の生徒、今日送る通知、自由英作文の滞留を最初に確認してから各作業へ入ります。',
+    title: '生徒の次の一歩を、一緒に。',
+    body: '担当生徒の様子を確かめ、今日の声かけから始めましょう。',
   },
   [InstructorWorkspaceView.STUDENTS]: {
-    eyebrow: '生徒フォロー',
-    title: '生徒一覧と通知作成を同じ画面で進める',
-    body: '優先度の高い生徒から一覧で確認し、右側の詳細で理由と次アクションを見ながら通知文を整えます。',
+    title: '担当生徒を確認する',
+    body: '学習の状況と理由を確かめて、一人ずつフォローできます。',
   },
   [InstructorWorkspaceView.WRITING]: {
-    eyebrow: '英作文運用',
-    title: '自由英作文の紙提出運用を段階ごとに進める',
-    body: '問題作成、印刷、添削キュー、返却履歴を一つのワークスペースで処理します。',
+    title: '課題を配り、提出へ返す',
+    body: '英作文の問題作成・配布・添削・返却を順に進めます。',
   },
   [InstructorWorkspaceView.WORKSHEETS]: {
-    eyebrow: 'プリント作成',
-    title: '紙配布の問題作成だけを素早く進める',
-    body: '日々の単語配布に必要な PDF 問題作成を独立させ、他の運用情報と分離して扱います。',
+    title: '今日の小テストを準備する',
+    body: '単語帳と範囲を選び、授業で使えるプリントを作成します。',
   },
   [InstructorWorkspaceView.CATALOG]: {
-    eyebrow: '教材カタログ',
-    title: '教材確認は必要なときだけ開く',
-    body: '生徒フォローを邪魔しないように、教材閲覧は独立ビューに寄せて必要時だけ使います。',
+    title: '教材と学習画面を確認する',
+    body: '利用できる単語帳を開き、生徒が取り組む内容を確かめます。',
   },
 };
+
+const VIEWS = [
+  { view: InstructorWorkspaceView.OVERVIEW, label: '今日のフォロー', icon: LayoutDashboard },
+  { view: InstructorWorkspaceView.STUDENTS, label: '担当生徒', icon: Users },
+  { view: InstructorWorkspaceView.WORKSHEETS, label: '小テスト・印刷', icon: FileStack },
+  { view: InstructorWorkspaceView.WRITING, label: '課題・提出・返却', icon: ScanText },
+  { view: InstructorWorkspaceView.CATALOG, label: '教材', icon: BookOpen },
+];
 
 const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   user,
@@ -54,99 +61,181 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   activeView,
   onChangeView,
 }) => {
-  const {
-    students,
-    writingAssignments,
-    writingQueue,
-    loading,
-    error,
-    refresh,
-  } = useInstructorDashboardData();
+  const data = useInstructorDashboardData(user.uid);
   const controller = useInstructorDashboardController({
-    students,
+    students: data.students,
     user,
-    refresh,
+    refresh: data.refreshAfterMutation,
   });
   const storageMode = useMemo(() => resolveStorageMode(import.meta.env.VITE_STORAGE_MODE), []);
   const viewCopy = VIEW_COPY[activeView];
-  const isLocalMockData = storageMode.capabilities.organization.usesMockData;
+  const hasAnySnapshot = data.hasStudentsData || data.hasAssignmentsData || data.hasQueueData;
+  const composerContainer = useRef<HTMLDivElement>(null);
+  const composerStudentUid = controller.selectedStudent?.uid;
+  useEffect(() => {
+    if (!composerStudentUid) return;
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    composerContainer.current
+      ?.querySelector<HTMLElement>('[data-testid="notification-message-draft"]')
+      ?.focus({ preventScroll: true });
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (origin?.isConnected) origin.focus({ preventScroll: true });
+    };
+  }, [composerStudentUid]);
 
-  if (loading) {
-    return <div className="p-10 text-center text-slate-500">生徒データを分析中...</div>;
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-[28px] border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-700">
-        {error}
-      </div>
-    );
-  }
+  const handleComposerKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      controller.closeComposer();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from<HTMLElement>(
+      composerContainer.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]',
+      ) || [],
+    ).filter((element) => element.getClientRects().length > 0);
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !composerContainer.current?.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (
+      !event.shiftKey &&
+      (active === last || !composerContainer.current?.contains(active))
+    ) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
-    <WorkspaceDashboardShell
-      testId="instructor-dashboard"
-      className="animate-in fade-in"
-      notice={controller.notice && (
-        <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
+    <div data-testid="instructor-dashboard" className="space-y-6 pb-12">
+      {storageMode.capabilities.organization.usesMockData && <B2BStorageModeBanner />}
+      <header className="rounded-[28px] border border-medace-100 bg-white px-5 py-6 sm:px-8 sm:py-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-medace-800">
+            <span className="rounded-full bg-medace-50 px-3 py-1.5">講師ワークスペース</span>
+            {user.organizationName && <span>{user.organizationName}</span>}
+          </div>
+          <button
+            type="button"
+            onClick={() => void data.refresh()}
+            disabled={data.loading}
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`h-4 w-4 ${data.loading ? 'animate-spin' : ''}`}
+            />
+            {data.loading ? '更新中' : '最新の状況へ更新'}
+          </button>
+        </div>
+        <h2 className="mt-5 text-2xl font-black leading-snug tracking-tight text-medace-900 sm:text-3xl">
+          {viewCopy.title}
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">{viewCopy.body}</p>
+        {data.updatedAt && (
+          <p className="mt-3 text-xs text-slate-500">
+            最終取得{' '}
+            {new Date(data.updatedAt).toLocaleTimeString('ja-JP', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </p>
+        )}
+      </header>
+
+      <nav
+        aria-label="講師の作業"
+        className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5"
+      >
+        {VIEWS.map(({ view, label, icon: Icon }) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => onChangeView(view)}
+            aria-current={view === activeView ? 'page' : undefined}
+            className={`inline-flex min-h-11 flex-shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${view === activeView ? 'bg-medace-50 text-medace-900 ring-1 ring-inset ring-medace-200' : 'text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Icon aria-hidden="true" className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {controller.notice && (
+        <div
+          role={controller.noticeKind === 'error' ? 'alert' : 'status'}
+          className={`${controller.selectedStudent && controller.noticeKind === 'error' ? 'fixed bottom-5 left-4 right-4 z-[60] mx-auto max-w-xl shadow-lg' : ''} rounded-2xl border px-5 py-4 text-sm leading-6 ${controller.noticeKind === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}
+        >
           {controller.notice}
         </div>
       )}
-      banner={isLocalMockData ? <B2BStorageModeBanner /> : undefined}
-      context={(
-        <>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-            グループ講師
-          </span>
-          {user.organizationName && (
-            <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-              {user.organizationName}
-            </span>
-          )}
-        </>
-      )}
-      userBadge={(
-        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
-          {user.displayName}
+      {data.error && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900"
+        >
+          <p className="font-bold">{data.error}</p>
+          <p className="mt-1">
+            {hasAnySnapshot
+              ? '取得済みの項目は表示しています。更新できなかった項目は前回の内容です。'
+              : 'まだ件数を確認できていません。'}{' '}
+            ログイン状態と通信を確認し、再度更新してください。
+          </p>
+          <button
+            type="button"
+            disabled={data.loading}
+            onClick={() => void data.refresh()}
+            className="mt-3 min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-2 font-bold disabled:opacity-50"
+          >
+            再取得する
+          </button>
         </div>
       )}
-      eyebrow={viewCopy.eyebrow}
-      title={viewCopy.title}
-      body={viewCopy.body}
-      actions={[
-        {
-          label: '優先生徒を見る',
-          icon: Bell,
-          onClick: () => onChangeView(InstructorWorkspaceView.STUDENTS),
-          variant: 'primary',
-        },
-        {
-          label: '作文を進める',
-          icon: ScanText,
-          onClick: () => onChangeView(InstructorWorkspaceView.WRITING),
-          variant: 'secondary',
-        },
-        {
-          label: '問題を印刷する',
-          icon: FileStack,
-          onClick: () => onChangeView(InstructorWorkspaceView.WORKSHEETS),
-          variant: 'secondary',
-        },
-      ]}
-    >
-      <InstructorDashboardModals userDisplayName={user.displayName} controller={controller} />
-
+      {data.loading && !hasAnySnapshot && (
+        <div
+          role="status"
+          className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-5 text-sm text-slate-600"
+        >
+          <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin text-medace-700" />
+          生徒・課題・提出を読み込んでいます。件数は取得後に表示します。
+        </div>
+      )}
+      {controller.selectedStudent && (
+        <div
+          ref={composerContainer}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${controller.selectedStudent.name}さんへのアプリ内通知`}
+          aria-busy={controller.sending || controller.drafting}
+          onKeyDown={handleComposerKeyDown}
+          className="[&_[data-testid=notification-composer]]:items-start [&_[data-testid=notification-composer]]:overflow-y-auto [&_[data-testid=notification-composer]>div]:my-auto"
+        >
+          <InstructorDashboardModals userDisplayName={user.displayName} controller={controller} />
+        </div>
+      )}
       <InstructorDashboardSections
         user={user}
         onSelectBook={onSelectBook}
         activeView={activeView}
         onChangeView={onChangeView}
         controller={controller}
-        students={students}
-        writingAssignments={writingAssignments}
-        writingQueue={writingQueue}
+        students={data.students}
+        writingAssignments={data.writingAssignments}
+        writingQueue={data.writingQueue}
+        hasStudentsData={data.hasStudentsData}
+        hasAssignmentsData={data.hasAssignmentsData}
+        hasQueueData={data.hasQueueData}
+        loading={data.loading}
       />
-    </WorkspaceDashboardShell>
+    </div>
   );
 };
 

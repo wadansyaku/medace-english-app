@@ -111,7 +111,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
             type="button"
             onClick={onSubmit}
             disabled={submittingScan || !fileValidation.valid}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
           >
             {submittingScan ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanText className="h-4 w-4" />}
             スキャン答案を登録する

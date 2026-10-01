@@ -174,7 +174,7 @@ const PlanEditorModal: React.FC<PlanEditorModalProps> = ({
             onClick={onSave}
             data-testid="plan-editor-save-button"
             disabled={Boolean(validationMessage)}
-            className="min-h-11 rounded-xl bg-medace-600 px-5 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="min-h-11 rounded-xl bg-steady-action px-5 py-3 font-bold text-steady-on-action shadow-lg transition-all hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             設定を更新する
           </button>

@@ -178,7 +178,8 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   if (normalizedPath === '/admin') return buildHomeState('admin');
 
   if (root === 'study' && bookId) {
-    const decodedBookId = decodeURIComponent(bookId);
+    let decodedBookId: string;
+    try { decodedBookId = decodeURIComponent(bookId); } catch { return initialNavigationState; }
     return {
       currentView: 'study',
       returnView: 'dashboard',
@@ -189,7 +190,8 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   }
 
   if (root === 'quiz' && bookId) {
-    const decodedBookId = decodeURIComponent(bookId);
+    let decodedBookId: string;
+    try { decodedBookId = decodeURIComponent(bookId); } catch { return initialNavigationState; }
     return {
       currentView: 'quiz',
       returnView: 'dashboard',

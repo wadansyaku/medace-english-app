@@ -1158,7 +1158,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         type="button"
                         onClick={() => handleOpenPreview('ANSWER_KEY')}
                         disabled={generatedQuestions.length === 0}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
                       >
                         <Eye className="h-4 w-4" />
                         解答を開く
@@ -1231,7 +1231,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
                 >
                   <Printer className="h-4 w-4" />
                   この版を印刷 / PDF保存

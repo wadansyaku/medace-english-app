@@ -110,16 +110,17 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div data-testid="app-shell" className="flex min-h-screen flex-col bg-steady-canvas font-sans">
+      <a href="#study-main-content" className="skip-to-content">本文へ移動</a>
       {showOfflineBlocker && (
         <div
           data-testid="offline-blocking-banner"
           className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/72 px-4"
         >
           <div className="max-w-lg rounded-panel border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
-            <p className="text-xs font-black text-amber-300">オンライン専用テスト</p>
+            <p className="text-xs font-black text-amber-300">ネットワーク接続を確認してください</p>
             <h2 className="mt-3 text-2xl font-black">オフラインでは操作を継続できません</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-200">
-              この導入 pilot はオンライン接続前提です。ネットワーク接続を戻してから、学習・教材更新・履歴保存を再開してください。
+              学習記録を保存するにはインターネット接続が必要です。接続が戻ると、この画面から学習を続けられます。
             </p>
             <button
               type="button"
@@ -153,7 +154,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header className={`sticky top-0 z-50 border-b border-slate-200 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.04)] ${
+      <header data-testid="app-sticky-header" className={`sticky top-0 z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
@@ -213,24 +214,24 @@ const Layout: React.FC<LayoutProps> = ({
             )}
           </div>
         )}
-        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between ${
-          compactStudentShell ? 'min-h-[62px] py-1' : 'min-h-[80px] py-2'
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 ${
+          compactStudentShell ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <button
             type="button"
             className="flex min-h-11 items-center gap-3 rounded-xl text-left transition-colors hover:bg-medace-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-medace-200"
             onClick={() => onChangeView(homeView)}
-            aria-label={`${BRAND.productLabel} ホームへ戻る`}
+            aria-label={`${BRAND.officialName} ホームへ戻る`}
           >
             <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
               <BookOpen className={`text-medace-700 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
-            <div className={compactStudentShell ? 'block' : 'hidden sm:block'}>
+            <div className="block">
               <h1 className={`font-black tracking-tight text-medace-900 ${compactStudentShell ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
-                {compactStudentShell ? BRAND.productLabel : BRAND.officialName}
+                {BRAND.officialName}
               </h1>
-              <p className={`font-bold tracking-[0.14em] text-medace-700/70 ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
-                {compactStudentShell ? '生徒モバイル' : BRAND.productLabel}
+              <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
+                {compactStudentShell ? 'メッドエース 学習スペース' : 'MedAse Study Space / 英単語学習'}
               </p>
             </div>
           </button>
@@ -244,7 +245,7 @@ const Layout: React.FC<LayoutProps> = ({
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
                           <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-[#f3b80a] fill-[#f3b80a]' : 'text-slate-300'}`} />
-                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
                               {stats.currentStreak}
                           </span>
                       </div>
@@ -277,9 +278,10 @@ const Layout: React.FC<LayoutProps> = ({
                 <button 
                   onClick={() => onChangeView(homeView)}
                   data-testid="layout-nav-home"
+                  aria-current={currentView === homeView ? 'page' : undefined}
                   className={`rounded-xl px-4 py-3 text-[0.95rem] font-bold transition-colors ${
                     currentView === homeView
-                      ? 'bg-medace-600 text-slate-950'
+                      ? 'bg-medace-50 text-medace-950'
                       : 'text-slate-700 hover:bg-medace-50 hover:text-medace-700'
                   }`}
                 >
@@ -289,7 +291,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <span
                     data-testid="layout-nav-english-practice-current"
                     aria-current="page"
-                    className="rounded-xl bg-medace-600 px-4 py-3 text-[0.95rem] font-bold text-slate-950"
+                    className="rounded-xl bg-medace-50 px-4 py-3 text-[0.95rem] font-bold text-medace-950"
                   >
                     英語演習
                   </span>
@@ -304,7 +306,7 @@ const Layout: React.FC<LayoutProps> = ({
                 <button 
                   onClick={onLogout}
                   aria-label="ログアウト"
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
                     compactStudentShell ? 'p-2.5' : 'p-3'
                   }`}
                   title="ログアウト"
@@ -324,15 +326,16 @@ const Layout: React.FC<LayoutProps> = ({
                   type="button"
                   onClick={() => onSelectWorkspaceSection(section.id)}
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
+                  aria-current={activeWorkspaceSection === section.id ? 'page' : undefined}
                   className={`shrink-0 rounded-xl border px-4 py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
-                      ? 'border-medace-600 bg-medace-600 text-slate-950'
+                      ? 'border-medace-200 bg-medace-50 text-medace-950'
                       : 'border-medace-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
                   }`}
                 >
                   <div className="text-sm font-bold">{section.label}</div>
                   {section.description && (
-                    <div className={`mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-white/72' : 'text-slate-400'}`}>
+                    <div className={`mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-medace-900' : 'text-slate-500'}`}>
                       {section.description}
                     </div>
                   )}
@@ -345,9 +348,9 @@ const Layout: React.FC<LayoutProps> = ({
       )}
 
       {/* Main Content */}
-      <main className={immersiveContent
+      <main id="study-main-content" tabIndex={-1} className={immersiveContent
         ? 'flex-grow'
-        : `flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`
+        : `flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-4 sm:py-8' : 'py-8 lg:py-10'}`
       }>
         {children}
       </main>
@@ -358,11 +361,11 @@ const Layout: React.FC<LayoutProps> = ({
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
         {compactStudentShell ? (
-          <div className="mx-auto max-w-7xl px-4 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+          <div className="mx-auto max-w-7xl px-4 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             {BRAND.productLabel}
           </div>
         ) : (
-          <div className="mx-auto max-w-7xl px-4 text-center text-[0.95rem] font-medium text-slate-400">
+          <div className="mx-auto max-w-7xl px-4 text-center text-[0.95rem] font-medium text-slate-500">
             &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
           </div>
         )}

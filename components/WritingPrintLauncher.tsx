@@ -108,7 +108,7 @@ export const buildPrintableAssignmentHtml = (assignment: WritingAssignment): str
 const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
   assignment,
   buttonLabel = '問題を印刷する',
-  buttonClassName = 'inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50',
+  buttonClassName = 'inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50',
 }) => {
   const [open, setOpen] = useState(false);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
@@ -188,7 +188,7 @@ const WritingPrintLauncher: React.FC<WritingPrintLauncherProps> = ({
               <button
                 type="button"
                 onClick={handleDownload}
-                className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+                className="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
               >
                 <FileDown className="h-4 w-4" />
                 HTML保存

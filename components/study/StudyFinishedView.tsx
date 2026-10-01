@@ -99,7 +99,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             <button
               data-testid="study-finish-exit"
               onClick={onExit}
-              className="w-full rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
+              className="w-full rounded-2xl bg-steady-action px-6 py-3 font-bold text-steady-on-action shadow-lg transition-all hover:bg-steady-action-hover"
             >
               ダッシュボードに戻る
             </button>
@@ -176,7 +176,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             type="button"
             data-testid="study-finish-exit"
             onClick={onExit}
-            className="rounded-2xl bg-medace-600 px-6 py-3 font-bold text-slate-950 shadow-lg transition-all hover:bg-medace-700"
+            className="rounded-2xl bg-steady-action px-6 py-3 font-bold text-steady-on-action shadow-lg transition-all hover:bg-steady-action-hover"
           >
             ダッシュボードに戻る
           </button>

@@ -180,7 +180,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
     window.requestAnimationFrame(() => {
       const element = document.querySelector(`[data-testid="dashboard-${sectionId}-section"]`);
-      if (element instanceof HTMLElement) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (element instanceof HTMLElement) navigation.scrollToElement(element);
     });
   }, [controller, navigation]);
 
@@ -234,9 +234,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   if (loading && !snapshot) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center text-medace-500">
-        <Loader2 className="mb-2 h-10 w-10 animate-spin" />
-        <p className="text-sm font-medium">学習データを読み込んでいます</p>
+      <div role="status" aria-live="polite" aria-busy="true" className="flex min-h-[55vh] flex-col items-center justify-center rounded-panel border border-medace-100 bg-white px-5 text-center">
+        <Loader2 className="mb-4 h-9 w-9 animate-spin text-medace-700" aria-hidden="true" />
+        <p className="text-base font-bold text-steady-ink">今日の学習を準備しています</p>
+        <p className="mt-2 text-xs text-steady-muted">教材と前回の記録を確認中です。</p>
       </div>
     );
   }
@@ -271,7 +272,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
       {controller.pageNotice && (
-        <div className={`sticky z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
+        <div role={controller.pageNotice.tone === 'success' ? 'status' : 'alert'} className={`sticky z-40 rounded-2xl border px-4 py-3 text-sm font-bold shadow-sm ${
           isStudentMobileShell ? 'top-[calc(0.35rem+var(--safe-top))]' : 'top-[calc(0.75rem+var(--safe-top))]'
         } ${
           controller.pageNotice.tone === 'success'

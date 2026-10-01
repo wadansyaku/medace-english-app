@@ -30,24 +30,24 @@ const ActivityBarChart: React.FC<{ logs: ActivityLog[]; dailyGoal?: number }> = 
 
   return (
     <div className="relative rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800">
           <BarChart className="h-5 w-5 text-medace-500" /> 週間学習記録
         </h3>
         <div className="flex items-center gap-3">
           {dailyGoal > 0 && (
-            <div className="flex items-center gap-1 text-xs font-bold text-slate-400">
+            <div className="flex items-center gap-1 text-xs font-bold text-slate-500">
               <div className="w-3 border-t-2 border-dashed border-slate-300"></div>
               目標: {dailyGoal}語
             </div>
           )}
-          <div className="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-400">
-            7日間合計: {logs.reduce((sum, entry) => sum + entry.count, 0)} 語
+          <div className="rounded-md bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500">
+            7日間合計: {chartData.reduce((sum, entry) => sum + entry.count, 0)} 語
           </div>
         </div>
       </div>
 
-      <div className="relative h-40 w-full">
+      <div role="img" aria-label={'7日間の学習記録。' + chartData.map((entry) => entry.date + '、' + entry.count + '語').join('。')} className="relative h-40 w-full">
         {dailyGoal > 0 && (
           <div
             className="absolute z-0 w-full border-t-2 border-dashed border-slate-300 opacity-50 transition-all duration-500"
@@ -59,9 +59,9 @@ const ActivityBarChart: React.FC<{ logs: ActivityLog[]; dailyGoal?: number }> = 
           {chartData.map((entry) => {
             const heightPercent = Math.round((entry.count / maxCount) * 100);
             return (
-              <div key={entry.date} className="group relative flex h-full flex-1 cursor-pointer flex-col items-center justify-end">
-                <div className="pointer-events-none absolute -top-8 z-20 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs font-bold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  {entry.count} 単語
+              <div key={entry.date} className="group relative flex h-full flex-1 flex-col items-center justify-end">
+                <div aria-hidden="true" className="absolute -top-6 text-[11px] font-bold text-slate-600">
+                  {entry.count}
                 </div>
                 <div className="relative flex h-full w-full items-end overflow-hidden rounded-t-md bg-slate-50 transition-all duration-300 hover:bg-slate-100">
                   <div
@@ -76,10 +76,9 @@ const ActivityBarChart: React.FC<{ logs: ActivityLog[]; dailyGoal?: number }> = 
                     }`}
                     style={{ height: `${heightPercent}%` }}
                   >
-                    {entry.isGoalMet && <div className="h-full w-full animate-pulse bg-white opacity-20"></div>}
                   </div>
                 </div>
-                <div className={`mt-2 text-xs font-bold ${entry.isToday ? 'text-medace-600' : 'text-slate-400'}`}>
+                <div className={`mt-2 text-xs font-bold ${entry.isToday ? 'text-medace-800' : 'text-slate-500'}`}>
                   {entry.dayLabel}
                 </div>
               </div>
@@ -150,18 +149,21 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
 }) => (
   <div className="space-y-4">
     <button
+      type="button"
       onClick={onToggle}
+      aria-expanded={open}
+      aria-controls="student-progress-details"
       className={`flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-colors hover:bg-slate-50 ${isCompact ? 'px-4 py-3.5' : 'px-5 py-4'}`}
     >
       <div>
         <div className="text-sm font-bold text-slate-900">くわしい学習記録</div>
-        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>週間記録やランキングは必要なときだけ確認できます。</div>
+        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{isGameMode ? '週間記録・定着状況・ランキングを確認' : '週間記録と単語の定着状況を確認'}</div>
       </div>
-      {open ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}
+      {open ? <ChevronUp className="h-5 w-5 text-slate-500" /> : <ChevronDown className="h-5 w-5 text-slate-500" />}
     </button>
 
     {open && (
-      <div className="space-y-6 animate-in fade-in slide-in-from-top-2">
+      <div id="student-progress-details" className="space-y-6 animate-in fade-in slide-in-from-top-2">
         <ActivityBarChart logs={activityLogs} dailyGoal={dailyGoal} />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -178,14 +180,14 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                       background: `conic-gradient(
                         #22c55e 0% ${Math.round((masteryDist.graduated / (masteryDist.total || 1)) * 100)}%,
                         #3b82f6 0% ${Math.round(((masteryDist.graduated + masteryDist.review) / (masteryDist.total || 1)) * 100)}%,
-                        #ff7a00 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
+                        rgb(var(--color-medace-500)) 0% ${Math.round(((masteryDist.graduated + masteryDist.review + masteryDist.learning) / (masteryDist.total || 1)) * 100)}%,
                         #f1f5f9 0% 100%
                       )`,
                     }}
                   ></div>
                   <div className="absolute inset-4 flex flex-col items-center justify-center rounded-full bg-white">
                     <span className="text-3xl font-bold text-slate-800">{masteryDist.total}</span>
-                    <span className="text-xs font-bold uppercase text-slate-400">合計単語</span>
+                    <span className="text-xs font-bold uppercase text-slate-500">合計単語</span>
                   </div>
                 </div>
                 <div className="grid w-full grid-cols-2 gap-4">
@@ -210,7 +212,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="flex h-40 items-center justify-center text-slate-400">データなし</div>
+              <div className="flex h-40 items-center justify-center text-slate-500">データなし</div>
             )}
           </div>
 
@@ -238,7 +240,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                                 ? 'bg-slate-100 text-slate-700'
                                 : index === 2
                                   ? 'bg-medace-50 text-medace-700'
-                                  : 'text-slate-400'
+                                  : 'text-slate-500'
                           }`}
                         >
                           {entry.rank}
@@ -252,17 +254,17 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                             <div className={`flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${league.color}`}>
                               {league.icon} {league.name}
                             </div>
-                            <div className="text-[10px] text-slate-400">Lv.{entry.level}</div>
+                            <div className="text-[10px] text-slate-500">Lv.{entry.level}</div>
                           </div>
                         </div>
                       </div>
                       <div className="text-sm font-bold text-slate-600">
-                        {entry.xp} <span className="text-xs text-slate-400">XP</span>
+                        {entry.xp} <span className="text-xs text-slate-500">XP</span>
                       </div>
                     </div>
                   );
                 })}
-                {leaderboard.length === 0 && <p className="text-center text-xs text-slate-400">ランキングデータなし</p>}
+                {leaderboard.length === 0 && <p className="text-center text-xs text-slate-500">ランキングデータなし</p>}
               </div>
             </div>
           ) : (
@@ -272,10 +274,10 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
               </h3>
               <div className="space-y-3">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今日</div>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">今日</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">
                     {todayCount}
-                    <span className="ml-1 text-sm text-slate-400">/ {todayWordGoal} 語</span>
+                    <span className="ml-1 text-sm text-slate-500">/ {todayWordGoal} 語</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
                     <div
@@ -285,20 +287,20 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">今週</div>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">今週</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">
                     {weekTotal}
-                    <span className="ml-1 text-sm text-slate-400">/ {weeklyGoal} 語</span>
+                    <span className="ml-1 text-sm text-slate-500">/ {weeklyGoal} 語</span>
                   </div>
                   <div className="mt-2 text-sm text-slate-500">
                     {weeklyRemaining === 0 ? '今週の目標ペースに到達しています。' : `あと ${weeklyRemaining} 語で今週の目標です。`}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">連続記録</div>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">連続記録</div>
                   <div className="mt-2 text-2xl font-black text-slate-950">
                     {currentStreak}
-                    <span className="ml-1 text-sm text-slate-400">日</span>
+                    <span className="ml-1 text-sm text-slate-500">日</span>
                   </div>
                   <div className="mt-2 text-sm text-slate-500">他人比較ではなく、自分のペースで積み上げる表示です。</div>
                 </div>

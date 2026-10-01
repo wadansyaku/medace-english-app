@@ -54,7 +54,7 @@ const AdminDemoPrompt: React.FC<AdminDemoPromptProps> = ({
         <button
           type="submit"
           data-testid="admin-demo-submit"
-          className="flex-1 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
+          className="flex-1 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover"
         >
           デモを開く
         </button>

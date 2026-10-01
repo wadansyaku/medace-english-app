@@ -29,7 +29,7 @@ const getButtonText = (html: string, testId: string): string => (
 );
 
 const getPrimaryButtonText = (html: string): string => {
-  const match = html.match(/<button(?=[^>]*bg-medace-600)[^>]*>[\s\S]*?<\/button>/);
+  const match = html.match(/<button(?=[^>]*bg-steady-action)[^>]*>[\s\S]*?<\/button>/);
   return stripHtml(match?.[0] ?? '');
 };
 
@@ -133,7 +133,7 @@ describe('StudyFinishedView primary CTA stability', () => {
     const exitButton = getButtonByTestId(rendered, 'study-finish-exit');
 
     expect(getPrimaryButtonText(rendered)).toBe('ダッシュボードに戻る');
-    expect(exitButton).toContain('bg-medace-600');
+    expect(exitButton).toContain('bg-steady-action');
     expect(stripHtml(exitButton)).toBe('ダッシュボードに戻る');
   });
 });

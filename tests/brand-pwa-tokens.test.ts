@@ -27,11 +27,11 @@ describe('MedAce Study Space brand tokens', () => {
       background_color: string;
     };
 
-    expect(BRAND_VISUAL_SYSTEM.palette.primary[500]).toBe('#ff7a00');
-    expect(BRAND_VISUAL_SYSTEM.palette.primary[600]).toBe('#ff7a00');
-    expect(BRAND_VISUAL_SYSTEM.palette.primary[700]).toBe('#e65100');
-    expect(BRAND_VISUAL_SYSTEM.palette.mark).toBe('#ff7a00');
-    expect(BRAND_VISUAL_SYSTEM.palette.neutral.canvas).toBe('#f4f8f7');
+    expect(BRAND_VISUAL_SYSTEM.palette.primary[500]).toBe('#F66D0B');
+    expect(BRAND_VISUAL_SYSTEM.palette.primary[600]).toBe('#E85D00');
+    expect(BRAND_VISUAL_SYSTEM.palette.primary[700]).toBe('#9D3E05');
+    expect(BRAND_VISUAL_SYSTEM.palette.mark).toBe('#F66D0B');
+    expect(BRAND_VISUAL_SYSTEM.palette.neutral.canvas).toBe('#FDF3ED');
     expect(indexHtml).toContain('<html lang="ja">');
     expect(indexHtml).toContain('name="apple-mobile-web-app-title" content="Steady Study"');
     expect(manifest.name).toBe('Steady Study');

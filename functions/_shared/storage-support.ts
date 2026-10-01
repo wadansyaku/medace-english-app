@@ -70,6 +70,10 @@ export interface DbWordRow {
   section: string | null;
   source_sheet: string | null;
   source_entry_id: number | null;
+  part_of_speech?: WordData['partOfSpeech'] | null;
+  inflections?: string | null;
+  pronunciation?: string | null;
+  source_note?: string | null;
   example_sentence: string | null;
   example_meaning: string | null;
   example_generated_at: number | null;
@@ -239,6 +243,10 @@ export const toWordData = (row: DbWordRow): WordData => {
     ...(row.section ? { section: row.section } : {}),
     ...(row.source_sheet ? { sourceSheet: row.source_sheet } : {}),
     ...(typeof row.source_entry_id === 'number' ? { sourceEntryId: row.source_entry_id } : {}),
+    ...(row.part_of_speech ? { partOfSpeech: row.part_of_speech } : {}),
+    ...(row.inflections ? { inflections: row.inflections } : {}),
+    ...(row.pronunciation ? { pronunciation: row.pronunciation } : {}),
+    ...(row.source_note ? { sourceNote: row.source_note } : {}),
     exampleSentence: row.example_sentence,
     exampleMeaning: row.example_meaning,
     exampleGeneratedAt: row.example_generated_at,

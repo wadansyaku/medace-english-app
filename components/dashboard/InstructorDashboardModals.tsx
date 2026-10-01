@@ -137,6 +137,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
               <select
                 data-testid="notification-intervention-kind"
                 value={controller.interventionKind}
+                disabled={controller.sending}
                 onChange={(event) => controller.setInterventionKind(event.target.value as InterventionKind)}
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
               >
@@ -152,6 +153,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
               <input
                 type="text"
                 value={controller.customInstruction}
+                disabled={controller.sending}
                 onChange={(event) => controller.setCustomInstruction(event.target.value)}
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
                 placeholder="例: 次の模試までに復習を再開してほしい"
@@ -161,7 +163,7 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
           <button
             type="button"
             onClick={controller.handleGenerateDraft}
-            disabled={controller.drafting}
+            disabled={controller.drafting || controller.sending}
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-medace-200 bg-white px-4 py-3 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50 disabled:opacity-60"
           >
             {controller.drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
@@ -174,6 +176,8 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
           <textarea
             data-testid="notification-message-draft"
             value={controller.messageDraft}
+            readOnly={controller.sending}
+            aria-busy={controller.sending}
             onChange={(event) => controller.setMessageDraft(event.target.value)}
             rows={8}
             className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
@@ -192,8 +196,8 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
             type="button"
             data-testid="notification-send-submit"
             onClick={controller.handleSendNotification}
-            disabled={controller.sending || !controller.messageDraft.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
+            disabled={controller.sending || controller.drafting || !controller.messageDraft.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:opacity-60"
           >
             {controller.sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             通知を保存する

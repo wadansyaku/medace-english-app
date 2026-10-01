@@ -285,7 +285,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
           data-testid="quiz-setup-primary-cta"
           disabled={setupActualQuestionCount === 0}
           onClick={onAdvanceToReady}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {primaryCtaCopy} <ChevronRight className="h-4 w-4" />
         </button>

@@ -20,6 +20,7 @@ import DashboardAccountSection from './DashboardAccountSection';
 import DashboardAnnouncementSection from './DashboardAnnouncementSection';
 import DashboardCoachSection from './DashboardCoachSection';
 import DashboardHeroSection from './DashboardHeroSection';
+import DashboardStudyShortcuts from './DashboardStudyShortcuts';
 import DashboardLibrarySection from './DashboardLibrarySection';
 import DashboardMobileQuickNav, { type DashboardMobileQuickNavItem } from './DashboardMobileQuickNav';
 import DashboardMissionSection from './DashboardMissionSection';
@@ -377,8 +378,16 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
     ? 'today'
     : viewModel.primaryLearningRouteId;
   const hasPrimarySupportSections = primarySupportSections.length > 0;
+  const quickQuizBook = viewModel.plannedBooks[0] || viewModel.primaryRecommendedBook;
   return (
     <>
+      <div className="order-1 flex min-w-0 items-end justify-between gap-3 px-1">
+        <div>
+          <p className="text-[11px] font-black tracking-[0.16em] text-medace-800">LEARNING HOME</p>
+          <h1 className="mt-1 text-lg font-black text-steady-ink sm:text-xl">{user.displayName}さん、今日も一歩ずつ。</h1>
+        </div>
+        <span className="hidden rounded-full border border-medace-200 bg-white px-3 py-1.5 text-xs font-bold text-steady-muted sm:block">学びを、自分の力に</span>
+      </div>
       <div
         ref={navigation.heroSectionRef}
         data-testid="dashboard-hero-section"
@@ -422,9 +431,17 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         />
       </div>
 
+      <DashboardStudyShortcuts
+        quizBook={quickQuizBook}
+        hasProgress={viewModel.hasStudyBooks || viewModel.weekTotal > 0}
+        onSelectBook={onSelectBook}
+        onOpenLibrary={() => onOpenSection('library')}
+        onOpenProgress={() => onOpenSection('progress')}
+      />
+
       <section
         data-testid="dashboard-smart-workspace"
-        className={`order-2 grid min-w-0 gap-4 ${
+        className={`order-3 grid min-w-0 gap-4 ${
           hasPrimarySupportSections ? 'xl:grid-cols-[minmax(0,0.68fr)_minmax(280px,0.32fr)]' : 'xl:grid-cols-1'
         }`}
       >
@@ -432,7 +449,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           <div data-testid="dashboard-primary-stack" className="grid min-w-0 content-start gap-4">
             <div className="flex min-w-0 items-center justify-between gap-3 px-1">
               <h2 className="text-sm font-black text-slate-950">課題とサポート</h2>
-              <span className="text-xs font-bold text-slate-400">必要な内容を開く</span>
+              <span className="text-xs font-bold text-slate-500">必要な内容を開く</span>
             </div>
             {primarySupportSections}
           </div>
@@ -440,8 +457,8 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
 
         <aside data-testid="dashboard-reference-rail" className="grid min-w-0 content-start gap-4">
           <div className="flex min-w-0 items-center justify-between gap-3 px-1">
-            <h2 className="text-sm font-black text-slate-950">記録と教材</h2>
-            <span className="text-xs font-bold text-slate-400">必要なときだけ</span>
+            <h2 className="text-sm font-black text-steady-ink">次の学びとサポート</h2>
+            <span className="text-xs font-bold text-steady-muted">自分のペースで</span>
           </div>
           <DashboardTaskOverviewRail
             primaryTask={viewModel.primaryTask}
@@ -461,7 +478,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
       {hasReferenceSections && (
         <section
           data-testid="dashboard-reference-sections"
-          className="order-3 grid min-w-0 gap-4"
+          className="order-4 grid min-w-0 gap-6"
         >
           {referenceSections}
         </section>

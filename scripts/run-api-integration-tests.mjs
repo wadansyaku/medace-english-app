@@ -504,6 +504,37 @@ const main = async () => {
     await importOfficialCatalog(admin, 'レベル4', 'ALL_PLANS', 'STEADY_STUDY_ORIGINAL', 10);
 
     const freeStudentUser = await freeStudent.demoLogin('STUDENT');
+    // These five books contain only generated integration fixtures in this
+    // mkdtemp local D1. Classification is deliberately not approval evidence.
+    const fixtureLedger = await queryLocalSql(persistDir, `
+      SELECT b.id,b.title,m.rights_status,m.review_status,m.qa_source_coverage_rate
+      FROM books b JOIN material_source_ledger m ON m.book_id=b.id
+      WHERE b.catalog_source='STEADY_STUDY_ORIGINAL' AND b.created_by IS NULL`);
+    assert(fixtureLedger.length === 5 && fixtureLedger.every(row => row.rights_status === 'pending' && row.review_status === 'needs_review'),
+      'new original-classified imports must remain pending without explicit source-ledger approval');
+    assert(fixtureLedger.every(row => row.qa_source_coverage_rate === 0), 'fixture imports without numeric source IDs must report actual coverage');
+    const unapprovedStarter = fixtureLedger.find(row => row.title === 'Starter 120');
+    const unapprovedWords = await freeStudent.storageRaw('getWordsByBook', { bookId: unapprovedStarter.id });
+    assert(unapprovedWords.status === 403, 'new original-classified import must be blocked for learners before approval');
+    await executeLocalSql(persistDir, `
+      UPDATE material_source_ledger SET rights_status='approved',review_status='approved',
+        notes='Explicit approval of generated integration fixtures in disposable local D1 only'
+      WHERE book_id IN (SELECT id FROM books WHERE created_by IS NULL AND catalog_source='STEADY_STUDY_ORIGINAL'
+        AND title IN ('Starter 120','レベル1','レベル2','レベル3','レベル4'))`);
+    const approvedWords = await freeStudent.storage('getWordsByBook', { bookId: unapprovedStarter.id });
+    assert(approvedWords.length === 2, 'explicitly approved valid fixture material must remain learnable with optional numeric source IDs');
+    const ledgerBeforeRejectedImport = await queryLocalSql(persistDir, `SELECT * FROM material_source_ledger WHERE book_id='${unapprovedStarter.id}'`);
+    for (const row of [{ word: 'goal', definition: '未抽出' }, { word: 'goal', definition: '目標', sourceEntryId: '3oops' }]) {
+      const rejected = await admin.storageRaw('batchImportWords', {
+        defaultBookName: 'Starter 120', source: { kind: 'rows', rows: [row] },
+        options: { accessScope: 'ALL_PLANS', catalogSource: 'STEADY_STUDY_ORIGINAL' },
+      });
+      assert(rejected.status === 400, 'official content markers and invalid source IDs must be rejected before saving');
+      assert(JSON.stringify(await queryLocalSql(persistDir, `SELECT * FROM material_source_ledger WHERE book_id='${unapprovedStarter.id}'`)) === JSON.stringify(ledgerBeforeRejectedImport),
+        'rejected import must preserve the approved fixture ledger');
+      assert(JSON.stringify(await freeStudent.storage('getWordsByBook', { bookId: unapprovedStarter.id })) === JSON.stringify(approvedWords),
+        'rejected import must preserve approved words');
+    }
     const retainedResetTokens = await queryLocalSql(
       persistDir,
       `SELECT created_by

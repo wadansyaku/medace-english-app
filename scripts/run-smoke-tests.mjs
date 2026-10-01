@@ -298,6 +298,7 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/navigation-recovery.smoke.spec.ts',
   'tests/smoke/public.smoke.spec.ts',
   'tests/smoke/student.smoke.spec.ts',
   'tests/smoke/dashboard-recovery.smoke.spec.ts',

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
 import getClientRuntimeFlags from '../config/runtime';
 import { dashboardService } from '../services/dashboard';
@@ -60,6 +60,9 @@ const AdminPanel: React.FC = () => {
   const [rawText, setRawText] = useState('');
   const [contentTitle, setContentTitle] = useState('');
   const [uploading, setUploading] = useState(false);
+  const importPending = useRef(false);
+  const importVersion = useRef(0);
+  const mounted = useRef(true);
   const [progress, setProgress] = useState(0);
   const [log, setLog] = useState<string[]>([]);
   const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.LICENSED_PARTNER);
@@ -71,6 +74,15 @@ const AdminPanel: React.FC = () => {
   const runtimeFlags = getClientRuntimeFlags();
   const destructiveActionsEnabled = runtimeFlags.enableDestructiveAdminActions;
   const destructiveActionsMessage = '本番/導入テストでは教材更新と初期化を UI から実行できません。バックアップ付き運用手順で事前確認後に反映してください。';
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      importVersion.current += 1;
+      importPending.current = false;
+    };
+  }, []);
 
   const loadCatalogBooks = async () => {
     setLoadingCatalogBooks(true);
@@ -102,6 +114,7 @@ const AdminPanel: React.FC = () => {
   );
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (importPending.current || !destructiveActionsEnabled) return;
     if (event.target.files && event.target.files[0]) {
       setFile(event.target.files[0]);
       setLog([]);
@@ -110,13 +123,18 @@ const AdminPanel: React.FC = () => {
   };
 
   const handleCsvUpload = async () => {
-    if (!file) return;
+    if (!file || importPending.current || !destructiveActionsEnabled) return;
 
+    importPending.current = true;
+    const version = ++importVersion.current;
+    const isCurrent = () => mounted.current && version === importVersion.current;
     setUploading(true);
+    setProgress(0);
     setLog((previous) => [...previous, 'ファイル読み込み中...']);
 
     try {
       const text = await file.text();
+      if (!isCurrent()) return;
       if (!text.trim()) throw new Error('有効なデータが見つかりませんでした。');
       setLog((previous) => [...previous, 'サーバーで CSV を検証しています...']);
       const defaultBookName = file.name.replace(/\.csv$/i, '');
@@ -133,27 +151,38 @@ const AdminPanel: React.FC = () => {
           accessScope: BookAccessScope.BUSINESS_ONLY,
         },
       }, (nextProgress) => {
-        setProgress(nextProgress);
+        if (isCurrent()) setProgress(nextProgress);
       });
 
+      if (!isCurrent()) return;
       appendImportSummary(setLog, result, 'インポート完了');
       await Promise.all([fetchDashboard(), loadCatalogBooks()]);
     } catch (error) {
+      if (!isCurrent()) return;
       console.error(error);
       setLog((previous) => [...previous, `エラー: ${(error as Error).message}`]);
     } finally {
-      setUploading(false);
+      if (isCurrent()) {
+        importVersion.current += 1;
+        importPending.current = false;
+        setUploading(false);
+      }
     }
   };
 
   const handleAiImport = async () => {
-    if (!rawText.trim() || !contentTitle.trim()) return;
+    if (!rawText.trim() || !contentTitle.trim() || importPending.current || !destructiveActionsEnabled) return;
 
+    importPending.current = true;
+    const version = ++importVersion.current;
+    const isCurrent = () => mounted.current && version === importVersion.current;
     setUploading(true);
+    setProgress(0);
     setLog(['教材解析を開始します...', 'テキストから重要単語を抽出中...']);
 
     try {
       const extracted = await extractVocabularyFromText(rawText);
+      if (!isCurrent()) return;
       if (extracted.words.length === 0) throw new Error('単語を抽出できませんでした。');
 
       setLog((previous) => [...previous, `抽出成功: ${extracted.words.length}語を検出しました。`]);
@@ -175,21 +204,27 @@ const AdminPanel: React.FC = () => {
           accessScope: BookAccessScope.BUSINESS_ONLY,
         },
       }, (nextProgress) => {
-        setProgress(nextProgress);
+        if (isCurrent()) setProgress(nextProgress);
       });
 
+      if (!isCurrent()) return;
       appendImportSummary(setLog, result, '独自教材の追加が完了');
       setRawText('');
       setContentTitle('');
       await Promise.all([fetchDashboard(), loadCatalogBooks()]);
     } catch (error) {
+      if (!isCurrent()) return;
       console.error(error);
       const message = isAiUnavailableError(error)
         ? 'AI教材生成はまだ利用できません。CSV一括に切り替えるか、Gemini 設定後に再試行してください。'
         : (error as Error).message;
       setLog((previous) => [...previous, `エラー: ${message}`]);
     } finally {
-      setUploading(false);
+      if (isCurrent()) {
+        importVersion.current += 1;
+        importPending.current = false;
+        setUploading(false);
+      }
     }
   };
 
@@ -243,10 +278,10 @@ const AdminPanel: React.FC = () => {
       progress={progress}
       log={log}
       catalogSource={catalogSource}
-      onModeChange={setMode}
-      onCatalogSourceChange={setCatalogSource}
-      onContentTitleChange={setContentTitle}
-      onRawTextChange={setRawText}
+      onModeChange={(value) => { if (!importPending.current) setMode(value); }}
+      onCatalogSourceChange={(value) => { if (!importPending.current) setCatalogSource(value); }}
+      onContentTitleChange={(value) => { if (!importPending.current) setContentTitle(value); }}
+      onRawTextChange={(value) => { if (!importPending.current) setRawText(value); }}
       onFileChange={handleFileChange}
       onAiImport={handleAiImport}
       onCsvUpload={handleCsvUpload}
@@ -255,7 +290,7 @@ const AdminPanel: React.FC = () => {
       preparingExamplesBookId={preparingExamplesBookId}
       onPrepareExamples={handlePrepareBookExamples}
       onOpenResetModal={() => {
-        if (!destructiveActionsEnabled) return;
+        if (!destructiveActionsEnabled || importPending.current) return;
         setShowResetModal(true);
       }}
       destructiveActionsEnabled={destructiveActionsEnabled}
@@ -323,19 +358,22 @@ const AdminPanel: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
             <button
-              onClick={() => setPanelView('dashboard')}
+              onClick={() => { if (!importPending.current) setPanelView('dashboard'); }}
+              disabled={uploading}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'dashboard' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
             >
               分析ダッシュボード
             </button>
             <button
-              onClick={() => setPanelView('content')}
+              onClick={() => { if (!importPending.current) setPanelView('content'); }}
+              disabled={uploading}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'content' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
             >
               教材運用
             </button>
             <button
-              onClick={() => setPanelView('commercial')}
+              onClick={() => { if (!importPending.current) setPanelView('commercial'); }}
+              disabled={uploading}
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'commercial' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
             >
               受付・お知らせ

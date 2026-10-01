@@ -138,7 +138,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
           type="button"
           onClick={() => onDemoLogin(UserRole.STUDENT)}
           data-testid="auth-fast-start-student"
-          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-medace-600 px-4 py-2.5 text-sm font-bold leading-tight text-slate-950 shadow-sm transition-colors hover:bg-medace-700"
+          className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-steady-action px-4 py-2.5 text-sm font-bold leading-tight text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover"
         >
           生徒として体験開始 <ArrowRight className="h-4 w-4" />
         </button>
@@ -404,7 +404,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
                 className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-bold leading-tight shadow-sm transition-colors ${
                   authMode === 'LOGIN'
                     ? 'bg-slate-950 text-white hover:bg-slate-800'
-                    : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
+                    : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
                 }`}
               >
                 {authMode === 'LOGIN' ? (
@@ -445,7 +445,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = ({
               type="button"
               onClick={() => onDemoLogin(UserRole.STUDENT)}
               data-testid="demo-login-student"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-2.5 text-base font-black text-slate-950 shadow-sm transition-colors hover:bg-medace-700 sm:min-h-12 sm:px-6 sm:py-3"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-2.5 text-base font-black text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover sm:min-h-12 sm:px-6 sm:py-3"
             >
               今すぐ学習を始める <ArrowRight className="h-4 w-4" />
             </button>

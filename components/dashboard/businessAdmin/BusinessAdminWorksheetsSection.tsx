@@ -22,7 +22,7 @@ const BusinessAdminWorksheetsSection: React.FC<BusinessAdminWorksheetsSectionPro
         buttonLabel="単語帳範囲からPDF問題を作る"
         defaultSourceMode="BOOK_RANGE"
         allowSourceModeSwitch={false}
-        buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+        buttonClassName="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
       />
     </section>
   </div>

@@ -10,6 +10,7 @@
     "dev": "node node_modules/vite/bin/vite.js",
     "build": "node node_modules/vite/bin/vite.js build",
     "preview": "node node_modules/vite/bin/vite.js preview",
+    "meeting:preview": "node scripts/start-meeting-preview.mjs",
     "release:gate": "node scripts/run-release-gate-local.mjs --scope release",
     "release:gate:dry": "node scripts/run-release-gate-local.mjs --scope release --dry-run",
     "release:gate:local": "node scripts/run-release-gate-local.mjs --scope release",
@@ -45,7 +46,7 @@
     "noun:analyze": "node scripts/analyze-noun-workbook.mjs",
     "db:migrations:check-names": "node scripts/check-migration-filenames.mjs",
     "db:migrate:local": "node node_modules/wrangler/bin/wrangler.js d1 migrations apply medace-db --local",
-    "db:migrate:verify": "bash -lc 'tmpdir=$(mktemp -d); cleanup() { rm -rf \"$tmpdir\"; }; trap cleanup EXIT; node node_modules/wrangler/bin/wrangler.js d1 migrations apply medace-db --local --persist-to \"$tmpdir\"'",
+    "db:migrate:verify": "node scripts/verify-local-migrations.mjs",
     "db:migrate:remote": "node node_modules/wrangler/bin/wrangler.js d1 migrations apply medace-db --remote",
     "db:seed:sql": "node scripts/build-seed-sql.mjs"
   },
@@ -64,12 +65,12 @@
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",
     "vite": "^8.0.16",
-    "vitest": "^4.1.8",
-    "wrangler": "^4.129.0",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.131.0",
     "xlsx": "^0.18.5"
   },
   "overrides": {
-    "brace-expansion": "^2.1.4",
+    "brace-expansion": "^2.1.7",
     "esbuild": "0.28.1",
     "protobufjs": "^7.6.6",
     "ws": "^8.21.0"
