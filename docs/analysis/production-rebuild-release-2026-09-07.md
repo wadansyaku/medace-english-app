@@ -59,3 +59,16 @@ XPの完全なreceipt化・サーバー算出、全演習の保存契約統一�
 APIの期待SHAとHTML参照assets・PWAが揃うまで最大180秒待つ共通readinessを導入した。旧SHA、HTML fallback、古いmanifest、欠けたiconが順に回復するHTTP fixtureを使い、永続不整合・応答停止・実行サーバー停止で成功しないことも確認した。実行サーバーの内部ログは一時保存し、固定の分類だけを記録して削除する。
 
 ローカル検証は121ファイル・735単体テスト、型、migration replay、依存境界、実ローカルサーバーでの公開session確認が成功。追加PRの必須CI、preview、productionはこのローカル記録とは別に評価する。
+
+
+## 最終完了記録（2026-09-07 08:32 UTC）
+
+- [追加PR #52](https://github.com/wadansyaku/medace-english-app/pull/52)をマージ。本番mainは `5853d1dc3701ace947865b064723161b3e0aee86`。
+- [PR CI](https://github.com/wadansyaku/medace-english-app/actions/runs/34099622002)と[preview](https://github.com/wadansyaku/medace-english-app/actions/runs/34099621908)が成功。previewの実API SHAは統合コミット `ee173ff343ddd47f5b66ef1f7b47ddeda1f3bd36` と一致。
+- [main CI](https://github.com/wadansyaku/medace-english-app/actions/runs/34100402034)は初回のローカル実行サーバー停止を `PROXY_CONNECTION_LOST` と分類できた。コード・条件を変えない単発再実行（attempt 2）が成功。内部ログは削除され、固定の分類だけが残る。上流の接続切れ自体を修正したという保証ではない。
+- [最終production workflow](https://github.com/wadansyaku/medace-english-app/actions/runs/34100401966)はattempt 1で全工程成功。121ファイル・735単体テスト、Cloudflare full56件（対象外2件）、native IDB3件、公開済みproduction5件、構成・教材・台帳・B2B・必要secretの確認が成功。
+- 最終canonical配備: `3970cea3-5dc9-4626-bcee-768e107deef7`、https://3970cea3.medace-english-app.pages.dev 。公開URL https://medace-english-app.pages.dev のAPIは204・期待SHA一致・no-store、HTML参照6assetsが200・正しいMIMEで応答。
+- 95daf52fから5853d1dの差分は配備用スクリプト・テスト・MDのみ。実学習受入済みの画面・API・DBスキーマと同一であり、公開JS/CSSのhashも同じ。最終確認のために新しい学習データを繰り返し追加していない。
+- 0041/0042適用前の復旧bookmark: `00000564-00000000-000050df-d4dc5cda30de799e80ae554df4776520`（旧workflow attempt 2）。
+- 最終運用補修配備前の復旧bookmark: `00000566-00000094-000050df-c3e69c386f7571c8fb35183e966aa487`。DB復元より追加スキーマを保ったコード復旧を優先し、復元時の正規利用データ喪失に注意する。
+- ローカル作業ツリーは最終mainへfast-forward済み。配備完了後にしか確定しない本節とバックログ・日誌の最終結果は、ローカル追記として保持する。稼働ソースは上記マージ済みcommitで確定している。

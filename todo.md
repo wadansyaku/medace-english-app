@@ -30,6 +30,6 @@
 - [x] remote-readonlyの構成・教材・台帳・B2B整合性gate（2026-09-07、エラー0）。
 - [x] PR #51で必須checkを確認し、main `95daf52f`へマージ。
 - [x] production bookmark、95daf52fの配備、公開URLのlive smoke5件と個人デモ11項目、DB19項目を記録。
-- [ ] 配備切替readiness・秘匿診断の補修と、後続release workflowの完走。
+- [x] PR #52で配備切替readiness・秘匿診断を補修し、main `5853d1d`のproduction workflowが全工程成功。
 
-PR #51の本番反映と実操作確認は完了。配備手順の補修を継続中。最新の検証・配備状態は[本番リリース記録](./docs/analysis/production-rebuild-release-2026-09-07.md)を参照する。外部通知・料金・権限の事業判断は別の確認を要する。以前の完了項目と検討履歴は [過去バックログ](./docs/archive/todo-through-2026-07-11.md) に保存した。
+PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで完了。最新の検証・配備状態は[本番リリース記録](./docs/analysis/production-rebuild-release-2026-09-07.md)を参照する。外部通知・料金・権限の事業判断は別の確認を要する。以前の完了項目と検討履歴は [過去バックログ](./docs/archive/todo-through-2026-07-11.md) に保存した。
