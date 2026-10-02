@@ -48,9 +48,11 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
 
       <div className="mt-5 space-y-4">
         <div>
-          <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">対象生徒</label>
+          <label htmlFor="writing-create-student" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">対象生徒</label>
           <select
+            id="writing-create-student"
             data-testid="writing-student-select"
+            disabled={generating}
             value={selectedStudentUid}
             onChange={(event) => onSelectStudent(event.target.value)}
             className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
@@ -67,8 +69,10 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           )}
         </div>
         <div>
-          <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">テンプレート</label>
+          <label htmlFor="writing-create-template" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">テンプレート</label>
           <select
+            id="writing-create-template"
+            disabled={generating}
             data-testid="writing-template-select"
             value={selectedTemplateId}
             onChange={(event) => onSelectTemplate(event.target.value)}
@@ -83,8 +87,10 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">テーマ補足</label>
+          <label htmlFor="writing-create-topic" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">テーマ補足</label>
           <input
+            id="writing-create-topic"
+            readOnly={generating}
             type="text"
             value={topicHint}
             onChange={(event) => onTopicHintChange(event.target.value)}
@@ -93,8 +99,10 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           />
         </div>
         <div>
-          <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">講師メモ</label>
+          <label htmlFor="writing-create-notes" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">講師メモ</label>
           <textarea
+            id="writing-create-notes"
+            readOnly={generating}
             value={notes}
             onChange={(event) => onNotesChange(event.target.value)}
             placeholder="面談で確認したい観点や、扱ってほしい具体例"

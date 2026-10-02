@@ -9,6 +9,8 @@ interface DashboardLibrarySectionProps {
   primaryRecommendedBook: BookMetadata | null;
   secondaryRecommendedBooks: BookMetadata[];
   blockedOfficialBookCount?: number;
+  canCreateBook?: boolean;
+  onTryGrammar?: () => void;
   progressMap: Record<string, BookProgress>;
   showLibrary: boolean;
   isCompact?: boolean;
@@ -26,6 +28,8 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   primaryRecommendedBook: recommendedBook,
   secondaryRecommendedBooks: otherRecommendedBooks,
   blockedOfficialBookCount = 0,
+  canCreateBook = true,
+  onTryGrammar,
   progressMap,
   showLibrary,
   isCompact = false,
@@ -46,7 +50,12 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   const primaryRecommendedBook = !isFiltering && recommendedBook && matches(recommendedBook) ? recommendedBook : null;
   const secondaryRecommendedBooks = isFiltering ? [] : otherRecommendedBooks.filter(matches);
   const hasMaterials = allBooks.length > 0 || allMyBooks.length > 0;
-  const canCreateFirstPersonalBook = scope === 'mine' && allMyBooks.length === 0 && allBooks.length > 0;
+  const pendingNotice = blockedOfficialBookCount > 0 ? (
+    <p role="status" data-testid="library-pending-materials" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-relaxed text-amber-800">
+      配布教材 {blockedOfficialBookCount} 冊は確認中です。承認後に学習・テストで使えます。
+    </p>
+  ) : null;
+  const canCreateFirstPersonalBook = canCreateBook && scope === 'mine' && allMyBooks.length === 0 && allBooks.length > 0;
   const libraryContent = hasMaterials && books.length === 0 && myBooks.length === 0 ? (
     <div role="status" className="rounded-card border border-dashed border-medace-200 bg-white px-5 py-8 text-center">
       <Search className="mx-auto h-6 w-6 text-steady-muted" aria-hidden="true" />
@@ -61,15 +70,16 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   ) : !hasMaterials ? (
   <section data-testid="dashboard-library-empty" className="rounded-lg border border-slate-200 bg-white p-5">
     <h3 className="text-base font-bold text-slate-900">教材</h3>
-    <p className="mt-2 text-sm font-bold text-slate-700">まだMy単語帳がありません</p>
-    <p className="mt-1 text-sm leading-relaxed text-slate-500">最初の教材を作ると、ここに単語帳と進捗が表示されます。</p>
+    <p className="mt-2 text-sm font-bold text-slate-700">{blockedOfficialBookCount > 0 ? '利用できる教材はまだありません' : 'まだMy単語帳がありません'}</p>
+    <p className="mt-1 text-sm leading-relaxed text-slate-500">{canCreateBook ? '最初の教材を作ると、ここに単語帳と進捗が表示されます。' : '現在のプランではMy単語帳の作成は利用できません。教室に所属している場合は、講師に教材の配布をご確認ください。'}</p>
+    {canCreateBook ? <button type="button" data-testid="library-create-first-personal-book" onClick={onOpenCreateModal} className="mt-4 min-h-11 rounded-xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover">My単語帳を作る</button> : onTryGrammar && <button type="button" onClick={onTryGrammar} className="mt-4 min-h-11 rounded-xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover">教材なしで文法を試す</button>}
   </section>
 ) : (
   <div className={isCompact ? 'space-y-5' : 'space-y-7 md:space-y-10'}>
     {myBooks.length > 0 && <div>
       <div className="mb-4 flex items-center justify-between gap-3 md:mb-6">
         <h3 className="min-w-0 border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">My単語帳</h3>
-        {myBooks.length > 0 && (
+        {myBooks.length > 0 && canCreateBook && (
           <button
             onClick={onOpenCreateModal}
             className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-[13px] font-bold text-medace-800 transition-colors hover:bg-medace-50 md:text-sm"
@@ -110,21 +120,14 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
             onSelect={onSelect}
           />
         ) : null}
-        {primaryRecommendedBook && blockedOfficialBookCount > 0 && (
-          <div className={`rounded-2xl border border-amber-200 bg-amber-50 text-sm font-bold leading-relaxed text-amber-800 ${isCompact ? 'p-4' : 'p-5'}`}>
-            配布教材 {blockedOfficialBookCount} 冊は確認中です。承認後に学習・テストで使えます。
-          </div>
-        )}
         {books.length === 0 && (
           <div className={`rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-sm leading-relaxed text-slate-600 ${isCompact ? 'p-4' : 'p-6'}`}>
-            現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。
+            {canCreateBook ? '現在のワークスペースには利用可能な公式コースがありません。My単語帳を作成するか、教材配信設定を確認してください。' : '利用できる配布教材はありません。教室に所属している場合は、講師に教材の配布をご確認ください。'}
           </div>
         )}
-        {books.length > 0 && !primaryRecommendedBook && !isFiltering && (
+        {books.length > 0 && !primaryRecommendedBook && !isFiltering && blockedOfficialBookCount === 0 && (
           <div className={`rounded-2xl border border-amber-200 bg-amber-50 text-sm font-bold leading-relaxed text-amber-800 ${isCompact ? 'p-4' : 'p-5'}`}>
-            {blockedOfficialBookCount > 0
-              ? `配布教材 ${blockedOfficialBookCount} 冊は確認中です。承認後に学習・テストで使えます。`
-              : '推奨コースはありません'}
+            推奨コースはありません
           </div>
         )}
       </div>
@@ -180,7 +183,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
             </div>
           ) : (
             <div className="mt-6 animate-in rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm leading-relaxed text-slate-600 slide-in-from-top-4">
-              公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。
+              {canCreateBook ? '公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。' : '公式コースは教室契約の教材配信で利用できます。教室に所属している場合は、講師に教材の配布をご確認ください。'}
             </div>
           )
         )}
@@ -194,6 +197,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><p className="text-[11px] font-black tracking-[0.16em] text-medace-800">YOUR LIBRARY</p><h2 className="mt-1 text-xl font-black text-steady-ink">自分に合う一冊を</h2><p className="mt-1 text-xs text-steady-muted">教材ごとに学習や小テストを始められます。</p></div>
         {hasMaterials && <span className="rounded-full border border-medace-200 bg-white px-3 py-1.5 text-xs font-bold text-steady-muted">{allBooks.length + allMyBooks.length}冊の教材</span>}
+        {hasMaterials && canCreateBook && allMyBooks.length === 0 && !canCreateFirstPersonalBook && <button type="button" data-testid="library-create-first-personal-book" onClick={onOpenCreateModal} className="min-h-11 rounded-xl border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-900 hover:bg-medace-100">My単語帳を作る</button>}
       </div>
       {hasMaterials && <div className="rounded-card border border-medace-100 bg-white p-3 sm:p-4">
         <label htmlFor="student-library-search" className="sr-only">教材名・説明・取り込みメモで検索</label>
@@ -203,6 +207,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
           {isFiltering && <span role="status" className="ml-auto text-xs font-bold text-steady-muted">{books.length + myBooks.length}冊が一致</span>}
         </div>
       </div>}
+      {pendingNotice}
       {libraryContent}
     </section>
   );

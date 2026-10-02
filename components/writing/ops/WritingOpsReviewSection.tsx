@@ -27,6 +27,9 @@ interface WritingOpsReviewSectionProps {
   reviewList: WritingQueueItem[];
   selectedSubmissionId: string;
   detail: WritingSubmissionDetailResponse | null;
+  detailLoading?: boolean;
+  detailError?: string | null;
+  onRetryDetail?: () => void;
   selectedEvaluationId: string;
   selectedEvaluation?: WritingEvaluation;
   reviewPublicComment: string;
@@ -46,6 +49,9 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
   reviewList,
   selectedSubmissionId,
   detail,
+  detailLoading = false,
+  detailError,
+  onRetryDetail,
   selectedEvaluationId,
   selectedEvaluation,
   reviewPublicComment,
@@ -78,6 +84,8 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
           key={item.submissionId}
           type="button"
           data-testid={`writing-review-item-${item.submissionId}`}
+          disabled={reviewing}
+          aria-pressed={selectedSubmissionId === item.submissionId}
           onClick={() => onSelectSubmission(item.submissionId)}
           className={`w-full rounded-3xl border px-5 py-4 text-left ${
             selectedSubmissionId === item.submissionId
@@ -107,8 +115,19 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
       ))}
     </div>
 
-    <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-      {!detail ? (
+    <div data-testid="writing-review-detail" aria-busy={detailLoading || reviewing} className="min-w-0 rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+      {detailLoading ? (
+        <div role="status" className="flex min-h-32 items-center gap-3 text-sm text-slate-600">
+          <Loader2 aria-hidden="true" className="h-5 w-5 animate-spin" />
+          答案を読み込んでいます。
+        </div>
+      ) : detailError ? (
+        <div role="alert" data-testid="writing-review-detail-error" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
+          <p className="font-bold">{detailError}</p>
+          <p className="mt-1">選択した答案の内容を確認できませんでした。</p>
+          <button type="button" onClick={onRetryDetail} className="mt-3 min-h-11 rounded-xl border border-red-300 bg-white px-4 py-2 font-bold">答案を再取得する</button>
+        </div>
+      ) : !detail ? (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-5 py-6">
           <div className="text-sm font-black text-slate-900">答案を選択してください</div>
           <div className="mt-2 text-sm leading-relaxed text-slate-500">
@@ -186,6 +205,8 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                       key={evaluation.id}
                       type="button"
                       onClick={() => onSelectEvaluation(evaluation.id)}
+                      disabled={reviewing}
+                      aria-pressed={selectedEvaluationId === evaluation.id}
                       className={`rounded-3xl border px-4 py-4 text-left ${
                         selectedEvaluationId === evaluation.id
                           ? 'border-medace-300 bg-medace-50/80'
@@ -290,17 +311,21 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                   <div className="mt-3 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm leading-relaxed text-medace-900/80">
                     1. 採用候補を選ぶ  2. 生徒に見せるコメントを書く  3. 返却または再提出依頼を確定
                   </div>
-                  <div className="mt-4 text-xs font-bold text-slate-400">生徒に見せるコメント</div>
+                  <label htmlFor="writing-review-public-comment" className="mt-4 block text-xs font-bold text-slate-500">生徒に見せるコメント</label>
                   <textarea
+                    id="writing-review-public-comment"
                     data-testid="writing-review-public-comment"
                     value={reviewPublicComment}
+                    readOnly={reviewing}
                     onChange={(event) => onReviewPublicCommentChange(event.target.value)}
                     className="mt-3 min-h-28 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
                     placeholder="良かった点と、次に直す点を生徒向けに短く書きます。"
                   />
-                  <div className="mt-4 text-xs font-bold text-slate-400">講師メモ</div>
+                  <label htmlFor="writing-review-private-memo" className="mt-4 block text-xs font-bold text-slate-500">講師メモ</label>
                   <textarea
+                    id="writing-review-private-memo"
                     value={reviewPrivateMemo}
+                    readOnly={reviewing}
                     onChange={(event) => onReviewPrivateMemoChange(event.target.value)}
                     className="mt-3 min-h-24 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
                     placeholder="面談や次回フォロー用の内部メモです。生徒には表示されません。"
@@ -350,7 +375,10 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                       </div>
                     </>
                   )}
-                  {detail.assignment.status !== 'COMPLETED' && (
+                  {detail.assignment.status === 'REVISION_REQUESTED' && (
+                    <p className="mt-5 text-sm leading-relaxed text-slate-600">再提出を待っています。新しい答案を確認・返却してから完了にできます。</p>
+                  )}
+                  {detail.assignment.status === 'RETURNED' && (
                     <button
                       type="button"
                       onClick={onComplete}

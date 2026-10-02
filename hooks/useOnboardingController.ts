@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { DIAGNOSTIC_QUESTIONS, evaluateDiagnostic, type SelfAssessmentKey } from '../data/diagnostic';
 import { dashboardService } from '../services/dashboard';
 import { sessionService } from '../services/session';
@@ -29,6 +29,8 @@ export const useOnboardingController = ({
   const [finalLevel, setFinalLevel] = useState<EnglishLevel | null>(null);
   const [result, setResult] = useState<ReturnType<typeof evaluateDiagnostic> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savingRef = useRef(false);
 
   const currentQuestion = DIAGNOSTIC_QUESTIONS[currentQuestionIndex];
   const currentAnswer = currentQuestion ? userAnswers[currentQuestion.id] ?? '' : '';
@@ -74,8 +76,10 @@ export const useOnboardingController = ({
   };
 
   const saveResult = async () => {
-    if (!finalLevel) return;
+    if (!finalLevel || savingRef.current) return;
+    savingRef.current = true;
     setIsSaving(true);
+    setSaveError(null);
 
     try {
       const updatedUser: UserProfile = {
@@ -85,7 +89,6 @@ export const useOnboardingController = ({
         needsOnboarding: false,
       };
 
-      await sessionService.updateSessionUser(updatedUser);
       if (result) {
         const nextPreference: LearningPreference = {
           userUid: user.uid,
@@ -101,8 +104,13 @@ export const useOnboardingController = ({
         };
         await dashboardService.saveLearningPreference(nextPreference);
       }
+      // Complete onboarding only after its recommended learning preferences are saved.
+      await sessionService.updateSessionUser(updatedUser);
       onComplete(updatedUser);
+    } catch {
+      setSaveError('診断結果を保存できませんでした。結果はこの画面に残っています。通信を確認して、もう一度保存してください。');
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   };
@@ -121,6 +129,8 @@ export const useOnboardingController = ({
     result,
     finalLevel,
     isSaving,
+    isSavePending: () => savingRef.current,
+    saveError,
     handleStart,
     handleSelectAnswer,
     handleNext,

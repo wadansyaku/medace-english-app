@@ -43,9 +43,10 @@ const Onboarding: React.FC<OnboardingProps> = ({
         result={controller.result}
         finalLevel={controller.finalLevel}
         isSaving={controller.isSaving}
+        saveError={controller.saveError}
         isRetake={isRetake}
         historySummary={historySummary}
-        onCancel={onCancel}
+        onCancel={onCancel ? () => { if (!controller.isSavePending()) onCancel(); } : undefined}
         onSave={controller.saveResult}
       />
     );

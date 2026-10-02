@@ -551,6 +551,11 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         onCloseNotice={() => controller.setReportNotice(null)}
       />
 
+      {(controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel) && (
+        <p data-testid="study-book-label" className="mb-2 break-words text-xs font-bold text-medace-800">
+          {controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel}
+        </p>
+      )}
       <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
         <button type="button" aria-label="学習を中断してダッシュボードに戻る" onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>

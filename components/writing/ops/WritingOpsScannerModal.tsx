@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, ScanText } from 'lucide-react';
 
 import type { WritingAssignment } from '../../../types';
@@ -15,6 +15,7 @@ interface WritingOpsScannerModalProps {
   scannerFiles: File[];
   scannerManualTranscript: string;
   submittingScan: boolean;
+  error?: string | null;
   onClose: () => void;
   onFilesChange: (files: File[]) => void;
   onManualTranscriptChange: (value: string) => void;
@@ -26,11 +27,14 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
   scannerFiles,
   scannerManualTranscript,
   submittingScan,
+  error,
   onClose,
   onFilesChange,
   onManualTranscriptChange,
   onSubmit,
 }) => {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   const fileValidation = useMemo(() => validateWritingSubmissionFiles(scannerFiles), [scannerFiles]);
   const fileRows = useMemo(() => scannerFiles.map((file) => ({
     file,
@@ -44,6 +48,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
   return (
     <ModalOverlay
       onClose={onClose}
+      closeOnOverlayClick={!submittingScan}
       ariaLabel={`スタッフ代理提出: ${scannerTarget.promptTitle}`}
       panelClassName="max-w-3xl rounded-[28px] border border-slate-200 bg-white p-6 shadow-2xl"
     >
@@ -53,13 +58,21 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
         <p className="mt-2 text-sm text-slate-500">
           校舎で取り込んだ PDF 1枚または画像最大4枚まで提出できます。OCR補助用のテキストも入力できます。
         </p>
+        {error && (
+          <div ref={errorRef} tabIndex={-1} role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">
+            <p className="font-bold">{error}</p>
+            <p className="mt-1">答案と補助テキストは保持しています。通信を確認して、もう一度登録してください。</p>
+          </div>
+        )}
         <div className="mt-6 space-y-4">
           <div>
-            <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">答案ファイル</label>
+            <label htmlFor="writing-scanner-files" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">答案ファイル</label>
             <input
+              id="writing-scanner-files"
               type="file"
               accept="application/pdf,image/*"
               multiple
+              disabled={submittingScan}
               onChange={(event) => onFilesChange(Array.from(event.target.files || []))}
               className="mt-2 block w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-bold"
             />
@@ -90,20 +103,24 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">補助テキスト（任意）</label>
+            <label htmlFor="writing-scanner-transcript" className="block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">補助テキスト（任意）</label>
             <textarea
+              id="writing-scanner-transcript"
               value={scannerManualTranscript}
+              readOnly={submittingScan}
               onChange={(event) => onManualTranscriptChange(event.target.value)}
               className="mt-2 min-h-32 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
               placeholder="OCR 補助のために本文を入力できます。"
             />
           </div>
         </div>
+        {submittingScan && <p role="status" className="mt-4 text-sm leading-6 text-slate-600">答案を登録しています。完了するまでこの内容を保持します。</p>}
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600"
+            disabled={submittingScan}
+            className="min-h-11 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 disabled:opacity-50"
           >
             キャンセル
           </button>

@@ -22,6 +22,7 @@ interface QuizSetupViewProps {
   setupActualQuestionCount: number;
   setupEmptyCopy: string;
   allWordsLength: number;
+  learnedSelectionUnavailable?: boolean;
   normalizedSetupRange: { start: number; end: number };
   minWordNumber: number;
   maxWordNumber: number;
@@ -35,6 +36,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
   setupCandidateWordsLength,
   setupActualQuestionCount,
   setupEmptyCopy,
+  learnedSelectionUnavailable = false,
   normalizedSetupRange,
   minWordNumber,
   maxWordNumber,
@@ -120,8 +122,10 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                     key={item.key}
                     type="button"
                     data-testid={`quiz-selection-${item.key.toLowerCase()}`}
+                    disabled={item.key === 'LEARNED_ONLY' && learnedSelectionUnavailable}
+                    aria-pressed={isActive}
                     onClick={() => onUpdateSetupConfig({ selectionMode: item.key })}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    className={`rounded-2xl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                       isActive
                         ? 'border-medace-500 bg-medace-50 text-medace-900'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -130,7 +134,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                     <span className="flex items-center justify-between gap-3">
                       <span className="min-w-0">
                         <span className="block text-sm font-black text-slate-950">{item.label}</span>
-                        <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.description}</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.key === 'LEARNED_ONLY' && learnedSelectionUnavailable ? '学習記録を確認できていません。再取得後に使えます。' : item.description}</span>
                       </span>
                       <span className={`h-4 w-4 shrink-0 rounded-full border-2 ${isActive ? 'border-medace-500 bg-medace-500' : 'border-slate-300 bg-white'}`} />
                     </span>

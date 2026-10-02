@@ -236,7 +236,10 @@ const App: React.FC = () => {
       return (
         <PasswordResetScreen
           token={passwordResetToken || null}
-          onBackToLogin={() => dispatchNavigation({ type: 'reset', historyMode: 'replace' })}
+          onBackToLogin={() => {
+            dispatchNavigation({ type: 'reset', historyMode: 'replace' });
+            dispatchNavigation({ type: 'open-auth', mode: 'LOGIN', historyMode: 'replace' });
+          }}
         />
       );
     }

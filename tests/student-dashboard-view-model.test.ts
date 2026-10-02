@@ -372,13 +372,31 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.blockedOfficialBookCount).toBe(1);
     expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.heroTitle).toBe('配布教材を確認中');
-    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今はMy単語帳で始められます。');
-    expect(viewModel.questButtonLabel).toBe('My単語帳を作る');
+    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。');
+    expect(viewModel.questButtonLabel).toBe('文法演習を試す');
     expect(asCanonicalTasks(viewModel).primaryTask).toMatchObject({
       id: 'today',
       routeId: 'today',
-      ctaLabel: 'My単語帳を作る',
+      ctaLabel: '文法演習を試す',
+      command: { type: 'open_practice', lane: 'grammar' },
     });
+  });
+
+  it('keeps an empty free-plan home actionable without recommending a locked feature', () => {
+    const viewModel = useStudentDashboardViewModel({ user: baseUser, snapshot: buildSnapshot({}) });
+    expect(viewModel.heroTitle).toBe('教材なしで文法を試す');
+    expect(viewModel.questButtonLabel).toBe('文法演習を試す');
+    expect(viewModel.primaryTask?.command).toEqual({ type: 'open_practice', lane: 'grammar' });
+    expect(viewModel.canCreateFromText).toBe(false);
+    expect(viewModel.canCreateFromFile).toBe(false);
+  });
+
+  it('offers creation when the confirmed plan allows it', () => {
+    const snapshot = buildSnapshot({});
+    snapshot.accountOverview!.subscriptionPlan = SubscriptionPlan.TOC_PAID;
+    const viewModel = useStudentDashboardViewModel({ user: baseUser, snapshot });
+    expect(viewModel.heroTitle).toBe('教材を1冊作る');
+    expect(viewModel.primaryTask?.command).toEqual({ type: 'create_book' });
   });
 
   it('keeps official books without quality gates out of learner planning', () => {

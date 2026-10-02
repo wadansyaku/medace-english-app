@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { Building2, Settings, ShieldCheck, Users } from 'lucide-react';
+import { ArrowLeft, LogIn, Building2, Settings, ShieldCheck, Users } from 'lucide-react';
 
 import getClientRuntimeFlags from '../../config/runtime';
 import { type OrganizationRole, UserRole } from '../../types';
@@ -12,6 +12,9 @@ import {
 interface PublicRolePageProps {
   roleKey: PublicBusinessRoleKey;
   onBack?: () => void;
+  onLogin?: () => void;
+  busy?: boolean;
+  authError?: string | null;
   onDemoLogin: (role: UserRole, organizationRole?: OrganizationRole) => void;
 }
 
@@ -25,6 +28,10 @@ const ROLE_ICONS = {
 const PublicRolePage: React.FC<PublicRolePageProps> = ({
   roleKey,
   onDemoLogin,
+  onBack,
+  onLogin,
+  busy = false,
+  authError,
 }) => {
   const runtimeFlags = getClientRuntimeFlags();
   const previewSectionRef = useRef<HTMLDivElement | null>(null);
@@ -51,6 +58,7 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
 
   return (
     <div className="mx-auto mt-6 max-w-5xl space-y-6">
+      {onBack && <button type="button" onClick={onBack} disabled={busy} data-testid="public-role-back" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-medace-800 hover:bg-white disabled:opacity-50"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> 案内に戻る</button>}
       <section
         className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]"
         data-testid={role.pageTestId}
@@ -75,16 +83,19 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               type="button"
               data-testid={role.primaryActionTestId}
               onClick={handlePrimaryAction}
+              disabled={busy}
               className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-bold ${
                 primaryAction.kind === 'demo'
-                  ? 'bg-medace-600 text-slate-950'
+                  ? 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50'
                   : 'border border-medace-200 bg-white text-medace-700'
               }`}
             >
               {primaryAction.kind === 'preview' && <Settings className="h-4 w-4" />}
-              {primaryAction.label}
+              {busy ? '体験を準備中...' : primaryAction.label}
             </button>
+            {onLogin && <button type="button" onClick={onLogin} disabled={busy} data-testid="public-role-login" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-medace-200 bg-white px-5 py-3 text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50"><LogIn className="h-4 w-4" aria-hidden="true" /> 登録済みのアカウントでログイン</button>}
           </div>
+          {authError && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{authError}</p>}
 
           <p className="mt-4 text-sm leading-relaxed text-slate-600">{primaryAction.note}</p>
         </div>

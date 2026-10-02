@@ -708,31 +708,6 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
 
       {activeView === InstructorWorkspaceView.WRITING && (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <WorkspaceMetricCard
-              label="添削待ち"
-              value={hasQueueData ? `${writingCounts.reviewReadyCount}件` : unknownValue}
-              detail="講師が確認する提出"
-              tone={hasQueueData && writingCounts.reviewReadyCount > 0 ? 'warning' : 'default'}
-            />
-            <WorkspaceMetricCard
-              label="再提出待ち"
-              value={
-                hasAssignmentsData ? `${writingCounts.revisionRequestedCount}件` : unknownValue
-              }
-              detail="返却後の課題"
-            />
-            <WorkspaceMetricCard
-              label="配布済み課題"
-              value={hasAssignmentsData ? `${writingCounts.issuedCount}件` : unknownValue}
-              detail="提出前の課題"
-            />
-            <WorkspaceMetricCard
-              label="完了済み"
-              value={hasAssignmentsData ? `${writingCounts.completedCount}件` : unknownValue}
-              detail="返却・完了した課題"
-            />
-          </div>
           <Suspense fallback={<LoadingPanel label="課題・提出の機能を読み込んでいます。" />}>
             <WritingOpsPanel user={user} />
           </Suspense>

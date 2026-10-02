@@ -9,6 +9,7 @@ import useNetworkStatus from '../hooks/useNetworkStatus';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
 import useIsStandalone from '../hooks/useIsStandalone';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
+import useIsMobileViewport from '../hooks/useIsMobileViewport';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -60,9 +61,10 @@ const Layout: React.FC<LayoutProps> = ({
   const isDemoUser = isDemoEmail(user?.email);
   const isStandalone = useIsStandalone();
   const compactStudentShell = useIsStudentMobileShell(user);
+  const compactHeader = useIsMobileViewport('(max-width: 767px), (max-height: 500px)') || compactStudentShell;
   const runtimeFlags = getClientRuntimeFlags();
   const isOnline = useNetworkStatus();
-  const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
+  const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactHeader);
   const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
   const isPreviewDeployment = runtimeFlags.deployment.isPagesPreviewHost;
   const isStudentPracticeView = user?.role === UserRole.STUDENT && currentView === 'englishPractice';
@@ -76,8 +78,8 @@ const Layout: React.FC<LayoutProps> = ({
   }, [isStandalone]);
 
   React.useEffect(() => {
-    setShowDemoBannerDetails(!compactStudentShell);
-  }, [compactStudentShell, user?.email]);
+    setShowDemoBannerDetails(!compactHeader);
+  }, [compactHeader, user?.email]);
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -154,12 +156,12 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header data-testid="app-sticky-header" className={`sticky top-0 z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
+      <header data-testid="app-sticky-header" className={`${compactStudentShell ? 'sticky top-0' : 'md:sticky md:top-0'} [@media(max-height:500px)]:static z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
           <div className="border-b border-[#f3b80a]/40 bg-[#fff9df]">
-            {compactStudentShell ? (
+            {compactHeader ? (
               <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -171,6 +173,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <button
                     type="button"
                     data-testid="demo-banner-toggle"
+                    aria-expanded={showDemoBannerDetails}
                     onClick={() => setShowDemoBannerDetails((previous) => !previous)}
                     className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-[#f3b80a]/70 bg-white px-3 py-2 text-xs font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
                   >
@@ -215,7 +218,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 ${
-          compactStudentShell ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
+          compactHeader ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <button
             type="button"
@@ -223,24 +226,24 @@ const Layout: React.FC<LayoutProps> = ({
             onClick={() => onChangeView(homeView)}
             aria-label={`${BRAND.officialName} ホームへ戻る`}
           >
-            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
-              <BookOpen className={`text-medace-700 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
+            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactHeader ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
+              <BookOpen className={`text-medace-700 ${compactHeader ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
             <div className="block">
-              <h1 className={`font-black tracking-tight text-medace-900 ${compactStudentShell ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
+              <h1 className={`font-black tracking-tight text-medace-900 ${compactHeader ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
                 {BRAND.officialName}
               </h1>
-              <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
-                {compactStudentShell ? 'メッドエース 学習スペース' : 'MedAse Study Space / 英単語学習'}
+              <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactHeader ? 'text-[10px]' : 'text-xs'}`}>
+                {compactHeader ? 'メッドエース 学習スペース' : 'MedAse Study Space / 英単語学習'}
               </p>
             </div>
           </button>
 
           {user && (
-            <div className={`flex items-center flex-1 justify-end ${compactStudentShell ? 'gap-2' : 'gap-4'}`}>
+            <div className={`flex items-center flex-1 justify-end ${compactHeader ? 'gap-2' : 'gap-4'}`}>
               
               {/* Gamification HUD */}
-              {user.role === UserRole.STUDENT && isGameMode && !compactStudentShell && (
+              {user.role === UserRole.STUDENT && isGameMode && !compactHeader && (
                   <div className="flex items-center gap-3 rounded-xl border border-medace-200 bg-white/90 px-4 py-2.5 shadow-sm md:gap-6">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
@@ -299,7 +302,7 @@ const Layout: React.FC<LayoutProps> = ({
               </nav>
 
               <div className="flex items-center gap-2">
-                <div className={`text-right ${compactStudentShell ? 'hidden' : 'hidden lg:block'}`}>
+                <div className={`text-right ${compactHeader ? 'hidden' : 'hidden lg:block'}`}>
                   <p className="text-[0.95rem] font-bold text-slate-900">{user.displayName}</p>
                   <p className="text-xs font-bold tracking-[0.12em] uppercase text-slate-500">{workspaceLabel}</p>
                 </div>
@@ -307,11 +310,11 @@ const Layout: React.FC<LayoutProps> = ({
                   onClick={onLogout}
                   aria-label="ログアウト"
                   className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
-                    compactStudentShell ? 'p-2.5' : 'p-3'
+                    compactHeader ? 'p-2.5' : 'p-3'
                   }`}
                   title="ログアウト"
                 >
-                  <LogOut className={compactStudentShell ? 'h-[18px] w-[18px]' : 'w-5 h-5'} />
+                  <LogOut className={compactHeader ? 'h-[18px] w-[18px]' : 'w-5 h-5'} />
                 </button>
               </div>
             </div>
@@ -319,7 +322,7 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
         {user && workspaceSections.length > 0 && onSelectWorkspaceSection && activeWorkspaceSection && (
           <div className="border-t border-medace-200 bg-white/90 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-2 sm:py-3 sm:px-6 lg:px-8">
               {workspaceSections.map((section) => (
                 <button
                   key={section.id}
@@ -327,7 +330,7 @@ const Layout: React.FC<LayoutProps> = ({
                   onClick={() => onSelectWorkspaceSection(section.id)}
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
                   aria-current={activeWorkspaceSection === section.id ? 'page' : undefined}
-                  className={`shrink-0 rounded-xl border px-4 py-3 text-left transition-colors ${
+                  className={`min-h-11 shrink-0 rounded-xl border px-4 py-2 sm:py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
                       ? 'border-medace-200 bg-medace-50 text-medace-950'
                       : 'border-medace-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
@@ -335,7 +338,7 @@ const Layout: React.FC<LayoutProps> = ({
                 >
                   <div className="text-sm font-bold">{section.label}</div>
                   {section.description && (
-                    <div className={`mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-medace-900' : 'text-slate-500'}`}>
+                    <div className={`sr-only md:not-sr-only md:mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-medace-900' : 'text-slate-500'}`}>
                       {section.description}
                     </div>
                   )}

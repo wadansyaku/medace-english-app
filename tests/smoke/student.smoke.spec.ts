@@ -149,13 +149,17 @@ test('desktop student dashboard keeps the command center calm and above the fold
     if (await page.getByTestId('phrasebook-create-modal').count()) {
       return 'phrasebook';
     }
+    if (await page.getByTestId('english-practice-hub').count()) {
+      await expect(page).toHaveURL(/\/english-practice\/grammar$/);
+      return 'practice';
+    }
     const mainText = await page.locator('main').innerText({ timeout: 1000 }).catch(() => '');
     if (mainText.includes('今日のクエスト') && mainText.includes('答えを確認')) {
       return 'study';
     }
     return 'pending';
   }, {
-    message: 'primary CTA should open study mode or the phrasebook creation modal',
+    message: 'primary CTA should open the available study, grammar trial, or phrasebook creation route',
     timeout: 20000,
   }).not.toBe('pending');
 });

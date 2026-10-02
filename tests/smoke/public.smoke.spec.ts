@@ -13,13 +13,15 @@ import {
 
 const expectedDeploymentSha = process.env.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA?.trim();
 
-test('public home starts with the learner CTA and edge login before auth', async ({ page }) => {
+test('public home offers clear account and learner trial actions before auth', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByTestId('start-first-home')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /最初の画面から、すぐ単語学習を始める/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '今日の学習を、ここから', exact: true })).toBeVisible();
   await expect(page.getByTestId('demo-login-student')).toBeVisible();
-  await expect(page.getByTestId('auth-edge-panel')).toBeVisible();
+  await expect(page.getByTestId('start-first-login')).toBeVisible();
+  await expect(page.getByTestId('start-first-signup')).toBeVisible();
+  await expect(page.getByTestId('auth-product-explanation')).not.toHaveAttribute('open', '');
 });
 
 test('public readonly session endpoint is reachable before login', async ({ page }) => {

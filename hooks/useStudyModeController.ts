@@ -59,6 +59,7 @@ export const useStudyModeController = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [rewardNotice, setRewardNotice] = useState<string | null>(null);
   const [isBookOwner, setIsBookOwner] = useState(false);
+  const [bookTitle, setBookTitle] = useState<string | null>(null);
   const [aiContextLoading, setAiContextLoading] = useState(false);
   const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
   const [aiImage, setAiImage] = useState<string | null>(null);
@@ -219,6 +220,7 @@ export const useStudyModeController = ({
     setCurrentIndex(0);
     setIsFinished(false);
     setIsBookOwner(false);
+    setBookTitle(null);
     setReviewWords([]);
     setUpdatedUser(null);
     setEarnedXP(null);
@@ -249,6 +251,7 @@ export const useStudyModeController = ({
             const books = await learningService.getBooks();
             if (cancelled || generation !== sessionGenerationRef.current) return;
             const currentBook = books.find((book) => book.id === bookId);
+            setBookTitle(currentBook?.title || null);
             let isMine = false;
             try {
               isMine = JSON.parse(currentBook?.description || '{}').createdBy === user.uid;
@@ -579,6 +582,7 @@ export const useStudyModeController = ({
     aiImage,
     aiImageLoading,
     backFaceScrollRef,
+    bookTitle,
     closeBack,
     currentIndex,
     currentWord,

@@ -298,6 +298,11 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/auth-focused.smoke.spec.ts',
+  'tests/smoke/ui-audit.smoke.spec.ts',
+  'tests/smoke/grammar-answer-isolation.smoke.spec.ts',
+  'tests/smoke/worksheet-reliability.smoke.spec.ts',
+  'tests/smoke/writing-ops-recovery.smoke.spec.ts',
   'tests/smoke/navigation-recovery.smoke.spec.ts',
   'tests/smoke/public.smoke.spec.ts',
   'tests/smoke/student.smoke.spec.ts',

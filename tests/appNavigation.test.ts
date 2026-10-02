@@ -243,3 +243,27 @@ describe('app navigation paths', () => {
     });
   });
 });
+
+// Overlay state belongs to the URL, so a refresh and browser Back/Forward can
+// recover the same form without discarding a pending lesson's deep link.
+describe('routed authentication overlay', () => {
+  it.each(['login', 'signup'])('round-trips %s on the home and public-role routes', (mode) => {
+    for (const path of ['/', getPublicBusinessRoleDirectPath('instructor')]) {
+      const state = parseNavigationPath(path, `?auth=${mode}`);
+      expect(state.authPanelMode).toBe(mode === 'login' ? 'LOGIN' : 'SIGNUP');
+      const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+      expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+    }
+  });
+  it('retains the exact lesson intent when a login form is opened from a deep link', () => {
+    const original = parseNavigationPath('/study/book-1');
+    const state = { ...original, authPanelMode: 'LOGIN' as const };
+    const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+    expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+    expect(parseNavigationPath(url.pathname, url.search).selectedTask).toEqual(original.selectedTask);
+  });
+  it('ignores invalid auth values and keeps password-reset links independent', () => {
+    expect(parseNavigationPath('/', '?auth=admin')).toEqual(parseNavigationPath('/'));
+    expect(parseNavigationPath('/reset-password', '?token=abc&auth=login').authPanelMode).toBeUndefined();
+  });
+});

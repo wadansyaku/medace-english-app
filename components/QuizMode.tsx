@@ -42,7 +42,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
   };
 
   const headerTitle = controller.screen === 'SETUP'
-    ? '5問クイズ'
+    ? `${controller.setupActualQuestionCount || controller.setupConfig.questionCount}問クイズ`
     : controller.screen === 'READY'
       ? 'この条件で始める'
       : controller.screen === 'RUNNING'
@@ -57,10 +57,23 @@ const QuizMode: React.FC<QuizModeProps> = ({
 
   if (controller.loading) {
     return (
-      <div className="flex h-80 flex-col items-center justify-center text-medace-600">
-        <Loader2 className="mb-4 h-12 w-12 animate-spin" />
+      <div role="status" aria-live="polite" aria-busy="true" className="flex h-80 flex-col items-center justify-center text-medace-600">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin" aria-hidden="true" />
         <p className="animate-pulse text-lg font-bold">{controller.loadingMessage}</p>
       </div>
+    );
+  }
+
+  if (controller.loadError) {
+    return (
+      <section role="alert" data-testid="quiz-load-error" className="mx-auto max-w-lg rounded-3xl border border-slate-200 bg-white p-6 text-center">
+        <h1 className="text-xl font-bold text-slate-900">小テストの教材を読み込めませんでした</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-600">{controller.loadError}</p>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <button type="button" onClick={controller.retryLoad} className="rounded-xl bg-steady-action px-5 py-3 font-bold text-steady-on-action">もう一度読み込む</button>
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700">元の画面に戻る</button>
+        </div>
+      </section>
     );
   }
 
@@ -69,8 +82,26 @@ const QuizMode: React.FC<QuizModeProps> = ({
       <QuizHeader
         title={headerTitle}
         subtitle={headerSubtitle}
+        bookLabel={controller.bookTitle || taskIntent?.label}
         onBack={handleHeaderBack}
       />
+
+      {controller.screen === 'SETUP' && controller.studiedWordsError && (
+        <section role="alert" data-testid="quiz-history-error" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+          <p>{controller.studiedWordsError}</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button type="button" disabled={controller.historyLoading} onClick={() => void controller.retryStudiedWords()} className="min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-3 font-bold disabled:opacity-60">{controller.historyLoading ? '学習記録を読み込み中' : '学習記録をもう一度読み込む'}</button>
+            {controller.setupConfig.selectionMode === 'LEARNED_ONLY' && <button type="button" onClick={() => controller.updateSetupConfig({ selectionMode: 'FULL_RANDOM' })} className="min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-3 font-bold">全範囲から出題する</button>}
+          </div>
+        </section>
+      )}
+
+      {controller.startError && (
+        <section role="alert" data-testid="quiz-start-error" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+          <p>{controller.startError}</p>
+          <button type="button" onClick={controller.retryStart} className="mt-3 min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-3 font-bold">同じ条件でもう一度準備する</button>
+        </section>
+      )}
 
       {controller.showExitConfirm && (
         <QuizExitConfirmDialog
@@ -87,6 +118,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           setupActualQuestionCount={controller.setupActualQuestionCount}
           setupEmptyCopy={controller.setupEmptyCopy}
           allWordsLength={controller.allWords.length}
+          learnedSelectionUnavailable={Boolean(controller.studiedWordsError) || controller.historyLoading}
           normalizedSetupRange={controller.normalizedSetupRange}
           minWordNumber={controller.minWordNumber}
           maxWordNumber={controller.maxWordNumber}

@@ -1,6 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
+const openPanels: HTMLDivElement[] = [];
+let scrollStyleBeforeModals: { bodyOverflow: string; htmlOverflow: string; bodyPaddingRight: string } | null = null;
+
 interface ModalOverlayProps {
   children: React.ReactNode;
   onClose: () => void;
@@ -12,6 +15,7 @@ interface ModalOverlayProps {
   ariaLabel?: string;
   ariaLabelledBy?: string;
   initialFocusSelector?: string;
+  returnFocusSelector?: string;
 }
 
 const ModalOverlay: React.FC<ModalOverlayProps> = ({
@@ -25,32 +29,41 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   ariaLabel,
   ariaLabelledBy,
   initialFocusSelector,
+  returnFocusSelector,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const returnFocusSelectorRef = useRef(returnFocusSelector);
 
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    returnFocusSelectorRef.current = returnFocusSelector;
+  }, [onClose, returnFocusSelector]);
 
   useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    const previousBodyPaddingRight = document.body.style.paddingRight;
-    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
-
-    document.body.style.overflow = 'hidden';
-    document.documentElement.style.overflow = 'hidden';
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    if (openPanels.length === 0) {
+      scrollStyleBeforeModals = {
+        bodyOverflow: document.body.style.overflow,
+        htmlOverflow: document.documentElement.style.overflow,
+        bodyPaddingRight: document.body.style.paddingRight,
+      };
+      const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+      const currentPadding = parseFloat(window.getComputedStyle(document.body).paddingRight) || 0;
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      if (scrollbarWidth > 0) document.body.style.paddingRight = `${currentPadding + scrollbarWidth}px`;
     }
+    openPanels.push(panel);
+    const isTopPanel = () => openPanels[openPanels.length - 1] === panel;
 
     const frame = window.requestAnimationFrame(() => {
-      const panel = panelRef.current;
+      if (!isTopPanel()) return;
       const initialFocusTarget = initialFocusSelector
         ? panel?.querySelector<HTMLElement>(initialFocusSelector)
         : null;
@@ -61,7 +74,10 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!isTopPanel()) return;
       if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
         onCloseRef.current();
         return;
       }
@@ -88,6 +104,11 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
 
       const firstElement = focusableElements[0];
       const lastElement = focusableElements[focusableElements.length - 1];
+      if (document.activeElement === panelRef.current || !panelRef.current.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? lastElement : firstElement).focus();
+        return;
+      }
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
         lastElement.focus();
@@ -104,10 +125,24 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      document.body.style.paddingRight = previousBodyPaddingRight;
-      previouslyFocusedRef.current?.focus?.();
+      const wasTopPanel = isTopPanel();
+      const panelIndex = openPanels.indexOf(panel);
+      if (panelIndex >= 0) openPanels.splice(panelIndex, 1);
+      if (openPanels.length === 0 && scrollStyleBeforeModals) {
+        document.body.style.overflow = scrollStyleBeforeModals.bodyOverflow;
+        document.documentElement.style.overflow = scrollStyleBeforeModals.htmlOverflow;
+        document.body.style.paddingRight = scrollStyleBeforeModals.bodyPaddingRight;
+        scrollStyleBeforeModals = null;
+      }
+      if (!wasTopPanel) return;
+      const previousFocus = previouslyFocusedRef.current;
+      const canRestorePrevious = previousFocus?.isConnected && previousFocus !== document.body && previousFocus !== document.documentElement;
+      const fallback = returnFocusSelectorRef.current
+        ? document.querySelector<HTMLElement>(returnFocusSelectorRef.current)
+        : null;
+      const nextPanel = openPanels[openPanels.length - 1];
+      const focusTarget = canRestorePrevious ? previousFocus : fallback;
+      (nextPanel && (!focusTarget || !nextPanel.contains(focusTarget)) ? nextPanel : focusTarget)?.focus({ preventScroll: true });
     };
   }, [initialFocusSelector]);
 
@@ -125,6 +160,9 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
       }}
     >
       <div
+        onClick={(event) => {
+          if (closeOnOverlayClick && event.target === event.currentTarget) onClose();
+        }}
         className={`flex min-h-full justify-center ${
           mobileBehavior === 'default'
             ? `p-3 sm:p-6 ${align === 'center' ? 'items-center' : 'items-start sm:items-center'}`

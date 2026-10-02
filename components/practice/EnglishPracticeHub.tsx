@@ -427,11 +427,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           ? (index * 3 + practiceSeed) % activeScopePool.length
           : index % activeScopePool.length;
         const scope = activeScopePool[scopeIndex];
-        return buildGrammarPracticeItemsForWord(word, {
-          seed: `english-practice:${practiceSeed}:${grammarMode}:${scope.id}:${index}`,
+        const questionSeed = `english-practice:${practiceSeed}:${grammarMode}:${scope.id}:${index}`;
+        const item = buildGrammarPracticeItemsForWord(word, {
+          seed: questionSeed,
           requestedScopeId: scope.id,
           userLevel: practiceLevel,
         }).find((item) => item.kind === targetGrammarKind) ?? null;
+        // A short word pool repeats within the five-question set. Keep each
+        // occurrence's answer separate, including when its scope changes.
+        return item ? { ...item, id: `${item.id}:${questionSeed}` } : null;
       })
       .filter((item): item is GrammarPracticeItem => Boolean(item))
       .slice(0, grammarQuestionCount);

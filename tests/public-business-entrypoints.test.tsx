@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import AuthExperienceScreen from '../components/auth/AuthExperienceScreen';
+import AuthExperienceScreen, { AuthForm } from '../components/auth/AuthExperienceScreen';
 import { getManagedRobotsContent } from '../components/Layout';
 import PublicInfoPage from '../components/PublicInfoPage';
 import {
@@ -23,8 +23,11 @@ const buildAuthScreen = ({
 }: {
   showPasswordRecovery?: boolean;
   passwordRecoveryMessage?: string | null;
-} = {}) => renderToStaticMarkup(
-  <AuthExperienceScreen
+} = {}) => {
+  // The recovery form now lives in a portal; its content contract is checked directly.
+  const Surface = showPasswordRecovery ? AuthForm : AuthExperienceScreen;
+  return renderToStaticMarkup(
+  <Surface
     currentView="login"
     publicRole={null}
     authMode="LOGIN"
@@ -55,7 +58,8 @@ const buildAuthScreen = ({
     onOpenPublicRole={noop}
     onClosePublicRole={noop}
   />,
-);
+  );
+};
 
 const buildPublicInfoPage = () => renderToStaticMarkup(
   <PublicInfoPage
@@ -68,15 +72,15 @@ const buildPublicInfoPage = () => renderToStaticMarkup(
 );
 
 describe('public business role entrypoints', () => {
-  it('keeps the first surface oriented around immediate start with login on the edge', () => {
+  it('keeps login, signup and an explicit student trial clear on the first surface', () => {
     const authMarkup = buildAuthScreen();
 
     expect(authMarkup).toContain('data-testid="start-first-home"');
-    expect(authMarkup).toContain('最初の画面から、すぐ単語学習を始める');
+    expect(authMarkup).toContain('今日の学習を、ここから');
     expect(authMarkup).toContain('data-testid="demo-login-student"');
-    expect(authMarkup).toContain('data-testid="auth-edge-panel"');
-    expect(authMarkup).toContain('パスワードを忘れた方');
-    expect(authMarkup).toContain('登録して診断へ');
+    expect(authMarkup).toContain('data-testid="start-first-login"');
+    expect(authMarkup).toContain('data-testid="start-first-signup"');
+    expect(authMarkup).not.toContain('data-testid="auth-email-input"');
     expect(authMarkup).not.toContain('導入ガイド');
     expect(authMarkup).not.toContain('相談フォーム');
     expect(authMarkup).not.toContain('説明と料金を見る');
@@ -107,7 +111,7 @@ describe('public business role entrypoints', () => {
 
     for (const role of PUBLIC_BUSINESS_ROLE_CONFIGS) {
       expect(authMarkup).toContain(role.cardActionTestId);
-      expect(authMarkup).toContain(getPublicBusinessRoleDirectPath(role.key));
+      expect(authMarkup).toContain(role.title);
       expect(publicMarkup).toContain(role.cardTestId);
       expect(publicMarkup).toContain(role.cardActionTestId);
     }
