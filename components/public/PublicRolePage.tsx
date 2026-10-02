@@ -119,10 +119,10 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
               data-testid={`public-role-preview-${role.key}`}
               className="rounded-[28px] border border-medace-100 bg-gradient-to-br from-white via-medace-50/60 to-slate-50 px-6 py-6 shadow-[0_18px_44px_rgba(255,130,22,0.10)]"
             >
-              <p className="text-sm font-bold text-medace-700">ロール別UIプレビュー</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">実権限を開かずに画面構成だけ確認できます</h2>
+              <p className="text-sm font-bold text-medace-700">役割別の画面プレビュー</p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">実際の権限を使わずに、画面構成だけを確認できます</h2>
               <p className="mt-3 max-w-3xl text-base leading-relaxed text-slate-600">
-                本番公開環境では service admin の実データや更新操作には入れません。代わりに、受付キュー、配信、お知らせ運用で見る代表 UI をこの場で確認できます。
+                本番公開環境では、サービス管理者の実データや更新操作にはアクセスできません。代わりに、受付一覧、配信、お知らせの管理画面の例をこのページで確認できます。
               </p>
               <div className="mt-6 grid gap-4 xl:grid-cols-3">
                 {role.previewPanels.map((panel) => (
@@ -147,10 +147,10 @@ const PublicRolePage: React.FC<PublicRolePageProps> = ({
           )}
 
           <section className="rounded-[28px] border border-slate-200 bg-slate-50 px-6 py-5">
-            <p className="text-sm font-bold text-slate-500">体験ポリシー</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">体験開始は明示クリックで行います</h2>
+            <p className="text-sm font-bold text-slate-500">体験を始めるときのルール</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">ボタンを押すと体験が始まります</h2>
             <p className="mt-3 text-base leading-relaxed text-slate-600">
-              ページを開いた時点では自動ログインしません。案内を読んだうえで、必要な役割だけを明示的に開きます。
+              ページを開いても自動ではログインしません。案内を読んだうえで、必要な役割の画面だけをボタンで開きます。
             </p>
           </section>
 

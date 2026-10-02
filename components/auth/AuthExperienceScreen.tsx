@@ -103,7 +103,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
         {showPasswordRecovery
           ? '登録したメールアドレスを入力してください。再設定の依頼を受け付けます。'
           : authMode === 'LOGIN'
-            ? '生徒・講師とも、登録済みのアカウントで入れます。'
+            ? '生徒も講師も、登録済みのアカウントでログインできます。'
             : '生徒用アカウントを作ります。講師の方は教室から案内されたアカウントでログインしてください。'}
       </p>
 
@@ -167,10 +167,10 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
         )}
         {showPasswordRecovery ? (
           <div data-testid="password-recovery-panel">
-            <p className="text-xs leading-relaxed text-slate-500">アカウントの有無は画面に表示しません。再設定リクエストの受付です。即時のメール送信を保証するものではありません。</p>
+            <p className="text-xs leading-relaxed text-slate-500">アカウントの有無は画面に表示しません。再設定の依頼を受け付けます。メールの即時送信は保証していません。</p>
             <button type="button" onClick={onClosePasswordRecovery} disabled={busy} className="mt-2 min-h-11 w-full rounded-lg text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">ログインに戻る</button>
           </div>
-        ) : authMode === 'SIGNUP' && <p className="text-xs leading-relaxed text-slate-500">登録後は初回診断で、学習のスタートレベルを確認します</p>}
+        ) : authMode === 'SIGNUP' && <p className="text-xs leading-relaxed text-slate-500">登録後の初回診断で、学習を始めるときのレベルを確認します</p>}
       </form>
     </section>
   );
@@ -210,7 +210,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
       </section>
       <section className="rounded-panel border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="role-entry-heading">
         <h2 id="role-entry-heading" className="text-base font-black text-steady-ink">講師・教室の方へ</h2>
-        <p className="mt-1 text-sm text-slate-600">登録済みの講師は上のログインから入れます。画面の案内はこちら。</p>
+        <p className="mt-1 text-sm text-slate-600">登録済みの講師は上のボタンからログインできます。こちらで画面を案内しています。</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {PUBLIC_BUSINESS_ROLE_CONFIGS.map((role) => (
             <button key={role.key} type="button" data-testid={role.cardActionTestId} onClick={() => onOpenPublicRole(role.key)} disabled={busy}
@@ -221,7 +221,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
           <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">学習の流れを見る</summary>
           <ol className="mt-2 list-inside list-decimal space-y-2 text-sm leading-relaxed text-slate-600">
             <li>生徒用アカウントを登録する、またはログインする</li>
-            <li>初回診断でスタートレベルを確認する</li>
+            <li>初回診断で学習を始めるときのレベルを確認する</li>
             <li>教材ホームで今日の学習や復習を選ぶ</li>
           </ol>
         </details>

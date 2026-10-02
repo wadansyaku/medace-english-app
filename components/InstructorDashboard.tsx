@@ -195,7 +195,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
             onClick={() => void data.refresh()}
             className="mt-3 min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-2 font-bold disabled:opacity-50"
           >
-            再取得する
+            もう一度読み込む
           </button>
         </div>
       )}

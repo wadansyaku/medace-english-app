@@ -184,13 +184,13 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
               <p className="mt-5 text-sm text-slate-600">
                 {loading
                   ? '担当生徒の状況を確認しています。'
-                  : '担当生徒の状況は未取得です。画面上部から再取得できます。'}
+                  : '担当生徒の状況はまだ読み込めていません。画面上部からもう一度読み込めます。'}
               </p>
             ) : priorityStudent ? (
               <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-lg font-bold text-medace-900">
-                    {priorityStudent.name}さんの次の一歩を確認
+                    {priorityStudent.name}さんが次にすることを確認
                   </p>
                   <p className="mt-2 text-sm leading-7 text-slate-600">
                     {getNextActionText(priorityStudent)}
@@ -277,7 +277,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
               <div className="mt-4 divide-y divide-slate-100">
                 {!hasStudentsData ? (
                   <p className="py-5 text-sm text-slate-500">
-                    {unknownValue}：生徒一覧は取得後に表示します。
+                    {unknownValue}：生徒一覧は読み込み後に表示します。
                   </p>
                 ) : controller.sortedStudents.length === 0 ? (
                   <p className="py-5 text-sm leading-6 text-slate-500">
@@ -433,7 +433,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                 <p className="mt-1 text-xs text-slate-500">
                   {hasStudentsData
                     ? `${controller.filteredStudents.length}名を表示 · 今日フォローが必要な順`
-                    : '取得後に表示します'}
+                    : '読み込み後に表示します'}
                 </p>
               </div>
               <div data-testid="instructor-students-list">
@@ -441,7 +441,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
                   <p className="px-5 py-10 text-sm leading-7 text-slate-500">
                     {loading
                       ? '生徒を読み込んでいます。'
-                      : '生徒を取得できませんでした。画面上部から再取得してください。'}
+                      : '生徒を読み込めませんでした。画面上部からもう一度読み込んでください。'}
                   </p>
                 ) : controller.filteredStudents.length === 0 ? (
                   <div className="px-5 py-10">
@@ -510,7 +510,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
             >
               {!focusedStudent ? (
                 <p className="py-10 text-sm text-slate-500">
-                  生徒を選ぶと、学習状況と次のアクションが表示されます。
+                  生徒を選ぶと、学習状況と次にすることが表示されます。
                 </p>
               ) : (
                 <div className="space-y-5">
@@ -717,7 +717,7 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
       {activeView === InstructorWorkspaceView.WORKSHEETS && (
         <div className="grid items-start gap-5 lg:grid-cols-[0.8fr_1.2fr]">
           <section className={PANEL}>
-            <h3 className="text-xl font-black text-slate-900">授業の確認を、小さく始める</h3>
+            <h3 className="text-xl font-black text-slate-900">授業の内容を小テストで確認する</h3>
             <p className="mt-3 text-sm leading-7 text-slate-600">
               単語帳の範囲を指定して、紙の小テストを作れます。作成したプリントを確認し、印刷またはPDF保存してください。
             </p>

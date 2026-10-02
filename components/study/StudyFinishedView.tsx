@@ -57,7 +57,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
               </div>
               <h2 className="text-[1.7rem] font-black tracking-tight text-slate-950">クエスト完了！</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                {sessionWordCount}語を進めました。次に直すところだけ見れば十分です。
+                {sessionWordCount}語を学習しました。次に見直すところだけ確認すれば十分です。
               </p>
               {reward}
             </div>
@@ -81,13 +81,13 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
               </div>
             ) : (
               <div className="mt-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-                もう一度に回す単語はありません。このまま次の学習に進めます。
+                もう一度確認する単語はありません。このまま次の学習に進めます。
               </div>
             )}
             <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
               <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">くわしく見る</summary>
               <div className="mt-3 grid gap-3 text-sm leading-relaxed text-slate-600">
-                <p>明日は最初の3分だけ、今日の苦手カードから触ると続けやすいです。</p>
+                <p>明日は最初の3分だけ、今日の苦手カードから学ぶと続けやすいです。</p>
                 <p>{weaknessSummary}</p>
               </div>
             </details>
@@ -126,7 +126,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
           </div>
           <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
-          <p className="mt-2 text-sm text-slate-500">{sessionWordCount}語を進めました。次に直すところだけ見れば十分です。</p>
+          <p className="mt-2 text-sm text-slate-500">{sessionWordCount}語を学習しました。次に見直すところだけ確認すれば十分です。</p>
           {reward}
         </div>
 
@@ -147,24 +147,24 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-                もう一度に回す単語はありません。このまま次の学習に進めます。
+                もう一度確認する単語はありません。このまま次の学習に進めます。
               </div>
             )}
           </div>
 
           <div className="rounded-3xl border border-medace-100 bg-[#fff8ef] p-5">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次の一手</div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次にすること</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600">
               <div className="rounded-2xl bg-white px-4 py-4">
-                <div className="font-bold text-slate-900">次の復習タイミング</div>
+                <div className="font-bold text-slate-900">次に復習する時期</div>
                 <div className="mt-1 leading-relaxed">{nextReviewMessage}</div>
               </div>
               <div className="rounded-2xl bg-white px-4 py-4">
-                <div className="font-bold text-slate-900">明日の入り方</div>
-                <div className="mt-1 leading-relaxed">最初の3分だけでいいので、今日の苦手カードから触ると続けやすいです。</div>
+                <div className="font-bold text-slate-900">明日の学習の始め方</div>
+                <div className="mt-1 leading-relaxed">最初の3分だけでいいので、今日の苦手カードから学ぶと続けやすいです。</div>
               </div>
               <div className="rounded-2xl bg-white px-4 py-4">
-                <div className="font-bold text-slate-900">今日の弱点フォーカス</div>
+                <div className="font-bold text-slate-900">今日、注目する弱点</div>
                 <div className="mt-1 leading-relaxed">{weaknessSummary}</div>
               </div>
             </div>

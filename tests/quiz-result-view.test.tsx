@@ -82,7 +82,7 @@ describe('QuizResultView translation feedback summary', () => {
     expect(rendered).toContain('6 / 10・部分点');
     expect(rendered).toContain('改善訳');
     expect(rendered).toContain('その語は今日、生徒によって復習される。');
-    expect(rendered).toContain('次ドリル');
+    expect(rendered).toContain('次の練習');
     expect(rendered).toContain('主語 / be+過去分詞 / by の3ますで確認しましょう。');
   });
 
@@ -108,6 +108,6 @@ describe('QuizResultView translation feedback summary', () => {
 
     expect(rendered).toContain('data-testid="quiz-review-translation-feedback-summary"');
     expect(rendered).toContain('改善訳: その語は今日、生徒によって復習される。');
-    expect(rendered).toContain('次ドリル: 主語 / be+過去分詞 / by の3ますで確認しましょう。');
+    expect(rendered).toContain('次の練習: 主語 / be+過去分詞 / by の3ますで確認しましょう。');
   });
 });

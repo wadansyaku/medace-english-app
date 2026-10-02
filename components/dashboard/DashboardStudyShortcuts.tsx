@@ -36,7 +36,7 @@ const DashboardStudyShortcuts: React.FC<DashboardStudyShortcutsProps> = ({
     },
     {
       id: 'quick-progress',
-      title: '積み上げを振り返る',
+      title: '学習記録を振り返る',
       helper: hasProgress ? '週間の学習記録・定着状況' : '学習を始めると記録が表示されます',
       icon: BarChart3,
       disabled: !hasProgress,

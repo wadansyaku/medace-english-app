@@ -66,11 +66,11 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     pageTestId: 'public-role-page-student',
     primaryActionTestId: 'demo-login-business-student',
     title: 'ビジネス版 生徒',
-    audienceLabel: '生徒ロール',
-    cardDescription: '講師フォロー通知と教材配信の前提で学習画面を確認します。',
-    cardDetail: '授業運用に乗る生徒導線、配布教材、添削返却の受け取りを確認',
+    audienceLabel: '生徒向け',
+    cardDescription: '講師からのフォロー通知や教材の配信を受ける生徒の学習画面を確認します。',
+    cardDetail: '授業での学習の流れ、配布教材、添削の返却物の受け取りを確認',
     summary: '授業で配られた教材に取り組み、講師からのフォローや添削返却を受け取る役割です。',
-    primaryActionSummary: '学習開始から返却確認まで、授業運用に乗る生徒導線をそのまま見られます。',
+    primaryActionSummary: '学習開始から返却物の確認まで、授業で生徒が学ぶ流れをそのまま見られます。',
     highlights: [
       {
         label: '配布教材の受け取り',
@@ -82,7 +82,7 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
       },
       {
         label: '添削返却の受信',
-        detail: '英作文や講師コメントを受け取り、次の学習アクションへつなげます。',
+        detail: '英作文や講師コメントを受け取り、次の学習につなげます。',
       },
     ],
     demoRole: UserRole.STUDENT,
@@ -97,23 +97,23 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     pageTestId: 'public-role-page-instructor',
     primaryActionTestId: 'demo-login-instructor',
     title: '講師',
-    audienceLabel: '講師ロール',
-    cardDescription: '優先生徒の抽出、通知文の作成、添削キューを確認します。',
-    cardDetail: '生徒一覧、通知、英作文 review の代表画面を確認',
-    summary: '担当生徒のフォロー、添削、学習停滞者への介入を担う教室・学校向けの運用役割です。',
-    primaryActionSummary: 'フォロー対象の抽出から通知、添削キューまでを 1 つの導線で確認できます。',
+    audienceLabel: '講師向け',
+    cardDescription: '優先して対応する生徒を見つけ、通知文の作成や添削待ちの一覧を確認します。',
+    cardDetail: '生徒一覧、通知、英作文の確認に使う代表画面を見る',
+    summary: '担当生徒のフォローや添削、学習が停滞した生徒への対応を担う、教室・学校向けの役割です。',
+    primaryActionSummary: 'フォローする生徒を見つけて通知し、添削待ちを確認する流れを見られます。',
     highlights: [
       {
         label: '要対応生徒の抽出',
-        detail: '停滞・未着手・再開待ちの生徒をまとめて見つけ、優先順に追えます。',
+        detail: '停滞・未着手・再開待ちの生徒をまとめて見つけ、優先順に確認できます。',
       },
       {
         label: '通知と声かけ',
-        detail: '授業前後の連絡や個別フォロー文を、運用文脈に合わせて整理できます。',
+        detail: '授業前後の連絡や個別フォローの文章を、運用の状況に合わせて整理できます。',
       },
       {
-        label: '英作文 review',
-        detail: '提出物の確認、レビュー依頼、返却待ちの状態をひとまとまりで扱えます。',
+        label: '英作文の確認',
+        detail: '提出物の確認、添削の依頼、返却待ちの状態をまとめて扱えます。',
       },
     ],
     demoRole: UserRole.INSTRUCTOR,
@@ -128,7 +128,7 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     pageTestId: 'public-role-page-group-admin',
     primaryActionTestId: 'demo-login-group-admin',
     title: '学校管理者',
-    audienceLabel: '学校管理者ロール',
+    audienceLabel: '学校管理者向け',
     cardDescription: '担当割当、運用状況、KPI の見え方を確認します。',
     cardDetail: '組織ダッシュボード、担当割当、運用指標の代表画面を確認',
     summary: '学校・教室の運用責任者として、講師配置、運用の進捗、継続率指標を俯瞰する役割です。',
@@ -159,7 +159,7 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     pageTestId: 'public-role-page-service-admin',
     primaryActionTestId: 'demo-login-admin',
     title: 'サービス管理者',
-    audienceLabel: 'サービス管理者ロール',
+    audienceLabel: 'サービス管理者向け',
     cardDescription: '受付キュー、お知らせ配信、教材運用の管理画面を確認します。',
     cardDetail: 'AdminPanel、運用設定、全体お知らせの配信画面を確認',
     summary: 'サービス全体の受付運用、お知らせ配信、教材メンテナンスを担うサービス側の管理役割です。',
@@ -257,7 +257,7 @@ export const getPublicBusinessRolePrimaryAction = (
         label: 'この役割を試す',
         note: roleKey === 'service-admin'
           ? '管理用デモはパスワード確認のあとに開始します。'
-          : 'ページ訪問時には自動ログインせず、クリックで体験を開始します。',
+          : 'ページを開いても自動ではログインしません。ボタンを押すと体験が始まります。',
       }
     : roleKey === 'service-admin'
       ? {
