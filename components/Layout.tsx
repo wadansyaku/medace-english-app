@@ -328,9 +328,23 @@ const Layout: React.FC<LayoutProps> = ({
                   key={section.id}
                   type="button"
                   onClick={() => onSelectWorkspaceSection(section.id)}
+                  onFocus={(event) => {
+                    const item = event.currentTarget;
+                    const scroller = item.parentElement;
+                    if (!scroller) return;
+                    const itemBounds = item.getBoundingClientRect();
+                    const scrollBounds = scroller.getBoundingClientRect();
+                    const focusInset = 8;
+                    const delta = itemBounds.left < scrollBounds.left + focusInset
+                      ? itemBounds.left - scrollBounds.left - focusInset
+                      : itemBounds.right > scrollBounds.right - focusInset
+                        ? itemBounds.right - scrollBounds.right + focusInset
+                        : 0;
+                    if (delta) scroller.scrollBy({ left: delta, behavior: 'auto' });
+                  }}
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
                   aria-current={activeWorkspaceSection === section.id ? 'page' : undefined}
-                  className={`min-h-11 shrink-0 rounded-xl border px-4 py-2 sm:py-3 text-left transition-colors ${
+                  className={`relative min-h-11 shrink-0 rounded-xl border px-4 py-2 sm:py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
                       ? 'border-medace-200 bg-medace-50 text-medace-950'
                       : 'border-medace-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
