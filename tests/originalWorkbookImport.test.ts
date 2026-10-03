@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
 import {
-  ORIGINAL_WORKBOOKS, archiveWorkbook, buildOriginalWorkbookSql,
+  ORIGINAL_WORKBOOKS, archiveWorkbook, buildOriginalWorkbookSql, buildOriginalWorkbookTitleSql,
   compareOriginalCatalog, parseOriginalWorkbook, workbookBookId,
 } from '../scripts/_shared/original-workbook-import.mjs';
 import { catalogRowsAreEquivalent, normalizeCatalogImport } from '../shared/catalogImport';
@@ -214,6 +214,74 @@ describe('source import remains additive and repeatable', () => {
       expect(db.prepare('SELECT COUNT(*) AS count FROM users').get()?.count).toBe(1);
       expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     } finally { db.close(); }
+  });
+});
+
+describe('original workbook series title refresh', () => {
+  it('imports the four Naruシスト titles and keeps their historical snapshot IDs', () => {
+    const fixtures: Record<string, SheetFixture[]> = {
+      verb: [{ name: '文法分類', rows: [['walk', null, '歩く', 'Walk home.']] }, { name: '動詞一覧', rows: [['walk']] }, { name: 'メモ', rows: [['walk']] }],
+      noun: nounFixture,
+      adverb: [{ name: '副詞一覧', rows: [[null, null, null, null, null, 'well', '上手に', 'She sings well.']] }],
+      adjective: [{ name: '形容詞', rows: [['kind', '親切な', 'She is kind.']] }, { name: '形容詞一覧', rows: [['kind']] }],
+    };
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(migrationSql);
+      const originals = ORIGINAL_WORKBOOKS.map(spec => parse(spec.key, fixtures[spec.key]));
+      const historical = originals.map(workbook => parseOriginalWorkbook({ ...workbook, spec: { ...workbook.spec, title: workbook.spec.legacyTitle } }));
+      originals.forEach((workbook, index) => expect(workbookBookId(workbook)).toBe(workbookBookId(historical[index])));
+      db.exec(buildOriginalWorkbookSql(historical, { timestamp: 1 }));
+      const nounBookId = workbookBookId(originals[1]);
+      const word = db.prepare('SELECT id FROM words WHERE book_id=? LIMIT 1').get(nounBookId)!;
+      db.exec(`INSERT INTO users(id,email,display_name,role,created_at,updated_at) VALUES ('name-fixture','name@example.invalid','Synthetic','STUDENT',1,1);
+        INSERT INTO learning_histories(user_id,word_id,book_id,status,last_studied_at,next_review_date) VALUES ('name-fixture','${word.id}','${nounBookId}','LEARNING',7,9);
+        INSERT INTO books(id,title,word_count,created_at,updated_at) VALUES ('level-1','メッドエース オリジナル名詞（原本監査版）',0,1,1);`);
+      for (let level = 2; level <= 6; level += 1) db.prepare('INSERT INTO books(id,title,word_count,created_at,updated_at) VALUES (?,?,0,1,1)').run(`level-${level}`, `既存レベル ${level}`);
+      const tables = ['books', 'material_source_ledger', 'words', 'users', 'learning_histories', 'catalog_workbook_sources', 'catalog_workbook_sheet_rows', 'catalog_source_entries', 'catalog_word_source_links'];
+      const snapshot = () => Object.fromEntries(tables.map(table => [table, db.prepare(`SELECT * FROM ${table}`).all().map(row => {
+        const copy = { ...row };
+        if (table === 'books' && String(row.id).startsWith('workbook-')) delete copy.title;
+        if (table === 'material_source_ledger') delete copy.book_title;
+        return copy;
+      })]));
+      const before = snapshot();
+      const renameSql = buildOriginalWorkbookTitleSql(originals);
+      db.exec(renameSql); db.exec(renameSql);
+      db.exec(buildOriginalWorkbookSql(originals, { timestamp: 20, localPreview: true }));
+      expect(snapshot()).toEqual(before);
+      expect(originals.map(workbook => db.prepare('SELECT title FROM books WHERE id=?').get(workbookBookId(workbook))?.title)).toEqual([
+        'Naruシスト 動詞', 'Naruシスト 名詞', 'Naruシスト 副詞', 'Naruシスト 形容詞',
+      ]);
+      expect(db.prepare("SELECT COUNT(*) AS count FROM material_source_ledger WHERE rights_status='pending' AND review_status='needs_review'").get()?.count).toBe(4);
+      expect(db.prepare('SELECT b.id FROM books b JOIN material_source_ledger m ON m.book_id=b.id WHERE b.title<>m.book_title').all()).toEqual([]);
+      expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    } finally { db.close(); }
+  });
+
+  it.each([
+    "UPDATE books SET source_context='unverified source'",
+    "UPDATE books SET title='Teacher custom title'",
+    "UPDATE material_source_ledger SET source_file='another.xlsx'",
+    "UPDATE catalog_workbook_sources SET sha256='unverified revision'",
+  ])('leaves mismatched or individually renamed material intact: %s', alterSql => {
+    const workbook = parse('noun', nounFixture);
+    const historical = parseOriginalWorkbook({ ...workbook, spec: { ...workbook.spec, title: workbook.spec.legacyTitle } });
+    const db = new DatabaseSync(':memory:');
+    try {
+      db.exec(migrationSql);
+      db.exec(buildOriginalWorkbookSql([historical], { timestamp: 1 }));
+      db.exec(alterSql);
+      const before = [db.prepare('SELECT * FROM books').all(), db.prepare('SELECT * FROM material_source_ledger').all()];
+      db.exec(buildOriginalWorkbookTitleSql([workbook]));
+      expect([db.prepare('SELECT * FROM books').all(), db.prepare('SELECT * FROM material_source_ledger').all()]).toEqual(before);
+    } finally { db.close(); }
+  });
+
+  it('rejects unknown files and abbreviated source revisions before generating updates', () => {
+    const workbook = parse('noun', nounFixture);
+    expect(() => buildOriginalWorkbookTitleSql([{ ...workbook, sha256: 'a'.repeat(16) }])).toThrow('full source SHA');
+    expect(() => buildOriginalWorkbookTitleSql([{ ...workbook, spec: { ...workbook.spec, file: 'another.xlsx' } }])).toThrow('known original workbook');
   });
 });
 

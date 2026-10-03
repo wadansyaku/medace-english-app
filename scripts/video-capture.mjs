@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname, basename } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
+import { ORIGINAL_WORKBOOKS } from './_shared/original-workbook-import.mjs';
 
 const argv = process.argv.slice(2);
 const value = (flag) => argv[argv.indexOf(flag) + 1];
@@ -77,7 +78,9 @@ try {
         headers: { Origin: base.origin, Referer: base.origin + '/' }, data: { action: 'getBooks' } });
       const books = response.status() === 200 ? await response.json() : [];
       const originals = Array.isArray(books) ? books.filter((book) =>
-        /^メッドエース オリジナル(?:動詞|名詞|副詞|形容詞)（原本監査版）$/.test(book.title)) : [];
+        /^workbook-(?:verb|noun|adverb|adjective)-[a-f0-9]{16}$/.test(book.id)
+        && book.catalogSource === 'STEADY_STUDY_ORIGINAL'
+        && ORIGINAL_WORKBOOKS.some(({ key, title }) => book.id.startsWith(`workbook-${key}-`) && book.title === title)) : [];
       const check = { sessionStatus: session.status(), catalogReadStatus: response.status(),
         originalBookCount: originals.length,
         originalWordCount: originals.reduce((sum, book) => sum + book.wordCount, 0),

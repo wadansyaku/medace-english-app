@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 
 export const ORIGINAL_WORKBOOKS = Object.freeze([
-  { key: 'verb', file: 'verb_list.xlsx', title: 'メッドエース オリジナル動詞（原本監査版）', contentSheet: '文法分類' },
-  { key: 'noun', file: 'noun_list_修正版_監査付き_20260411.xlsx', title: 'メッドエース オリジナル名詞（原本監査版）' },
-  { key: 'adverb', file: 'adverb_list.xlsx', title: 'メッドエース オリジナル副詞（原本監査版）', contentSheet: '副詞一覧' },
-  { key: 'adjective', file: 'adjective_list.xlsx', title: 'メッドエース オリジナル形容詞（原本監査版）', contentSheet: '形容詞' },
+  { key: 'verb', file: 'verb_list.xlsx', title: 'Naruシスト 動詞', legacyTitle: 'メッドエース オリジナル動詞（原本監査版）', contentSheet: '文法分類' },
+  { key: 'noun', file: 'noun_list_修正版_監査付き_20260411.xlsx', title: 'Naruシスト 名詞', legacyTitle: 'メッドエース オリジナル名詞（原本監査版）' },
+  { key: 'adverb', file: 'adverb_list.xlsx', title: 'Naruシスト 副詞', legacyTitle: 'メッドエース オリジナル副詞（原本監査版）', contentSheet: '副詞一覧' },
+  { key: 'adjective', file: 'adjective_list.xlsx', title: 'Naruシスト 形容詞', legacyTitle: 'メッドエース オリジナル形容詞（原本監査版）', contentSheet: '形容詞' },
 ]);
 
 export const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -350,6 +350,33 @@ const sqlValue = (value) => value == null || value === '' ? 'NULL' : typeof valu
   ? String(value) : `'${String(value).replace(/'/g, "''")}'`;
 const insert = (table, columns, values) => `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${values.map(sqlValue).join(', ')}) ON CONFLICT DO NOTHING;`;
 export const workbookBookId = (workbook) => `workbook-${workbook.spec.key}-${workbook.sha256.slice(0, 16)}`;
+
+// Generate a separate, repeatable title refresh for already-imported snapshots.
+// Full source SHA, file, ledger and historical title must match. Source archives,
+// word IDs, histories, timestamps and material approval/access fields stay intact.
+export const buildOriginalWorkbookTitleSql = (workbooks) => {
+  const statements = ['-- Local review only: refresh the four original workbook display titles.',
+    '-- No source content, history, access scope or material approval changes.'];
+  for (const workbook of workbooks) {
+    const spec = ORIGINAL_WORKBOOKS.find((entry) => entry.key === workbook.spec.key);
+    const { sha256 } = workbook;
+    if (!spec || spec.file !== workbook.spec.file || !/^[a-f0-9]{64}$/.test(sha256)) {
+      throw new Error('Title refresh requires a known original workbook and full source SHA');
+    }
+    const bookId = sqlValue(workbookBookId(workbook));
+    const title = sqlValue(spec.title);
+    const allowedTitles = [spec.legacyTitle, spec.title].map(sqlValue).join(', ');
+    const sourceId = sqlValue(`xlsx-${spec.key}-${sha256}`);
+    const sourceFile = sqlValue(spec.file);
+    const revision = sqlValue(sha256);
+    const context = sqlValue(`原本由来:${spec.file}; source_revision:${sha256}`);
+    const sourceMatch = `EXISTS (SELECT 1 FROM catalog_workbook_sources s WHERE s.id=${sourceId} AND s.series_key=${sqlValue(spec.key)} AND s.source_file=${sourceFile} AND s.sha256=${revision})`;
+    const ledgerMatch = `EXISTS (SELECT 1 FROM material_source_ledger m WHERE m.source_id=${sqlValue(`ledger-${workbookBookId(workbook)}`)} AND m.book_id=${bookId} AND m.catalog_source='STEADY_STUDY_ORIGINAL' AND m.source_file=${sourceFile} AND m.edition=${revision} AND m.book_title IN (${allowedTitles}))`;
+    statements.push(`UPDATE books SET title=${title} WHERE id=${bookId} AND title IN (${allowedTitles}) AND catalog_source='STEADY_STUDY_ORIGINAL' AND source_context=${context} AND ${sourceMatch} AND ${ledgerMatch};`);
+    statements.push(`UPDATE material_source_ledger SET book_title=${title} WHERE source_id=${sqlValue(`ledger-${workbookBookId(workbook)}`)} AND book_id=${bookId} AND catalog_source='STEADY_STUDY_ORIGINAL' AND source_file=${sourceFile} AND edition=${revision} AND book_title IN (${allowedTitles}) AND ${sourceMatch} AND EXISTS (SELECT 1 FROM books b WHERE b.id=${bookId} AND b.title=${title} AND b.catalog_source='STEADY_STUDY_ORIGINAL' AND b.source_context=${context});`);
+  }
+  return `${statements.join('\n')}\n`;
+};
 
 // Generates SQL only. No connection, exec, remote flag, deletes, or updates.
 // Snapshot books never reuse old word IDs; exact existing matches are reported

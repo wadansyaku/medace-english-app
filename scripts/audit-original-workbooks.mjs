@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import XLSX from 'xlsx';
 import {
-  ORIGINAL_WORKBOOKS, archiveWorkbook, buildOriginalWorkbookSql,
+  ORIGINAL_WORKBOOKS, archiveWorkbook, buildOriginalWorkbookSql, buildOriginalWorkbookTitleSql,
   compareOriginalCatalog, digest, parseOriginalWorkbook, workbookBookId,
 } from './_shared/original-workbook-import.mjs';
 
@@ -16,7 +16,7 @@ for (let i = 0; i < args.length; i += 1) {
     options[{ '--input-dir': 'inputDir', '--output-dir': 'outputDir', '--catalog': 'catalog', '--catalog-scope': 'catalogScope', '--lineage-map': 'lineageMap' }[flag]] = args[++i];
   } else if (flag === '--help') {
     console.log('Usage: node scripts/audit-original-workbooks.mjs [--input-dir path] [--output-dir path] [--catalog official-content.json] [--catalog-scope unrelated|source-lineage --lineage-map verified-book-ids.json] [--local-preview]');
-    console.log('Reads four original XLSX files unchanged. Writes JSON audit, source archives, import rows, CSV differences and local-only additive SQL. Does not access or mutate any DB.');
+    console.log('Reads four original XLSX files unchanged. Writes JSON audit, source archives, import rows, CSV differences, local-only additive SQL and a separate source-guarded title refresh SQL. Does not access or mutate any DB.');
     process.exit(0);
   } else throw new Error(`Unknown flag: ${flag}`);
 }
@@ -70,4 +70,5 @@ await fs.writeFile(path.join(outputDir, 'catalog-differences.csv'), `${columns.j
 const referenceRows = comparison.lexicalOverlapReference?.records || [];
 await fs.writeFile(path.join(outputDir, 'lexical-overlap-reference.csv'), `correspondenceScope,${columns.join(',')}\n${referenceRows.map((row) => [quote('UNRELATED_CATALOG_RECOMPOSITION'), ...columns.map((column) => quote(Array.isArray(row[column]) ? row[column].join(';') : row[column]))].join(',')).join('\n')}\n`);
 await fs.writeFile(path.join(outputDir, options.localPreview ? 'original-workbooks.local-preview.sql' : 'original-workbooks.pending.sql'), buildOriginalWorkbookSql(workbooks, { localPreview: options.localPreview }));
+await fs.writeFile(path.join(outputDir, 'original-workbooks.titles.sql'), buildOriginalWorkbookTitleSql(workbooks));
 console.log(JSON.stringify({ outputDir, totals: audit.totals, summary: audit.summary, comparison: { verified: comparison.verified, correspondenceScope: comparison.correspondenceScope, counts: comparison.counts, coverage: comparison.coverage, coverageByPartOfSpeech: comparison.coverageByPartOfSpeech, lexicalOverlapReference: comparison.lexicalOverlapReference?.metrics, reason: comparison.reason } }, null, 2));
