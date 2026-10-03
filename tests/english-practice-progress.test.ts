@@ -30,6 +30,24 @@ const createMemoryStorage = (): EnglishPracticeStorage => {
 };
 
 describe('english practice progress', () => {
+  it('retains the authored question ID locally and saves scope attempts without fictional vocabulary IDs', () => {
+    const storage = createMemoryStorage();
+    const progress = recordEnglishPracticeAttempt(createEmptyEnglishPracticeProgress('curated-user'), {
+      lane: 'grammar', mode: 'GRAMMAR_CLOZE', correct: true,
+      curatedQuestionId: 'grammar-original-20261003-svo-01',
+      scopeId: 'basic-svo', level: EnglishLevel.A1,
+    });
+    saveEnglishPracticeProgress(progress, storage);
+    const attempt = loadEnglishPracticeProgress('curated-user', storage).attempts[0];
+    expect(attempt.curatedQuestionId).toBe('grammar-original-20261003-svo-01');
+    expect(attempt.syncStatus).toBe('pending');
+    expect(toEnglishPracticeCloudQuizAttempt('curated-user', attempt)).toBeNull();
+    const payload = toEnglishPracticeStoragePayload(attempt);
+    expect(payload).toMatchObject({ grammarScopeId: 'basic-svo', level: EnglishLevel.A1 });
+    expect(payload.wordId).toBeUndefined();
+    expect(payload.bookId).toBeUndefined();
+    expect(payload).not.toHaveProperty('curatedQuestionId');
+  });
   it('summarizes grammar, translation, reading, and writing attempts into weak points', () => {
     const base = createEmptyEnglishPracticeProgress('student-progress');
     const withGrammar = recordEnglishPracticeAttempt(base, {

@@ -18,6 +18,12 @@ export const expectPreviewDeployment = process.env.PLAYWRIGHT_EXPECT_PREVIEW ===
 const expectIdbStorageMode = process.env.VITE_STORAGE_MODE === 'idb';
 const demoLoginSessionTimeoutMs = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1' ? 45_000 : 15_000;
 
+export const exposeStudentDemo = async (page: Page) => {
+  const button = page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent);
+  if (!await button.isVisible()) await page.getByText('生徒画面の期間限定デモを見る', { exact: true }).click();
+  await expect(button).toBeVisible();
+};
+
 export const toUploadBuffer = (value: string): Buffer => Buffer.from(value);
 
 export const finishStudySession = async (page: Page, maxCards = 12) => {
@@ -119,12 +125,19 @@ export const completeDiagnostic = async (page: Page) => {
 
 export const maybeCompleteOnboarding = async (page: Page) => {
   const dashboard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard);
+  const choice = page.getByTestId('onboarding-choice');
   const onboarding = page.getByTestId(MOBILE_FLOW_TEST_IDS.onboardingProfile);
   const onboardingReadyTimeoutMs = 30_000;
   await Promise.race([
     dashboard.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs }).catch(() => null),
+    choice.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs }).catch(() => null),
     onboarding.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs }).catch(() => null),
   ]);
+
+  if (await choice.isVisible().catch(() => false)) {
+    await page.getByTestId('onboarding-choose-diagnostic-button').click();
+    await onboarding.waitFor({ state: 'visible', timeout: onboardingReadyTimeoutMs });
+  }
 
   if (await onboarding.isVisible().catch(() => false)) {
     await page.getByRole('button', { name: new RegExp(MOBILE_FLOW_BUTTON_LABELS.onboardingGrade) }).click();
@@ -706,7 +719,47 @@ export const runtimeAdminPost = async <T,>(
   throw new Error(`${resolvedPathname} failed with status 401 after ${timeoutMs}ms`);
 };
 
+/** Resource details mount only after choosing their single navigation entry. */
+export const openDashboardReference = async (page: Page, section: string) => {
+  const opener = page.getByTestId(`dashboard-task-reference-${section}`);
+  await expect(opener).toHaveCount(1);
+  const menu = opener.locator('xpath=ancestor::details');
+  if (await menu.count()) {
+    if (!(await opener.isVisible())) await menu.locator('summary').click();
+  }
+  await expect(opener).toBeVisible();
+  await opener.click();
+  const panel = page.getByTestId('dashboard-reference-panel');
+  await expect(panel).toHaveCount(1);
+  await expect(panel).toBeVisible();
+  await expect(opener).toHaveAttribute('aria-pressed', 'true');
+  await expect(panel).toBeFocused();
+  return panel;
+};
+
+/** Urgent task summaries remain visible; the detailed section starts closed. */
+export const openDashboardTaskDetails = async (page: Page, section: string) => {
+  const details = page.getByTestId(`dashboard-task-details-${section}`);
+  await expect(details).toBeVisible();
+  if (!(await details.evaluate(element => (element as HTMLDetailsElement).open))) {
+    await details.locator('summary').click();
+  }
+  await expect(details).toHaveAttribute('open', '');
+  return details;
+};
+
+/** Urgent writing is in task details; other writing is reached through the reference menu. */
+export const openDashboardWriting = async (page: Page) => {
+  const details = page.getByTestId('dashboard-task-details-writing');
+  const entry = page.getByTestId('dashboard-task-reference-writing');
+  await expect.poll(async () => (await details.count()) + (await entry.count())).toBeGreaterThan(0);
+  if (await details.count()) await openDashboardTaskDetails(page, 'writing');
+  else await openDashboardReference(page, 'writing');
+  await expect(page.getByTestId('writing-student-section')).toBeVisible();
+};
+
 export const completeSeededStudySession = async (page: Page, bookId: string) => {
+  await openDashboardReference(page, 'library');
   await page.getByTestId(`book-study-${bookId}`).click();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
@@ -714,6 +767,7 @@ export const completeSeededStudySession = async (page: Page, bookId: string) => 
 };
 
 export const completeCoachCtaStudySession = async (page: Page) => {
+  await openDashboardTaskDetails(page, 'coach');
   await page.getByTestId('coach-follow-up-cta').click();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
 
@@ -721,6 +775,7 @@ export const completeCoachCtaStudySession = async (page: Page) => {
 };
 
 export const completeMissionCtaStudySession = async (page: Page) => {
+  await openDashboardTaskDetails(page, 'mission');
   await page.getByTestId('dashboard-mission-primary-cta').click();
 
   const studyCard = page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront);

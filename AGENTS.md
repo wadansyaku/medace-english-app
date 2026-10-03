@@ -23,6 +23,7 @@
 - 統合: `npm run build` → `npm run test:api` → `npm run test:smoke`、`npm run security:audit`。
 - 画面変更はPC・モバイルの実renderと対象操作を確認する。ブラウザ回帰ファイルを追加したら `scripts/run-smoke-tests.mjs` のsuiteにも登録する。
 - API/browserの標準runnerはローカル検証用。buildや同一出力先のsmokeを複数担当で同時実行しない。
+- 実装中は検証済みcommitからの差分と依存範囲に応じて高速検証する。機能の区切り・公開する最終候補は全体確認を行い、同一ソースの成功済みbuild・全テストを不必要に重複させない。経過時間だけで検証を有効と判断せず、必須CI・配備gateは維持する。
 - 失敗は原因を調べる。契約テストは文書の分冊や妥当なUI変更に合わせるが、必須check・認可・保存の保証を弱めて通さない。
 
 ## 整理・配備・証拠

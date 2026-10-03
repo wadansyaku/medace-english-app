@@ -102,11 +102,13 @@ describe('quiz controller translation advance policy', () => {
     const retryAttempt = createPendingQuizAttempt({
       mode: 'JA_TRANSLATION_INPUT',
       correct: pendingAttempt.correct,
+      clientAttemptId: pendingAttempt.clientAttemptId,
       responseTimeMs: pendingAttempt.responseTimeMs,
       feedback: pendingAttempt.feedback,
       advanceAutomatically: pendingAttempt.advanceAutomatically,
     });
 
+    expect(retryAttempt.clientAttemptId).toBe(pendingAttempt.clientAttemptId);
     expect(retryAttempt.advanceAutomatically).toBe(false);
     expect(retryAttempt.feedback).toBe(feedback);
   });

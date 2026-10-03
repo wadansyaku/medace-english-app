@@ -8,9 +8,10 @@ import type {
   UserProfile,
 } from '../../types';
 import type { WeaknessInteractionEvent } from '../../shared/weakness';
+import type { QuizAttemptReceipt } from '../../shared/quizAttempt';
 
 export const DB_NAME = 'MedAceDB';
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 export const STORES = {
   BOOKS: 'books',
@@ -22,6 +23,7 @@ export const STORES = {
   ASSIGNMENTS: 'assignments',
   INTERACTION_EVENTS: 'interactionEvents',
   STUDY_ATTEMPT_RECEIPTS: 'studyAttemptReceipts',
+  QUIZ_ATTEMPT_RECEIPTS: 'quizAttemptReceipts',
   WEAKNESS_SIGNALS: 'weaknessSignals',
   COMMERCIAL_REQUESTS: 'commercialRequests',
   PRODUCT_ANNOUNCEMENTS: 'productAnnouncements',
@@ -55,6 +57,13 @@ export interface StoredStudyAttemptReceipt {
   clientAttemptId: string;
   fingerprint: string;
   committedAt: number;
+}
+
+export interface StoredQuizAttemptReceipt extends QuizAttemptReceipt {
+  id: string;
+  uid: string;
+  fingerprint: string;
+  storageMode: 'idb';
 }
 
 export interface StoredWeaknessSignalRecord {
@@ -96,6 +105,7 @@ export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, r
     if (!db.objectStoreNames.contains(STORES.ASSIGNMENTS)) db.createObjectStore(STORES.ASSIGNMENTS, { keyPath: 'studentUid' });
     if (!db.objectStoreNames.contains(STORES.INTERACTION_EVENTS)) db.createObjectStore(STORES.INTERACTION_EVENTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.STUDY_ATTEMPT_RECEIPTS)) db.createObjectStore(STORES.STUDY_ATTEMPT_RECEIPTS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORES.QUIZ_ATTEMPT_RECEIPTS)) db.createObjectStore(STORES.QUIZ_ATTEMPT_RECEIPTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.WEAKNESS_SIGNALS)) db.createObjectStore(STORES.WEAKNESS_SIGNALS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.COMMERCIAL_REQUESTS)) db.createObjectStore(STORES.COMMERCIAL_REQUESTS, { keyPath: 'id', autoIncrement: true });
     if (!db.objectStoreNames.contains(STORES.PRODUCT_ANNOUNCEMENTS)) db.createObjectStore(STORES.PRODUCT_ANNOUNCEMENTS, { keyPath: 'id' });

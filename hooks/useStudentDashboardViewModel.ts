@@ -4,6 +4,7 @@ import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/weakness';
 import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
 import { isBookSelectableForToday } from '../shared/materialQuality';
+import { DEFAULT_SMART_SESSION_LIMIT } from '../shared/studySession';
 import {
   resolveStudentDashboardCommand,
   type StudentDashboardCommand,
@@ -236,7 +237,6 @@ export const useStudentDashboardViewModel = ({
   const weeklyGoal = todayWordGoal * 7;
   const weeklyRemaining = Math.max(weeklyGoal - weekTotal, 0);
   const remainingWords = Math.max(todayWordGoal - todayCount, 0);
-  const reviewFirstCount = dueCount > 0 ? Math.min(dueCount, Math.max(remainingWords, Math.min(todayWordGoal, 8))) : 0;
   const estimatedMinutes = Math.max(3, Math.ceil((remainingWords > 0 ? remainingWords : Math.max(6, Math.min(todayWordGoal, 10))) / 4));
   const todayProgressPercent = todayWordGoal > 0 ? Math.min(100, Math.round((todayCount / todayWordGoal) * 100)) : 0;
 
@@ -288,7 +288,7 @@ export const useStudentDashboardViewModel = ({
       ? '配布教材を確認中'
       : canCreateBook ? '教材を1冊作る' : '教材なしで文法を試す'
     : remainingWords > 0
-      ? `あと${remainingWords}語`
+      ? `今日の目標まであと${remainingWords}語`
       : '今日は完了';
 
   const heroCopy = !hasStudyBooks
@@ -301,8 +301,8 @@ export const useStudentDashboardViewModel = ({
         : '利用できる単語帳はまだありません。文法のお試し問題から始められます。'
     : remainingWords > 0
       ? dueCount > 0
-        ? `まず復習${reviewFirstCount}語。そのあと残りへ。`
-        : `${remainingWords}語だけ進めます。`
+        ? `1回${DEFAULT_SMART_SESSION_LIMIT}語まで、期限が来た復習を優先して進めます。`
+        : `1回${DEFAULT_SMART_SESSION_LIMIT}語まで進めます。終わったら、残りを続けられます。`
       : '余力があれば、英語演習を1セットだけ追加します。';
 
   const questButtonLabel = !hasStudyBooks

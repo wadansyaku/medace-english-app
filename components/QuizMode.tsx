@@ -24,6 +24,13 @@ const QuizMode: React.FC<QuizModeProps> = ({
   onBack,
 }) => {
   const controller = useQuizModeController({ user, bookId, taskIntent });
+  const returnToConditions = () => {
+    if (controller.isScopedSession) onBack();
+    else controller.resetToSetup();
+  };
+  const confirmExit = () => {
+    if (controller.confirmExitRunning() && controller.isScopedSession) onBack();
+  };
 
   const handleHeaderBack = () => {
     if (controller.screen === 'SETUP') {
@@ -31,14 +38,15 @@ const QuizMode: React.FC<QuizModeProps> = ({
       return;
     }
     if (controller.screen === 'READY') {
-      controller.setScreen('SETUP');
+      if (controller.isScopedSession) onBack();
+      else controller.setScreen('SETUP');
       return;
     }
     if (controller.screen === 'RUNNING') {
       controller.setShowExitConfirm(true);
       return;
     }
-    controller.resetToSetup();
+    returnToConditions();
   };
 
   const headerTitle = controller.screen === 'SETUP'
@@ -49,7 +57,9 @@ const QuizMode: React.FC<QuizModeProps> = ({
         ? 'テスト中'
         : '結果を見る';
 
-  const headerSubtitle = controller.screen === 'SETUP'
+  const headerSubtitle = controller.isScopedSession
+    ? controller.activeSummary
+    : controller.screen === 'SETUP'
     ? '必要なときだけ条件を変えて、すぐ始めます。'
     : controller.screen === 'READY'
       ? '条件を確認してから開始します。設定と出題はこの画面で分けます。'
@@ -82,11 +92,11 @@ const QuizMode: React.FC<QuizModeProps> = ({
       <QuizHeader
         title={headerTitle}
         subtitle={headerSubtitle}
-        bookLabel={controller.bookTitle || taskIntent?.label}
+        bookLabel={taskIntent?.wordRange ? `${controller.bookTitle || '選択した教材'} / ${taskIntent.label}` : controller.bookTitle || taskIntent?.label}
         onBack={handleHeaderBack}
       />
 
-      {controller.screen === 'SETUP' && controller.studiedWordsError && (
+      {controller.screen === 'SETUP' && !controller.isScopedSession && controller.studiedWordsError && (
         <section role="alert" data-testid="quiz-history-error" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950">
           <p>{controller.studiedWordsError}</p>
           <div className="mt-3 flex flex-wrap gap-3">
@@ -106,11 +116,24 @@ const QuizMode: React.FC<QuizModeProps> = ({
       {controller.showExitConfirm && (
         <QuizExitConfirmDialog
           onCancel={() => controller.setShowExitConfirm(false)}
-          onConfirm={controller.confirmExitRunning}
+          onConfirm={confirmExit}
+          returnDestinationLabel={controller.isScopedSession ? '章・範囲選択' : undefined}
+          exitBlocked={controller.exitBlocked}
         />
       )}
 
-      {controller.screen === 'SETUP' && (
+      {controller.screen === 'SETUP' && controller.isScopedSession && (
+        <section data-testid="quiz-scoped-session-setup" className="rounded-3xl border border-slate-200 bg-white p-6">
+          <p className="text-sm leading-relaxed text-slate-600">
+            {controller.setupActualQuestionCount === 0
+              ? 'この章・範囲には出題できる単語がありません。章・範囲選択に戻って選び直してください。'
+              : 'この小テストは選んだ章・範囲で出題します。別の範囲を選ぶときは章・範囲選択に戻ってください。'}
+          </p>
+          <button type="button" onClick={onBack} className="mt-4 min-h-11 rounded-xl border border-slate-200 px-4 py-3 font-bold text-slate-700">章・範囲選択へ戻る</button>
+        </section>
+      )}
+
+      {controller.screen === 'SETUP' && !controller.isScopedSession && (
         <QuizSetupView
           bookId={bookId}
           setupConfig={controller.setupConfig}
@@ -189,8 +212,10 @@ const QuizMode: React.FC<QuizModeProps> = ({
           translationFeedbackSummaries={controller.translationFeedbackSummaries}
           nextReviewCopy={controller.nextReviewCopy}
           onRetry={() => controller.startQuiz(controller.activeConfig!)}
-          onReset={controller.resetToSetup}
+          onReset={returnToConditions}
           onBack={onBack}
+          resetLabel={controller.isScopedSession ? '章・範囲を選び直す' : undefined}
+          backLabel={controller.isScopedSession ? '章・範囲選択へ戻る' : undefined}
         />
       )}
     </div>

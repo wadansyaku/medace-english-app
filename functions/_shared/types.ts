@@ -91,6 +91,7 @@ export interface DbUserRow {
   role: string;
   grade: string | null;
   english_level: string | null;
+  diagnostic_deferred_at?: number | null;
   subscription_plan: string | null;
   organization_id: string | null;
   organization_name: string | null;

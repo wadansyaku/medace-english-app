@@ -36,6 +36,9 @@ import {
 import { recordClientProductEvent } from '../services/productEvents';
 import { getLearnerAiQuestionQualityState } from '../shared/aiCacheCbt';
 import { isSmartSessionBookId } from '../shared/studySession';
+import { getBookTaskWordRange, isWordInStudyRange } from '../shared/studyScope';
+import { NARU_BOOK_ID } from '../shared/naruBook';
+import type { QuizAttemptInput } from '../shared/quizAttempt';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
 
@@ -44,6 +47,7 @@ type AiGrammarQuestionMode = Extract<QuizSessionConfig['questionMode'], 'GRAMMAR
 export type QuizAdvanceTarget = 'NEXT_QUESTION' | 'RESULT';
 
 export interface PendingQuizAttempt {
+  clientAttemptId: string;
   correct: boolean;
   responseTimeMs: number;
   feedback?: JapaneseTranslationFeedback | null;
@@ -241,13 +245,16 @@ export const createPendingQuizAttempt = ({
   responseTimeMs,
   feedback,
   advanceAutomatically,
+  clientAttemptId = crypto.randomUUID(),
 }: {
   mode: WorksheetQuestionMode;
   correct: boolean;
   responseTimeMs: number;
   feedback?: JapaneseTranslationFeedback | null;
   advanceAutomatically?: boolean;
+  clientAttemptId?: string;
 }): PendingQuizAttempt => ({
+  clientAttemptId,
   correct,
   responseTimeMs,
   feedback,
@@ -322,6 +329,18 @@ export const useQuizModeController = ({
   bookId,
   taskIntent,
 }: UseQuizModeControllerParams) => {
+  // An automatic chapter session contains only the selected session words,
+  // not the full book needed by the editable quiz setup screen.
+  const scopedRange = useMemo(() => {
+    if (bookId !== NARU_BOOK_ID || !taskIntent?.autoStart) return undefined;
+    try {
+      return getBookTaskWordRange(taskIntent, bookId);
+    } catch {
+      // Invalid tasks follow the retryable load-error path below.
+      return undefined;
+    }
+  }, [bookId, taskIntent]);
+  const isScopedSession = Boolean(scopedRange);
   const toPresetQuestionCount = (value: number): QuizSessionConfig['questionCount'] => {
     if (value <= 5) return 5;
     if (value <= 10) return 10;
@@ -374,6 +393,16 @@ export const useQuizModeController = ({
   const quizStartedEventRef = useRef(false);
   const spellingStartedEventRef = useRef(false);
   const generationRef = useRef(0);
+  const advanceTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const gradingRef = useRef(false);
+  const savedAttemptRef = useRef<{
+    pending: PendingQuizAttempt; request: QuizAttemptInput; question: GeneratedWorksheetQuestion;
+    uid: string; generation: number; questionIndex: number; status: 'PENDING' | 'SAVING' | 'SAVED';
+  } | null>(null);
+  const clearAttemptTimer = () => {
+    if (advanceTimerRef.current !== null) window.clearTimeout(advanceTimerRef.current);
+    advanceTimerRef.current = null;
+  };
   const startingRef = useRef(false);
   const failedStartRef = useRef<{ config: QuizSessionConfig; words: WordData[] } | null>(null);
   const historyLoadingRef = useRef(false);
@@ -419,12 +448,15 @@ export const useQuizModeController = ({
     ],
   );
   const setupActualQuestionCount = getActualQuizQuestionCount(setupConfig.questionCount, setupCandidateWords.length);
-  const setupSummary = formatQuizSelectionSummary(
-    {
+  const selectionSummary = scopedRange
+    ? { selectionMode: 'RANGE_RANDOM' as const, rangeStart: scopedRange.start, rangeEnd: scopedRange.end }
+    : {
       selectionMode: setupConfig.selectionMode,
       rangeStart: normalizedSetupRange.start,
       rangeEnd: normalizedSetupRange.end,
-    },
+    };
+  const setupSummary = formatQuizSelectionSummary(
+    selectionSummary,
     setupActualQuestionCount,
   );
   const currentQuestion = questions[currentQIndex];
@@ -433,7 +465,7 @@ export const useQuizModeController = ({
   const isOrderMode = currentQuestion?.interactionType === 'ORDERING';
   const reviewTargets = useMemo(() => missedQuestions.slice(0, 3), [missedQuestions]);
   const activeSummary = activeConfig
-    ? formatQuizSelectionSummary(activeConfig, questions.length)
+    ? formatQuizSelectionSummary(scopedRange ? selectionSummary : activeConfig, questions.length)
     : setupSummary;
 
   const setShowOptions = (nextValue: SetStateAction<boolean>) => {
@@ -451,6 +483,9 @@ export const useQuizModeController = ({
   };
 
   const resetAttemptState = () => {
+    clearAttemptTimer();
+    savedAttemptRef.current = null;
+    gradingRef.current = false;
     setQuestions([]);
     setCurrentQIndex(0);
     dispatchAttempt({ type: 'RESET_FOR_SESSION' });
@@ -460,6 +495,7 @@ export const useQuizModeController = ({
   };
 
   const resetToSetup = () => {
+    generationRef.current += 1;
     setActiveConfig(null);
     setScreen('SETUP');
     setShowExitConfirm(false);
@@ -467,6 +503,15 @@ export const useQuizModeController = ({
     setStartError(null);
     failedStartRef.current = null;
     resetAttemptState();
+  };
+
+  const confirmExitRunning = (): boolean => {
+    // The ref also blocks an exit in the same tick as submitting an answer,
+    // before React has rendered pendingAttempt or the disabled button.
+    const saved = savedAttemptRef.current;
+    if (gradingRef.current || (saved && saved.status !== 'SAVED')) return false;
+    resetToSetup();
+    return true;
   };
 
   const buildRuleBasedQuestions = (
@@ -596,6 +641,7 @@ export const useQuizModeController = ({
         setStartError(null);
         setStudiedWordsError(null);
         setLoadingMessage(buildQuizLoadingMessage('EN_TO_JA'));
+        getBookTaskWordRange(taskIntent || undefined, bookId);
         const autoStart = Boolean(taskIntent?.autoStart);
         const [nextWords, nextStudiedWordIds] = await Promise.all([
           autoStart
@@ -612,9 +658,12 @@ export const useQuizModeController = ({
         if (cancelled) return;
 
         const shouldPreserveSessionOrder = autoStart && isSmartSessionBookId(bookId);
+        const sessionWords = scopedRange
+          ? nextWords.filter((word) => isWordInStudyRange(word, scopedRange))
+          : nextWords;
         const sortedWords = shouldPreserveSessionOrder
-          ? nextWords
-          : [...nextWords].sort((left, right) => left.number - right.number);
+          ? sessionWords
+          : [...sessionWords].sort((left, right) => left.number - right.number);
         const nextMin = sortedWords.length > 0 ? Math.min(...sortedWords.map((word) => word.number)) : 1;
         const nextMax = sortedWords.length > 0 ? Math.max(...sortedWords.map((word) => word.number)) : 1;
 
@@ -663,6 +712,9 @@ export const useQuizModeController = ({
     return () => {
       cancelled = true;
       generationRef.current += 1;
+      clearAttemptTimer();
+      savedAttemptRef.current = null;
+      gradingRef.current = false;
       startingRef.current = false;
     };
   }, [bookId, taskIntent, user.uid, loadAttempt]);
@@ -710,6 +762,7 @@ export const useQuizModeController = ({
   }, [activeConfig, bookId, questions.length, screen, taskIntent]);
 
   const updateSetupConfig = (nextPartial: Partial<QuizSessionConfig>) => {
+    if (isScopedSession) return;
     setSetupConfig((previous) => {
       const next = { ...previous, ...nextPartial };
       if (nextPartial.questionMode) {
@@ -763,6 +816,10 @@ export const useQuizModeController = ({
   };
 
   const startQuiz = (config: QuizSessionConfig) => {
+    if (isScopedSession) {
+      void startQuizWithWords(setupConfig, allWords);
+      return;
+    }
     if (config.selectionMode === 'LEARNED_ONLY' && (studiedWordsError || historyLoadingRef.current)) return;
     const normalizedRange = normalizeQuizRange(
       config.rangeStart,
@@ -802,7 +859,7 @@ export const useQuizModeController = ({
   };
 
   const goToReady = () => {
-    if (setupActualQuestionCount === 0) return;
+    if (isScopedSession || setupActualQuestionCount === 0) return;
     setScreen('READY');
   };
 
@@ -817,11 +874,18 @@ export const useQuizModeController = ({
   };
 
   const resetCurrentQuestionFeedbackState = () => {
+    clearAttemptTimer();
+    savedAttemptRef.current = null;
     dispatchAttempt({ type: 'RESET_FOR_NEXT_QUESTION' });
   };
 
   const advanceAfterAttempt = () => {
-    if (resolveQuizAdvanceTarget(currentQIndex, questions.length) === 'NEXT_QUESTION') {
+    const saved = savedAttemptRef.current;
+    if (!saved || saved.status !== 'SAVED' || saved.generation !== generationRef.current) return;
+    // Consume the saved answer synchronously before React updates the next button.
+    savedAttemptRef.current = null;
+    clearAttemptTimer();
+    if (resolveQuizAdvanceTarget(saved.questionIndex, questions.length) === 'NEXT_QUESTION') {
       setCurrentQIndex((previous) => previous + 1);
       resetCurrentQuestionFeedbackState();
       return;
@@ -831,6 +895,57 @@ export const useQuizModeController = ({
     setScreen('RESULT');
   };
 
+  const savePendingAttempt = async (saved: NonNullable<typeof savedAttemptRef.current>) => {
+    if (saved.status !== 'PENDING' || saved.generation !== generationRef.current) return;
+    saved.status = 'SAVING';
+    dispatchAttempt({ type: 'PERSIST_STARTED', attempt: saved.pending });
+    const request = saved.request;
+    try {
+      const receipt = await learningService.recordQuizAttempt(
+        saved.uid, request.wordId, request.bookId, request.correct, request.questionMode,
+        request.responseTimeMs, request.missionAssignmentId, request.taskIntentType,
+        request.generatedProblemId, request.grammarScopeId, request.translationFeedback, request.clientAttemptId,
+      );
+      if (!receipt || receipt.clientAttemptId !== request.clientAttemptId
+        || receipt.wordId !== request.wordId || receipt.bookId !== request.bookId
+        || !Number.isFinite(receipt.committedAt)) {
+        throw new Error('小テスト保存のreceiptを確認できませんでした。');
+      }
+      if (receipt.projectionStatus === 'PENDING') {
+        saved.status = 'PENDING';
+        if (saved.generation !== generationRef.current || savedAttemptRef.current !== saved) return;
+        dispatchAttempt({ type: 'PERSIST_FAILED',
+          message: '解答は保存済みです。課題の進捗をまだ確認できていません。同じ解答で保存と進捗を再確認してください。' });
+        return;
+      }
+      if (receipt.projectionStatus !== 'COMPLETE') throw new Error('小テストの進捗確認が完了していません。');
+    } catch (error) {
+      saved.status = 'PENDING';
+      if (saved.generation !== generationRef.current || savedAttemptRef.current !== saved) return;
+      console.error('Quiz attempt save failed', error);
+      dispatchAttempt({ type: 'PERSIST_FAILED',
+        message: '解答結果の保存を確認できませんでした。通信を確認して、同じ解答をもう一度保存してください。' });
+      return;
+    }
+    saved.status = 'SAVED';
+    if (saved.generation !== generationRef.current || savedAttemptRef.current !== saved) return;
+    const { question, pending } = saved;
+    if (request.correct) setScore((previous) => previous + 1);
+    else setMissedQuestions((previous) => upsertQuestionFeedbackById(previous, question, pending.feedback));
+    if (pending.feedback && question.mode === 'JA_TRANSLATION_INPUT') {
+      setTranslationFeedbackSummaries((previous) => upsertQuestionFeedbackById(previous, question, pending.feedback));
+    }
+    dispatchAttempt({ type: 'PERSIST_SUCCEEDED' });
+    if (!pending.advanceAutomatically) {
+      dispatchAttempt({ type: 'SET_TRANSLATION_AWAITING_ADVANCE', value: true });
+      return;
+    }
+    clearAttemptTimer();
+    advanceTimerRef.current = window.setTimeout(() => {
+      if (saved.generation === generationRef.current && savedAttemptRef.current === saved) advanceAfterAttempt();
+    }, 900);
+  };
+
   const persistAttempt = async (
     correct: boolean,
     responseTimeMs: number,
@@ -838,65 +953,24 @@ export const useQuizModeController = ({
     options: { advanceAutomatically?: boolean } = {},
   ) => {
     const question = questions[currentQIndex];
-    if (!question) return;
-
-    const pendingQuizAttempt = createPendingQuizAttempt({
-      mode: question.mode,
-      correct,
-      responseTimeMs,
-      feedback,
-      advanceAutomatically: options.advanceAutomatically,
-    });
-
-    dispatchAttempt({ type: 'PERSIST_STARTED', attempt: pendingQuizAttempt });
-
-    try {
-      await learningService.recordQuizAttempt(
-        user.uid,
-        question.wordId,
-        question.bookId,
-        correct,
-        question.mode,
-        responseTimeMs,
-        taskIntent?.missionAssignmentId,
-        taskIntent?.intentType,
-        question.generatedProblemId,
-        question.grammarScope?.scopeId,
-        feedback || undefined,
-      );
-    } catch (error) {
-      console.error('Quiz attempt save failed', error);
-      dispatchAttempt({
-        type: 'PERSIST_FAILED',
-        message: '解答結果の保存に失敗しました。通信を確認して、もう一度保存してください。',
-      });
-      return;
-    }
-
-    if (correct) {
-      setScore((previous) => previous + 1);
-    } else {
-      setMissedQuestions((previous) => upsertQuestionFeedbackById(previous, question, feedback));
-    }
-
-    if (feedback && question.mode === 'JA_TRANSLATION_INPUT') {
-      setTranslationFeedbackSummaries((previous) => upsertQuestionFeedbackById(previous, question, feedback));
-    }
-
-    dispatchAttempt({ type: 'PERSIST_SUCCEEDED' });
-
-    if (!pendingQuizAttempt.advanceAutomatically) {
-      dispatchAttempt({ type: 'SET_TRANSLATION_AWAITING_ADVANCE', value: true });
-      return;
-    }
-
-    window.setTimeout(() => {
-      advanceAfterAttempt();
-    }, 900);
+    // Ref lock covers repeated clicks before React has rendered the disabled state.
+    if (!question || savedAttemptRef.current) return;
+    const pending = createPendingQuizAttempt({ mode: question.mode, correct, responseTimeMs,
+      feedback: feedback ? structuredClone(feedback) : feedback, advanceAutomatically: options.advanceAutomatically });
+    const request: QuizAttemptInput = {
+      wordId: question.wordId, bookId: question.bookId, correct, questionMode: question.mode,
+      responseTimeMs, missionAssignmentId: taskIntent?.missionAssignmentId, taskIntentType: taskIntent?.intentType,
+      generatedProblemId: question.generatedProblemId, grammarScopeId: question.grammarScope?.scopeId,
+      translationFeedback: pending.feedback || undefined, clientAttemptId: pending.clientAttemptId,
+    };
+    const saved = { pending, request, question: structuredClone(question), uid: user.uid,
+      generation: generationRef.current, questionIndex: currentQIndex, status: 'PENDING' as const };
+    savedAttemptRef.current = saved;
+    await savePendingAttempt(saved);
   };
 
   const handleOptionClick = async (option: string) => {
-    if (selectedOption || !currentQuestion || persistingAttempt) return;
+    if (selectedOption || !currentQuestion || persistingAttempt || savedAttemptRef.current) return;
     dispatchAttempt({ type: 'SELECT_OPTION', option });
     await persistAttempt(
       option === currentQuestion.answer,
@@ -905,28 +979,28 @@ export const useQuizModeController = ({
   };
 
   const handleOrderTokenSelect = (tokenId: string) => {
-    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt) return;
+    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     const answerTokenCount = currentQuestion.answerTokenIds?.length || 0;
     dispatchAttempt({ type: 'ADD_ORDER_TOKEN', tokenId, answerTokenCount });
   };
 
   const handleOrderTokenRemove = (tokenId: string) => {
-    if (orderFeedback || persistingAttempt) return;
+    if (orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     dispatchAttempt({ type: 'REMOVE_ORDER_TOKEN', tokenId });
   };
 
   const handleOrderTokenMove = (tokenId: string, direction: -1 | 1) => {
-    if (orderFeedback || persistingAttempt) return;
+    if (orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     dispatchAttempt({ type: 'MOVE_ORDER_TOKEN', tokenId, direction });
   };
 
   const handleOrderTokensClear = () => {
-    if (orderFeedback || persistingAttempt) return;
+    if (orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     dispatchAttempt({ type: 'CLEAR_ORDER_TOKENS' });
   };
 
   const handleOrderSubmit = async () => {
-    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt) return;
+    if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     const answerTokenIds = currentQuestion.answerTokenIds || [];
     if (answerTokenIds.length === 0 || orderedTokenIds.length !== answerTokenIds.length) return;
     const correct = orderedTokenIds.every((tokenId, index) => tokenId === answerTokenIds[index]);
@@ -936,9 +1010,11 @@ export const useQuizModeController = ({
 
   const handleHintSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt) return;
+    if (!currentQuestion || inputResult || !answerInput.trim() || persistingAttempt || gradingRef.current || savedAttemptRef.current) return;
 
     if (currentQuestion.mode === 'JA_TRANSLATION_INPUT') {
+      const gradingGeneration = generationRef.current;
+      gradingRef.current = true;
       const responseTimeMs = Math.max(0, Date.now() - questionStartedAtRef.current);
       const translationAttempt = resolveJapaneseTranslationAttempt({
         input: answerInput,
@@ -971,12 +1047,14 @@ export const useQuizModeController = ({
           grammarScopeId: currentQuestion.grammarScope?.scopeId,
           examTarget: resolveTranslationExamTarget(),
         });
+        if (gradingGeneration !== generationRef.current) return;
         if (aiFeedback) {
           feedback = aiFeedback;
         }
         dispatchAttempt({ type: 'SET_CHECKING_TRANSLATION_FEEDBACK', value: false });
       }
 
+      gradingRef.current = false;
       const correct = feedback.isCorrect;
       dispatchAttempt({
         type: 'SET_TRANSLATION_RESULT',
@@ -1033,13 +1111,9 @@ export const useQuizModeController = ({
   };
 
   const handleRetrySave = async () => {
-    if (!pendingAttempt || persistingAttempt) return;
-    await persistAttempt(
-      pendingAttempt.correct,
-      pendingAttempt.responseTimeMs,
-      pendingAttempt.feedback,
-      { advanceAutomatically: pendingAttempt.advanceAutomatically },
-    );
+    const saved = savedAttemptRef.current;
+    if (!pendingAttempt || !saved || persistingAttempt) return;
+    await savePendingAttempt(saved);
   };
 
   const handleAdvanceAfterTranslationFeedback = () => {
@@ -1053,6 +1127,8 @@ export const useQuizModeController = ({
     : '間違いはありません。明日の最初に軽く1回確認しましょう。';
 
   return {
+    isScopedSession,
+    exitBlocked: Boolean(pendingAttempt || persistingAttempt || checkingTranslationFeedback),
     screen,
     setupConfig,
     activeConfig,
@@ -1123,7 +1199,7 @@ export const useQuizModeController = ({
     setShowOptions,
     setAnswerInput,
     setShowExitConfirm,
-    confirmExitRunning: resetToSetup,
+    confirmExitRunning,
     resetToSetup,
   };
 };

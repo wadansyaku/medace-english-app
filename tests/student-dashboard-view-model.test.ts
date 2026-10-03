@@ -111,6 +111,26 @@ const buildSnapshot = (overrides: Partial<DashboardSnapshot>): DashboardSnapshot
   ...overrides,
 });
 
+describe('daily goal and session size', () => {
+  it.each([0, 40])('distinguishes a 40-word daily goal from a 20-word session with %i due words', dueCount => {
+    const viewModel = useStudentDashboardViewModel({
+      user: baseUser,
+      snapshot: buildSnapshot({
+        dueCount,
+        officialBooks: [makeBook('daily-book', 'Daily book')],
+        learningPlan: {
+          uid: baseUser.uid, createdAt: Date.now(), targetDate: '2026-12-31',
+          goalDescription: 'Daily goal', dailyWordGoal: 40,
+          selectedBookIds: ['daily-book'], status: 'ACTIVE',
+        },
+      }),
+    });
+    expect(viewModel.heroTitle).toBe('今日の目標まであと40語');
+    expect(viewModel.heroCopy).toContain('1回20語まで');
+    expect(viewModel.primaryTask?.command).toMatchObject({ type: 'start_learning', task: { limit: 20 } });
+  });
+});
+
 type CanonicalDashboardTask = {
   id: string;
   routeId?: string;

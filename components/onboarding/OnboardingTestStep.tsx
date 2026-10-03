@@ -72,14 +72,14 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
               </div>
             </div>
 
-            {isRetake && onCancel && (
+            {onCancel && (
               <div className="mt-4 flex justify-end">
                 <button
                   type="button"
                   onClick={onCancel}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full border border-medace-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-colors hover:bg-medace-100"
                 >
-                  <X className="h-4 w-4" /> 閉じる
+                  <X className="h-4 w-4" /> {isRetake ? '閉じる' : '診断をやめる'}
                 </button>
               </div>
             )}

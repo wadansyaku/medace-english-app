@@ -10,10 +10,11 @@ import {
   isGrammarScopeCompatibleWithMode,
   resolveGrammarScopeSelection,
 } from './grammarScope';
+import type { GrammarQuestionFeedback } from '../config/grammarQuestionBank';
 
 export type GrammarPracticeKind = 'ENGLISH_WORD_ORDER' | 'JAPANESE_WORD_ORDER' | 'GRAMMAR_CLOZE';
 
-export type GrammarPracticeSource = 'example' | 'fallback';
+export type GrammarPracticeSource = 'example' | 'fallback' | 'curated';
 
 interface ResolvedPracticeSentence {
   sentence: string;
@@ -35,6 +36,7 @@ interface GrammarPracticeBaseItem {
   source: GrammarPracticeSource;
   prompt: string;
   grammarScope: GrammarScopeSelection;
+  feedback?: GrammarQuestionFeedback;
 }
 
 export interface EnglishWordOrderPracticeItem extends GrammarPracticeBaseItem {
@@ -42,6 +44,7 @@ export interface EnglishWordOrderPracticeItem extends GrammarPracticeBaseItem {
   sourceSentence: string;
   chips: GrammarPracticeChip[];
   correctChipIds: string[];
+  acceptedChipOrders?: string[][];
 }
 
 export interface JapaneseWordOrderPracticeItem extends GrammarPracticeBaseItem {

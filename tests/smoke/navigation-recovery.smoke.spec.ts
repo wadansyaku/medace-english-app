@@ -1,3 +1,4 @@
+import { exposeStudentDemo } from './smoke-support';
 import { expect, test } from './diagnostics';
 import { MOBILE_FLOW_TEST_IDS } from './smoke-support';
 
@@ -6,8 +7,9 @@ test('malformed encoded book routes recover on initial load and popstate', async
   page.on('pageerror', error => pageErrors.push(error.message));
   for (const path of ['/study/%', '/quiz/%E0%A4%A']) {
     await page.goto(path);
-    await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent)).toBeVisible();
+    await expect(page.getByTestId('start-first-guest')).toBeVisible();
   }
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   for (const path of ['/study/%', '/quiz/%E0%A4%A']) {

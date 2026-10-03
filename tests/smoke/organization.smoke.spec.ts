@@ -14,6 +14,7 @@ import {
   storageAction,
   completeCoachCtaStudySession,
   completeMissionCtaStudySession,
+  openDashboardTaskDetails,
 } from './smoke-support';
 
 test('group admin can open the organization dashboard and update an assignment', async ({ page }) => {
@@ -477,6 +478,7 @@ test('admin reload sees organization KPI changes after notification and study', 
   }
   await studentPage.reload();
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+  await openDashboardTaskDetails(studentPage, 'coach');
   await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeVisible();
   await completeCoachCtaStudySession(studentPage);
 
@@ -543,6 +545,8 @@ test('group admin can issue a weekly mission and student can restart it from the
         name: '今週のミッション: Smoke Weekly Mission',
       }),
     ).toBeVisible();
+    await expect(studentPage.getByTestId('dashboard-task-details-mission').locator('summary')).toContainText('期限');
+    await openDashboardTaskDetails(studentPage, 'mission');
     await expect(studentPage.getByTestId('dashboard-mission-section')).toBeVisible();
     await expect(
       studentPage.getByTestId('dashboard-mission-section').getByRole('heading', {

@@ -1,3 +1,6 @@
+import type { QuizAttemptReceipt } from '../shared/quizAttempt';
+import type { BookStudyOverview, StudyWordRange } from '../types';
+import { assertNoDailyStudyWordRange, getBookTaskWordRange, normalizeStudyWordRange } from '../shared/studyScope';
 import {
   CatalogImportRequest,
   CatalogImportResult,
@@ -192,6 +195,7 @@ export class CloudflareStorageService implements IStorageService {
   }
 
   async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+    assertNoDailyStudyWordRange(taskIntent);
     return this.callStorage({
       action: 'getDailySessionWords',
       payload: { limit, taskIntent },
@@ -199,6 +203,7 @@ export class CloudflareStorageService implements IStorageService {
   }
 
   async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+    getBookTaskWordRange(taskIntent, bookId);
     return this.callStorage({
       action: 'getBookSession',
       payload: { bookId, limit, taskIntent },
@@ -207,6 +212,13 @@ export class CloudflareStorageService implements IStorageService {
 
   async getDueCount(uid: string): Promise<number> {
     return this.callStorage({ action: 'getDueCount' });
+  }
+
+  async getBookStudyOverview(_uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview> {
+    return this.callStorage({
+      action: 'getBookStudyOverview',
+      payload: { bookId, wordRange: normalizeStudyWordRange(wordRange) },
+    });
   }
 
   async saveSRSHistory(
@@ -236,10 +248,11 @@ export class CloudflareStorageService implements IStorageService {
     generatedProblemId?: string,
     grammarScopeId?: GrammarCurriculumScopeId,
     translationFeedback?: JapaneseTranslationFeedback,
-  ): Promise<void> {
-    await this.callStorage({
+    clientAttemptId?: string,
+  ): Promise<QuizAttemptReceipt | null> {
+    return this.callStorage({
       action: 'recordQuizAttempt',
-      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId, grammarScopeId, translationFeedback },
+      payload: { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId, taskIntentType, generatedProblemId, grammarScopeId, translationFeedback, clientAttemptId },
     });
   }
 

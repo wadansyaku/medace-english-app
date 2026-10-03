@@ -1,3 +1,5 @@
+import { exposeStudentDemo } from './smoke-support';
+import { formatDateKey } from '../../utils/date';
 import type { Page } from '@playwright/test';
 
 import { attachSmokeDiagnostics, expect, test } from './diagnostics';
@@ -16,6 +18,9 @@ import {
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
   maybeCompleteOnboarding,
+  openDashboardWriting,
+  openDashboardReference,
+  openDashboardTaskDetails,
   resolveWritingStudentSelectValue,
   runtimeAdminPost,
   seedLeveledPhrasebooks,
@@ -146,10 +151,10 @@ test.describe('student mobile ux', () => {
     isMobile: true,
   });
 
-  test('public landing keeps demo CTA inside the first viewport on mobile', async ({ page }) => {
+  test('public landing keeps guest learning CTA inside the first viewport on mobile', async ({ page }) => {
     await page.goto('/');
 
-    const demoButton = page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent);
+    const demoButton = page.getByTestId('start-first-guest');
     await expect(demoButton).toBeVisible();
     const box = await demoButton.boundingBox();
     expect(box).not.toBeNull();
@@ -174,7 +179,8 @@ test.describe('student mobile ux', () => {
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -185,14 +191,16 @@ test.describe('student mobile ux', () => {
     expect(box).not.toBeNull();
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan(844);
 
-    const launcherBox = await page.getByTestId('dashboard-mobile-quick-nav').boundingBox();
-    expect(launcherBox).not.toBeNull();
-    expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThan((launcherBox?.y ?? 844) - 8);
+    await expect(primaryCta).toHaveCount(1);
+    await expect(page.getByTestId('dashboard-mobile-quick-nav')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
+    await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
   });
 
-  test('student dashboard action launcher stays compact and keeps practice and library reachable on mobile', async ({ page }) => {
+  test('student dashboard resource navigation keeps practice and library reachable on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -201,20 +209,19 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
     await expect(page.getByTestId('dashboard-task-reference-library')).toBeVisible();
-    await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
-    await expect(page.getByTestId('dashboard-mobile-quick-nav').locator('button')).toHaveCount(3);
-    await expect.poll(async () => (
-      page.getByTestId('dashboard-mobile-quick-nav').evaluate((element) => element.scrollWidth <= element.clientWidth)
-    )).toBe(true);
+    const resourceNav = page.getByTestId('dashboard-task-overview-rail');
+    await expect(resourceNav.getByRole('button', { name: '教材', exact: true })).toBeVisible();
+    await expect(resourceNav.getByRole('button', { name: '学習記録', exact: true })).toBeVisible();
+    await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect.poll(async () => resourceNav.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 
-    await page.getByTestId('dashboard-task-reference-library').click();
-    await expect.poll(async () => {
-      const box = await page.getByTestId('dashboard-library-section').boundingBox();
-      return box?.y ?? 9999;
-    }).toBeLessThanOrEqual(220);
-
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.getByTestId('dashboard-task-overview-englishPractice').click();
+    await openDashboardReference(page, 'library');
+    await expect(page.getByTestId('dashboard-library-section')).toBeInViewport();
+    await expect(page.getByTestId('dashboard-progress-section')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-task-reference-library')).toBeFocused();
+    await page.getByTestId('dashboard-practice-lane-grammar').click();
 
     await expect(page).toHaveURL(/\/english-practice\/grammar$/);
     await expect(page.getByTestId('student-dashboard')).toHaveCount(0);
@@ -225,19 +232,16 @@ test.describe('student mobile ux', () => {
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    await page.getByTestId('dashboard-quicknav-library').click();
-
-    await expect.poll(async () => {
-      const box = await page.getByTestId('dashboard-library-section').boundingBox();
-      return box?.y ?? 9999;
-    }).toBeLessThanOrEqual(220);
-    await expect(page.getByTestId('dashboard-quicknav-library')).toHaveAttribute('aria-pressed', 'true');
-
-    await page.getByTestId('dashboard-quicknav-today').click();
+    await openDashboardReference(page, 'library');
+    await expect(page.getByTestId('dashboard-library-section')).toBeInViewport();
+    await page.getByRole('button', { name: '閉じて今日の画面に戻る', exact: true }).click();
+    await expect(page.getByTestId('dashboard-task-reference-library')).toBeFocused();
+    await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta).click();
     await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
   });
 
-  test('student dashboard action launcher follows the mission primary task on mobile', async ({ browser, baseURL }) => {
+  test('student dashboard hero follows the mission primary task and preserves its deadline on mobile', async ({ browser, baseURL }) => {
     test.skip(!baseURL, 'smoke baseURL is required for API-seeded launcher state');
     const appBaseURL = baseURL!;
     const adminContext = await browser.newContext({ baseURL: appBaseURL });
@@ -290,6 +294,10 @@ test.describe('student mobile ux', () => {
 
       await studentPage.goto('/dashboard');
       await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
+      const missionDetails = studentPage.getByTestId('dashboard-task-details-mission');
+      await expect(missionDetails.locator('summary')).toContainText(`期限 ${formatDateKey(weeklyMission.dueAt)}`);
+      await expect(studentPage.getByTestId('dashboard-mission-section')).toBeHidden();
+      await openDashboardTaskDetails(studentPage, 'mission');
       const missionSection = studentPage.getByTestId('dashboard-mission-section');
       await expect(missionSection).toBeVisible();
       await expect(missionSection.getByRole('heading', { name: 'Mobile Launcher Mission' })).toBeVisible();
@@ -300,20 +308,16 @@ test.describe('student mobile ux', () => {
       ));
       expect(studentBefore?.primaryMissionStatus).toBe('ASSIGNED');
 
-      const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
-      await expect(quickNav).toBeVisible();
-      await expect(quickNav.locator('button')).toHaveCount(3);
-      await expect.poll(async () => (
-        quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
-      )).toBe(true);
-
-      const primaryQuickNav = quickNav.locator('button').first();
-      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-mission');
-      await expect(primaryQuickNav).toHaveAttribute('aria-pressed', 'true');
-      await expect(primaryQuickNav).toContainText('課題');
-      await expect(studentPage.getByTestId('dashboard-quicknav-today')).toHaveCount(0);
-
-      await primaryQuickNav.click();
+      const missionActionLabel = (await missionSection.getByTestId('dashboard-mission-primary-cta').innerText()).trim();
+      expect(missionActionLabel).not.toBe('');
+      await missionDetails.locator('summary').click();
+      await expect(missionDetails.locator('summary')).toContainText(`期限 ${formatDateKey(weeklyMission.dueAt)}`);
+      const primaryCta = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
+      await expect(primaryCta).toHaveCount(1);
+      await expect(primaryCta).toBeVisible();
+      await expect(primaryCta).toContainText(missionActionLabel);
+      await expect(studentPage.getByTestId('dashboard-mobile-quick-nav')).toHaveCount(0);
+      await primaryCta.click();
       const studyCard = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront);
       const quizRunningView = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.quizRunningView);
       await Promise.race([
@@ -338,7 +342,7 @@ test.describe('student mobile ux', () => {
     }
   });
 
-  test('student dashboard action launcher follows the coach primary task on mobile', async ({ browser, baseURL }) => {
+  test('student dashboard hero follows the coach primary task on mobile', async ({ browser, baseURL }) => {
     test.skip(!baseURL, 'smoke baseURL is required for API-seeded launcher state');
     const appBaseURL = baseURL!;
     const adminContext = await browser.newContext({ baseURL: appBaseURL });
@@ -396,22 +400,18 @@ test.describe('student mobile ux', () => {
       await expect(studentPage.getByTestId('dashboard-task-overview-rail')).toBeVisible();
       await expect(studentPage.getByTestId('dashboard-task-overview-coach')).toHaveCount(0);
       await expect(studentPage.getByTestId('dashboard-task-reference-library')).toBeVisible();
+      const coachDetails = studentPage.getByTestId('dashboard-task-details-coach');
+      await expect(coachDetails.locator('summary')).toBeVisible();
+      await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeHidden();
+      await openDashboardTaskDetails(studentPage, 'coach');
       await expect(studentPage.getByTestId('coach-follow-up-cta')).toBeVisible();
-
-      const quickNav = studentPage.getByTestId('dashboard-mobile-quick-nav');
-      await expect(quickNav).toBeVisible();
-      await expect(quickNav.locator('button')).toHaveCount(3);
-      await expect.poll(async () => (
-        quickNav.evaluate((element) => element.scrollWidth <= element.clientWidth)
-      )).toBe(true);
-
-      const primaryQuickNav = quickNav.locator('button').first();
-      await expect(primaryQuickNav).toHaveAttribute('data-testid', 'dashboard-quicknav-coach');
-      await expect(primaryQuickNav).toHaveAttribute('aria-pressed', 'true');
-      await expect(primaryQuickNav).toContainText('講師');
-      await expect(studentPage.getByTestId('dashboard-quicknav-today')).toHaveCount(0);
-
-      await primaryQuickNav.click();
+      await coachDetails.locator('summary').click();
+      const primaryCta = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
+      await expect(primaryCta).toHaveCount(1);
+      await expect(primaryCta).toBeVisible();
+      await expect(primaryCta).toContainText('復習');
+      await expect(studentPage.getByTestId('dashboard-mobile-quick-nav')).toHaveCount(0);
+      await primaryCta.click();
       await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
     } finally {
       await adminContext.close();
@@ -421,7 +421,8 @@ test.describe('student mobile ux', () => {
 
   test('student dashboard avoids unintended horizontal overflow on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     await dismissAnnouncementModalIfPresent(page);
@@ -438,7 +439,8 @@ test.describe('student mobile ux', () => {
     const progressSection = page.getByTestId('dashboard-progress-section');
     const weeklyRecord = progressSection.getByRole('heading', { name: '週間学習記録' });
     await expect(weeklyRecord).toHaveCount(0);
-    await page.getByTestId('dashboard-task-reference-progress').click();
+    await openDashboardReference(page, 'progress');
+    await expect(page.getByTestId('dashboard-library-section')).toHaveCount(0);
     await expect(weeklyRecord).toBeVisible();
     await expect(progressSection.getByRole('heading', { name: '学習ステータス' })).toBeVisible();
     const progressToggle = progressSection.getByRole('button', { name: /くわしい学習記録/ });
@@ -447,9 +449,11 @@ test.describe('student mobile ux', () => {
     await progressToggle.click();
     await expect(weeklyRecord).toBeVisible();
 
-    await page.getByTestId('dashboard-task-reference-plan').click();
+    await openDashboardReference(page, 'plan');
+    await expect(progressSection).toHaveCount(0);
     await expect(page.getByTestId('dashboard-plan-anchor')).toBeInViewport();
-    await page.getByTestId('dashboard-quicknav-library').click();
+    await openDashboardReference(page, 'library');
+    await expect(page.getByTestId('dashboard-plan-anchor')).toHaveCount(0);
     await page.getByRole('button', { name: /配布教材をもっと見る|すべての配布教材を見る/ }).click();
     await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。教室に所属している場合は、講師に教材の配布をご確認ください。')).toBeVisible();
 
@@ -459,7 +463,8 @@ test.describe('student mobile ux', () => {
 
   test('student mobile reading budget covers dashboard quiz setup and study start', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
 
@@ -503,6 +508,7 @@ test.describe('student mobile ux', () => {
         maxScrollHeight: viewport.dashboardScrollHeight,
       });
 
+      await openDashboardReference(page, 'library');
       await page.getByTestId(`book-quiz-${bookId}`).scrollIntoViewIfNeeded();
       await page.getByTestId(`book-quiz-${bookId}`).click();
       await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.quizSetupView)).toBeVisible();
@@ -529,6 +535,7 @@ test.describe('student mobile ux', () => {
 
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();
+      await openDashboardReference(page, 'library');
       await page.getByTestId(`book-study-${bookId}`).scrollIntoViewIfNeeded();
       await page.getByTestId(`book-study-${bookId}`).click();
       await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studyCardFront)).toBeVisible();
@@ -545,7 +552,8 @@ test.describe('student mobile ux', () => {
 
   test('student settings keeps the save action reachable on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -561,17 +569,20 @@ test.describe('student mobile ux', () => {
 
   test('free student without books can try grammar and return from the hero on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
     await expect(primaryCta).toContainText('文法演習を試す');
+    await expect(page.getByTestId('dashboard-practice-lane-grammar')).toHaveCount(0);
     await primaryCta.click();
 
     await expect(page).toHaveURL(/\/english-practice\/grammar$/);
     await expect(page.getByTestId('english-practice-hub')).toBeVisible();
-    await expect(page.getByText('お試し問題です。復習対象には入りません。')).toBeVisible();
+    await expect(page.getByTestId('grammar-practice-question')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '判定する', exact: true })).toBeVisible();
     await expect(page.getByTestId('phrasebook-create-modal')).toHaveCount(0);
     await page.getByTestId('english-practice-close').click();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -579,7 +590,8 @@ test.describe('student mobile ux', () => {
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -589,6 +601,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'plan');
     await page.getByRole('button', { name: /プランを作る|プランを作成|プラン作成/ }).first().click();
     await expect(page.getByText('今日の学習プラン')).toBeVisible();
     await page.getByRole('button', { name: '編集' }).click();
@@ -618,6 +631,8 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('auth-password-input').fill('smoke-pass-123');
     await page.getByTestId('auth-confirm-password-input').fill('smoke-pass-123');
     await page.getByTestId('auth-submit').click();
+    await expect(page.getByTestId('onboarding-choice')).toBeVisible();
+    await page.getByTestId('onboarding-choose-diagnostic-button').click();
     await expect(page.getByTestId('onboarding-profile')).toBeVisible();
     await expect(page.getByTestId('onboarding-profile-mobile-note')).toBeVisible();
     await expect(page.getByText('公式資格の判定ではなく')).toBeHidden();
@@ -662,7 +677,8 @@ test.describe('student mobile ux', () => {
 
   test('student can reach the finish action after a short study session on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -673,6 +689,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-study-${bookId}`).click();
     await expect(page.getByTestId('study-card-front')).toBeVisible();
 
@@ -691,7 +708,8 @@ test.describe('student mobile ux', () => {
 
   test('study resets the next card to the top of the mobile viewport', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -702,6 +720,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-study-${bookId}`).click();
     await expect(page.getByTestId('study-card-front')).toBeVisible();
     await page.getByTestId('study-flip-button').click();
@@ -716,7 +735,8 @@ test.describe('student mobile ux', () => {
 
   test('student can open a seeded phrasebook and flip a study card on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -727,6 +747,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     const studyButton = page.getByTestId(`book-study-${bookId}`);
     await studyButton.scrollIntoViewIfNeeded();
     await studyButton.click();
@@ -742,7 +763,8 @@ test.describe('student mobile ux', () => {
 
   test('cold-start smart session respects a higher diagnosed band before any study history exists', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -772,7 +794,8 @@ test.describe('student mobile ux', () => {
 
   test('student weakness focus card populates after the first smart-session on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -782,7 +805,9 @@ test.describe('student mobile ux', () => {
     });
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
-    await page.getByTestId('dashboard-quicknav-weakness').click();
+    const initialWeaknessDetails = page.getByTestId('dashboard-task-details-weakness');
+    if (await initialWeaknessDetails.count()) await openDashboardTaskDetails(page, 'weakness');
+    else await openDashboardReference(page, 'weakness');
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
     await expect(page.getByTestId('dashboard-weakness-section')).toContainText('あと少し解くと苦手が見えます');
 
@@ -802,7 +827,7 @@ test.describe('student mobile ux', () => {
     const weaknessDetails = page.getByTestId('dashboard-task-details-weakness');
     await expect(weaknessDetails).toBeVisible();
     await expect(page.getByTestId('dashboard-weakness-section')).toBeHidden();
-    await page.getByTestId('dashboard-quicknav-weakness').click();
+    await openDashboardTaskDetails(page, 'weakness');
     await expect(weaknessDetails).toHaveAttribute('open', '');
     await expect(page.getByTestId('dashboard-weakness-section')).toBeVisible();
     await expect(page.getByTestId('dashboard-weakness-section')).not.toContainText('あと少し解くと苦手が見えます');
@@ -811,6 +836,7 @@ test.describe('student mobile ux', () => {
 
   test('student quiz shows an empty learned-only state before any study ratings on mobile', async ({ page }) => {
     await page.goto('/');
+    await page.getByText('生徒画面の期間限定デモを見る', { exact: true }).click();
     await page.getByTestId('demo-login-student').click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -822,6 +848,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
     await page.getByTestId('quiz-advanced-settings-toggle').click();
@@ -834,7 +861,8 @@ test.describe('student mobile ux', () => {
 
   test('student can complete the learned-only quiz flow on mobile after studying', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -849,6 +877,7 @@ test.describe('student mobile ux', () => {
       storageAction<string[]>(page, 'getStudiedWordIdsByBook', { bookId })
     )).toHaveLength(2);
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
     await page.getByTestId('quiz-advanced-settings-toggle').click();
@@ -866,7 +895,8 @@ test.describe('student mobile ux', () => {
 
   test('quiz-only mobile attempts do not inflate dashboard progress or due counts', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -877,6 +907,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
     await startQuizFromSetup(page);
@@ -903,7 +934,8 @@ test.describe('student mobile ux', () => {
 
   test('mobile quiz does not downgrade mastery for previously studied words', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -923,6 +955,7 @@ test.describe('student mobile ux', () => {
     expect(masteryBeforeQuiz.learning).toBe(2);
     expect(masteryBeforeQuiz.review).toBe(0);
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
     await startQuizFromSetup(page);
@@ -950,7 +983,8 @@ test.describe('student mobile ux', () => {
 
   test('student can back out from a running quiz with confirmation on mobile', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
@@ -961,6 +995,7 @@ test.describe('student mobile ux', () => {
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
+    await openDashboardReference(page, 'library');
     await page.getByTestId(`book-quiz-${bookId}`).click();
     await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
     await startQuizFromSetup(page);
@@ -996,7 +1031,7 @@ test.describe('student mobile ux', () => {
     await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
-    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await openDashboardWriting(studentPage);
     const businessStudent = await getCurrentSessionUser(studentPage);
     expect(businessStudent?.uid).toBeTruthy();
 
@@ -1015,7 +1050,7 @@ test.describe('student mobile ux', () => {
     await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
 
     await studentPage.reload();
-    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await openDashboardWriting(studentPage);
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await expect(studentPage.getByText('ファイル選択へ進む')).toBeVisible();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
@@ -1069,7 +1104,7 @@ test.describe('student mobile ux', () => {
     await loginBusinessStudentDemo(studentPage);
     await maybeCompleteOnboarding(studentPage);
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
-    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await openDashboardWriting(studentPage);
     const businessStudent = await getCurrentSessionUser(studentPage);
     expect(businessStudent?.uid).toBeTruthy();
 
@@ -1088,7 +1123,7 @@ test.describe('student mobile ux', () => {
     await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
 
     await studentPage.reload();
-    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await openDashboardWriting(studentPage);
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
     await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
@@ -1112,7 +1147,7 @@ test.describe('student mobile ux', () => {
     await expect(adminPage.getByText(/返却内容を確定しました。/)).toBeVisible();
 
     await studentPage.reload();
-    await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+    await openDashboardWriting(studentPage);
     await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
     await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingFeedbackMobileView)).toBeVisible();
     await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();

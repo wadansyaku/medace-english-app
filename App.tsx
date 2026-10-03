@@ -19,6 +19,8 @@ import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
 import { recordDashboardStartTaskEvent } from './services/productEvents';
 import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
+import { NARU_BOOK_ID } from './shared/naruBook';
+import { createNaruChapterReturnTask } from './shared/naruStudy';
 
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const EnglishPracticeHub = lazy(() => import('./components/practice/EnglishPracticeHub'));
@@ -28,6 +30,8 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const InstructorDashboard = lazy(() => import('./components/InstructorDashboard'));
 const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDashboard'));
 const Onboarding = lazy(() => import('./components/Onboarding'));
+const GuestTrialScreen = lazy(() => import('./components/guest/GuestTrialScreen'));
+const GuestTrialImportNotice = lazy(() => import('./components/guest/GuestTrialImportNotice'));
 
 const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
@@ -145,6 +149,12 @@ const App: React.FC = () => {
     }
 
     switch (currentView) {
+      case 'guestTrial':
+        return <GuestTrialScreen
+          onBack={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
+          onOpenAuth={() => handleChangeView('dashboard')}
+          onReturnToAccount={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
+        />;
       case 'dashboard':
         return (
           <Dashboard
@@ -187,7 +197,11 @@ const App: React.FC = () => {
             user={user}
             bookId={getTaskRouteBookId(selectedTask)}
             taskIntent={selectedTask}
-            onBack={() => dispatchNavigation({ type: 'finish-book-view' })}
+            onBack={() => {
+              if (selectedTask.bookId === NARU_BOOK_ID && selectedTask.wordRange && !selectedTask.missionAssignmentId) {
+                openLearningTask(createNaruChapterReturnTask(selectedTask));
+              } else dispatchNavigation({ type: 'finish-book-view' });
+            }}
           />
         ) : null;
       case 'admin':
@@ -247,12 +261,17 @@ const App: React.FC = () => {
     if (!user) {
       return (
         <AuthExperienceScreen
-          currentView={currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
+          currentView={currentView === 'guestTrial' ? 'guestTrial' : currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
           publicRole={publicRole}
           {...authExperienceProps}
           onClosePublicInfo={() => dispatchNavigation({ type: 'close-public-info' })}
           onOpenPublicRole={(roleKey) => dispatchNavigation({ type: 'open-public-role', role: roleKey })}
           onClosePublicRole={() => dispatchNavigation({ type: 'close-public-role' })}
+          onStartGuestTrial={() => dispatchNavigation({ type: 'open-guest-trial' })}
+          guestTrialContent={currentView === 'guestTrial' ? <GuestTrialScreen
+            onBack={() => dispatchNavigation({ type: 'reset' })}
+            onOpenAuth={(mode) => dispatchNavigation({ type: 'open-auth', mode })}
+          /> : undefined}
         />
       );
     }
@@ -281,6 +300,7 @@ const App: React.FC = () => {
             </div>
           }
         >
+          {user && currentView !== 'guestTrial' && <GuestTrialImportNotice key={user.uid} user={user} onContinueTrial={() => dispatchNavigation({ type: 'open-guest-trial' })} />}
           {renderContent()}
         </Suspense>
       </Layout>

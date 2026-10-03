@@ -21,10 +21,9 @@ import {
 import { MASTERY_INTERACTION_SOURCE } from '../../shared/learningHistory';
 import { isWorksheetQuestionMode } from '../../shared/worksheetQuestionMode';
 import { isValidStudySessionXp, MAX_STUDY_SESSION_XP, resolveXpProgress } from '../../shared/xp';
-import { resolveBookProgressionBand, appendLearningInteractionEvent, rebuildWeaknessSignalsForUser } from './weakness-actions';
+import { resolveBookProgressionBand, rebuildWeaknessSignalsForUser } from './weakness-actions';
 import { formatDateKey } from '../../utils/date';
 import { getGrammarCurriculumScope } from '../../utils/grammarScope';
-import { buildQuizAttemptHistory } from '../../utils/quiz';
 import { mapUserRowToProfile } from './auth';
 import { readLearningPlanBookIds, syncLearningPlanBooks } from './learning-plan-books';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
@@ -54,9 +53,9 @@ import {
 } from './storage-support';
 import { HttpError } from './http';
 import { commitStudyAttempt } from './study-attempt-receipts';
-import { buildHistorySnapshotCondition } from './learning-history-state';
 import { validateStudyAttempt } from '../../shared/srs';
-import { recordCbtProblemAttempt, recordCbtScopeAttempt, recordJapaneseTranslationFeedbackEvent } from './ai-cache-cbt';
+import { commitQuizAttempt, readQuizAttemptReceipt, toQuizAttemptReceipt } from './quiz-attempt-receipts';
+import { createEnglishPracticeQuizAttemptId, validateQuizAttempt, type QuizAttemptReceipt } from '../../shared/quizAttempt';
 
 const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
   const organization = await readActiveOrganizationContextForUser(env, userId);
@@ -220,8 +219,9 @@ const validateQuizAttemptConsistency = async (
       throw new HttpError(400, 'translationFeedback は全文和訳入力でのみ保存できます。');
     }
     if (
-      typeof translationFeedback.score !== 'number'
-      || typeof translationFeedback.maxScore !== 'number'
+      !Number.isFinite(translationFeedback.score)
+      || !Number.isFinite(translationFeedback.maxScore)
+      || typeof translationFeedback.verdictLabel !== 'string'
       || translationFeedback.score < 0
       || translationFeedback.maxScore <= 0
       || translationFeedback.score > translationFeedback.maxScore
@@ -350,171 +350,77 @@ export const handleRecordQuizAttempt = async (
   generatedProblemId?: string,
   grammarScopeId?: GrammarCurriculumScopeId,
   translationFeedback?: JapaneseTranslationFeedback,
-): Promise<void> => {
-  await assertBookLearningAccess(env, user, bookId);
-  await validateQuizAttemptConsistency(
-    env,
-    wordId,
-    bookId,
-    correct,
-    questionMode,
-    responseTimeMs,
-    generatedProblemId,
-    grammarScopeId,
-    translationFeedback,
-  );
-  const now = Date.now();
-  const existing = await readFirst<DbHistoryRow>(
-    env,
-    'SELECT * FROM learning_histories WHERE user_id = ? AND word_id = ?',
-    user.id,
-    wordId,
-  );
-
-  const nextHistory = buildQuizAttemptHistory({
-    existing: existing
-      ? {
-          wordId: existing.word_id,
-          bookId: existing.book_id,
-          status: existing.status,
-          lastStudiedAt: existing.last_studied_at,
-          nextReviewDate: existing.next_review_date,
-          interval: existing.interval_days,
-          easeFactor: existing.ease_factor,
-          correctCount: existing.correct_count,
-          attemptCount: existing.attempt_count,
-          totalResponseTimeMs: existing.total_response_time_ms,
-          interactionSource: existing.interaction_source || undefined,
-        }
-      : undefined,
-    wordId,
-    bookId,
-    correct,
-    responseTimeMs,
-    now,
-  });
-
-  const snapshot = buildHistorySnapshotCondition(user.id, wordId, existing);
-  const historyWrite = await env.DB.prepare(`
-    INSERT INTO learning_histories (
-      user_id, word_id, book_id, status, last_studied_at, next_review_date,
-      interval_days, ease_factor, correct_count, attempt_count, total_response_time_ms, interaction_source
-    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${snapshot.sql}
-    ON CONFLICT(user_id, word_id) DO UPDATE SET
-      book_id = excluded.book_id,
-      status = excluded.status,
-      last_studied_at = excluded.last_studied_at,
-      next_review_date = excluded.next_review_date,
-      interval_days = excluded.interval_days,
-      ease_factor = excluded.ease_factor,
-      correct_count = excluded.correct_count,
-      attempt_count = excluded.attempt_count,
-      total_response_time_ms = excluded.total_response_time_ms,
-      interaction_source = excluded.interaction_source
-  `).bind(
-    user.id,
-    nextHistory.wordId,
-    nextHistory.bookId,
-    nextHistory.status,
-    nextHistory.lastStudiedAt,
-    nextHistory.nextReviewDate,
-    nextHistory.interval,
-    nextHistory.easeFactor,
-    nextHistory.correctCount,
-    nextHistory.attemptCount,
-    nextHistory.totalResponseTimeMs,
-    nextHistory.interactionSource || null,
-    ...snapshot.bindings,
-  ).run();
-  if (historyWrite.meta.changes !== 1) {
-    throw new HttpError(409, '学習記録が別の操作で更新されました。最新状態でやり直してください。');
+  clientAttemptId?: string,
+): Promise<QuizAttemptReceipt | null> => {
+  const input = { wordId, bookId, correct, questionMode, responseTimeMs, missionAssignmentId,
+    taskIntentType, generatedProblemId, grammarScopeId, translationFeedback, clientAttemptId };
+  try { validateQuizAttempt(input); } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : '小テスト記録が不正です。');
   }
-
+  // Authorization is evaluated for every request, including receipt replays.
+  await assertBookLearningAccess(env, user, bookId);
+  await validateQuizAttemptConsistency(env, wordId, bookId, correct, questionMode,
+    responseTimeMs, generatedProblemId, grammarScopeId, translationFeedback);
+  if (missionAssignmentId) {
+    const ownedAssignment = await readFirst<{ id: string }>(env, `
+      SELECT a.id FROM weekly_mission_assignments a
+      JOIN weekly_missions m ON m.id = a.mission_id
+      WHERE a.id = ? AND a.student_user_id = ? AND (m.book_id IS NULL OR m.book_id = ?)
+    `, missionAssignmentId, user.id, bookId);
+    if (!ownedAssignment) throw new HttpError(400, '小テスト記録とミッションの組み合わせが一致しません。');
+  }
   const [bookProgressionBand, missionAssignments] = await Promise.all([
-    resolveBookProgressionBand(env, bookId),
-    readMissionAssignmentsByStudent(env, [user.id]),
+    resolveBookProgressionBand(env, bookId), readMissionAssignmentsByStudent(env, [user.id]),
   ]);
   const missionAssignment = missionAssignments.get(user.id);
   const effectiveMissionAssignmentId = missionAssignmentId || (
     !missionAssignment?.mission.bookId || missionAssignment.mission.bookId === bookId
-      ? missionAssignment?.id
-      : undefined
+      ? missionAssignment?.id : undefined
   );
-  await appendLearningInteractionEvent(env, {
-    userId: user.id,
-    wordId,
-    bookId,
-    createdAt: nextHistory.lastStudiedAt,
-    interactionSource: 'QUIZ',
-    questionMode,
-    correct,
-    responseTimeMs,
-    intervalDaysBefore: existing?.interval_days || 0,
-    bookProgressionBand,
-    missionAssignmentId: effectiveMissionAssignmentId,
-    taskIntentType,
+  const receipt = await commitQuizAttempt(env, user.id, input, {
+    missionAssignmentId: effectiveMissionAssignmentId, bookProgressionBand, organizationId: user.organization_id,
   });
-  if (generatedProblemId) {
+  // Canonical history/event/CBT writes have committed. Derived projections are
+  // idempotent and may be rebuilt on replay; failures never imply the answer was lost.
+  if (receipt.projection_status === 'PENDING') {
     try {
-      await recordCbtProblemAttempt(env, {
-        userId: user.id,
-        wordId,
-        problemId: generatedProblemId,
-        correct,
-        responseTimeMs,
-        now: nextHistory.lastStudiedAt,
-      });
+      await rebuildWeaknessSignalsForUser(env, user.id, user);
+      if (receipt.mission_assignment_id) {
+        await touchWeeklyMissionProgressFromQuiz(env, user, {
+          bookId: receipt.book_id, assignmentId: receipt.mission_assignment_id,
+          dateKey: formatDateKey(receipt.created_at), attemptedAt: receipt.created_at,
+        });
+      }
+      await env.DB.prepare(`UPDATE quiz_attempt_receipts SET projection_status = 'COMPLETE', projection_failed_at = NULL
+        WHERE user_id = ? AND client_attempt_id = ?`).bind(user.id, receipt.client_attempt_id).run();
     } catch (error) {
-      console.warn('CBT problem attempt update skipped:', error);
+      console.warn('Quiz projections pending rebuild:', error);
+      try {
+        await env.DB.prepare(`UPDATE quiz_attempt_receipts SET projection_failed_at = ?
+          WHERE user_id = ? AND client_attempt_id = ? AND projection_status = 'PENDING'`)
+          .bind(Date.now(), user.id, receipt.client_attempt_id).run();
+      } catch (metadataError) { console.warn('Quiz projection status update failed:', metadataError); }
     }
   }
-  if (grammarScopeId) {
+  // Read the durable status after projection attempts. Another replay may have
+  // completed it concurrently; failed metadata/readback never implies COMPLETE.
+  let confirmedReceipt = receipt;
+  if (receipt.projection_status === 'PENDING') {
     try {
-      await recordCbtScopeAttempt(env, {
-        userId: user.id,
-        grammarScopeId,
-        questionMode,
-        correct,
-        responseTimeMs,
-        now: nextHistory.lastStudiedAt,
-      });
-    } catch (error) {
-      console.warn('CBT scope attempt update skipped:', error);
-    }
+      confirmedReceipt = await readQuizAttemptReceipt(env, user.id, receipt.client_attempt_id) || receipt;
+    } catch { console.warn('Quiz projection confirmation pending readback.'); }
   }
-  if (translationFeedback && questionMode === 'JA_TRANSLATION_INPUT') {
-    try {
-      await recordJapaneseTranslationFeedbackEvent(env, {
-        userId: user.id,
-        wordId,
-        bookId,
-        questionMode,
-        grammarScopeId,
-        sourceSentence: translationFeedback.sourceSentence || '',
-        expectedTranslation: translationFeedback.expectedTranslation || translationFeedback.improvedTranslation || '',
-        userTranslation: translationFeedback.userTranslation || '',
-        feedback: translationFeedback,
-        examTarget: translationFeedback.examTarget,
-        organizationId: user.organization_id,
-        model: translationFeedback.usedAi ? 'gemini' : 'deterministic',
-        promptVersion: translationFeedback.usedAi ? 'translation-feedback-v1' : 'deterministic-v1',
-        now: nextHistory.lastStudiedAt,
-      });
-    } catch (error) {
-      console.warn('Japanese translation feedback event write skipped:', error);
-    }
-  }
-  await rebuildWeaknessSignalsForUser(env, user.id, user);
-
-  await touchWeeklyMissionProgressFromQuiz(env, user, {
-    bookId,
-    assignmentId: effectiveMissionAssignmentId,
-    dateKey: formatDateKey(nextHistory.lastStudiedAt),
-    attemptedAt: nextHistory.lastStudiedAt,
-  });
+  // Legacy callers keep their successful 204. A pending legacy answer instead
+  // exposes its generated ID for recovery; throwing after commit would invite
+  // an ID-less retry that writes the same canonical answer again.
+  return clientAttemptId || confirmedReceipt.projection_status === 'PENDING'
+    ? toQuizAttemptReceipt(confirmedReceipt) : null;
 };
 
 const validateEnglishPracticeAttemptPayload = (payload: EnglishPracticeAttemptPayload): void => {
+  if (typeof payload.clientAttemptId !== 'string' || !payload.clientAttemptId.trim()) {
+    throw new HttpError(400, '英語演習の記録識別子が不正です。');
+  }
   const laneModeAllowed: Record<EnglishPracticeLaneId, readonly EnglishPracticeAttemptMode[]> = {
     grammar: ['GRAMMAR_CLOZE', 'EN_WORD_ORDER'],
     translation: ['JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'],
@@ -610,8 +516,16 @@ export const handleRecordEnglishPracticeAttempt = async (
     ).run();
   }
 
-  if (shouldDelegateQuizAttempt && (!existing || !existing.delegated_quiz_attempt)) {
-    await handleRecordQuizAttempt(
+  let projectionStatus: EnglishPracticeAttemptResult['projectionStatus'] = 'COMPLETE';
+  const delegatedAttemptId = shouldDelegateQuizAttempt
+    ? await createEnglishPracticeQuizAttemptId(user.id, payload.clientAttemptId) : undefined;
+  const delegatedReceipt = delegatedAttemptId
+    ? await readQuizAttemptReceipt(env, user.id, delegatedAttemptId) : null;
+  // Replays of new delegated records reauthorize and check the immutable quiz
+  // fingerprint even after completion. Legacy completed records have no stable
+  // receipt mapping; do not create a second canonical answer for those rows.
+  if (shouldDelegateQuizAttempt && (!existing?.delegated_quiz_attempt || delegatedReceipt)) {
+    const receipt = await handleRecordQuizAttempt(
       env,
       user,
       payload.wordId!,
@@ -624,18 +538,33 @@ export const handleRecordEnglishPracticeAttempt = async (
       payload.generatedProblemId,
       payload.grammarScopeId,
       payload.translationFeedback,
+      delegatedAttemptId,
     );
-    await env.DB.prepare(`
-      UPDATE english_practice_attempts
-      SET delegated_quiz_attempt = 1, synced_at = ?
-      WHERE user_id = ? AND client_attempt_id = ?
-    `).bind(now, user.id, payload.clientAttemptId).run();
+    projectionStatus = receipt?.projectionStatus || 'PENDING';
+    if (projectionStatus === 'COMPLETE' && !existing?.delegated_quiz_attempt) {
+      try {
+        const result = await env.DB.prepare(`
+          UPDATE english_practice_attempts
+          SET delegated_quiz_attempt = 1, synced_at = ?
+          WHERE user_id = ? AND client_attempt_id = ?
+        `).bind(now, user.id, payload.clientAttemptId).run();
+        if (result.success === false || (result.meta.changes ?? 0) !== 1) {
+          projectionStatus = 'PENDING';
+        }
+      } catch {
+        // The canonical answer is already durable. Keep the original English
+        // attempt queued until its delegation confirmation can be written.
+        console.warn('English practice delegation confirmation pending.');
+        projectionStatus = 'PENDING';
+      }
+    }
   }
 
   return {
     id: existing?.id || id,
     deduplicated: Boolean(existing),
     delegatedQuizAttempt: shouldDelegateQuizAttempt,
+    projectionStatus,
   };
 };
 

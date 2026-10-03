@@ -7,9 +7,9 @@ const fraction = (n, total) => total ? Number((n / total).toFixed(4)) : 0;
 
 // Produce a new, append-only book. Existing four-book imports require a
 // separately reviewed history migration and are deliberately rejected here.
-export const createNaruWorkbookImport = (workbooks, { timestamp = Date.now(), accessScope = 'PUBLIC' } = {}) => {
+export const createNaruWorkbookImport = (workbooks, { timestamp = Date.now(), accessScope = 'ALL_PLANS' } = {}) => {
   if (workbooks.length !== ORIGINAL_WORKBOOKS.length || new Set(workbooks.map(w => w.spec.key)).size !== 4) throw new Error('All four original workbooks are required');
-  if (!['PUBLIC', 'BUSINESS_ONLY'].includes(accessScope)) throw new Error('Invalid access scope');
+  if (!['ALL_PLANS', 'BUSINESS_ONLY'].includes(accessScope)) throw new Error('Invalid access scope');
   const ordered = ORIGINAL_WORKBOOKS.map(spec => {
     const workbook = workbooks.find(w => w.spec.key === spec.key);
     if (!workbook || workbook.spec.file !== spec.file || !/^[a-f0-9]{64}$/.test(workbook.sha256)) throw new Error('Known workbook and full SHA required');
@@ -125,6 +125,91 @@ export const buildNaruApprovalSql = (model, approvalNote, timestamp = Date.now()
   // closing the gap between a read-back and the separate approval operation.
   // The caller must check the final RETURNING row and read back approved status.
   return `${buildNaruStageSql(model, { requireComplete: true })}UPDATE material_source_ledger SET review_status=CASE WHEN ${proof} THEN 'approved' ELSE NULL END,rights_status='approved',notes=${sqlValue(`${expected.notes} 公開承認根拠: ${approvalNote.trim()}`)},updated_at=${timestamp} WHERE source_id=${sqlValue(expected.source_id)} AND book_id=${id} RETURNING book_id,edition,rights_status,review_status;\n`;
+};
+
+const assertNaruAccessScopeRepairModel = model => {
+  const tables = Object.keys(policies);
+  const book = model?.tables?.books?.[0];
+  const ledger = model?.tables?.material_source_ledger?.[0];
+  if (model?.bookId !== NARU_BOOK_ID || model.title !== NARU_BOOK_TITLE
+    || !/^[a-f0-9]{64}$/.test(model.revision || '')
+    || !Number.isSafeInteger(model.wordCount) || model.wordCount < 1
+    || Object.keys(model.tables || {}).length !== tables.length
+    || tables.some(table => !Array.isArray(model.tables?.[table]) || !model.tables[table].length)
+    || model.tables.books.length !== 1 || model.tables.material_source_ledger.length !== 1
+    || model.tables.catalog_workbook_sources.length !== ORIGINAL_WORKBOOKS.length
+    || model.tables.words.length !== model.wordCount
+    || book?.id !== model.bookId || book.title !== model.title || book.access_scope !== 'ALL_PLANS'
+    || book.catalog_source !== 'STEADY_STUDY_ORIGINAL' || book.source_context !== `original-workbooks:${model.revision}`
+    || ledger?.book_id !== model.bookId || ledger.book_title !== model.title || ledger.edition !== model.revision
+    || !Array.isArray(model.legacyBookIds) || model.legacyBookIds.length !== ORIGINAL_WORKBOOKS.length) {
+    throw new Error('Complete ALL_PLANS Naru model required for access-scope repair');
+  }
+  for (const table of tables) {
+    const { pk } = policies[table];
+    const keys = model.tables[table].map(row => {
+      if (pk.some(column => row[column] === undefined || row[column] === null)) throw new Error(`${table}: full row key required`);
+      return JSON.stringify(pk.map(column => row[column]));
+    });
+    if (new Set(keys).size !== keys.length) throw new Error(`${table}: duplicate expected row`);
+  }
+};
+
+// Preflight is read-only. It must complete, pass the JS verifier and be
+// explicitly reviewed before the separate single-statement write operation.
+export const naruAccessScopeRepairQueries = model => {
+  assertNaruAccessScopeRepairModel(model);
+  const legacy = model.legacyBookIds.map(sqlValue).join(',');
+  return [...naruImportQueries(model), { table: 'repair_conflicts', sql: `SELECT
+    (SELECT COUNT(*) FROM books WHERE id IN (${legacy}) OR (title=${sqlValue(model.title)} AND id<>${sqlValue(model.bookId)}))
+    + (SELECT COUNT(*) FROM words WHERE book_id IN (${legacy})) AS conflict_count;` }];
+};
+
+export const verifyNaruAccessScopeRepairRows = (model, actual) => {
+  assertNaruAccessScopeRepairModel(model);
+  if (!actual || !Array.isArray(actual.books) || actual.books.length !== 1
+    || !Array.isArray(actual.material_source_ledger) || actual.material_source_ledger.length !== 1
+    || !Array.isArray(actual.repair_conflicts) || actual.repair_conflicts.length !== 1
+    || actual.repair_conflicts[0]?.conflict_count !== 0) {
+    throw new Error('Complete conflict-free repair preflight required');
+  }
+  const book = actual.books[0]; const ledger = actual.material_source_ledger[0];
+  if (!['PUBLIC', 'ALL_PLANS'].includes(book.access_scope)
+    || ledger.rights_status !== 'approved' || ledger.review_status !== 'approved') {
+    throw new Error('Only an already approved PUBLIC/ALL_PLANS book may be repaired');
+  }
+  // Only the known broken access enum is normalized for verification. Every
+  // other original immutable field and all seven row sets use the import gate.
+  const verified = verifyNaruImportRows(model, { ...actual, books: [{ ...book, access_scope: 'ALL_PLANS' }] });
+  return { ...verified, bookId: model.bookId, revision: model.revision,
+    previousAccessScope: book.access_scope, repairNeeded: book.access_scope === 'PUBLIC' };
+};
+
+// This is a separate, explicitly reviewed operation. It never stages missing
+// rows, approves content, or changes the import/approval CLI's default behavior.
+// No SQL is produced without successful full-row preflight verification. The
+// caller must keep preflight and execution separate and recheck after changes.
+export const buildNaruAccessScopeRepairSql = (model, actual) => {
+  verifyNaruAccessScopeRepairRows(model, actual);
+  const book = model.tables.books[0]; const ledger = model.tables.material_source_ledger[0];
+  const immutableProof = (table, row) => Object.entries(row)
+    .filter(([column]) => !policies[table].mutable.includes(column) && !(table === 'books' && column === 'access_scope'))
+    .map(([column, value]) => `${column} IS ${sqlValue(value)}`).join(' AND ');
+  const id = sqlValue(model.bookId);
+  const bookProof = `${immutableProof('books', book)} AND word_count=${model.wordCount} AND access_scope IN ('PUBLIC','ALL_PLANS')`;
+  const ledgerProof = `${immutableProof('material_source_ledger', ledger)} AND rights_status='approved' AND review_status='approved'`;
+  const exists = (table, proof) => `EXISTS (SELECT 1 FROM ${table} WHERE ${proof})`;
+  const counts = naruImportQueries(model).map(({ table, sql }) => `(${sql.replace('SELECT *', 'SELECT COUNT(*)').replace(/;$/, '')})=${model.tables[table].length}`).join(' AND ');
+  const legacy = model.legacyBookIds.map(sqlValue).join(',');
+  const targetProof = `${exists('books', bookProof)} AND ${exists('material_source_ledger', ledgerProof)} AND (${counts})
+    AND NOT EXISTS (SELECT 1 FROM books WHERE id IN (${legacy}) OR (title=${sqlValue(model.title)} AND id<>${id}))
+    AND NOT EXISTS (SELECT 1 FROM words WHERE book_id IN (${legacy}))`;
+  // The existing approved row alone may change; timestamps, approval notes,
+  // report flags and every original source/playable field remain untouched.
+  const sql = `UPDATE books SET access_scope='ALL_PLANS' WHERE id=${id} AND access_scope='PUBLIC'
+    AND (${targetProof}) RETURNING id,title,access_scope;\n`;
+  if (Buffer.byteLength(sql) > 100000) throw new Error('SQL statement exceeds D1 limit');
+  return sql;
 };
 
 export const naruImportQueries = model => Object.entries(model.tables).map(([table]) => {

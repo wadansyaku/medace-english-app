@@ -1,3 +1,4 @@
+import { createEnglishPracticeQuizAttemptId, type QuizAttemptReceipt } from '../shared/quizAttempt';
 
 import {
   ActivityLog,
@@ -9,6 +10,8 @@ import {
   CommercialRequestStatus,
   BookMetadata,
   BookProgress,
+  BookStudyOverview,
+  StudyWordRange,
   ClassroomWorksheetLifecycleEventResult,
   DashboardSnapshot,
   LearningTrack,
@@ -132,6 +135,7 @@ import {
 import {
   getBookProgress as getBookProgressFromHistory,
   getBookSession as getBookSessionFromHistory,
+  getBookStudyOverview as getBookStudyOverviewFromHistory,
   getDailySessionWords as getDailySessionWordsFromHistory,
   getDueCount as getDueCountFromHistory,
   getStudiedWordIdsByBook as getStudiedWordIdsByBookFromHistory,
@@ -341,6 +345,10 @@ export class IndexedDBStorageService implements IStorageService {
     return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit, taskIntent);
   }
 
+  async getBookStudyOverview(uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview> {
+    return getBookStudyOverviewFromHistory(this.getLearningHistoryContext(), uid, bookId, wordRange);
+  }
+
   async getDueCount(uid: string): Promise<number> {
     return getDueCountFromHistory(this.getLearningHistoryContext(), uid);
   }
@@ -378,7 +386,8 @@ export class IndexedDBStorageService implements IStorageService {
     generatedProblemId?: string,
     grammarScopeId?: import('../types').GrammarCurriculumScopeId,
     translationFeedback?: import('../types').JapaneseTranslationFeedback,
-  ): Promise<void> {
+    clientAttemptId?: string,
+  ): Promise<QuizAttemptReceipt | null> {
     return recordQuizAttemptFromHistory(
       this.getLearningHistoryContext(),
       uid,
@@ -392,6 +401,7 @@ export class IndexedDBStorageService implements IStorageService {
       generatedProblemId,
       grammarScopeId,
       translationFeedback,
+      clientAttemptId,
     );
   }
 
@@ -399,6 +409,7 @@ export class IndexedDBStorageService implements IStorageService {
     uid: string,
     payload: EnglishPracticeAttemptPayload,
   ): Promise<EnglishPracticeAttemptResult> {
+    let projectionStatus: EnglishPracticeAttemptResult['projectionStatus'] = 'COMPLETE';
     const delegatedQuizAttempt = Boolean(
       payload.wordId
       && payload.bookId
@@ -406,7 +417,7 @@ export class IndexedDBStorageService implements IStorageService {
       && ['GRAMMAR_CLOZE', 'EN_WORD_ORDER', 'JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'].includes(payload.mode),
     );
     if (delegatedQuizAttempt) {
-      await this.recordQuizAttempt(
+      const receipt = await this.recordQuizAttempt(
         uid,
         payload.wordId!,
         payload.bookId!,
@@ -418,12 +429,16 @@ export class IndexedDBStorageService implements IStorageService {
         payload.generatedProblemId,
         payload.grammarScopeId,
         payload.translationFeedback,
+        await createEnglishPracticeQuizAttemptId(uid, payload.clientAttemptId),
       );
+      if (!receipt) throw new Error('英語演習の保存確認を取得できませんでした。');
+      projectionStatus = receipt.projectionStatus;
     }
     return {
       id: payload.clientAttemptId,
       deduplicated: false,
       delegatedQuizAttempt,
+      projectionStatus,
     };
   }
 
@@ -500,6 +515,7 @@ export class IndexedDBStorageService implements IStorageService {
         STORES.ASSIGNMENTS,
         STORES.INTERACTION_EVENTS,
         STORES.STUDY_ATTEMPT_RECEIPTS,
+        STORES.QUIZ_ATTEMPT_RECEIPTS,
         STORES.WEAKNESS_SIGNALS,
         STORES.COMMERCIAL_REQUESTS,
         STORES.PRODUCT_ANNOUNCEMENTS,
@@ -516,6 +532,7 @@ export class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.ASSIGNMENTS).clear();
     tx.objectStore(STORES.INTERACTION_EVENTS).clear();
     tx.objectStore(STORES.STUDY_ATTEMPT_RECEIPTS).clear();
+    tx.objectStore(STORES.QUIZ_ATTEMPT_RECEIPTS).clear();
     tx.objectStore(STORES.WEAKNESS_SIGNALS).clear();
     tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
     tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();

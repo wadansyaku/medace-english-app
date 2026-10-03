@@ -16,6 +16,8 @@ interface StudyFinishedViewProps {
   reviewPreview: WordData[];
   onStartSpellingCheck: () => void;
   onExit: () => void;
+  exitLabel?: string;
+  sessionLabel?: string;
 }
 
 export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
@@ -30,6 +32,8 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
   reviewPreview,
   onStartSpellingCheck,
   onExit,
+  exitLabel = 'ダッシュボードに戻る',
+  sessionLabel,
 }) => {
   const reward = earnedXP !== null && streakBonusXP !== null ? (
     <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
@@ -56,6 +60,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
                 <Award className={`h-8 w-8 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
               </div>
               <h2 className="text-[1.7rem] font-black tracking-tight text-slate-950">クエスト完了！</h2>
+              {sessionLabel && <p className="mt-2 text-sm font-bold text-medace-800">{sessionLabel}</p>}
               <p className="mt-2 text-sm leading-relaxed text-slate-500">
                 {sessionWordCount}語を学習しました。次に見直すところだけ確認すれば十分です。
               </p>
@@ -101,7 +106,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
               onClick={onExit}
               className="w-full rounded-2xl bg-steady-action px-6 py-3 font-bold text-steady-on-action shadow-lg transition-all hover:bg-steady-action-hover"
             >
-              ダッシュボードに戻る
+              {exitLabel}
             </button>
             <button
               type="button"
@@ -126,6 +131,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             <Award className={`h-10 w-10 ${leveledUp ? 'text-yellow-500' : 'text-green-600'}`} />
           </div>
           <h2 className="text-3xl font-black text-slate-900">クエスト完了！</h2>
+          {sessionLabel && <p className="mt-2 text-sm font-bold text-medace-800">{sessionLabel}</p>}
           <p className="mt-2 text-sm text-slate-500">{sessionWordCount}語を学習しました。次に見直すところだけ確認すれば十分です。</p>
           {reward}
         </div>
@@ -178,7 +184,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
             onClick={onExit}
             className="rounded-2xl bg-steady-action px-6 py-3 font-bold text-steady-on-action shadow-lg transition-all hover:bg-steady-action-hover"
           >
-            ダッシュボードに戻る
+            {exitLabel}
           </button>
           <button
             type="button"

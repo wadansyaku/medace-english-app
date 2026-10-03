@@ -4,6 +4,7 @@ import {
   expectPreviewDeployment,
   loginBusinessStudentDemo,
   maybeCompleteOnboarding,
+  openDashboardWriting,
   PUBLIC_BUSINESS_ROLE_KEYS,
 } from './smoke-support';
 import {
@@ -18,7 +19,8 @@ test('public home offers clear account and learner trial actions before auth', a
 
   await expect(page.getByTestId('start-first-home')).toBeVisible();
   await expect(page.getByRole('heading', { name: '今日の学習を、ここから', exact: true })).toBeVisible();
-  await expect(page.getByTestId('demo-login-student')).toBeVisible();
+  await expect(page.getByTestId('start-first-guest')).toBeVisible();
+  await expect(page.getByTestId('demo-login-student')).toBeHidden();
   await expect(page.getByTestId('start-first-login')).toBeVisible();
   await expect(page.getByTestId('start-first-signup')).toBeVisible();
   await expect(page.getByTestId('auth-product-explanation')).not.toHaveAttribute('open', '');
@@ -47,7 +49,7 @@ test('public role card updates the URL and browser back returns to the start scr
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByTestId('start-first-home')).toBeVisible();
-  await expect(page.getByTestId('demo-login-student')).toBeVisible();
+  await expect(page.getByTestId('start-first-guest')).toBeVisible();
 });
 
 test('public role link hub keeps the business role previews visible', async ({ page }) => {
@@ -121,13 +123,7 @@ test('preview deployment supports demo login, D1 read, and Writing visibility', 
   await loginBusinessStudentDemo(page);
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  const writingDetails = page.getByTestId('dashboard-task-details-writing');
-  if (await writingDetails.count()) {
-    if (await writingDetails.getAttribute('open') === null) {
-      await writingDetails.locator('summary').click();
-    }
-    await expect(writingDetails).toHaveAttribute('open', '');
-  }
+  await openDashboardWriting(page);
   const writingSection = page.getByTestId('writing-student-section');
   await writingSection.scrollIntoViewIfNeeded();
   await expect(writingSection).toBeVisible();

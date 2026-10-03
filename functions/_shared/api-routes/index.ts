@@ -2,6 +2,7 @@ import type { ApiRouteDefinition } from './runtime';
 import { aiRoutes } from './ai';
 import { analyticsRoutes } from './analytics';
 import { authProfileRoutes } from './auth-profile';
+import { guestTrialRoutes } from './guest-trial';
 import { publicCommercialRoutes } from './public-commercial';
 import { runtimeAdminRoutes } from './runtime-admin';
 import { storageRoutes } from './storage';
@@ -11,6 +12,7 @@ import { writingRoutes } from './writing';
 export const apiRoutes: ApiRouteDefinition[] = [
   ...analyticsRoutes,
   ...authProfileRoutes,
+  ...guestTrialRoutes,
   ...publicCommercialRoutes,
   ...runtimeAdminRoutes,
   ...writingRoutes,

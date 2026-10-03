@@ -298,6 +298,7 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/guest-trial.smoke.spec.ts',
   'tests/smoke/auth-focused.smoke.spec.ts',
   'tests/smoke/ui-audit.smoke.spec.ts',
   'tests/smoke/grammar-answer-isolation.smoke.spec.ts',
@@ -312,6 +313,8 @@ const cloudflareFiles = [
   'tests/smoke/writing.smoke.spec.ts',
   'tests/smoke/mobile.smoke.spec.ts',
   'tests/smoke/study-reliability.smoke.spec.ts',
+  'tests/smoke/quiz-receipts.smoke.spec.ts',
+  'tests/smoke/quiz-controller-receipts.smoke.spec.ts',
 ];
 
 const suites = suiteMode === 'sentinel'
@@ -334,7 +337,7 @@ const suites = suiteMode === 'sentinel'
           ? []
           : [{
             name: 'idb',
-            files: ['tests/smoke/idb.smoke.spec.ts'],
+            files: ['tests/smoke/idb.smoke.spec.ts', 'tests/smoke/quiz-receipts-idb.smoke.spec.ts'],
             env: {
               VITE_STORAGE_MODE: 'idb',
             },
@@ -369,7 +372,9 @@ const runBuildForEnv = async (suiteEnv, buildKey) => {
 };
 
 for (const suite of suites) {
-  const port = await getAvailablePort();
+  const requestedPort = Number(process.env.PLAYWRIGHT_SMOKE_PORT || 0);
+  if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new Error('PLAYWRIGHT_SMOKE_PORT must be an available TCP port');
+  const port = requestedPort || await getAvailablePort();
   const baseUrl = isExternalTarget ? externalBaseUrl : `http://127.0.0.1:${port}`;
   const outputDir = path.join(cwd, 'test-results', `smoke-${suite.name}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
@@ -453,6 +458,8 @@ for (const suite of suites) {
 
     if (suiteExitCode !== 0) {
       exitCode = suiteExitCode;
+      // A user interruption must not launch a browser for the next suite.
+      if (suiteExitCode === 130 || suiteExitCode === 143) break;
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);

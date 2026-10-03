@@ -22,102 +22,25 @@ const makeTask = (overrides: Partial<StudentDashboardTaskItem> = {}): StudentDas
 });
 
 describe('DashboardTaskOverviewRail', () => {
-  it('offers one next action and keeps material and progress shortcuts ahead of optional detail', () => {
-    const rendered = renderToStaticMarkup(
-      <DashboardTaskOverviewRail
-        primaryTask={makeTask()}
-        urgentTasks={[makeTask({ id: 'mission', group: 'urgent', isPrimary: false })]}
-        supportingTasks={[makeTask({ id: 'weakness', group: 'supporting', isPrimary: false })]}
-        referenceTasks={(['weakness', 'announcements', 'plan', 'library', 'progress'] as const).map((id) => (
-          makeTask({ id, group: 'reference', isPrimary: false })
-        ))}
-        showPrimaryAction={false}
-        onSelectTask={() => undefined}
-        onSelectReferenceTask={() => undefined}
-        onStartPrimary={() => undefined}
-      />,
-    );
-    expect(rendered).toContain('dashboard-task-overview-mission');
-    expect(rendered).not.toContain('dashboard-task-overview-weakness');
-    expect(rendered).toContain('dashboard-task-reference-library');
+  const noop = () => undefined;
+  it('has one entry per resource and leaves the learning command in the hero', () => {
+    const rendered = renderToStaticMarkup(<DashboardTaskOverviewRail referenceTasks={['library', 'progress', 'library', 'plan'].map(id => makeTask({ id: id as StudentDashboardTaskItem['id'], group: 'reference' }))} onSelectReferenceTask={noop} />);
+    expect(rendered.match(/data-testid="dashboard-task-reference-library"/g)).toHaveLength(1);
     expect(rendered).toContain('dashboard-task-reference-progress');
-    expect(rendered).not.toContain('dashboard-task-reference-announcements');
+    expect(rendered).not.toContain('dashboard-task-overview-today');
+    expect(rendered).not.toContain('教材を作る');
   });
-
-  it('can keep the first setup action in the hero only', () => {
-    const rendered = renderToStaticMarkup(
-      <DashboardTaskOverviewRail
-        primaryTask={makeTask()}
-        urgentTasks={[]}
-        supportingTasks={[]}
-        referenceTasks={[
-          makeTask({
-            id: 'library',
-            routeId: undefined,
-            title: '教材',
-            body: '教材と記録を確認します。',
-            ctaLabel: '教材を見る',
-            metricLabel: '0冊',
-            stateLabel: '確認',
-            tone: 'reference',
-            group: 'reference',
-            isPrimary: false,
-            mobileLabel: '教材',
-          }),
-        ]}
-        showPrimaryAction={false}
-        onSelectTask={() => undefined}
-        onSelectReferenceTask={() => undefined}
-        onStartPrimary={() => undefined}
-      />,
-    );
-
-    expect(rendered).toContain('教材・記録');
-    expect(rendered).toContain('教材');
+  it('keeps every optional resource reachable in a closed menu instead of truncating the last resources', () => {
+    const ids = ['weakness', 'announcements', 'plan', 'library', 'progress', 'account', 'writing', 'motivation', 'companion'] as const;
+    const rendered = renderToStaticMarkup(<DashboardTaskOverviewRail referenceTasks={ids.map(id => makeTask({ id, group: 'reference' }))} onSelectReferenceTask={noop} />);
+    for (const id of ids) expect(rendered).toContain(`dashboard-task-reference-${id}`);
+    expect(rendered).toContain('<summary');
+    expect(rendered).not.toMatch(/<details[^>]* open/);
+    expect(rendered.indexOf('dashboard-task-reference-progress')).toBeLessThan(rendered.indexOf('<details'));
+  });
+  it('identifies the selected resource without creating a second primary action', () => {
+    const rendered = renderToStaticMarkup(<DashboardTaskOverviewRail activeSection="library" referenceTasks={[makeTask({ id: 'library', group: 'reference' })]} onSelectReferenceTask={noop} />);
+    expect(rendered).toContain('aria-pressed="true"');
     expect(rendered).not.toContain('今日の学習');
-    expect(rendered).not.toContain('data-testid="dashboard-task-overview-today"');
-    expect(rendered).toContain('data-testid="dashboard-task-reference-library"');
-  });
-
-  it('can keep any primary action out of the rail while showing supporting actions', () => {
-    const rendered = renderToStaticMarkup(
-      <DashboardTaskOverviewRail
-        primaryTask={makeTask({
-          id: 'coach',
-          routeId: undefined,
-          title: '講師メッセージ',
-          ctaLabel: '復習を10語始める',
-          metricLabel: 'Coach',
-          stateLabel: 'フォロー',
-          tone: 'coach',
-          mobileLabel: '講師',
-        })}
-        urgentTasks={[]}
-        supportingTasks={[
-          makeTask({
-            id: 'englishPractice',
-            routeId: 'englishPractice',
-            title: '文法演習',
-            ctaLabel: '文法を5問',
-            metricLabel: '5問',
-            stateLabel: '文法',
-            tone: 'practice',
-            group: 'supporting',
-            isPrimary: false,
-            mobileLabel: '演習',
-          }),
-        ]}
-        referenceTasks={[]}
-        showPrimaryAction={false}
-        onSelectTask={() => undefined}
-        onSelectReferenceTask={() => undefined}
-        onStartPrimary={() => undefined}
-      />,
-    );
-
-    expect(rendered).toContain('文法演習');
-    expect(rendered).toContain('data-testid="dashboard-task-overview-englishPractice"');
-    expect(rendered).not.toContain('講師メッセージ');
-    expect(rendered).not.toContain('data-testid="dashboard-task-overview-coach"');
   });
 });

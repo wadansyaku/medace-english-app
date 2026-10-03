@@ -11,6 +11,7 @@ import {
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
   maybeCompleteOnboarding,
+  openDashboardWriting,
   resolveWritingStudentSelectValue,
   runtimeAdminPost,
   storageAction,
@@ -44,7 +45,7 @@ test('group admin and business student can complete the writing workflow with on
   await loginBusinessStudentDemo(studentPage);
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
-  await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  await openDashboardWriting(studentPage);
   const businessStudent = await getCurrentSessionUser(studentPage);
   expect(businessStudent?.uid).toBeTruthy();
 
@@ -109,7 +110,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(adminPage.getByText(/再提出依頼を保存しました。/)).toBeVisible();
 
   await studentPage.reload();
-  await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  await openDashboardWriting(studentPage);
   await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-2.png',
@@ -123,6 +124,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(studentPage.getByText(/答案を提出しました/)).toBeVisible();
 
   await studentPage.reload();
+  await openDashboardWriting(studentPage);
   const previousFeedbackButton = studentPage.getByRole('button', { name: '前の添削結果を見る', exact: true });
   await expect(previousFeedbackButton).toBeVisible();
   await previousFeedbackButton.click();
@@ -141,7 +143,7 @@ test('group admin and business student can complete the writing workflow with on
   await expect(adminPage.locator('[data-testid^="writing-review-item-"]').first()).toBeVisible();
 
   await studentPage.reload();
-  await expect(studentPage.getByTestId('writing-student-section')).toBeVisible();
+  await openDashboardWriting(studentPage);
   await studentPage.locator('[data-testid^="writing-open-feedback-"]').first().click();
   await expect(studentPage.getByTestId('writing-feedback-comment')).toBeVisible();
   await expect(studentPage.getByTestId('writing-feedback-approved-evaluation')).toHaveCount(1);

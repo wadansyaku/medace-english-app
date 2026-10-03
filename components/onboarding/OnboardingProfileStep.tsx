@@ -51,10 +51,10 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
       <div className="relative overflow-hidden rounded-panel border border-slate-200 bg-white p-5 text-slate-950 shadow-panel md:p-8">
         <div className="relative min-w-0">
           <div className="inline-flex items-center gap-2 rounded-md border border-medace-100 bg-medace-50 px-3 py-1 text-[11px] font-bold text-medace-700">
-            <Radar className="h-4 w-4" /> 初回レベル診断
+            <Radar className="h-4 w-4" /> レベル診断（任意・12問）
           </div>
           <h1 className="mt-3 text-[1.45rem] font-black leading-tight tracking-tight text-slate-950 md:mt-4 md:text-[2.35rem]">
-            {isRetake ? '学習スタート帯を再診断する' : '最初のスタート帯を、短時間で決める'}
+            {isRetake ? 'いまのレベルを確認する' : '最初のスタート帯を、短時間で決める'}
           </h1>
           <p data-testid="onboarding-profile-mobile-note" className="mt-2 text-[13px] leading-relaxed text-slate-600 sm:hidden">
             12問で、最初に使うレベルを決めます。
@@ -107,13 +107,13 @@ const OnboardingProfileStep: React.FC<OnboardingProfileStepProps> = ({
               学年と自己認識をそろえてから診断を始めます。入力はここだけです。
             </p>
           </div>
-          {isRetake && onCancel && (
+          {onCancel && (
             <button
               type="button"
               onClick={onCancel}
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
             >
-              <X className="h-4 w-4" /> 閉じる
+              <X className="h-4 w-4" /> {isRetake ? '閉じる' : '選択に戻る'}
             </button>
           )}
         </div>

@@ -1,8 +1,11 @@
 # Naruシスト 一冊化と公開の検証記録
 
+
+公開後追記: 通常TOC_FREEの実操作で、投入値PUBLICが現行access scope enum外のためNaru非表示となる問題を確認した。元の配備・原本照合は成功しているが、一般生徒の利用可能性は未達。[修復候補と影響](./2026-10-03-smart-ui-and-grammar.md)に記録。その後、本人の全プラン開放の明示承認に基づき12:46 UTCに一冊だけALL_PLANSへ修復した。7table全列保持、本番無料生徒の閲覧/学習開始、公開コードの合成4プラン認証HTTPを確認。[修復完了と確認範囲](./2026-10-03-smart-ui-and-grammar.md)を参照。以下のPUBLICは当初公開時の履歴であり、現在値はALL_PLANS。
+
 ## 現在の状態
 
-2026-10-03時点の公開前候補。PR #53のCIとpreview配備は成功し、previewには一冊1530語を全原本照合の上で承認済み。previewの56シーン実操作も成功した。**まだ本番へ反映していない**。本番は `5853d1dc3701ace947865b064723161b3e0aee86`、公開先は既存の `https://medace-english-app.pages.dev`。追加レビュー修正を含む新しいheadで必須checksを再確認してから公開する。
+2026-10-03に公開完了。PR #53の最終候補 `e88a7fd75503faf1aeeb6f21c3700ddfc0f62a12` をmain `4c4690a62ea0b595c10a536a5ccb313e870d3c7a`へsquashし、[production workflow 37113034090](https://github.com/wadansyaku/medace-english-app/actions/runs/37113034090)が全工程成功。[公開先](https://medace-english-app.pages.dev)の実SHA・HTML参照JS/CSS・PWAを確認した。本番の「Naruシスト」一冊1530語はPUBLIC/approvedで、四原本と七表の全行・不変フィールド照合も成功した。
 
 本人の四原本を「Naruシスト」一冊にする依頼を受け、先行する四冊の名称変更を置き換える。原本バイト、教材SQL、教材全行のJSON、DBバックアップ、合成アカウントのcookieは公開Gitへ追加しない。
 
@@ -60,6 +63,24 @@ D1のfile importはSQLにBEGIN/COMMITを入れず、一文100,000bytes以下を�
 
 実生徒での新教材学習は未検証。合成D1の成功を本番本人の学習成功とは呼ばない。公開URLの非認証確認と、本番DBの集計・全原本照合を別に記録する。
 
+## 最終配備と保存確認
+
+- 最終候補の型・44 migration replay・到達性・境界・136ファイル/901unit、build・API成功。表示名を含む実ブラウザー12件、起動process新規8件、動画QA正常1＋拒否61ケース成功。
+- 最終CIは37112126600、previewは37112126601で成功。previewとmainは候補と同じsource tree `aac816471f8dd020ae6d8c8e08f70bfddfabdd0a`。両配備workflowの必須全回帰を維持し、107Chrome・3IDB成功。preview配備後4件・production配備後5件も成功した。
+- 最終localと最終previewで各56シーン・5幅の保存/reloadが成功、字体読込待ち・横overflow・page errorの条件も確認。previewは `https://debd4ecf.medace-english-app.pages.dev`、runtime SHAはGitHub仮mergeの `5e914c2c842c9a67c8f6087be45ebac93f63e95d`。
+- 本番投入はpreviewと同じstage SHA `ebab88aa10b0f2617ce2ce91f72208f9a506c01012766fec183c8571f4e33b52`。投入前の新ID・四snapshot・原本word prefix・11参照表・plan参照は0。投入と承認の各直前にfresh Time Travel bookmarkを採取した。
+- 承認後は一冊/1530語/四原本/1531出典/保留一件を再照合。新教材のContent QA、全教材台帳、B2B整合性gateが成功。既存の品質・導入warningを0へ見せず、原本のcoverage・重複も保持した。
+- 投入前後の既存件数は同一: users13、learning histories197、study receipts2、interaction events244、plan books4、weekly missions0、既存books58・words65711。FK違反0。実生徒の行やcookieを検証fixture・公開artifactへ使わず、本番に検証用ユーザーを作成していない。
+- 追加のローカル教材exportは自動承認レビューで拒否されたため未実行。既存のprivate backupを保持し、直前のCloudflare Time Travel bookmarkを復旧起点にする安全な代替で完了した。
+
+## Notion企画との照合
+
+本人指定のNotion企画は、別担当がMacネイティブNotionのMedAseゲストworkspaceから閲覧した。Notionへの編集・コメント・共有変更は行っていない。企画ページは語彙DBではなく、最新1530レコード・多義語/異品詞の保持・actually保留を変更する根拠は無かった。4月の名詞添付と今回のファイルは名称と表示サイズが対応するが、添付バイトを再取得しておらずSHA同一性は未確認。
+
+原本の英例文は動詞353・名詞932・副詞86・形容詞159、計1530語すべてにあり、そのまま保存した。日本語例文訳は0。日英例文対率0を「英例文も0」と解釈しない。分類は動詞29群、名詞10分類/29小分類/25section、副詞6群を保持し、形容詞に原本にない分類を補作しない。
+
+一冊内の四品詞と順序・範囲は「品詞ごとの章」に整合する。現行の品詞presetは小テスト用であり、SRSの章選択・用法別単位・単語直下の例文常時表示・例文の収録語相互参照・例文和訳の拡充は未完として後続計画へ置く。番号は参照を助ける方針に合うが、参照機能が完成したとは呼ばない。追加生成は原本・生成由来・レビュー状態を区別し、原本の例文や欠訳を無断で置き換えない。
+
 ## 全体改善との関係
 
-[包括監査と改善計画](./2026-10-03-medace-improvement-plan.md)は確定した破綻とコード上の候補を区別する。今回のUI/auth、取得失敗・保存通知、講師導線、worksheet競合、ナビゲーション・横向きの修正は候補branchへ統合済み。次の保存基盤P1として小テストの同一回答再送receipt・履歴/event原子確定を独立branchで実装・検証した。独立レビューでの34件中1件timeoutは専用tmp cloneで34件すべて成功し、再現しなかった。この候補は今回のPRへ含めず、依存更新との統合と公開gateを別に行う。未公開のquiz/EnglishPractice/XP/Writingを公開済み・修正済みと数えない。
+[包括監査と改善計画](./2026-10-03-medace-improvement-plan.md)は確定した破綻とコード上の候補を区別する。今回のUI/auth、取得失敗・保存通知、講師導線、worksheet競合、ナビゲーション・横向きの修正は公開済み。次の保存基盤P1として小テストの同一回答再送receipt・履歴/event原子確定を独立branchで実装し、最終UI/一冊/Tailwind4へ統合した。保存HEADは `83ca5313717e6574d2d374331c5540d356e0b8f4`、935unit・34SQLite・API/build/audit・独立70/semantic成功。独立レビュー対象16ファイルは最終HEADとSHA256一致。ブラウザー32件成功後にMacの同期依存読取待ちで残87Chrome＋9IDBを保留し、全自分processを終了した。公開gate未完のままPR #53へ混ぜず、未公開quizや未実装EnglishPractice/XP/Writingを公開済み・修正済みと数えない。

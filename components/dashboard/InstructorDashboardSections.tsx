@@ -27,7 +27,6 @@ import {
 import type { useInstructorDashboardController } from '../../hooks/useInstructorDashboardController';
 import { getInstructorQueueSegment } from '../../shared/retention';
 import { getBusinessAdminWritingCounts } from '../../utils/businessAdminDashboard';
-import WorkspaceMetricCard from '../workspace/WorkspaceMetricCard';
 
 const OfficialCatalogAccessPanel = lazy(() => import('../OfficialCatalogAccessPanel'));
 const WorksheetPrintLauncher = lazy(() => import('../WorksheetPrintLauncher'));
@@ -135,7 +134,6 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
     (student) => getInstructorQueueSegment(student) === 'REACTIVATED',
   ).length;
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
-  const priorityStudent = immediateStudents[0];
   const focusedStudent = controller.focusedStudent;
   const unknownValue = loading ? '読込中' : '未取得';
   const scopeSwitch = (
@@ -171,215 +169,92 @@ const InstructorDashboardSections: React.FC<InstructorDashboardSectionsProps> = 
   return (
     <>
       {activeView === InstructorWorkspaceView.OVERVIEW && (
-        <div className="space-y-6">
-          <section className={`${PANEL} bg-medace-50/50`}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold text-medace-800">担当生徒から始める</p>
-                <h3 className="mt-2 text-xl font-black text-medace-900">今日のフォロー</h3>
-              </div>
-              {scopeSwitch}
+        <div data-testid="instructor-action-overview" className="grid gap-5 xl:grid-cols-2">
+          <section className={PANEL}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-black text-slate-900">対応が必要な生徒</h3>
+              <span className="text-sm font-bold text-slate-600">{hasStudentsData ? `${immediateStudents.length}名` : unknownValue}</span>
             </div>
+            <div className="mt-3">{scopeSwitch}</div>
+            <p className="mt-2 text-xs text-slate-500">
+              自分の担当 {hasStudentsData ? `${controller.assignedStudents.length}名` : unknownValue} · {controller.studentScope === 'ASSIGNED' ? '自分の担当を表示' : '閲覧できる生徒を表示'}
+            </p>
             {!hasStudentsData ? (
               <p className="mt-5 text-sm text-slate-600">
-                {loading
-                  ? '担当生徒の状況を確認しています。'
-                  : '担当生徒の状況はまだ読み込めていません。画面上部からもう一度読み込めます。'}
+                {loading ? '担当生徒の状況を確認しています。' : '担当生徒の状況はまだ読み込めていません。画面上部からもう一度読み込めます。'}
               </p>
-            ) : priorityStudent ? (
-              <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-lg font-bold text-medace-900">
-                    {priorityStudent.name}さんが次にすることを確認
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">
-                    {getNextActionText(priorityStudent)}
-                  </p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    最終学習 {formatDaysSinceActive(priorityStudent.lastActive)} ·{' '}
-                    {priorityStudent.cohortName || 'クラス未設定'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  data-testid={`send-notification-${priorityStudent.uid}`}
-                  className={`${PRIMARY_BUTTON} flex-shrink-0`}
-                  onClick={() => controller.openComposer(priorityStudent)}
-                >
-                  <Bell aria-hidden="true" className="h-4 w-4" />
-                  声かけの通知文を作る
-                </button>
-              </div>
+            ) : immediateStudents.length === 0 ? (
+              <p className="mt-5 text-sm leading-6 text-slate-600">
+                {controller.sortedStudents.length === 0
+                  ? 'この表示範囲に生徒はいません。担当設定または閲覧範囲を確認してください。'
+                  : '今日フォローが必要な生徒はいません。経過や再開の確認は生徒一覧で行えます。'}
+              </p>
             ) : (
-              <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-bold text-slate-900">
-                    {controller.sortedStudents.length === 0
-                      ? '担当・表示範囲を確認しましょう'
-                      : '今日フォローが必要な生徒はいません'}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {controller.sortedStudents.length === 0
-                      ? '生徒が表示されない場合は閲覧範囲を切り替え、担当設定を管理者に確認してください。'
-                      : '生徒一覧から、学習ペースや今週の課題の様子を確かめられます。'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={`${PRIMARY_BUTTON} flex-shrink-0`}
-                  onClick={() => onChangeView(InstructorWorkspaceView.STUDENTS)}
-                >
-                  <Users aria-hidden="true" className="h-4 w-4" />
-                  生徒を確認する
-                </button>
-              </div>
-            )}
-          </section>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <WorkspaceMetricCard
-              label="自分の担当"
-              value={hasStudentsData ? `${controller.assignedStudents.length}名` : unknownValue}
-              detail="担当設定に基づく人数"
-            />
-            <WorkspaceMetricCard
-              label="今日フォロー"
-              value={hasStudentsData ? `${immediateStudents.length}名` : unknownValue}
-              detail="選択中の表示範囲"
-              tone={hasStudentsData && immediateStudents.length > 0 ? 'warning' : 'default'}
-            />
-            <WorkspaceMetricCard
-              label="添削待ち"
-              value={hasQueueData ? `${writingCounts.reviewReadyCount}件` : unknownValue}
-              detail="閲覧できる提出"
-              tone={hasQueueData && writingCounts.reviewReadyCount > 0 ? 'warning' : 'default'}
-            />
-            <WorkspaceMetricCard
-              label="再提出待ち"
-              value={
-                hasAssignmentsData ? `${writingCounts.revisionRequestedCount}件` : unknownValue
-              }
-              detail="返却後の課題"
-            />
-          </div>
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <section className={PANEL}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-lg font-black text-slate-900">担当生徒の様子</h3>
-                <button
-                  type="button"
-                  onClick={() => onChangeView(InstructorWorkspaceView.STUDENTS)}
-                  className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-medace-800"
-                >
-                  生徒一覧へ
-                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="mt-4 divide-y divide-slate-100">
-                {!hasStudentsData ? (
-                  <p className="py-5 text-sm text-slate-500">
-                    {unknownValue}：生徒一覧は読み込み後に表示します。
-                  </p>
-                ) : controller.sortedStudents.length === 0 ? (
-                  <p className="py-5 text-sm leading-6 text-slate-500">
-                    この表示範囲に生徒はいません。担当設定または閲覧範囲を確認してください。
-                  </p>
-                ) : (
-                  controller.sortedStudents.slice(0, 4).map((student) => (
-                    <button
-                      key={student.uid}
-                      type="button"
-                      className="flex min-h-20 w-full items-center justify-between gap-3 py-4 text-left"
-                      onClick={() => {
-                        controller.setFilter('ALL');
-                        controller.setQuery('');
-                        controller.setFocusedStudentUid(student.uid);
-                        onChangeView(InstructorWorkspaceView.STUDENTS);
-                      }}
-                    >
-                      <div className="min-w-0">
-                        <p className="content-safe font-bold text-slate-900">{student.name}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {student.cohortName || 'クラス未設定'} · 最終学習{' '}
-                          {formatDaysSinceActive(student.lastActive)}
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-600">
-                          {getNextActionText(student)}
-                        </p>
-                      </div>
-                      <span
-                        className={`flex-shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${getRiskStyle(student.riskLevel)}`}
-                      >
-                        {getRiskLabel(student.riskLevel)}
+              <ul className="mt-3 divide-y divide-slate-100">
+                {immediateStudents.slice(0, 4).map((student) => (
+                  <li key={student.uid} data-testid={`instructor-action-student-${student.uid}`} className="py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="content-safe font-bold text-slate-900">{student.name}</p>
+                      <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${student.missionOverdue || student.primaryMissionStatus === 'OVERDUE' ? 'border-red-200 bg-red-50 text-red-800' : getRiskStyle(student.riskLevel)}`}>
+                        {student.missionOverdue || student.primaryMissionStatus === 'OVERDUE' ? '課題期限超過' : getRiskLabel(student.riskLevel)}
                       </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
-            <div className="space-y-4">
-              <section className={PANEL}>
-                <h3 className="text-lg font-black text-slate-900">小テスト・課題を準備</h3>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  授業の単語確認にはプリントを。英作文の課題は配布から返却まで確認できます。
-                </p>
-                <div className="mt-4 grid gap-3">
-                  <button
-                    type="button"
-                    onClick={() => onChangeView(InstructorWorkspaceView.WORKSHEETS)}
-                    className={SECONDARY_BUTTON}
-                  >
-                    <FileStack aria-hidden="true" className="h-4 w-4" />
-                    単語の小テストを作る
-                    <ArrowRight aria-hidden="true" className="ml-auto h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onChangeView(InstructorWorkspaceView.WRITING)}
-                    className={SECONDARY_BUTTON}
-                  >
-                    <ScanText aria-hidden="true" className="h-4 w-4" />
-                    英作文の課題・提出を開く
-                    <ArrowRight aria-hidden="true" className="ml-auto h-4 w-4" />
-                  </button>
-                </div>
-              </section>
-              <section className={PANEL}>
-                <h3 className="text-lg font-black text-slate-900">提出への返却</h3>
-                {!hasQueueData ? (
-                  <p className="mt-3 text-sm text-slate-500">
-                    {unknownValue}：添削待ちの有無をまだ確認できません。
-                  </p>
-                ) : writingQueue.length === 0 ? (
-                  <p className="mt-3 flex items-center gap-2 text-sm text-slate-600">
-                    <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-700" />
-                    現在、添削待ちの提出はありません。
-                  </p>
-                ) : (
-                  <div className="mt-3 divide-y divide-slate-100">
-                    {writingQueue.slice(0, 3).map((item) => (
-                      <div key={item.submissionId} className="py-3">
-                        <p className="text-sm font-bold text-slate-900">
-                          {item.studentName}
-                          <span className="ml-2 text-xs font-normal text-slate-500">
-                            {item.attemptNo}回目の提出
-                          </span>
-                        </p>
-                        <p className="mt-1 text-sm text-slate-600">{item.promptTitle}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onChangeView(InstructorWorkspaceView.WRITING)}
-                  className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-medace-800"
-                >
-                  添削・返却を開く
-                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
-                </button>
-              </section>
-            </div>
-          </div>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">{student.cohortName || 'クラス未設定'} · 最終学習 {formatDaysSinceActive(student.lastActive)}</p>
+                    {student.missionDueAt != null && Number.isFinite(student.missionDueAt) && student.missionDueAt > 0 && (
+                      <p className="mt-1 text-xs font-bold text-slate-700">課題期限 {formatDateTime(student.missionDueAt)}</p>
+                    )}
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{getNextActionText(student)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" data-testid={`instructor-action-details-${student.uid}`} className={SECONDARY_BUTTON}
+                        onClick={() => {
+                          controller.setFilter('ALL');
+                          controller.setQuery('');
+                          controller.setFocusedStudentUid(student.uid);
+                          onChangeView(InstructorWorkspaceView.STUDENTS);
+                        }}>状況を確認</button>
+                      <button type="button" data-testid={`send-notification-${student.uid}`} className={SECONDARY_BUTTON}
+                        onClick={() => controller.openComposer(student)}>
+                        <Bell aria-hidden="true" className="h-4 w-4" /> 通知文を作る
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" onClick={() => onChangeView(InstructorWorkspaceView.STUDENTS)}
+              className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-medace-800">
+              {hasStudentsData && immediateStudents.length > 4 ? `対応が必要な${immediateStudents.length}名と全生徒を見る` : '生徒一覧へ'}
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </section>
+          <section className={PANEL}>
+            <h3 className="text-lg font-black text-slate-900">提出・返却</h3>
+            <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <div className="flex items-center gap-2"><dt className="text-slate-500">添削待ち</dt><dd className="font-bold text-slate-900">{hasQueueData ? `${writingCounts.reviewReadyCount}件` : unknownValue}</dd></div>
+              <div className="flex items-center gap-2"><dt className="text-slate-500">再提出待ち</dt><dd className="font-bold text-slate-900">{hasAssignmentsData ? `${writingCounts.revisionRequestedCount}件` : unknownValue}</dd></div>
+            </dl>
+            {!hasQueueData ? (
+              <p className="mt-5 text-sm text-slate-500">{unknownValue}：添削待ちの有無をまだ確認できません。</p>
+            ) : writingQueue.length === 0 ? (
+              <p className="mt-5 flex items-center gap-2 text-sm text-slate-600">
+                <CheckCircle2 aria-hidden="true" className="h-4 w-4 text-emerald-700" /> 現在、添削待ちの提出はありません。
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-slate-100">
+                {writingQueue.slice(0, 3).map((item) => (
+                  <li key={item.submissionId} className="py-4">
+                    <p className="content-safe text-sm font-bold text-slate-900">{item.studentName}<span className="ml-2 text-xs font-normal text-slate-500">{item.attemptNo}回目の提出</span></p>
+                    <p className="mt-1 break-words text-sm text-slate-600">{item.promptTitle}</p>
+                    <p className="mt-1 text-xs text-slate-500">{Number.isFinite(item.submittedAt) && item.submittedAt > 0 ? `提出 ${formatDateTime(item.submittedAt)}` : '提出日時未取得'}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" onClick={() => onChangeView(InstructorWorkspaceView.WRITING)}
+              className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-medace-800">
+              添削・返却を開く <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </section>
         </div>
       )}
 

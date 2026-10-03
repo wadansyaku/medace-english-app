@@ -27,6 +27,15 @@ import {
 } from '../../types';
 import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import { HttpError } from './http';
+import { buildRowSnapshotCondition, type SqlSnapshotCondition } from './learning-history-state';
+import type { D1PreparedStatement } from './types';
+
+interface PreparedCbtMutation<T> {
+  result: T;
+  statements: D1PreparedStatement[];
+  snapshots: SqlSnapshotCondition[];
+}
+
 import { requireActiveOrganizationContext } from './organization-memberships';
 import { assertBookReadAccess, buildInClause, readVisibleBookRows } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
@@ -920,7 +929,7 @@ export const readCbtLearnerScopeSnapshot = async (
   };
 };
 
-export const recordCbtScopeAttempt = async (
+export const prepareCbtScopeAttempt = async (
   env: AppEnv,
   input: {
     userId: string;
@@ -931,7 +940,8 @@ export const recordCbtScopeAttempt = async (
     responseTimeMs?: number;
     now?: number;
   },
-): Promise<CbtState> => {
+  guard: SqlSnapshotCondition = { sql: '1', bindings: [] },
+): Promise<PreparedCbtMutation<CbtState>> => {
   const now = input.now ?? Date.now();
   const row = await env.DB.prepare(`
     SELECT * FROM cbt_learner_scope_states
@@ -941,11 +951,11 @@ export const recordCbtScopeAttempt = async (
     correct: input.correct,
     difficultyLevel: input.difficultyLevel ?? 0.5,
   });
-  await env.DB.prepare(`
+  const statement = env.DB.prepare(`
     INSERT INTO cbt_learner_scope_states (
       user_id, grammar_scope_id, question_mode, mastery_level, confidence,
       attempt_count, correct_count, last_attempt_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
     ON CONFLICT(user_id, grammar_scope_id, question_mode) DO UPDATE SET
       mastery_level = excluded.mastery_level,
       confidence = excluded.confidence,
@@ -963,11 +973,21 @@ export const recordCbtScopeAttempt = async (
     state.correctCount,
     now,
     now,
-  ).run();
-  return state;
+    ...guard.bindings,
+  );
+  return { result: state, statements: [statement], snapshots: [buildRowSnapshotCondition(
+    'cbt_learner_scope_states', { user_id: input.userId, grammar_scope_id: input.grammarScopeId, question_mode: input.questionMode },
+    ['mastery_level', 'confidence', 'attempt_count', 'correct_count'], row as unknown as Record<string, unknown> | null,
+  )] };
 };
 
-export const recordJapaneseTranslationFeedbackEvent = async (
+export const recordCbtScopeAttempt = async (env: AppEnv, input: Parameters<typeof prepareCbtScopeAttempt>[1]): Promise<CbtState> => {
+  const prepared = await prepareCbtScopeAttempt(env, input);
+  await prepared.statements[0].run();
+  return prepared.result;
+};
+
+export const prepareJapaneseTranslationFeedbackEvent = (
   env: AppEnv,
   input: {
     userId: string;
@@ -984,10 +1004,12 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     model?: string | null;
     promptVersion?: string | null;
     now?: number;
+    eventId?: string;
   },
-): Promise<void> => {
+  guard: SqlSnapshotCondition = { sql: '1', bindings: [] },
+): D1PreparedStatement => {
   const now = input.now ?? Date.now();
-  const id = `translation-feedback-${createAiCacheKey({
+  const id = input.eventId || `translation-feedback-${createAiCacheKey({
     contentKind: 'GRAMMAR_PROBLEM',
     model: 'feedback',
     promptVersion: 'v1',
@@ -996,13 +1018,13 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     grammarScopeId: input.grammarScopeId,
     sourceText: `${input.userId}:${input.sourceSentence}:${input.userTranslation}:${now}`,
   }).sourceHash}-${now}`;
-  await env.DB.prepare(`
+  return env.DB.prepare(`
     INSERT INTO japanese_translation_feedback_events (
       id, user_id, word_id, book_id, question_mode, grammar_scope_id,
       source_sentence, expected_translation, user_translation, score, max_score,
       is_correct, verdict_label, feedback_json, created_at,
       exam_target, organization_id, model, prompt_version
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
   `).bind(
     id,
     input.userId,
@@ -1023,7 +1045,12 @@ export const recordJapaneseTranslationFeedbackEvent = async (
     input.organizationId || null,
     input.model || null,
     input.promptVersion || null,
-  ).run();
+    ...guard.bindings,
+  );
+};
+
+export const recordJapaneseTranslationFeedbackEvent = async (env: AppEnv, input: Parameters<typeof prepareJapaneseTranslationFeedbackEvent>[1]): Promise<void> => {
+  await prepareJapaneseTranslationFeedbackEvent(env, input).run();
 };
 
 interface CbtRow {
@@ -1045,7 +1072,7 @@ const toCbtState = (row: CbtRow | null, levelColumn: 'ability_level' | 'mastery_
     : getInitialCbtState()
 );
 
-export const recordCbtProblemAttempt = async (
+export const prepareCbtProblemAttempt = async (
   env: AppEnv,
   input: {
     userId: string;
@@ -1055,7 +1082,8 @@ export const recordCbtProblemAttempt = async (
     responseTimeMs?: number;
     now?: number;
   },
-): Promise<{ learner: CbtState; word: CbtState; problemDifficultyLevel: number }> => {
+  guard: SqlSnapshotCondition = { sql: '1', bindings: [] },
+): Promise<PreparedCbtMutation<{ learner: CbtState; word: CbtState; problemDifficultyLevel: number }>> => {
   const now = input.now ?? Date.now();
   const responseTimeMs = Math.max(0, Math.round(input.responseTimeMs || 0));
   const problem = await env.DB.prepare('SELECT * FROM cbt_problem_stats WHERE problem_id = ?')
@@ -1083,11 +1111,11 @@ export const recordCbtProblemAttempt = async (
   );
   const nextDifficulty = inferProblemDifficultyFromStats(exposureCount, correctCount);
 
-  await env.DB.batch([
+  const statements = [
     env.DB.prepare(`
       INSERT INTO cbt_learner_profiles (
         user_id, ability_level, confidence, attempt_count, correct_count, last_attempt_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
       ON CONFLICT(user_id) DO UPDATE SET
         ability_level = excluded.ability_level,
         confidence = excluded.confidence,
@@ -1095,12 +1123,12 @@ export const recordCbtProblemAttempt = async (
         correct_count = excluded.correct_count,
         last_attempt_at = excluded.last_attempt_at,
         updated_at = excluded.updated_at
-    `).bind(input.userId, learner.level, learner.confidence, learner.attemptCount, learner.correctCount, now, now),
+    `).bind(input.userId, learner.level, learner.confidence, learner.attemptCount, learner.correctCount, now, now, ...guard.bindings),
     env.DB.prepare(`
       INSERT INTO cbt_learner_word_states (
         user_id, word_id, mastery_level, confidence, attempt_count, correct_count,
         last_problem_id, last_attempt_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${guard.sql}
       ON CONFLICT(user_id, word_id) DO UPDATE SET
         mastery_level = excluded.mastery_level,
         confidence = excluded.confidence,
@@ -1109,24 +1137,34 @@ export const recordCbtProblemAttempt = async (
         last_problem_id = excluded.last_problem_id,
         last_attempt_at = excluded.last_attempt_at,
         updated_at = excluded.updated_at
-    `).bind(input.userId, input.wordId, word.level, word.confidence, word.attemptCount, word.correctCount, input.problemId, now, now),
+    `).bind(input.userId, input.wordId, word.level, word.confidence, word.attemptCount, word.correctCount, input.problemId, now, now, ...guard.bindings),
     env.DB.prepare(`
       INSERT INTO cbt_problem_stats (
         problem_id, difficulty_level, discrimination, exposure_count, correct_count, avg_response_time_ms, updated_at
-      ) VALUES (?, ?, 1, ?, ?, ?, ?)
+      ) SELECT ?, ?, 1, ?, ?, ?, ? WHERE ${guard.sql}
       ON CONFLICT(problem_id) DO UPDATE SET
         difficulty_level = excluded.difficulty_level,
         exposure_count = excluded.exposure_count,
         correct_count = excluded.correct_count,
         avg_response_time_ms = excluded.avg_response_time_ms,
         updated_at = excluded.updated_at
-    `).bind(input.problemId, nextDifficulty, exposureCount, correctCount, avgResponseTimeMs, now),
+    `).bind(input.problemId, nextDifficulty, exposureCount, correctCount, avgResponseTimeMs, now, ...guard.bindings),
     env.DB.prepare(`
       UPDATE ai_generated_problems
       SET difficulty_level = ?, updated_at = ?
-      WHERE id = ?
-    `).bind(nextDifficulty, now, input.problemId),
-  ]);
+      WHERE id = ? AND ${guard.sql}
+    `).bind(nextDifficulty, now, input.problemId, ...guard.bindings),
+  ];
 
-  return { learner, word, problemDifficultyLevel: nextDifficulty };
+  return { result: { learner, word, problemDifficultyLevel: nextDifficulty }, statements, snapshots: [
+    buildRowSnapshotCondition('cbt_learner_profiles', { user_id: input.userId }, ['ability_level', 'confidence', 'attempt_count', 'correct_count'], learnerRow as unknown as Record<string, unknown> | null),
+    buildRowSnapshotCondition('cbt_learner_word_states', { user_id: input.userId, word_id: input.wordId }, ['mastery_level', 'confidence', 'attempt_count', 'correct_count'], wordRow as unknown as Record<string, unknown> | null),
+    buildRowSnapshotCondition('cbt_problem_stats', { problem_id: input.problemId }, ['difficulty_level', 'exposure_count', 'correct_count', 'avg_response_time_ms'], problem as unknown as Record<string, unknown> | null),
+  ] };
+};
+
+export const recordCbtProblemAttempt = async (env: AppEnv, input: Parameters<typeof prepareCbtProblemAttempt>[1]): Promise<{ learner: CbtState; word: CbtState; problemDifficultyLevel: number }> => {
+  const prepared = await prepareCbtProblemAttempt(env, input);
+  await env.DB.batch(prepared.statements);
+  return prepared.result;
 };

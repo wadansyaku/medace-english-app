@@ -2,6 +2,7 @@ import { learningClient, catalogClient, dashboardClient, sessionClient, type Lea
 
 type LearningSurface = Pick<LearningClient,
   | 'getBookSession'
+  | 'getBookStudyOverview'
   | 'getDailySessionWords'
   | 'getStudiedWordIdsByBook'
   | 'listAiGeneratedProblemReviewQueue'
@@ -31,6 +32,7 @@ export type LearningService =
 export const learningService: LearningService = {
   addXP: (user, amount) => sessionClient.addXP(user, amount),
   getBookSession: (uid, bookId, limit, taskIntent) => learningClient.getBookSession(uid, bookId, limit, taskIntent),
+  getBookStudyOverview: (uid, bookId, wordRange) => learningClient.getBookStudyOverview(uid, bookId, wordRange),
   getBooks: () => catalogClient.getBooks(),
   getDailySessionWords: (uid, limit, taskIntent) => learningClient.getDailySessionWords(uid, limit, taskIntent),
   getDashboardSnapshot: (uid) => dashboardClient.getDashboardSnapshot(uid),
@@ -49,6 +51,7 @@ export const learningService: LearningService = {
     generatedProblemId,
     grammarScopeId,
     translationFeedback,
+    clientAttemptId,
   ) => learningClient.recordQuizAttempt(
     uid,
     wordId,
@@ -61,6 +64,7 @@ export const learningService: LearningService = {
     generatedProblemId,
     grammarScopeId,
     translationFeedback,
+    clientAttemptId,
   ),
   recordEnglishPracticeAttempt: (uid, payload) => learningClient.recordEnglishPracticeAttempt(uid, payload),
   reviewAiGeneratedProblem: (payload) => learningClient.reviewAiGeneratedProblem(payload),

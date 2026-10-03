@@ -1,10 +1,13 @@
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectEmptyPayload, expectEnum, expectNumber, expectObject, expectString, expectTrimmedString } from '../request-validation';
+import { expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalObject, expectString, expectTrimmedString } from '../request-validation';
+import { normalizeStudyWordRange } from '../../../shared/studyScope';
+import { HttpError } from '../http';
 import {
   handleBatchImportWords,
   handleDeleteBook,
   handleGetBookSession,
+  handleGetBookStudyOverview,
   handleGetBooks,
   handleGetDailySessionWords,
   handleGetWordsByBook,
@@ -90,9 +93,10 @@ export const catalogStorageActionDefinitions = {
   getDailySessionWords: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
+      if (record.wordRange !== undefined) throw new HttpError(400, 'デイリー学習には単語範囲を指定できません。');
       return {
         limit: expectNumber(record, 'limit'),
-        taskIntent: typeof record.taskIntent === 'object' ? record.taskIntent as never : undefined,
+        taskIntent: expectOptionalObject(record.taskIntent, 'taskIntent') as never,
       };
     },
     execute: ({ env, user }, payload) => handleGetDailySessionWords(env, user, payload.limit, payload.taskIntent),
@@ -100,13 +104,24 @@ export const catalogStorageActionDefinitions = {
   getBookSession: defineStorageAction({
     parse: (payload) => {
       const record = expectObject(payload);
+      if (record.wordRange !== undefined) throw new HttpError(400, '学習範囲はtaskIntentに指定してください。');
       return {
         bookId: expectString(record, 'bookId'),
         limit: expectNumber(record, 'limit'),
-        taskIntent: typeof record.taskIntent === 'object' ? record.taskIntent as never : undefined,
+        taskIntent: expectOptionalObject(record.taskIntent, 'taskIntent') as never,
       };
     },
     execute: ({ env, user }, payload) => handleGetBookSession(env, user, payload.bookId, payload.limit, payload.taskIntent),
+  }),
+  getBookStudyOverview: defineStorageAction({
+    parse: (payload) => {
+      const record = expectObject(payload);
+      let wordRange;
+      try { wordRange = normalizeStudyWordRange(record.wordRange); }
+      catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '単語範囲が不正です。'); }
+      return { bookId: expectString(record, 'bookId'), wordRange };
+    },
+    execute: ({ env, user }, payload) => handleGetBookStudyOverview(env, user, payload.bookId, payload.wordRange),
   }),
 } satisfies Pick<
   StorageActionDefinitionMap,
@@ -120,4 +135,5 @@ export const catalogStorageActionDefinitions = {
   | 'prepareBookExamples'
   | 'getDailySessionWords'
   | 'getBookSession'
+  | 'getBookStudyOverview'
 >;

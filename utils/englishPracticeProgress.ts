@@ -38,6 +38,8 @@ export interface EnglishPracticeAttemptInput {
   translationFeedback?: JapaneseTranslationFeedback;
   clientAttemptId?: string;
   syncStatus?: EnglishPracticeAttemptSyncStatus;
+  // Retained on this device only; the current remote attempt contract stores scope/level.
+  curatedQuestionId?: string;
 }
 
 export interface EnglishPracticeAttemptRecord extends EnglishPracticeAttemptInput {

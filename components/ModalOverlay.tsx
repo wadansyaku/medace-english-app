@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 const openPanels: HTMLDivElement[] = [];
@@ -41,7 +41,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     returnFocusSelectorRef.current = returnFocusSelector;
   }, [onClose, returnFocusSelector]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
@@ -62,16 +62,15 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     openPanels.push(panel);
     const isTopPanel = () => openPanels[openPanels.length - 1] === panel;
 
-    const frame = window.requestAnimationFrame(() => {
-      if (!isTopPanel()) return;
-      const initialFocusTarget = initialFocusSelector
+    // Focus before the first paint. A delayed frame can move focus back to
+    // the first field after someone has already started the next one.
+    const initialFocusTarget = initialFocusSelector
         ? panel?.querySelector<HTMLElement>(initialFocusSelector)
         : null;
-      const fallbackFocusTarget = panel?.querySelector<HTMLElement>(
+    const fallbackFocusTarget = panel?.querySelector<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
-      (initialFocusTarget || fallbackFocusTarget || panel)?.focus();
-    });
+    (initialFocusTarget || fallbackFocusTarget || panel)?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isTopPanel()) return;
@@ -123,7 +122,6 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.cancelAnimationFrame(frame);
       window.removeEventListener('keydown', handleKeyDown);
       const wasTopPanel = isTopPanel();
       const panelIndex = openPanels.indexOf(panel);

@@ -4,6 +4,7 @@ import {
   storageAction,
   loginAdminDemo,
   maybeCompleteOnboarding,
+  openDashboardReference,
 } from './smoke-support';
 
 test('student plan panel hides intake forms while admin can approve an intake record and publish an announcement', async ({ browser }) => {
@@ -19,11 +20,12 @@ test('student plan panel hides intake forms while admin can approve an intake re
   const announcementBody = '受付キューの運用とお知らせ表示を更新しました。';
 
   await studentPage.goto('/');
+  await studentPage.getByText('生徒画面の期間限定デモを見る', { exact: true }).click();
   await studentPage.getByTestId('demo-login-student').click();
   await maybeCompleteOnboarding(studentPage);
   await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
 
-  await studentPage.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+  await openDashboardReference(studentPage, 'account');
   await expect(studentPage.getByTestId('commercial-upgrade-panel')).toBeVisible();
   await expect(studentPage.locator('[data-testid="commercial-request-form"]')).toHaveCount(0);
   await storageAction(studentPage, 'submitCommercialRequest', {
@@ -39,7 +41,7 @@ test('student plan panel hides intake forms while admin can approve an intake re
     source: 'SMOKE_BACKEND_INTAKE',
   });
   await studentPage.reload();
-  await studentPage.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+  await openDashboardReference(studentPage, 'account');
   await expect(studentPage.getByTestId('commercial-request-status-list')).toBeVisible();
   await expect(studentPage.getByTestId('commercial-request-status-list')).toContainText('受付済み');
 
@@ -70,6 +72,7 @@ test('student plan panel hides intake forms while admin can approve an intake re
   await expect(studentPage.getByTestId('announcement-modal')).toContainText(announcementTitle);
   await studentPage.getByRole('button', { name: '閉じる' }).click();
   await expect(studentPage.getByTestId('announcement-modal')).toHaveCount(0);
+  await openDashboardReference(studentPage, 'announcements');
   await expect(studentPage.getByTestId('dashboard-announcement-section')).toContainText(announcementTitle);
 
   await storageAction(adminPage, 'upsertProductAnnouncement', {
@@ -84,7 +87,7 @@ test('student plan panel hides intake forms while admin can approve an intake re
 
   await studentPage.reload();
   await expect(studentPage.getByTestId('announcement-modal')).toHaveCount(0);
-  await studentPage.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+  await openDashboardReference(studentPage, 'account');
   await expect(studentPage.getByTestId('commercial-request-status-list')).toContainText('承認済み');
 
   await adminContext.close();
