@@ -1,6 +1,7 @@
 import React from 'react';
 import type { UserProfile } from '../types';
 import { useOnboardingController } from '../hooks/useOnboardingController';
+import OnboardingChoiceStep from './onboarding/OnboardingChoiceStep';
 import OnboardingProfileStep from './onboarding/OnboardingProfileStep';
 import OnboardingResultStep from './onboarding/OnboardingResultStep';
 import OnboardingTestStep from './onboarding/OnboardingTestStep';
@@ -20,7 +21,17 @@ const Onboarding: React.FC<OnboardingProps> = ({
   historySummary,
   onCancel,
 }) => {
-  const controller = useOnboardingController({ user, onComplete });
+  const controller = useOnboardingController({ user, onComplete, isRetake });
+  const handleCancel = () => {
+    if (controller.isSavePending()) return;
+    if (isRetake) onCancel?.();
+    else controller.handleReturnToChoice();
+  };
+  const cancel = isRetake && !onCancel ? undefined : handleCancel;
+
+  if (controller.step === 'CHOICE') {
+    return <OnboardingChoiceStep isSaving={controller.isSaving} saveError={controller.saveError} onStartLearning={controller.deferDiagnostic} onChooseDiagnostic={controller.handleChooseDiagnostic} />;
+  }
 
   if (controller.step === 'PROFILE') {
     return (
@@ -29,7 +40,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
         selfAssessment={controller.selfAssessment}
         isRetake={isRetake}
         historySummary={historySummary}
-        onCancel={onCancel}
+        onCancel={cancel}
         onSelectGrade={controller.setSelectedGrade}
         onSelectSelfAssessment={controller.setSelfAssessment}
         onStart={controller.handleStart}
@@ -46,7 +57,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
         saveError={controller.saveError}
         isRetake={isRetake}
         historySummary={historySummary}
-        onCancel={onCancel ? () => { if (!controller.isSavePending()) onCancel(); } : undefined}
+        onCancel={cancel}
         onSave={controller.saveResult}
       />
     );
@@ -61,7 +72,7 @@ const Onboarding: React.FC<OnboardingProps> = ({
       progressPercent={controller.progressPercent}
       currentAnswer={controller.currentAnswer}
       isRetake={isRetake}
-      onCancel={onCancel}
+      onCancel={cancel}
       onSelectAnswer={controller.handleSelectAnswer}
       onBack={controller.handleBack}
       onNext={controller.handleNext}

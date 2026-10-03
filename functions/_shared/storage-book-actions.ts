@@ -7,6 +7,8 @@ import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditSt
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
+import type { BookStudyOverview, StudyWordRange } from '../../types';
+import { assertNoDailyStudyWordRange, getBookTaskWordRange, normalizeStudyWordRange } from '../../shared/studyScope';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
 import { inspectCatalogImportContent } from '../../shared/catalogImport';
@@ -29,6 +31,7 @@ import {
   buildInClause,
   createBookId,
   getMasterySourceSql,
+  getMasteryProgressSql,
   readAll,
   readFirst,
   readVisibleBookRows,
@@ -36,6 +39,11 @@ import {
   toWordData,
   type DbWordRow,
 } from './storage-support';
+
+const validateStudyScope = <T>(validate: () => T): T => {
+  try { return validate(); }
+  catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '単語範囲が不正です。'); }
+};
 
 const resolvePreferredDailyBookIds = async (
   env: AppEnv,
@@ -620,6 +628,7 @@ export const handleGetDailySessionWords = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
+  validateStudyScope(() => assertNoDailyStudyWordRange(taskIntent));
   const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
@@ -749,9 +758,15 @@ export const handleGetBookSession = async (
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
 ): Promise<WordData[]> => {
+  const range = validateStudyScope(() => getBookTaskWordRange(taskIntent, bookId));
+  const rangeSql = range ? 'AND w.word_number BETWEEN ? AND ?' : '';
+  const rangeParams = range ? [range.start, range.end] : [];
+  const now = Date.now();
   const limit = normalizeStudySessionLimit(limitInput);
   await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
+  const historyCondition = range !== undefined || selectionPolicy === 'BOOK_DUE_ONLY'
+    ? getMasteryProgressSql('h') : getMasterySourceSql('h');
 
   if (selectionPolicy === 'BOOK_NEW_ONLY') {
     const newRows = await readAll<DbWordRow>(
@@ -761,13 +776,15 @@ export const handleGetBookSession = async (
        WHERE w.book_id = ?
          AND NOT EXISTS (
            SELECT 1 FROM learning_histories h
-           WHERE h.user_id = ? AND h.word_id = w.id
-             AND ${getMasterySourceSql('h')}
+           WHERE h.user_id = ? AND h.word_id = w.id AND h.book_id = w.book_id
+             AND ${historyCondition}
          )
+         ${rangeSql}
        ORDER BY w.word_number ASC
        LIMIT ?`,
       bookId,
       user.id,
+      ...rangeParams,
       limit,
     );
     return newRows.map(toWordData);
@@ -777,31 +794,36 @@ export const handleGetBookSession = async (
     env,
     `SELECT w.*
      FROM learning_histories h
-     JOIN words w ON w.id = h.word_id
+     JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
      WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date <= ?
-       AND ${getMasterySourceSql('h')}
+       AND ${historyCondition}
+       ${rangeSql}
      ORDER BY h.next_review_date ASC
      LIMIT ?`,
     user.id,
     bookId,
-    Date.now(),
+    now,
+    ...rangeParams,
     limit,
   );
 
   const result = [...dueRows];
+  if (selectionPolicy === 'BOOK_DUE_ONLY') return result.map(toWordData);
   if (selectionPolicy === 'BOOK_REVIEW_ONLY' && result.length < limit) {
     const aheadRows = await readAll<DbWordRow>(
       env,
       `SELECT w.*
        FROM learning_histories h
-       JOIN words w ON w.id = h.word_id
+       JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
        WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date > ?
-         AND ${getMasterySourceSql('h')}
+         AND ${historyCondition}
+         ${rangeSql}
        ORDER BY h.next_review_date ASC
        LIMIT ?`,
       user.id,
       bookId,
-      Date.now(),
+      now,
+      ...rangeParams,
       limit - result.length,
     );
     result.push(...aheadRows);
@@ -816,13 +838,15 @@ export const handleGetBookSession = async (
        WHERE w.book_id = ?
          AND NOT EXISTS (
            SELECT 1 FROM learning_histories h
-           WHERE h.user_id = ? AND h.word_id = w.id
-             AND ${getMasterySourceSql('h')}
+           WHERE h.user_id = ? AND h.word_id = w.id AND h.book_id = w.book_id
+             AND ${historyCondition}
          )
+         ${rangeSql}
        ORDER BY w.word_number ASC
        LIMIT ?`,
       bookId,
       user.id,
+      ...rangeParams,
       limit - result.length,
     );
     result.push(...newRows);
@@ -833,18 +857,43 @@ export const handleGetBookSession = async (
       env,
       `SELECT w.*
        FROM learning_histories h
-       JOIN words w ON w.id = h.word_id
+       JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
        WHERE h.user_id = ? AND h.book_id = ? AND h.status != 'graduated' AND h.next_review_date > ?
-         AND ${getMasterySourceSql('h')}
+         AND ${historyCondition}
+         ${rangeSql}
        ORDER BY h.next_review_date ASC
        LIMIT ?`,
       user.id,
       bookId,
-      Date.now(),
+      now,
+      ...rangeParams,
       limit - result.length,
     );
     result.push(...aheadRows);
   }
 
   return result.map(toWordData);
+};
+
+export const handleGetBookStudyOverview = async (
+  env: AppEnv,
+  user: DbUserRow,
+  bookId: string,
+  wordRange?: StudyWordRange,
+): Promise<BookStudyOverview> => {
+  const range = validateStudyScope(() => normalizeStudyWordRange(wordRange));
+  await assertBookLearningAccess(env, user, bookId);
+  const row = await readFirst<{ total_count: number; studied_count: number; due_count: number }>(env,
+    `SELECT COUNT(*) AS total_count,
+       COALESCE(SUM(CASE WHEN h.word_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS studied_count,
+       COALESCE(SUM(CASE WHEN h.word_id IS NOT NULL AND h.status != 'graduated' AND h.next_review_date <= ? THEN 1 ELSE 0 END), 0) AS due_count
+     FROM words w
+     LEFT JOIN learning_histories h ON h.word_id = w.id AND h.book_id = w.book_id
+       AND h.user_id = ? AND ${getMasteryProgressSql('h')}
+     WHERE w.book_id = ? ${range ? 'AND w.word_number BETWEEN ? AND ?' : ''}`,
+    Date.now(), user.id, bookId, ...(range ? [range.start, range.end] : []));
+  if (!row) throw new Error('教材の学習状況を取得できませんでした。');
+  const totalCount = Number(row.total_count);
+  const studiedCount = Number(row.studied_count);
+  return { bookId, totalCount, studiedCount, newCount: totalCount - studiedCount, dueCount: Number(row.due_count) };
 };

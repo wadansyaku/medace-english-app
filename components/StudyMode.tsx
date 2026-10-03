@@ -23,13 +23,16 @@ import {
 } from '../types';
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { getHintAuditTone } from '../shared/wordHintAssets';
-import { getSmartSessionConfig, isSmartSessionBookId } from '../shared/studySession';
+import { getSmartSessionConfig } from '../shared/studySession';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import { useStudyModeController } from '../hooks/useStudyModeController';
 import { recordClientProductEvent } from '../services/productEvents';
 import StudyFinishedView from './study/StudyFinishedView';
 import StudyReportDialogs from './study/StudyReportDialogs';
 import WordSourceDetails from './study/WordSourceDetails';
+import NaruStudySetup from './study/NaruStudySetup';
+import { createNaruChapterReturnTask, isNaruChapterStudyTask, resolveNaruStudyChapter } from '../shared/naruStudy';
+import { NARU_BOOK_ID, NARU_RANGE_PRESETS } from '../shared/naruBook';
 
 interface StudyModeProps {
   user: UserProfile;
@@ -38,6 +41,7 @@ interface StudyModeProps {
   onBack: () => void;
   onSessionComplete: (user: UserProfile) => void;
   onStartTask: (user: UserProfile, task: LearningTaskIntent) => void;
+  backLabel?: string;
 }
 
 function HelpCircleIcon() {
@@ -51,10 +55,10 @@ function HelpCircleIcon() {
 }
 
 const RATING_OPTIONS = [
-  { id: 0, label: 'もう一回', className: 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
-  { id: 1, label: 'あとで復習', className: 'border-amber-100 bg-amber-50 text-amber-700 hover:bg-amber-100', icon: <HelpCircleIcon /> },
-  { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-600 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
-  { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-600 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
+  { id: 0, label: 'もう一回', className: 'border-red-100 bg-red-50 text-red-700 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
+  { id: 1, label: 'あとで復習', className: 'border-amber-100 bg-amber-50 text-amber-800 hover:bg-amber-100', icon: <HelpCircleIcon /> },
+  { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
+  { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-700 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
 ];
 
 const getHiddenHintReviewState = (
@@ -93,7 +97,7 @@ const getHiddenHintReviewState = (
   }
 };
 
-const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask }) => {
+const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask, backLabel = 'ダッシュボードに戻る' }) => {
   const controller = useStudyModeController({
     user,
     bookId,
@@ -158,7 +162,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         <p className="mt-3 text-sm leading-relaxed text-slate-600">{controller.loadError}</p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           <button type="button" onClick={controller.retryLoad} className="rounded-xl bg-medace-600 px-5 py-3 font-bold text-slate-950">もう一度読み込む</button>
-          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700">ダッシュボードに戻る</button>
+          <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 px-5 py-3 font-bold text-slate-700">{backLabel}</button>
         </div>
       </section>
     );
@@ -167,8 +171,8 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
   if (controller.queue.length === 0) {
     return (
       <div className="p-10 text-center">
-        <p className="mb-2 text-lg font-bold text-slate-700">学習対象の単語はありません</p>
-        <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-slate-950">ダッシュボードに戻る</button>
+        <p className="mb-2 text-lg font-bold text-slate-700">{taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' ? '期限が来た復習はありません' : '学習対象の単語はありません'}</p>
+        <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-slate-950">{backLabel}</button>
       </div>
     );
   }
@@ -199,12 +203,19 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         weaknessSummary={controller.weaknessSummary}
         reviewPreview={controller.reviewPreview}
         onStartSpellingCheck={() => {
-          onStartTask(controller.updatedUser || user, createFollowUpSpellingTaskIntent(bookId));
+          const spellingTask = createFollowUpSpellingTaskIntent(bookId, taskIntent?.wordRange);
+          onStartTask(controller.updatedUser || user, taskIntent?.wordRange
+            ? { ...spellingTask, label: `${resolveNaruStudyChapter(taskIntent.wordRange)?.label || '選択した章'}・スペル5問` }
+            : spellingTask);
         }}
         onExit={controller.handleExit}
+        exitLabel={backLabel}
+        sessionLabel={taskIntent?.wordRange ? taskIntent.label : undefined}
       />
     );
   }
+
+  const hasCoreExample = Boolean(controller.currentWord.exampleSentence?.trim()) && !hiddenExampleReviewState;
 
   const frontFace = (
     <section
@@ -232,7 +243,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
           <WordSourceDetails word={controller.currentWord} compact />
         </div>
 
-        <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-medium text-slate-400">
+        <div className="px-4 py-2 text-center text-xs font-medium text-slate-500">
           カードか下のボタンで答えを確認
         </div>
       </div>
@@ -244,7 +255,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
       data-testid="study-card-back"
       aria-hidden={!controller.isFlipped}
       inert={!controller.isFlipped}
-      className="study-card-face study-card-face-back border border-medace-300 bg-medace-500 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
+      className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
       onClick={controller.closeBack}
     >
       <div className="flex h-full min-h-0 flex-col">
@@ -259,7 +270,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
               disabled={controller.isAdvancingCard}
               aria-label={controller.isBookOwner ? '定義を編集' : '問題を報告する'}
               onClick={controller.startEditing}
-              className={`rounded-full border border-medace-200 p-2 transition-colors ${controller.isBookOwner ? 'text-slate-950/70 hover:bg-medace-100 hover:text-slate-950' : 'text-slate-950/70 hover:bg-red-500/20 hover:text-red-100'}`}
+              className={`rounded-full border border-medace-200 p-2 transition-colors ${controller.isBookOwner ? 'text-slate-950/70 hover:bg-medace-100 hover:text-slate-950' : 'text-slate-950/70 hover:bg-red-500/20 hover:text-red-800'}`}
               title={controller.isBookOwner ? '定義を編集' : '問題を報告する'}
             >
               {controller.isBookOwner ? <Edit2 className="h-4 w-4" /> : <Flag className="h-4 w-4" />}
@@ -272,7 +283,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
           )}
         </div>
 
-        <div className="mt-3 shrink-0 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
+          <div ref={controller.backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
+        <div className="mb-3 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
           {controller.isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
               <input
@@ -297,9 +310,21 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
           )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-          <div ref={controller.backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
-            <WordSourceDetails word={controller.currentWord} />
+            {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3"><h3 className="text-xs font-bold text-slate-500">例文</h3><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
+              <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
+              {controller.currentWord.exampleMeaning?.trim() && (controller.showTranslation
+                ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">{controller.currentWord.exampleMeaning}</p>
+                : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}
+            </section>}
+            {hiddenExampleReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenExampleReviewState.title}。{hiddenExampleReviewState.description}</p>}
+            {!controller.showHints && (controller.aiContextLoading || controller.aiImageLoading) && <p role="status" className="mb-3 text-sm text-slate-600">ヒントを作成中です。</p>}
+            {!controller.showHints && (controller.exampleError || controller.imageError) && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{controller.exampleError || controller.imageError}</p>}
+            {!controller.showHints && hiddenImageReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenImageReviewState.title}。{hiddenImageReviewState.description}</p>}
+            {(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null))) && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
+              <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-600">{controller.currentWord.bookId === NARU_BOOK_ID ? '補足' : '補足・出典'}</summary>
+              <WordSourceDetails word={controller.currentWord} />
+            </details>}
             {!controller.showHints ? (
               <button
                 type="button"
@@ -307,11 +332,10 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                   event.stopPropagation();
                   controller.setShowHints(true);
                 }}
-                className="flex min-h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-medace-200 bg-white/70 px-4 py-5 text-center text-slate-600 transition-colors hover:bg-medace-100"
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
               >
                 <Sparkles className="h-5 w-5 text-medace-300" />
-                <span className="text-sm font-bold">まだ難しいときだけヒントを見る</span>
-                <span className="text-xs text-slate-500">例文・訳・画像ヒントをあとから開けます</span>
+                <span>追加のヒント</span>
               </button>
             ) : (
               <div className="space-y-3">
@@ -329,7 +353,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
+                {!hasCoreExample && <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiContextLoading ? (
                     <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-5 text-medace-800">
                       <Loader2 className="h-5 w-5 animate-spin" />
@@ -383,7 +407,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                           }}
                           className="mx-auto flex items-center justify-center gap-1 text-xs text-slate-500 transition-colors hover:text-slate-950"
                         >
-                          <Languages className="h-3 w-3" /> 訳を表示
+                          <Languages className="h-3 w-3" /> {controller.aiContext.japanese.startsWith('語義:') ? '語義を確認' : '例文の訳を表示'}
                         </button>
                       )}
                       {controller.exampleError ? (
@@ -440,8 +464,9 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
                       ) : null}
                     </div>
                   )}
-                </div>
-
+                </div>}
+                {hasCoreExample && controller.canGenerateExampleHint && controller.isBookOwner && <button type="button" onClick={event => { event.stopPropagation(); void controller.generateExampleHint(true); }} disabled={controller.aiContextLoading} className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600">{controller.aiContextLoading ? '例文を作成中...' : '別の例文を作る'}</button>}
+                {hasCoreExample && controller.exampleError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{controller.exampleError}</p>}
                 <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
                   {controller.aiImageLoading ? (
                     <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-6 text-medace-800">
@@ -553,19 +578,14 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
 
       {(controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel) && (
         <p data-testid="study-book-label" className="mb-2 break-words text-xs font-bold text-medace-800">
-          {controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel}
+          {[controller.bookTitle, taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel].filter(Boolean).join(' / ')}
         </p>
       )}
       <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
-        <button type="button" aria-label="学習を中断してダッシュボードに戻る" onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
+        <button type="button" aria-label={`学習を中断して${backLabel}`} onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
-          {(isSmartSessionBookId(bookId) || taskIntent) && (
-            <span className="flex items-center gap-1 rounded bg-medace-100 px-2 py-1 text-xs font-bold text-medace-700">
-              <Zap className="h-3 w-3" /> {taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel}
-            </span>
-          )}
           <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">
             {controller.currentIndex + 1} / {controller.queue.length}
           </span>
@@ -641,6 +661,19 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
       </MobileStickyActionBar>
     </div>
   );
+};
+
+const StudyMode: React.FC<StudyModeProps> = (props) => {
+  if (!isNaruChapterStudyTask(props.bookId, props.taskIntent)) return <StudySession {...props} />;
+  const chapter = resolveNaruStudyChapter(props.taskIntent?.wordRange);
+  const kind = props.taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' ? 'due' : 'new';
+  const isReady = props.taskIntent?.autoStart && chapter
+    && (props.taskIntent.selectionPolicy === 'BOOK_NEW_ONLY' || props.taskIntent.selectionPolicy === 'BOOK_DUE_ONLY');
+  if (!isReady) return <NaruStudySetup user={props.user} chapter={chapter || NARU_RANGE_PRESETS[0]} kind={kind}
+    invalidSelection={!chapter} onSelect={task => props.onStartTask(props.user, task)} onBack={props.onBack} />;
+  const returnToChapter = (user: UserProfile) => props.onStartTask(user, createNaruChapterReturnTask(props.taskIntent!));
+  return <StudySession {...props} key={`${props.user.uid}:${chapter.id}:${kind}`}
+    onBack={() => returnToChapter(props.user)} onSessionComplete={returnToChapter} backLabel="章の学習に戻る" />;
 };
 
 export default StudyMode;

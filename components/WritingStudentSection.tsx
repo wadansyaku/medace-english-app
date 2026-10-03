@@ -18,7 +18,16 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
   const refreshedAtLabel = controller.lastRefreshedAt
     ? new Date(controller.lastRefreshedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
     : '未取得';
-  const primaryStatus = controller.submitReadyCount > 0
+  const hasAssignmentsData = controller.lastRefreshedAt !== null;
+  const unknownCount = controller.loading || controller.refreshing ? '読込中' : '未取得';
+  const primaryStatus = !hasAssignmentsData
+    ? {
+      icon: controller.loading || controller.refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />,
+      label: controller.loading || controller.refreshing ? '課題を確認中です' : '課題は未取得です',
+      body: '課題と返却の件数をまだ確認できていません。',
+      className: 'border-slate-200 bg-slate-50 text-slate-700',
+    }
+    : controller.submitReadyCount > 0
     ? {
       icon: <Send className="h-4 w-4" />,
       label: '提出できます',
@@ -90,17 +99,17 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">提出</div>
-          <div className="mt-2 text-lg font-black text-slate-950">{controller.submitReadyCount}</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{hasAssignmentsData ? controller.submitReadyCount : unknownCount}</div>
           <div className="mt-1 text-xs text-slate-500">今すぐ送信可能</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">返却</div>
-          <div className="mt-2 text-lg font-black text-slate-950">{controller.feedbackReadyCount}</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{hasAssignmentsData ? controller.feedbackReadyCount : unknownCount}</div>
           <div className="mt-1 text-xs text-slate-500">確認できる添削</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">合計</div>
-          <div className="mt-2 text-lg font-black text-slate-950">{controller.assignments.length}</div>
+          <div className="mt-2 text-lg font-black text-slate-950">{hasAssignmentsData ? controller.assignments.length : unknownCount}</div>
           <div className="mt-1 text-xs text-slate-500">{isMobileViewport ? '全課題' : '現在表示中'}</div>
         </div>
       </div>
@@ -108,6 +117,14 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
       {isMobileViewport && controller.assignments.length > 0 && (
         <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-500">
           スマホでは、操作が必要な課題から順に表示しています。
+        </div>
+      )}
+
+      {controller.loadError && (
+        <div role="alert" data-testid="writing-load-error" className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-bold">{controller.loadError}</p>
+          <p className="mt-1">{hasAssignmentsData ? '最新の状態を確認できません。前回取得した課題と件数を表示しています。' : '課題と返却の有無は、まだ確認できていません。'}</p>
+          <button type="button" onClick={() => void controller.refresh({ silent: true })} disabled={controller.loading || controller.refreshing} className="mt-3 min-h-11 rounded-xl border border-amber-300 bg-white px-4 py-2 font-bold disabled:opacity-50">課題をもう一度読み込む</button>
         </div>
       )}
 
@@ -124,6 +141,10 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
       {controller.loading ? (
         <div role="status" aria-label="自由英作文課題を読み込み中" className="mt-8 flex min-h-[16vh] items-center justify-center text-slate-500">
           <Loader2 className="h-8 w-8 animate-spin text-medace-500" />
+        </div>
+      ) : !hasAssignmentsData ? (
+        <div role="status" data-testid="writing-assignments-unknown" className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          課題の有無は未確認です。上の更新ボタンから、もう一度読み込めます。
         </div>
       ) : (
         <div className="mt-6">

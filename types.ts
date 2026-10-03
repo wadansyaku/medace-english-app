@@ -464,6 +464,7 @@ export interface UserProfile {
   grade?: UserGrade;
   englishLevel?: EnglishLevel;
   needsOnboarding?: boolean;
+  diagnosticDeferredAt?: number;
   subscriptionPlan?: SubscriptionPlan;
   organizationName?: string;
   studyMode?: UserStudyMode;
@@ -529,6 +530,19 @@ export interface BookProgress {
   learnedCount: number;
   totalCount: number;
   percentage: number;
+}
+
+export interface StudyWordRange {
+  start: number;
+  end: number;
+}
+
+export interface BookStudyOverview {
+  bookId: string;
+  totalCount: number;
+  studiedCount: number;
+  newCount: number;
+  dueCount: number;
 }
 
 export interface CsvRow {
@@ -643,6 +657,7 @@ export type TaskSelectionPolicy =
   | 'WEAKNESS_FOCUS'
   | 'BOOK_DEFAULT'
   | 'BOOK_REVIEW_ONLY'
+  | 'BOOK_DUE_ONLY'
   | 'BOOK_NEW_ONLY';
 
 export type LearningTaskMode = 'study' | 'quiz';
@@ -666,6 +681,7 @@ export interface LearningTaskIntent {
   selectionPolicy: TaskSelectionPolicy;
   limit: number;
   bookId?: string;
+  wordRange?: StudyWordRange;
   preferredBookIds?: string[];
   missionAssignmentId?: string;
   targetQuestionModes?: WorksheetQuestionMode[];

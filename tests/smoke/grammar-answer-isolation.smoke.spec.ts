@@ -1,5 +1,8 @@
 import { build } from 'esbuild';
 import { expect, test, type Page } from '@playwright/test';
+import { ORIGINAL_GRAMMAR_QUESTIONS, type OriginalGrammarQuestion } from '../../config/grammarQuestionBank';
+import { type GrammarCurriculumScopeId } from '../../types';
+import { getGrammarScopesForPracticeSelection } from '../../utils/grammarScope';
 
 // Render the real ReactDOM component. Only storage/AI services are replaced,
 // and every browser request is intercepted so no live account or server is used.
@@ -12,7 +15,10 @@ const word = {
   exampleMeaning: '生徒は 授業前に ノートを 整理する。',
 };
 export const learningService = {
-  getDailySessionWords: () => Promise.resolve(fixture.oneWord ? [word] : []),
+  getDailySessionWords: () => {
+    fixture.returnedWordCount = fixture.oneWord ? 1 : 0;
+    return Promise.resolve(fixture.oneWord ? [word] : []);
+  },
   recordEnglishPracticeAttempt: (_uid, payload) => {
     fixture.attempts.push(payload);
     return Promise.resolve();
@@ -63,110 +69,178 @@ const mount = async (page: Page, oneWord = false) => {
     : route.abort());
   await page.goto('http://127.0.0.1:41826/synthetic-grammar-isolation');
   await page.evaluate((useOneWord) => {
-    (globalThis as any).__grammarFixture = { oneWord: useOneWord, attempts: [] };
+    (globalThis as any).__grammarFixture = { oneWord: useOneWord, returnedWordCount: null, attempts: [] };
   }, oneWord);
   await page.addScriptTag({ content: bundle });
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
-  await expect(page.locator('article')).toHaveCount(5);
+  await expect(page.getByTestId('grammar-practice-question')).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => (globalThis as any).__grammarFixture.returnedWordCount)).toBe(oneWord ? 1 : 0);
   return errors;
 };
 
-test('fallback cloze selection and checking affect only the selected occurrence', async ({ page }, testInfo) => {
+// The DOM identifies the authored question; its displayed answer is never the
+// answer key. Correct answers, distractors and chip order come from the bank.
+const getAuthoredQuestion = async (page: Page): Promise<OriginalGrammarQuestion> => {
+  const id = await page.getByTestId('grammar-practice-question').getAttribute('data-question-id');
+  const source = ORIGINAL_GRAMMAR_QUESTIONS.find(question => question.id === id);
+  expect(source, `Unknown authored grammar ID: ${id}`).toBeTruthy();
+  return source!;
+};
+const attemptList = (page: Page) => page.evaluate(() => (globalThis as any).__grammarFixture.attempts);
+const expectUnansweredCloze = async (page: Page, source: OriginalGrammarQuestion) => {
+  const question = page.getByTestId('grammar-practice-question');
+  await expect(question).toContainText(source.contextJa);
+  await expect(question).toContainText(source.recommendedGradeJa);
+  await expect(question).not.toContainText(source.sourceSentence);
+  await expect(question).not.toContainText(source.translationJa);
+  await expect(question).not.toContainText(source.explanationJa);
+  await expect(question.getByTestId('grammar-answer-feedback')).toHaveCount(0);
+  await expect(question.locator('button[aria-pressed="true"]')).toHaveCount(0);
+  await expect(question.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
+};
+const expectScopeAttempt = (attempt: any, source: OriginalGrammarQuestion, mode: string, correct: boolean) => {
+  expect(attempt).toMatchObject({ lane: 'grammar', mode, correct, grammarScopeId: source.scopeId, level: source.level });
+  expect(attempt.wordId).toBeUndefined();
+  expect(attempt.bookId).toBeUndefined();
+  expect(attempt.word).toBeUndefined();
+  expect(attempt).not.toHaveProperty('curatedQuestionId');
+};
+const selectOnlyScope = async (page: Page, scopeId: GrammarCurriculumScopeId) => {
+  await page.getByRole('button', { name: '範囲を変更', exact: true }).click();
+  await page.getByRole('button', { name: '全範囲', exact: true }).click();
+  const scopes = getGrammarScopesForPracticeSelection({ mode: 'GRAMMAR_CLOZE' });
+  const scopeButton = (label: string) => page.getByRole('button').filter({
+    has: page.getByText(label, { exact: true }),
+  });
+  const target = scopes.find(scope => scope.id === scopeId)!;
+  const selected = scopeButton(target.labelJa);
+  if (await selected.getAttribute('aria-pressed') !== 'true') await selected.click();
+  for (const scope of scopes.filter(scope => scope.id !== scopeId)) {
+    const button = scopeButton(scope.labelJa);
+    if (await button.getAttribute('aria-pressed') === 'true') await button.click();
+  }
+  await expect.poll(async () => (await getAuthoredQuestion(page)).scopeId).toBe(scopeId);
+};
+const orderChunkText = (text: string) => text.normalize('NFKC').toLowerCase()
+  .replace(/[“”‘’]/g, "'").replace(/[.!?;:]/g, '').replace(/\s+/g, ' ').trim();
+
+test('curated cloze keeps its answer and one saved attempt when moving next and back', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const errors = await mount(page);
-  const questions = page.locator('article');
-  const first = questions.nth(0);
-  const fifth = questions.nth(4);
-  const firstCheck = first.getByRole('button', { name: '判定する', exact: true });
-  const fifthCheck = fifth.getByRole('button', { name: '判定する', exact: true });
-
-  await expect(firstCheck).toBeDisabled();
-  await expect(fifthCheck).toBeDisabled();
-  await first.getByRole('button', { name: 'is', exact: true }).click();
-  await expect(firstCheck).toBeEnabled();
-  await expect(fifthCheck).toBeDisabled();
-  await expect(fifth.locator('button[aria-pressed="true"]')).toHaveCount(0);
-  const evidencePath = testInfo.outputPath('only-first-question-selected.png');
+  const question = page.getByTestId('grammar-practice-question');
+  const first = await getAuthoredQuestion(page);
+  await expectUnansweredCloze(page, first);
+  await expect(page.getByRole('button', { name: '次の問題へ', exact: true })).toBeDisabled();
+  const wrong = first.options.find(option => option !== first.answer)!;
+  await question.getByRole('button', { name: wrong, exact: true }).click();
+  const evidencePath = testInfo.outputPath('one-authored-question-selected.png');
   await page.screenshot({ path: evidencePath, fullPage: true });
-  await testInfo.attach('only-first-question-selected', { path: evidencePath, contentType: 'image/png' });
+  await testInfo.attach('one-authored-question-selected', { path: evidencePath, contentType: 'image/png' });
+  const check = question.getByRole('button', { name: '判定する', exact: true });
+  await check.evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
+  await expect(question.getByTestId('grammar-answer-feedback')).toContainText(first.explanationJa);
+  await expect(question.getByTestId('grammar-answer-feedback')).toContainText(first.distractorReasons[wrong]);
+  await expect(question).toContainText(first.sourceSentence);
+  await expect(question).toContainText(first.translationJa);
+  await expect.poll(async () => (await attemptList(page)).length).toBe(1);
+  const committedAttempt = (await attemptList(page))[0];
+  expectScopeAttempt(committedAttempt, first, 'GRAMMAR_CLOZE', false);
 
-  await firstCheck.click();
-  await expect(first.locator('[aria-live="polite"]')).toContainText('正解');
-  await expect(fifth.locator('[aria-live="polite"]')).toHaveCount(0);
-  await expect(fifth.getByRole('button', { name: 'are', exact: true })).toBeEnabled();
-  await fifth.getByRole('button', { name: 'are', exact: true }).click();
-  await fifthCheck.click();
-  await expect(fifth.locator('[aria-live="polite"]')).toContainText('正解');
-  await expect(questions.nth(1).getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
-  // Sample answers remain excluded from stored progress and its sync service.
-  expect(await page.evaluate(() => (globalThis as any).__grammarFixture.attempts)).toEqual([]);
+  await page.getByRole('button', { name: '次の問題へ', exact: true }).click();
+  const second = await getAuthoredQuestion(page);
+  expect(second.id).not.toBe(first.id);
+  await expectUnansweredCloze(page, second);
+  await page.getByRole('button', { name: '前の問題を確認', exact: true }).click();
+  await expect(question).toHaveAttribute('data-question-id', first.id);
+  await expect(question.getByRole('button', { name: wrong, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(check).toBeDisabled();
+  await expect(question.getByTestId('grammar-answer-feedback')).toContainText(first.explanationJa);
+  expect(await attemptList(page)).toEqual([committedAttempt]);
   expect(errors).toEqual([]);
 });
 
-test('fallback word-order chips and checking stay independent for repeated words', async ({ page }) => {
+test('curated word-order answers and unfinished chip selections stay independent across questions', async ({ page }) => {
   const errors = await mount(page);
   await page.getByRole('button', { name: '英語並び替え', exact: true }).click();
-  const questions = page.locator('article');
-  await expect(questions).toHaveCount(5);
-  const first = questions.nth(0);
-  const fifth = questions.nth(4);
-  const firstChipPool = first.locator(':scope > div').nth(2);
-  const fifthChipPool = fifth.locator(':scope > div').nth(2);
-  const fifthChipCount = await fifthChipPool.getByRole('button').count();
-  const firstChipCount = await firstChipPool.getByRole('button').count();
-
-  for (let index = 0; index < firstChipCount; index += 1) {
-    await firstChipPool.getByRole('button').first().click();
-    await expect(fifthChipPool.getByRole('button')).toHaveCount(fifthChipCount);
-    await expect(fifth.locator(':scope > div').nth(1).getByRole('button')).toHaveCount(0);
-  }
-  await expect(first.getByRole('button', { name: '判定する', exact: true })).toBeEnabled();
-  await expect(fifth.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
-  await first.getByRole('button', { name: '判定する', exact: true }).click();
-  await expect(first.locator('[aria-live="polite"]')).toBeVisible();
-  await expect(fifth.locator('[aria-live="polite"]')).toHaveCount(0);
-  await expect(fifthChipPool.getByRole('button').first()).toBeEnabled();
+  const question = page.getByTestId('grammar-practice-question');
+  await expect(question).toHaveCount(1);
+  const first = await getAuthoredQuestion(page);
+  await expect(question).toContainText(first.contextJa);
+  await expect(question).not.toContainText(first.sourceSentence);
+  const chosen = question.locator(':scope > div').nth(1);
+  const pool = question.locator(':scope > div').nth(2);
+  for (const chunk of first.orderChunks) await pool.getByRole('button', { name: orderChunkText(chunk), exact: true }).first().click();
+  await expect(chosen.getByRole('button')).toHaveCount(first.orderChunks.length);
+  await question.getByRole('button', { name: '判定する', exact: true }).click();
+  await expect(question.getByTestId('grammar-answer-feedback')).toContainText(first.sourceSentence);
+  await expect.poll(async () => (await attemptList(page)).length).toBe(1);
+  expectScopeAttempt((await attemptList(page))[0], first, 'EN_WORD_ORDER', true);
+  await page.getByRole('button', { name: '次の問題へ', exact: true }).click();
+  const second = await getAuthoredQuestion(page);
+  expect(second.id).not.toBe(first.id);
+  await expect(chosen.getByRole('button')).toHaveCount(0);
+  await expect(question.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
+  const secondChunk = orderChunkText(second.orderChunks[0]);
+  await pool.getByRole('button', { name: secondChunk, exact: true }).first().click();
+  await expect(chosen.getByRole('button')).toHaveCount(1);
+  await page.getByRole('button', { name: '前の問題を確認', exact: true }).click();
+  await expect(question).toHaveAttribute('data-question-id', first.id);
+  await expect(chosen.getByRole('button')).toHaveCount(first.orderChunks.length);
+  await expect(question.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '次の問題へ', exact: true }).click();
+  await expect(question).toHaveAttribute('data-question-id', second.id);
+  await expect(chosen.getByRole('button')).toHaveCount(1);
+  await expect(chosen.getByRole('button')).toHaveText([secondChunk]);
+  await expect(question.getByTestId('grammar-answer-feedback')).toHaveCount(0);
+  expect((await attemptList(page)).length).toBe(1);
   expect(errors).toEqual([]);
 });
 
-test('one-word sessions can record separate answers while preserving source identity', async ({ page }) => {
+test('a one-word vocabulary session still saves curated scope answers without word or book association', async ({ page }) => {
   const errors = await mount(page, true);
-  const questions = page.locator('article');
-  for (const index of [0, 4]) {
-    const question = questions.nth(index);
-    await question.locator('button[aria-pressed]').first().click();
+  const question = page.getByTestId('grammar-practice-question');
+  const sources: OriginalGrammarQuestion[] = [];
+  for (let index = 0; index < 2; index += 1) {
+    const source = await getAuthoredQuestion(page); sources.push(source);
+    await expectUnansweredCloze(page, source);
+    await question.getByRole('button', { name: source.answer, exact: true }).click();
     await question.getByRole('button', { name: '判定する', exact: true }).click();
-    await expect(question.locator('[aria-live="polite"]')).toBeVisible();
+    await expect(question.getByTestId('grammar-answer-feedback')).toContainText(source.explanationJa);
+    if (index === 0) await page.getByRole('button', { name: '次の問題へ', exact: true }).click();
   }
-  await expect(questions.nth(1).getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
-  await expect.poll(() => page.evaluate(() => (globalThis as any).__grammarFixture.attempts.length)).toBe(2);
-  const attempts = await page.evaluate(() => (globalThis as any).__grammarFixture.attempts);
-  expect(attempts.map((attempt: any) => [attempt.wordId, attempt.bookId, attempt.mode])).toEqual([
-    ['synthetic-organize', 'synthetic-book', 'GRAMMAR_CLOZE'],
-    ['synthetic-organize', 'synthetic-book', 'GRAMMAR_CLOZE'],
-  ]);
+  expect(sources[0].id).not.toBe(sources[1].id);
+  await expect.poll(async () => (await attemptList(page)).length).toBe(2);
+  const attempts = await attemptList(page);
+  attempts.forEach((attempt: any, index: number) => expectScopeAttempt(attempt, sources[index], 'GRAMMAR_CLOZE', true));
   expect(new Set(attempts.map((attempt: any) => attempt.clientAttemptId)).size).toBe(2);
-
   await page.getByRole('button', { name: '問題を更新', exact: true }).click();
-  await expect(questions.locator('[aria-live="polite"]')).toHaveCount(0);
-  await expect(questions.locator('button[aria-pressed="true"]')).toHaveCount(0);
-  for (let index = 0; index < 5; index += 1) {
-    await expect(questions.nth(index).getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
-  }
+  const next = await getAuthoredQuestion(page);
+  expect(sources.map(source => source.id)).not.toContain(next.id);
+  await expectUnansweredCloze(page, next);
+  expect((await attemptList(page)).length).toBe(2);
   expect(errors).toEqual([]);
 });
 
-test('changing the scope allocation never carries a checked answer into a different question', async ({ page }) => {
+test('refresh and scope changes clear unfinished answers without leaking an authored answer before checking', async ({ page }) => {
   const errors = await mount(page);
-  const first = page.locator('article').first();
-  const originalQuestion = await first.innerText();
-  await first.locator('button[aria-pressed]').first().click();
-  await first.getByRole('button', { name: '判定する', exact: true }).click();
-  await expect(first.locator('[aria-live="polite"]')).toBeVisible();
-  await page.getByRole('button', { name: 'ランダム演習', exact: true }).click();
-  await expect(first).not.toHaveText(originalQuestion);
-  await expect(first.locator('[aria-live="polite"]')).toHaveCount(0);
-  await expect(first.locator('button[aria-pressed="true"]')).toHaveCount(0);
-  await expect(first.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
+  const question = page.getByTestId('grammar-practice-question');
+  const first = await getAuthoredQuestion(page);
+  await question.getByRole('button', { name: first.answer, exact: true }).click();
+  await question.getByRole('button', { name: '判定する', exact: true }).click();
+  await expect.poll(async () => (await attemptList(page)).length).toBe(1);
+  await page.getByRole('button', { name: '問題を更新', exact: true }).click();
+  const refreshed = await getAuthoredQuestion(page);
+  expect(refreshed.id).not.toBe(first.id);
+  await expectUnansweredCloze(page, refreshed);
+  const wrong = refreshed.options.find(option => option !== refreshed.answer)!;
+  await question.getByRole('button', { name: wrong, exact: true }).click();
+  await expect(question.locator('button[aria-pressed="true"]')).toHaveCount(1);
+  const targetScope = refreshed.scopeId === 'basic-svo' ? 'be-verb' : 'basic-svo';
+  await selectOnlyScope(page, targetScope);
+  const scoped = await getAuthoredQuestion(page);
+  expect(scoped.scopeId).toBe(targetScope);
+  expect(scoped.id).not.toBe(refreshed.id);
+  await expectUnansweredCloze(page, scoped);
+  expect((await attemptList(page)).length).toBe(1);
   expect(errors).toEqual([]);
 });

@@ -10,7 +10,7 @@ import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../..
 import { PUBLIC_BUSINESS_ROLE_CONFIGS, type PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 export interface AuthExperienceScreenProps {
-  currentView: 'login' | 'publicInfo' | 'publicRole';
+  currentView: 'login' | 'guestTrial' | 'publicInfo' | 'publicRole';
   publicRole: PublicBusinessRoleKey | null;
   authPanelMode?: 'LOGIN' | 'SIGNUP';
   authMode: 'LOGIN' | 'SIGNUP';
@@ -43,6 +43,8 @@ export interface AuthExperienceScreenProps {
   onClosePublicInfo: () => void;
   onOpenPublicRole: (roleKey: PublicBusinessRoleKey) => void;
   onClosePublicRole: () => void;
+  onStartGuestTrial?: () => void;
+  guestTrialContent?: React.ReactNode;
 }
 
 // Keep the form independent of the landing page and its optional explanation.
@@ -160,7 +162,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
         <button type="submit" disabled={busy} data-testid={showPasswordRecovery ? 'submit-password-recovery' : 'auth-submit'}
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-4 py-3 text-base font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover disabled:cursor-wait disabled:opacity-60">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : showPasswordRecovery ? <LifeBuoy className="h-4 w-4" aria-hidden="true" /> : authMode === 'LOGIN' ? <LogIn className="h-4 w-4" aria-hidden="true" /> : <UserPlus className="h-4 w-4" aria-hidden="true" />}
-          {busy ? '送信中...' : showPasswordRecovery ? passwordRecoveryMessage ? 'もう一度依頼する' : '再設定を依頼する' : authMode === 'LOGIN' ? 'ログイン' : '登録して診断へ'}
+          {busy ? '送信中...' : showPasswordRecovery ? passwordRecoveryMessage ? 'もう一度依頼する' : '再設定を依頼する' : authMode === 'LOGIN' ? 'ログイン' : '登録して学習を始める'}
         </button>
         {authMode === 'LOGIN' && !showPasswordRecovery && (
           <button type="button" onClick={onOpenPasswordRecovery} disabled={busy} data-testid="open-password-recovery" className="min-h-11 w-full rounded-lg text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">パスワードを忘れた方</button>
@@ -170,7 +172,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
             <p className="text-xs leading-relaxed text-slate-500">アカウントの有無は画面に表示しません。再設定の依頼を受け付けます。メールの即時送信は保証していません。</p>
             <button type="button" onClick={onClosePasswordRecovery} disabled={busy} className="mt-2 min-h-11 w-full rounded-lg text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">ログインに戻る</button>
           </div>
-        ) : authMode === 'SIGNUP' && <p className="text-xs leading-relaxed text-slate-500">登録後の初回診断で、学習を始めるときのレベルを確認します</p>}
+        ) : authMode === 'SIGNUP' && <p className="text-xs leading-relaxed text-slate-500">登録後すぐに学習を始められます。レベル診断は任意で、あとから受けられます。</p>}
       </form>
     </section>
   );
@@ -182,7 +184,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
     onClosePublicRole, onDemoLogin, onOpenAuth, onCloseAuth } = props;
   const busy = authSubmitting || passwordRecoveryLoading;
 
-  const content = currentView === 'publicRole' && publicRole ? (
+  const content = currentView === 'guestTrial' ? props.guestTrialContent : currentView === 'publicRole' && publicRole ? (
     <PublicRolePage roleKey={publicRole} onDemoLogin={onDemoLogin} onBack={onClosePublicRole}
       onLogin={() => onOpenAuth('LOGIN')} busy={authSubmitting} authError={authPanelMode ? null : authError} />
   ) : currentView === 'publicInfo' ? (
@@ -194,18 +196,21 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 text-xl font-black text-medace-700">{BRAND.mark}</div>
         <p className="mt-5 text-sm font-bold text-medace-700">英単語学習スペース</p>
         <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の学習を、ここから</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">アカウントで学習を続けるか、登録なしの体験から始められます。</p>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">まずは登録なしで5語を学べます。進捗を残して続けたいときに、アカウントを作れます。</p>
+        {props.onStartGuestTrial && <button type="button" onClick={props.onStartGuestTrial} data-testid="start-first-guest" disabled={busy}
+          className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50 sm:max-w-xl"><BookOpen className="h-4 w-4" aria-hidden="true" /> 今すぐ学ぶ（登録不要） <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}
         <div className="mt-6 grid gap-3 sm:max-w-xl sm:grid-cols-2">
           <button type="button" onClick={() => onOpenAuth('LOGIN')} data-testid="start-first-login" disabled={busy}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"><LogIn className="h-4 w-4" aria-hidden="true" /> ログイン</button>
+            className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-black disabled:opacity-50 ${props.onStartGuestTrial ? 'border border-medace-200 bg-white text-medace-900 hover:bg-medace-50' : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'}`}><LogIn className="h-4 w-4" aria-hidden="true" /> ログイン</button>
           <button type="button" onClick={() => onOpenAuth('SIGNUP')} data-testid="start-first-signup" disabled={busy}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-medace-200 bg-white px-5 py-3 text-base font-bold text-medace-900 hover:bg-medace-50 disabled:opacity-50"><UserPlus className="h-4 w-4" aria-hidden="true" /> 新規登録</button>
         </div>
-        <div className="mt-5 border-t border-slate-100 pt-5">
+        <details className="mt-5 border-t border-slate-100 pt-3">
+          <summary className="cursor-pointer py-2 text-xs font-bold text-slate-600">生徒画面の期間限定デモを見る</summary>
           <button type="button" onClick={() => onDemoLogin(UserRole.STUDENT)} data-testid="demo-login-student" disabled={busy}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50"><BookOpen className="h-4 w-4" aria-hidden="true" /> {authSubmitting ? '体験を準備中...' : '登録なしで生徒画面を体験する'} <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>
           <p className="mt-1 text-xs leading-relaxed text-slate-500">{getDemoAccessWindowLabel()} 限定の体験です。自分のアカウントに保存するには登録してください。</p>
-        </div>
+        </details>
         {!authPanelMode && authError && <p role="alert" data-testid="auth-demo-error" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{authError}</p>}
       </section>
       <section className="rounded-panel border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="role-entry-heading">
@@ -220,9 +225,9 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
         <details data-testid="auth-product-explanation" className="mt-4 border-t border-slate-100 pt-3">
           <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">学習の流れを見る</summary>
           <ol className="mt-2 list-inside list-decimal space-y-2 text-sm leading-relaxed text-slate-600">
-            <li>生徒用アカウントを登録する、またはログインする</li>
-            <li>初回診断で学習を始めるときのレベルを確認する</li>
-            <li>教材ホームで今日の学習や復習を選ぶ</li>
+            <li>登録なしのお試しで、まず1語から学ぶ</li>
+            <li>続けたいときに登録し、体験の回答を自分のアカウントへ保存する</li>
+            <li>教材ホームで学習や復習を選ぶ。レベル診断は後からでも受けられる</li>
           </ol>
         </details>
       </section>
@@ -236,7 +241,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
     {content}{authPanelMode && (
     <ModalOverlay onClose={() => { if (!busy) onCloseAuth(); }} closeOnOverlayClick={!busy} zIndexClassName="z-[60]"
       panelClassName="max-w-lg" ariaLabelledBy="auth-dialog-title" initialFocusSelector="[data-auth-initial-focus]"
-      returnFocusSelector={currentView === 'publicRole' ? '[data-testid=public-role-login]' : authPanelMode === 'SIGNUP' ? '[data-testid=start-first-signup]' : '[data-testid=start-first-login]'}>
+      returnFocusSelector={currentView === 'guestTrial' ? authPanelMode === 'SIGNUP' ? '[data-testid=guest-save-account]' : '[data-testid=guest-existing-login]' : currentView === 'publicRole' ? '[data-testid=public-role-login]' : authPanelMode === 'SIGNUP' ? '[data-testid=start-first-signup]' : '[data-testid=start-first-login]'}>
       <AuthForm {...props} authMode={authPanelMode || authMode} />
     </ModalOverlay>
   )}</>;

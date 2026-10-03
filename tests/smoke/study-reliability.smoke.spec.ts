@@ -1,10 +1,12 @@
+import { exposeStudentDemo } from './smoke-support';
 import type { Page, Route } from '@playwright/test';
 import type { WordData } from '../../types';
 import { expect, test } from './diagnostics';
-import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, seedPhrasebook } from './smoke-support';
+import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook } from './smoke-support';
 
 const prepareStudy = async (page: Page) => {
   await page.goto('/');
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -12,6 +14,7 @@ const prepareStudy = async (page: Page) => {
   const bookId = imported.importedBookIds[0] as string;
   await page.reload();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  await openDashboardReference(page, 'library');
   return bookId;
 };
 
@@ -27,7 +30,7 @@ const loadFixtureWords = (page: Page, bookId: string): Promise<WordData[]> => pa
 
 const openExampleHint = async (page: Page) => {
   await page.getByTestId('study-flip-button').click();
-  await page.getByRole('button', { name: /まだ難しいときだけヒントを見る/ }).click();
+  await page.getByRole('button', { name: /追加のヒント/ }).click();
   await page.getByRole('button', { name: '例文を作る', exact: true }).evaluate((button: HTMLButtonElement) => {
     button.click();
     button.click();
@@ -229,7 +232,7 @@ test.describe('study reliability', () => {
       word: 'stale-other-lesson', exampleSentence: 'Stale other lesson hint.',
     }) });
     await page.getByTestId('study-flip-button').click();
-    await page.getByRole('button', { name: /まだ難しいときだけヒントを見る/ }).click();
+    await page.getByRole('button', { name: /追加のヒント/ }).click();
     await expect(page.getByText('Stale other lesson hint.')).toHaveCount(0);
     await page.getByTestId('study-rate-3').click();
     await expect(page.getByTestId('study-card-front')).toContainText('stabilize');

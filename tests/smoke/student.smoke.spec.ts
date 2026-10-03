@@ -1,3 +1,5 @@
+import { exposeStudentDemo } from './smoke-support';
+import { formatDateKey } from '../../utils/date';
 import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
@@ -8,6 +10,8 @@ import {
   loginBusinessStudentDemo,
   loginGroupAdminDemo,
   maybeCompleteOnboarding,
+  openDashboardReference,
+  openDashboardTaskDetails,
   seedPhrasebook,
   storageAction,
   updateSessionProfile,
@@ -16,14 +20,17 @@ import {
 test('demo student can start immediately without onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
 
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await expect(page.getByTestId('onboarding-profile')).toHaveCount(0);
   await expect(page.getByText('今日やること')).toBeVisible();
   await expect(page.getByTestId('dashboard-english-practice-entry')).toHaveCount(1);
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
-  await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
-  await expect(page.getByTestId('dashboard-practice-lane-grammar')).toBeVisible();
+  await expect(page.getByTestId('student-hero-primary-cta')).toBeVisible();
+  const grammarEntry = page.getByTestId('dashboard-practice-lane-grammar');
+  if (await grammarEntry.count()) await expect(grammarEntry).toBeVisible();
+  else await expect(page.getByTestId('student-hero-primary-cta')).toContainText('文法');
   await expect(page.getByTestId('dashboard-practice-lane-translation')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-lane-reading')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-lane-writing')).toHaveCount(0);
@@ -31,7 +38,7 @@ test('demo student can start immediately without onboarding and reach the dashbo
   await expect(page.getByText('今日の英語演習')).toHaveCount(0);
   await expect(page.getByText('英語演習のおすすめ')).toHaveCount(0);
 
-  await page.getByTestId('dashboard-practice-lane-grammar').click();
+  await (await grammarEntry.count() ? grammarEntry : page.getByTestId('student-hero-primary-cta')).click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-focus')).toHaveCount(0);
@@ -42,9 +49,9 @@ test('demo student can start immediately without onboarding and reach the dashbo
   await page.goBack();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
-  await expect(page.getByTestId('dashboard-practice-dock')).toBeVisible();
+  await expect(page.getByTestId('student-hero-primary-cta')).toBeVisible();
 
-  await page.getByTestId('dashboard-practice-lane-grammar').click();
+  await (await grammarEntry.count() ? grammarEntry : page.getByTestId('student-hero-primary-cta')).click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
@@ -58,6 +65,7 @@ test('desktop student dashboard keeps the command center calm and above the fold
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/');
 
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -103,41 +111,33 @@ test('desktop student dashboard keeps the command center calm and above the fold
     mediumDesktopBox!.y + mediumDesktopBox!.height,
     'command center should not collapse into a tall single column on 1024px web',
   ).toBeLessThanOrEqual(768);
-  const referenceSections = page.getByTestId('dashboard-reference-sections');
-  await expect(referenceSections).toBeVisible();
-  const referenceSectionsBox = await referenceSections.boundingBox();
-  expect(referenceSectionsBox, 'reference sections should have a full-width layout box').not.toBeNull();
-  expect(
-    Math.round(referenceSectionsBox!.x),
-    'reference details should align with the command center instead of staying in the right rail',
-  ).toBe(Math.round(mediumDesktopBox!.x));
-  expect(
-    referenceSectionsBox!.width,
-    'reference details should span the main dashboard column, not only the right rail',
-  ).toBeGreaterThanOrEqual(mediumDesktopBox!.width - 2);
-
-  const offenders = await findUnexpectedHorizontalOverflow(page);
-  expect(offenders).toEqual([]);
-
-  await page.getByTestId('dashboard-task-reference-library').click();
-  const libraryReachableTop = await page.getByTestId('dashboard-library-section').evaluate((element) => (
-    element.getBoundingClientRect().top + window.scrollY
-      - Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
-  ));
-  await expect.poll(async () => {
-    const box = await page.getByTestId('dashboard-library-section').boundingBox();
-    return box?.y ?? 9999;
-  }).toBeLessThanOrEqual(Math.max(260, libraryReachableTop + 1));
+  await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-library-section')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-progress-section')).toHaveCount(0);
+  const referencePanel = await openDashboardReference(page, 'library');
+  const referencePanelBox = await referencePanel.boundingBox();
+  const referenceRailBox = await page.getByTestId('dashboard-reference-rail').boundingBox();
+  expect(referencePanelBox, 'selected details should have a full-width layout box').not.toBeNull();
+  expect(referenceRailBox).not.toBeNull();
+  expect(Math.round(referencePanelBox!.x)).toBe(Math.round(referenceRailBox!.x));
+  expect(Math.round(referencePanelBox!.width)).toBe(Math.round(referenceRailBox!.width));
   await expect(page.getByTestId('dashboard-library-section')).toBeInViewport();
+  expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
 
-  const announcementsShortcut = page.getByTestId('dashboard-task-reference-announcements');
-  if (await announcementsShortcut.count()) {
-    await announcementsShortcut.scrollIntoViewIfNeeded();
-    await announcementsShortcut.click();
-    await expect.poll(async () => {
-      const box = await page.getByTestId('dashboard-announcements-section').boundingBox();
-      return box?.y ?? 9999;
-    }).toBeLessThanOrEqual(260);
+  await page.keyboard.press('Escape');
+  await expect(referencePanel).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-task-reference-library')).toBeFocused();
+  await expect(page.getByTestId('dashboard-task-reference-library')).toHaveAttribute('aria-pressed', 'false');
+
+  const announcementsEntry = page.getByTestId('dashboard-task-reference-announcements');
+  if (await announcementsEntry.count()) {
+    const menuSummary = announcementsEntry.locator('xpath=ancestor::details').locator('summary');
+    await openDashboardReference(page, 'announcements');
+    await expect(page.getByTestId('dashboard-announcements-section')).toBeVisible();
+    await expect(page.getByTestId('dashboard-library-section')).toHaveCount(0);
+    await page.getByRole('button', { name: '閉じて今日の画面に戻る', exact: true }).click();
+    await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(menuSummary).toBeFocused();
   }
 
   await primaryCta.scrollIntoViewIfNeeded();
@@ -164,7 +164,7 @@ test('desktop student dashboard keeps the command center calm and above the fold
   }).not.toBe('pending');
 });
 
-test('desktop dashboard keeps lower details full-width when the right rail is present', async ({ browser, baseURL }, testInfo) => {
+test('desktop dashboard keeps one selected resource full-width and mission deadlines visible', async ({ browser, baseURL }, testInfo) => {
   test.skip(!baseURL, 'smoke baseURL is required for API-seeded dashboard state');
   const appBaseURL = baseURL!;
   const adminContext = await browser.newContext({
@@ -213,47 +213,77 @@ test('desktop dashboard keeps lower details full-width when the right rail is pr
     await studentPage.goto('/dashboard');
     await expect(studentPage.getByTestId('student-dashboard')).toBeVisible();
     await expect(studentPage.getByTestId('dashboard-primary-stack')).toBeVisible();
-    await expect(studentPage.getByTestId('dashboard-reference-rail')).toBeVisible();
-    await expect(studentPage.getByTestId('dashboard-reference-sections')).toBeVisible();
+    await expect(studentPage.getByTestId('student-hero-primary-cta')).toHaveCount(1);
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    const missionDetails = studentPage.getByTestId('dashboard-task-details-mission');
+    await expect(missionDetails.locator('summary')).toContainText(`期限 ${formatDateKey(weeklyMission.dueAt)}`);
+    await expect(studentPage.getByTestId('dashboard-mission-section')).toBeHidden();
+    await openDashboardTaskDetails(studentPage, 'mission');
+    await expect(studentPage.getByTestId('dashboard-mission-section')).toContainText('Right Rail Regression Mission');
+    await missionDetails.locator('summary').click();
 
-    // Compare a single layout frame. Async measurements can straddle scrollbar creation.
-    const { commandBox, railBox, referenceBox, libraryBox } = await studentPage.evaluate(() => {
+    await openDashboardReference(studentPage, 'library');
+    await expect(studentPage.getByTestId('dashboard-progress-section')).toHaveCount(0);
+    const { commandBox, referenceBox, libraryBox } = await studentPage.evaluate(() => {
       const box = (testId: string) => {
         const element = document.querySelector(`[data-testid="${testId}"]`);
         if (!element) return null;
         const { x, y, width, height } = element.getBoundingClientRect();
         return { x, y, width, height };
       };
-      return {
-        commandBox: box('dashboard-command-center'),
-        railBox: box('dashboard-reference-rail'),
-        referenceBox: box('dashboard-reference-sections'),
-        libraryBox: box('dashboard-library-section'),
-      };
+      return { commandBox: box('dashboard-command-center'), referenceBox: box('dashboard-reference-panel'), libraryBox: box('dashboard-library-section') };
     });
     expect(commandBox).not.toBeNull();
-    expect(railBox).not.toBeNull();
     expect(referenceBox).not.toBeNull();
     expect(libraryBox).not.toBeNull();
     expect(Math.abs(referenceBox!.x - commandBox!.x)).toBeLessThanOrEqual(1);
     expect(referenceBox!.width).toBeGreaterThanOrEqual(commandBox!.width - 2);
-    expect(referenceBox!.x).toBeLessThan(railBox!.x - 16);
-    expect(referenceBox!.width).toBeGreaterThan(railBox!.width * 1.8);
-    expect(libraryBox!.width).toBeGreaterThan(railBox!.width * 1.8);
+    expect(libraryBox!.width).toBeGreaterThanOrEqual(commandBox!.width - 2);
+    await studentPage.getByRole('button', { name: '閉じて今日の画面に戻る', exact: true }).click();
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(studentPage.getByTestId('dashboard-task-reference-library')).toBeFocused();
+    await openDashboardReference(studentPage, 'progress');
+    await expect(studentPage.getByTestId('dashboard-library-section')).toHaveCount(0);
+    await expect(studentPage.getByTestId('dashboard-progress-section')).toBeVisible();
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(1);
+    await studentPage.keyboard.press('Escape');
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(studentPage.getByTestId('dashboard-task-reference-progress')).toBeFocused();
 
-    const containment = await studentPage.evaluate(() => {
-      const rail = document.querySelector('[data-testid="dashboard-reference-rail"]');
-      const details = document.querySelector('[data-testid="dashboard-reference-sections"]');
-      const library = document.querySelector('[data-testid="dashboard-library-section"]');
-      return {
-        detailsInsideRail: Boolean(rail && details && rail.contains(details)),
-        libraryInsideRail: Boolean(rail && library && rail.contains(library)),
-      };
-    });
-    expect(containment).toEqual({
-      detailsInsideRail: false,
-      libraryInsideRail: false,
-    });
+    const planEntry = studentPage.getByTestId('dashboard-task-reference-plan');
+    const otherMenu = planEntry.locator('xpath=ancestor::details');
+    const otherSummary = otherMenu.locator('summary');
+    await otherSummary.click();
+    await expect(planEntry).toBeVisible();
+    await planEntry.focus();
+    await studentPage.keyboard.press('Escape');
+    await expect(otherMenu).not.toHaveAttribute('open', '');
+    await expect(otherSummary).toBeFocused();
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await openDashboardReference(studentPage, 'plan');
+    await expect(studentPage.getByTestId('dashboard-plan-anchor')).toBeVisible();
+    await expect(studentPage.getByTestId('dashboard-progress-section')).toHaveCount(0);
+    await studentPage.getByRole('button', { name: '閉じて今日の画面に戻る', exact: true }).click();
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(otherSummary).toBeFocused();
+
+    // These reference sections also own a task ref; reselecting must keep panel focus.
+    const repeatSection = await studentPage.getByTestId('dashboard-task-reference-weakness').count() ? 'weakness' : 'writing';
+    const repeatEntry = studentPage.getByTestId(`dashboard-task-reference-${repeatSection}`);
+    await expect(repeatEntry).toHaveCount(1);
+    const repeatSummary = repeatEntry.locator('xpath=ancestor::details').locator('summary');
+    await openDashboardReference(studentPage, repeatSection);
+    await repeatSummary.click();
+    await expect(repeatEntry).toBeVisible();
+    await repeatEntry.focus();
+    await studentPage.keyboard.press('Enter');
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(1);
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toBeFocused();
+    await studentPage.keyboard.press('Escape');
+    await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+    await expect(repeatSummary).toBeVisible();
+    await expect(repeatSummary).toBeFocused();
+    await expect(repeatEntry).toBeHidden();
 
     const offenders = await findUnexpectedHorizontalOverflow(studentPage);
     expect(offenders).toEqual([]);
@@ -266,6 +296,7 @@ test('desktop dashboard keeps lower details full-width when the right rail is pr
 test('study routes survive reload and finish back on the dashboard path', async ({ page }) => {
   await page.goto('/');
 
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -290,6 +321,7 @@ test('study routes survive reload and finish back on the dashboard path', async 
 test('student can open the dedicated practice screen from a direct route', async ({ page }) => {
   await page.goto('/');
 
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toBeVisible();

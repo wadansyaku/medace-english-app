@@ -1,20 +1,29 @@
 import React from 'react';
 import { XCircle } from 'lucide-react';
+import ModalOverlay from '../ModalOverlay';
 
 interface QuizExitConfirmDialogProps {
   onCancel: () => void;
   onConfirm: () => void;
+  returnDestinationLabel?: string;
+  exitBlocked?: boolean;
 }
 
 const QuizExitConfirmDialog: React.FC<QuizExitConfirmDialogProps> = ({
   onCancel,
   onConfirm,
+  returnDestinationLabel = '条件設定画面',
+  exitBlocked = false,
 }) => (
-  <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/40 px-4 pb-4 pt-16 sm:items-center">
-    <div
-      data-testid="quiz-exit-confirm-dialog"
-      className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
-    >
+  <ModalOverlay
+    onClose={onCancel}
+    ariaLabel="今のテストをやめますか？"
+    initialFocusSelector={'[data-testid="quiz-exit-cancel"]'}
+    align="center"
+    mobileBehavior="default"
+    panelClassName="max-w-md rounded-[28px] border border-slate-200 bg-white p-5 shadow-2xl"
+  >
+    <div data-testid="quiz-exit-confirm-dialog">
       <div className="flex items-start gap-3">
         <div className="rounded-2xl bg-red-50 p-3 text-red-600">
           <XCircle className="h-5 w-5" />
@@ -22,7 +31,9 @@ const QuizExitConfirmDialog: React.FC<QuizExitConfirmDialogProps> = ({
         <div>
           <div className="text-lg font-black text-slate-950">今のテストをやめますか？</div>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
-            途中結果は保存せずに、条件設定画面へ戻ります。
+            {exitBlocked
+              ? '採点・保存が完了するまで終了できません。「続ける」で解答に戻り、保存に失敗している場合は同じ解答をもう一度保存してください。'
+              : `保存済みの解答は記録に残ります。テストを終了して、${returnDestinationLabel}へ戻ります。`}
           </p>
         </div>
       </div>
@@ -39,13 +50,14 @@ const QuizExitConfirmDialog: React.FC<QuizExitConfirmDialogProps> = ({
           type="button"
           data-testid="quiz-exit-confirm"
           onClick={onConfirm}
-          className="rounded-2xl bg-red-600 px-4 py-3 font-bold text-white transition-colors hover:bg-red-700"
+          disabled={exitBlocked}
+          className="rounded-2xl bg-red-600 px-4 py-3 font-bold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
         >
           やめて戻る
         </button>
       </div>
     </div>
-  </div>
+  </ModalOverlay>
 );
 
 export default QuizExitConfirmDialog;

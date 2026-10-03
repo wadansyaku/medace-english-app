@@ -148,6 +148,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     hasCoachNotification: Boolean(viewModel.latestCoachNotification),
   });
 
+  const [activeReferenceSection, setActiveReferenceSection] = React.useState<StudentDashboardSectionId | null>(null);
+  const referenceOpenerRef = React.useRef<HTMLElement | null>(null);
   const [localPracticeLane, setLocalPracticeLane] = React.useState<FocusedPracticeLane | null>(null);
   const selectedPracticeLane = activePracticeLane !== undefined ? activePracticeLane : localPracticeLane;
 
@@ -162,27 +164,50 @@ const Dashboard: React.FC<DashboardProps> = ({
     onClosePracticeLane?.();
   }, [onClosePracticeLane, refreshEnglishPracticeSummary]);
 
+  React.useEffect(() => {
+    if (!activeReferenceSection || selectedPracticeLane) return;
+    const frame = window.requestAnimationFrame(() => {
+      const panel = document.querySelector('[data-testid="dashboard-reference-panel"]');
+      if (panel instanceof HTMLElement) {
+        panel.focus({ preventScroll: true });
+        navigation.scrollToElement(panel);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeReferenceSection, selectedPracticeLane, navigation.scrollToElement]);
+
+  const closeReferenceSection = React.useCallback(() => {
+    setActiveReferenceSection(null);
+    window.requestAnimationFrame(() => referenceOpenerRef.current?.focus({ preventScroll: false }));
+  }, []);
+
   const openDashboardSection = React.useCallback((sectionId: StudentDashboardSectionId) => {
     if (sectionId === 'progress') controller.setShowProgressDetails(true);
     if (sectionId === 'account') controller.setShowAccountDetails(true);
-    const refs = {
+    const primaryRefs = {
       mission: navigation.missionSectionRef,
       writing: navigation.writingSectionRef,
       coach: navigation.coachSectionRef,
       weakness: navigation.weaknessSectionRef,
-      plan: navigation.planSectionRef,
-      library: navigation.librarySectionRef,
     };
-    const sectionRef = refs[sectionId as keyof typeof refs];
-    if (sectionRef) {
-      navigation.scrollToSection(sectionRef);
+    const primaryRef = primaryRefs[sectionId as keyof typeof primaryRefs];
+    const primaryDetails = primaryRef?.current?.closest('details[data-testid^="dashboard-task-details-"]');
+    if (primaryRef?.current && primaryDetails) {
+      navigation.scrollToSection(primaryRef);
+      window.requestAnimationFrame(() => {
+        const summary = primaryDetails.querySelector('summary');
+        if (summary instanceof HTMLElement) summary.focus({ preventScroll: true });
+      });
       return;
     }
-    window.requestAnimationFrame(() => {
-      const element = document.querySelector(`[data-testid="dashboard-${sectionId}-section"]`);
-      if (element instanceof HTMLElement) navigation.scrollToElement(element);
-    });
-  }, [controller, navigation]);
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const menu = activeElement?.closest('details');
+    referenceOpenerRef.current = menu && !menu.open ? menu.querySelector('summary') : activeElement;
+    if (activeReferenceSection === sectionId) {
+      const panel = document.querySelector('[data-testid="dashboard-reference-panel"]');
+      if (panel instanceof HTMLElement) { panel.focus({ preventScroll: true }); navigation.scrollToElement(panel); }
+    } else setActiveReferenceSection(sectionId);
+  }, [activeReferenceSection, controller, navigation]);
 
   const executeDashboardCommand = React.useCallback((command: StudentDashboardCommand) => {
     // Opening a task is independent of the optional progress acknowledgement.
@@ -218,7 +243,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       <Onboarding
         user={user}
         isRetake
-        historySummary={`現在レベル: ${user.englishLevel}, XP: ${user.stats?.xp}, 学年・属性: ${GRADE_LABELS[user.grade || UserGrade.ADULT]}`}
+        historySummary={`現在レベル: ${user.englishLevel || '未診断'}, XP: ${user.stats?.xp}, 学年・属性: ${GRADE_LABELS[user.grade || UserGrade.ADULT]}`}
         onComplete={(updated) => {
           onUserUpdate(updated);
           controller.setShowOnboarding(false);
@@ -259,7 +284,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     <div
       data-testid="student-dashboard"
       className={`relative flex min-w-0 flex-col overflow-x-hidden animate-in fade-in duration-500 md:gap-8 md:pb-20 ${
-        isStudentMobileShell ? 'gap-4 pb-28' : 'gap-5 pb-24'
+        isStudentMobileShell ? 'gap-4 pb-8' : 'gap-5 pb-12'
       }`}
     >
       {loadError === 'refresh' && (
@@ -320,6 +345,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           onSelectTask={handleTaskSelect}
           onOpenSection={openDashboardSection}
           onSelectPracticeLane={handlePracticeLaneSelect}
+          activeReferenceSection={activeReferenceSection}
+          onCloseReferenceSection={closeReferenceSection}
         />
       )}
     </div>

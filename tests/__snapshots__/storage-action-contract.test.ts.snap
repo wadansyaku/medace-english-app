@@ -80,6 +80,13 @@ exports[`storage action contract > matches the storage action contract snapshot 
     "roles": null,
   },
   {
+    "action": "getBookStudyOverview",
+    "alias": "getBookStudyOverview",
+    "domain": "catalog",
+    "requiresDestructiveAdminFlag": false,
+    "roles": null,
+  },
+  {
     "action": "getDashboardSnapshot",
     "alias": "getDashboardSnapshot",
     "domain": "dashboard",

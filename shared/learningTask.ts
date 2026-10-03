@@ -5,6 +5,7 @@ import {
   WeaknessDimension,
   type InstructorNotification,
   type LearningTaskIntent,
+  type StudyWordRange,
   type PrimaryMissionSnapshot,
   type WeaknessSignalSummary,
 } from '../types';
@@ -14,6 +15,7 @@ import {
   WEAKNESS_FOCUS_SESSION_ID,
   WEAKNESS_FOCUS_SESSION_LIMIT,
 } from './studySession';
+import { normalizeStudyWordRange } from './studyScope';
 
 const TASK_QUERY_KEY = 'task';
 const MAX_PREFERRED_BOOK_IDS = 5;
@@ -47,6 +49,9 @@ export const parseTaskIntent = (value: string | null | undefined): LearningTaskI
     if (!parsed.intentType || !parsed.selectionPolicy || !parsed.label) return null;
     const preferredBookIds = normalizeTaskPreferredBookIds(parsed.preferredBookIds);
     const normalizedTask = { ...parsed };
+    const wordRange = normalizeStudyWordRange(parsed.wordRange);
+    if (wordRange) normalizedTask.wordRange = wordRange;
+    else delete normalizedTask.wordRange;
     if (preferredBookIds.length > 0) {
       normalizedTask.preferredBookIds = preferredBookIds;
     } else {
@@ -97,7 +102,7 @@ export const createBookQuizTaskIntent = (bookId: string, label = '教材テス�
   limit: 10,
 });
 
-export const createFollowUpSpellingTaskIntent = (bookId: string): LearningTaskIntent => ({
+export const createFollowUpSpellingTaskIntent = (bookId: string, wordRange?: StudyWordRange): LearningTaskIntent => ({
   mode: 'quiz',
   intentType: LearningTaskIntentType.BOOK_QUIZ,
   bookId,
@@ -106,6 +111,7 @@ export const createFollowUpSpellingTaskIntent = (bookId: string): LearningTaskIn
   limit: 5,
   targetQuestionModes: ['SPELLING_HINT'],
   autoStart: true,
+  ...(wordRange ? { wordRange: normalizeStudyWordRange(wordRange) } : {}),
 });
 
 export const createTodayFocusTaskIntent = (

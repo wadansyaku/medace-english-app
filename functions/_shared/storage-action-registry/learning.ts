@@ -89,10 +89,11 @@ export const learningStorageActionDefinitions = {
         generatedProblemId: expectOptionalString(record, 'generatedProblemId'),
         grammarScopeId: expectOptionalString(record, 'grammarScopeId') as never,
         translationFeedback: expectOptionalObject(record.translationFeedback, 'translationFeedback') as never,
+        clientAttemptId: record.clientAttemptId === undefined ? undefined : expectString(record, 'clientAttemptId'),
       };
     },
     execute: async ({ env, user }, payload) => {
-      await handleRecordQuizAttempt(
+      return handleRecordQuizAttempt(
         env,
         user,
         payload.wordId,
@@ -105,8 +106,8 @@ export const learningStorageActionDefinitions = {
         payload.generatedProblemId,
         payload.grammarScopeId,
         payload.translationFeedback,
+        payload.clientAttemptId,
       );
-      return null;
     },
   }),
   recordEnglishPracticeAttempt: defineStorageAction<'recordEnglishPracticeAttempt'>({

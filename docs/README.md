@@ -7,11 +7,14 @@ This directory keeps operational docs and historical design notes for Steady Stu
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。
 
 - [Product charter](../project.md): 対象、価値、原則、観測する指標。
+- [登録前の学習と任意診断](./analysis/2026-10-03-value-first-onboarding.md): 固定UI版から分けた非公開Start版、端末記録と本人への引継ぎ、0045の移行境界。
 - [Naruシスト一冊化・公開検証](./analysis/2026-10-03-naru-one-book-release.md): 原本保持、投入ガード、preview・本番の状態。
 - [包括UI・保存基盤改善計画](./analysis/2026-10-03-medace-improvement-plan.md): 確定した破綻と追加候補、優先順位・受入条件。
 - [Current backlog](../todo.md): 今回と次期の作業、受入条件、配備前の未完了事項。
 - [Rebuild audit and plan 2026-09-07](./analysis/rebuild-plan-2026-09-07.md): 課題・実装・削除根拠・検証記録。
 - [Production rebuild release 2026-09-07](./analysis/production-rebuild-release-2026-09-07.md): PR、migration、プレビュー・本番の実確認を段階別に記録。
+- [Quiz receipt candidate 2026-10-03](./analysis/2026-10-03-quiz-attempt-receipts.md): 小テスト保存再送の独立候補、合成データ検証、Cloudflare/IDBの保証境界。
+- [Quiz receipt integration 2026-10-03](./analysis/2026-10-03-quiz-attempt-receipts-integration.md): UI・一冊公開版へ重ねた未公開候補、統合回帰と配備前の境界。
 - [Architecture](./architecture.md): 依存方向、取得/行動/保存の契約と未完の境界。
 - [Environment setup](./environment-setup.md): ローカル教材投入、AI/R2、環境変数と設定の詳細。
 - [Deployment operations runbook](./deployment-ops-runbook.md): release gate、preview/prod、rollback。
@@ -66,3 +69,5 @@ These docs are useful background, but implementation details may have changed. C
 - `npm run clean:artifacts` is always a dry run. Use `npm run clean:artifacts:apply` only after reviewing the printed list.
 - Cleanup is deliberately narrow: only the type-checked exact names `dist/`, `_worker.bundle`, `test-results/`, and `test-results-rerun/`, plus `.DS_Store`, Python bytecode, and `__pycache__`, are regenerable targets. Similar names and symlinks are preserved. `node_modules`, `.wrangler`, `tmp`, `output`, and `.playwright*` remain outside the cleanup boundary because they can contain active local state, recovery evidence, or user artifacts.
 - Local workbook correction helpers and the files under `output/spreadsheet/` are not production source and are not cleanup targets. Preserve them together until they are explicitly promoted to a documented repeatable workflow or archived outside the repo.
+
+- [2026-10-03 ホーム整理・章別学習・文法追加の非公開候補](./analysis/2026-10-03-smart-ui-and-grammar.md)

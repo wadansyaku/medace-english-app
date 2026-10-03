@@ -40,10 +40,12 @@ import {
 
 interface ProfileBody {
   user?: {
+    uid?: string;
     displayName?: string;
     grade?: string;
     englishLevel?: string;
     studyMode?: string;
+    diagnosticDeferredAt?: number;
   };
 }
 
@@ -227,6 +229,23 @@ const handleProfileUpdate = async (
   const { env, request } = context;
   const body = await readJson<ProfileBody>(request);
   const nextUser = body.user || {};
+  // Existing cloud clients send the complete profile. Keep legacy payloads
+  // compatible while preventing another tab's cookie switch from changing the
+  // account this user explicitly chose to update.
+  if (nextUser.uid !== undefined && nextUser.uid !== currentUser.id) {
+    throw new HttpError(409, 'ログイン中のアカウントが変わりました。ご本人のアカウントで再試行してください。');
+  }
+  if (nextUser.diagnosticDeferredAt !== undefined && (
+    currentUser.role !== UserRole.STUDENT
+    || !Number.isSafeInteger(nextUser.diagnosticDeferredAt)
+    || nextUser.diagnosticDeferredAt <= 0
+  )) {
+    throw new HttpError(400, '診断を後で行う設定が正しくありません。');
+  }
+  // The marker is a choice, not a client-issued diagnostic level or timestamp.
+  // Ordinary updates and completed diagnostics preserve the stored choice.
+  const nextDiagnosticDeferredAt = currentUser.diagnostic_deferred_at
+    || (nextUser.diagnosticDeferredAt !== undefined ? Date.now() : null);
   const nextDisplayName =
     typeof nextUser.displayName === 'string' && nextUser.displayName.trim()
       ? nextUser.displayName.trim()
@@ -243,7 +262,7 @@ const handleProfileUpdate = async (
 
   await env.DB.prepare(`
     UPDATE users
-    SET display_name = ?, grade = ?, english_level = ?, study_mode = ?,
+    SET display_name = ?, grade = ?, english_level = ?, study_mode = ?, diagnostic_deferred_at = COALESCE(diagnostic_deferred_at, ?),
         updated_at = ?
     WHERE id = ?
   `).bind(
@@ -251,6 +270,7 @@ const handleProfileUpdate = async (
     nextGrade,
     nextEnglishLevel,
     nextStudyMode,
+    nextDiagnosticDeferredAt,
     Date.now(),
     currentUser.id,
   ).run();

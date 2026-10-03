@@ -1,3 +1,4 @@
+import type { QuizAttemptReceipt } from '../shared/quizAttempt';
 
 import {
   ActivityLog,
@@ -9,6 +10,8 @@ import {
   CommercialRequestStatus,
   BookMetadata,
   BookProgress,
+  BookStudyOverview,
+  StudyWordRange,
   ClassroomWorksheetLifecycleEventResult,
   DashboardSnapshot,
   LearningTrack,
@@ -132,6 +135,7 @@ import {
 import {
   getBookProgress as getBookProgressFromHistory,
   getBookSession as getBookSessionFromHistory,
+  getBookStudyOverview as getBookStudyOverviewFromHistory,
   getDailySessionWords as getDailySessionWordsFromHistory,
   getDueCount as getDueCountFromHistory,
   getStudiedWordIdsByBook as getStudiedWordIdsByBookFromHistory,
@@ -341,6 +345,10 @@ export class IndexedDBStorageService implements IStorageService {
     return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit, taskIntent);
   }
 
+  async getBookStudyOverview(uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview> {
+    return getBookStudyOverviewFromHistory(this.getLearningHistoryContext(), uid, bookId, wordRange);
+  }
+
   async getDueCount(uid: string): Promise<number> {
     return getDueCountFromHistory(this.getLearningHistoryContext(), uid);
   }
@@ -378,7 +386,8 @@ export class IndexedDBStorageService implements IStorageService {
     generatedProblemId?: string,
     grammarScopeId?: import('../types').GrammarCurriculumScopeId,
     translationFeedback?: import('../types').JapaneseTranslationFeedback,
-  ): Promise<void> {
+    clientAttemptId?: string,
+  ): Promise<QuizAttemptReceipt | null> {
     return recordQuizAttemptFromHistory(
       this.getLearningHistoryContext(),
       uid,
@@ -392,6 +401,7 @@ export class IndexedDBStorageService implements IStorageService {
       generatedProblemId,
       grammarScopeId,
       translationFeedback,
+      clientAttemptId,
     );
   }
 
@@ -500,6 +510,7 @@ export class IndexedDBStorageService implements IStorageService {
         STORES.ASSIGNMENTS,
         STORES.INTERACTION_EVENTS,
         STORES.STUDY_ATTEMPT_RECEIPTS,
+        STORES.QUIZ_ATTEMPT_RECEIPTS,
         STORES.WEAKNESS_SIGNALS,
         STORES.COMMERCIAL_REQUESTS,
         STORES.PRODUCT_ANNOUNCEMENTS,
@@ -516,6 +527,7 @@ export class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.ASSIGNMENTS).clear();
     tx.objectStore(STORES.INTERACTION_EVENTS).clear();
     tx.objectStore(STORES.STUDY_ATTEMPT_RECEIPTS).clear();
+    tx.objectStore(STORES.QUIZ_ATTEMPT_RECEIPTS).clear();
     tx.objectStore(STORES.WEAKNESS_SIGNALS).clear();
     tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
     tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();

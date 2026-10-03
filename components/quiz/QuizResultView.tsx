@@ -20,6 +20,8 @@ interface QuizResultViewProps {
   onRetry: () => void;
   onReset: () => void;
   onBack: () => void;
+  resetLabel?: string;
+  backLabel?: string;
 }
 
 const QuizResultView: React.FC<QuizResultViewProps> = ({
@@ -34,6 +36,8 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
   onRetry,
   onReset,
   onBack,
+  resetLabel = '条件を決め直す',
+  backLabel = 'ダッシュボードへ戻る',
 }) => (
   <div data-testid="quiz-result-view" className="space-y-4">
     <section className="rounded-[32px] bg-white p-6 shadow-lg sm:p-8">
@@ -171,7 +175,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
             onClick={onReset}
             className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-200"
           >
-            条件を決め直す
+            {resetLabel}
           </button>
           <button
             type="button"
@@ -179,7 +183,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
             onClick={onBack}
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-50"
           >
-            ダッシュボードへ戻る
+            {backLabel}
           </button>
         </div>
       </div>

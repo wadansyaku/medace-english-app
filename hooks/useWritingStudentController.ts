@@ -38,6 +38,7 @@ export const useWritingStudentController = (user: UserProfile) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [submitTarget, setSubmitTarget] = useState<WritingAssignment | null>(null);
   const [feedbackDetail, setFeedbackDetail] = useState<WritingStudentSubmissionDetailResponse | null>(null);
@@ -98,6 +99,7 @@ export const useWritingStudentController = (user: UserProfile) => {
       if (activeUserUidRef.current !== user.uid) return;
       setAssignments(sortedAssignments);
       setLastRefreshedAt(Date.now());
+      setLoadError(null);
     })();
 
     refreshInFlightRef.current = { userUid: user.uid, promise: refreshPromise };
@@ -107,10 +109,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     } catch (error) {
       if (activeUserUidRef.current !== user.uid) return;
       console.error(error);
-      setNotice({
-        tone: 'error',
-        message: (error as Error).message || '自由英作文課題の取得に失敗しました。',
-      });
+      setLoadError((error as Error).message || '自由英作文課題の取得に失敗しました。');
     } finally {
       if (refreshInFlightRef.current?.promise === refreshPromise) {
         refreshInFlightRef.current = null;
@@ -129,6 +128,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     feedbackRequestVersionRef.current += 1;
     setAssignments([]);
     setLastRefreshedAt(null);
+    setLoadError(null);
     setNotice(null);
     setFeedbackDetail(null);
     setSubmitTarget(null);
@@ -281,6 +281,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     loading,
     refreshing,
     lastRefreshedAt,
+    loadError,
     notice,
     submitTarget,
     feedbackDetail,

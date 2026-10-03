@@ -12,7 +12,6 @@ import {
   NotebookPen,
   PencilLine,
   RefreshCw,
-  Shuffle,
   Sparkles,
   Target,
   XCircle,
@@ -38,6 +37,7 @@ import {
   type JapaneseWordOrderPracticeItem,
 } from '../../utils/grammarPractice';
 import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
+import { buildCuratedGrammarPracticeItems, isGrammarPracticeOrderCorrect } from '../../utils/grammarQuestionBank';
 import { buildDeterministicTranslationFeedback } from '../../utils/worksheet';
 import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
 import { learningService } from '../../services/learning';
@@ -214,10 +214,6 @@ const resolveTranslationExamTarget = (grade?: UserGrade): TranslationExamTarget 
   return 'GENERAL';
 };
 
-const toGrammarKind = (mode: GrammarMode): GrammarPracticeItem['kind'] => (
-  mode === 'GRAMMAR_CLOZE' ? 'GRAMMAR_CLOZE' : 'ENGLISH_WORD_ORDER'
-);
-
 const isGrammarClozeItem = (item: GrammarPracticeItem): item is GrammarClozePracticeItem => (
   item.kind === 'GRAMMAR_CLOZE'
 );
@@ -259,7 +255,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   onClose,
   closeLabel = '閉じる',
 }) => {
-  const userLevel = user.englishLevel ?? EnglishLevel.A2;
+  const isUndiagnosed = !user.englishLevel;
+  const userLevel = user.englishLevel ?? EnglishLevel.A1;
   const isEmbedded = variant === 'embedded';
   const isEmbeddedDrill = isEmbedded && embeddedMode === 'drill';
   const handleBack = onBack ?? (() => undefined);
@@ -275,8 +272,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [scopeViewFilter, setScopeViewFilter] = useState<ScopeViewFilter>('recommended');
   const [scopeCategoryFilter, setScopeCategoryFilter] = useState<ScopeCategoryFilter>('all');
   const [scopePickerOpen, setScopePickerOpen] = useState(false);
-  const [randomScopeMode, setRandomScopeMode] = useState(true);
   const [showScopeHint, setShowScopeHint] = useState(true);
+  const [grammarQuestionIndex, setGrammarQuestionIndex] = useState(0);
+  const [excludedGrammarQuestionIds, setExcludedGrammarQuestionIds] = useState<string[]>([]);
+  const checkedGrammarItemIdsRef = React.useRef(new Set<string>());
   const [grammarSelections, setGrammarSelections] = useState<Record<string, string>>({});
   const [grammarOrders, setGrammarOrders] = useState<Record<string, string[]>>({});
   const [checkedGrammarItems, setCheckedGrammarItems] = useState<Record<string, boolean>>({});
@@ -411,35 +410,25 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     () => grammarScopes.filter((scope) => selectedScopeIds.includes(scope.id)),
     [grammarScopes, selectedScopeIds],
   );
-  const activeScopePool = useMemo(
-    () => (selectedScopes.length > 0 ? selectedScopes : grammarScopes.slice(0, 4)),
-    [grammarScopes, selectedScopes],
-  );
-  const targetGrammarKind = toGrammarKind(grammarMode);
   const examTarget = resolveTranslationExamTarget(user.grade);
 
-  const grammarItems = useMemo(() => {
-    if (activeScopePool.length === 0) return [];
-    if (practiceWords.length === 0) return [];
-    return Array.from({ length: grammarQuestionCount }, (_, index) => {
-        const word = practiceWords[index % practiceWords.length];
-        const scopeIndex = randomScopeMode
-          ? (index * 3 + practiceSeed) % activeScopePool.length
-          : index % activeScopePool.length;
-        const scope = activeScopePool[scopeIndex];
-        const questionSeed = `english-practice:${practiceSeed}:${grammarMode}:${scope.id}:${index}`;
-        const item = buildGrammarPracticeItemsForWord(word, {
-          seed: questionSeed,
-          requestedScopeId: scope.id,
-          userLevel: practiceLevel,
-        }).find((item) => item.kind === targetGrammarKind) ?? null;
-        // A short word pool repeats within the five-question set. Keep each
-        // occurrence's answer separate, including when its scope changes.
-        return item ? { ...item, id: `${item.id}:${questionSeed}` } : null;
-      })
-      .filter((item): item is GrammarPracticeItem => Boolean(item))
-      .slice(0, grammarQuestionCount);
-  }, [activeScopePool, grammarMode, grammarQuestionCount, practiceLevel, practiceSeed, practiceWords, randomScopeMode, targetGrammarKind]);
+  const grammarItems = useMemo(() => buildCuratedGrammarPracticeItems({
+    mode: grammarMode,
+    scopeIds: selectedScopes.map(scope => scope.id),
+    userLevel: practiceLevel,
+    seed: `english-practice:${practiceSeed}:${grammarMode}`,
+    questionCount: grammarQuestionCount,
+    excludeQuestionIds: excludedGrammarQuestionIds,
+  }), [selectedScopes, grammarMode, practiceLevel, practiceSeed, excludedGrammarQuestionIds]);
+
+  React.useEffect(() => {
+    setGrammarQuestionIndex(0);
+    setExcludedGrammarQuestionIds([]);
+    setGrammarSelections({});
+    setGrammarOrders({});
+    setCheckedGrammarItems({});
+    checkedGrammarItemIdsRef.current.clear();
+  }, [grammarMode, practiceLevel, selectedScopeIds.join('|')]);
 
   const translationItems = useMemo(() => (
     practiceWords
@@ -542,7 +531,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     attempt: EnglishPracticeAttemptInput,
     options?: { translationFeedback?: JapaneseTranslationFeedback },
   ) => {
-    const isFallbackWordAttempt = samplePracticeActive && (attempt.lane === 'grammar' || attempt.lane === 'translation');
+    const isFallbackWordAttempt = samplePracticeActive && !attempt.curatedQuestionId
+      && (attempt.lane === 'grammar' || attempt.lane === 'translation');
     if (isFallbackWordAttempt || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
       setPracticeSyncError(null);
       return;
@@ -559,6 +549,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   }, [samplePracticeActive, user.uid]);
 
   const resetGeneratedPractice = () => {
+    const answeredQuestionIds = grammarItems
+      .filter(item => checkedGrammarItemIdsRef.current.has(item.id))
+      .flatMap(item => item.feedback ? [item.feedback.questionId] : []);
+    setExcludedGrammarQuestionIds(current => [...new Set([...current, ...answeredQuestionIds])]);
+    setGrammarQuestionIndex(0);
+    checkedGrammarItemIdsRef.current.clear();
     setPracticeSeed((current) => current + 1);
     setGrammarSelections({});
     setGrammarOrders({});
@@ -627,17 +623,20 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   };
 
   const handleGrammarCheck = (item: GrammarPracticeItem, correct: boolean) => {
+    if (checkedGrammarItemIdsRef.current.has(item.id)) return;
+    checkedGrammarItemIdsRef.current.add(item.id);
     setCheckedGrammarItems((current) => ({ ...current, [item.id]: true }));
     recordPracticeAttempt({
       lane: 'grammar',
       mode: grammarMode,
       correct,
-      wordId: item.wordId,
-      bookId: item.bookId,
-      word: item.word,
+      wordId: item.source === 'curated' ? undefined : item.wordId,
+      bookId: item.source === 'curated' ? undefined : item.bookId,
+      word: item.source === 'curated' ? undefined : item.word,
       scopeId: item.grammarScope.scopeId,
       scopeLabelJa: item.grammarScope.labelJa,
-      level: practiceLevel,
+      level: item.feedback?.level ?? practiceLevel,
+      curatedQuestionId: item.source === 'curated' ? item.feedback?.questionId : undefined,
     });
   };
 
@@ -766,6 +765,34 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   }, [practiceLevel, recordPracticeAttempt, selectedWritingTask, writingDraft, writingWithinRange]);
   const overallAccuracy = formatPercent(progressSummary.accuracy);
   const currentStreak = user.stats?.currentStreak ?? 0;
+  const renderGrammarFeedback = (item: GrammarPracticeItem, correct: boolean, selected?: string) => {
+    const feedback = item.feedback;
+    if (!feedback) return <p className="mt-3 text-sm leading-relaxed text-slate-600">例文: {item.sourceSentence}</p>;
+    const otherDistractors = Object.entries(feedback.distractorReasons).filter(([option]) => option !== selected);
+    const selectedOrderText = isEnglishWordOrderItem(item)
+      ? (grammarOrders[item.id] || []).map(id => item.chips.find(chip => chip.id === id)?.text || '').join(' ')
+      : '';
+    return (
+      <div data-testid="grammar-answer-feedback" className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed">
+        <p className="font-bold text-slate-900">{item.sourceSentence}</p>
+        <p className="text-slate-600">{feedback.translationJa}</p>
+        <div><p className="font-bold text-slate-900">正答の理由</p><p className="mt-1 text-slate-700">{feedback.explanationJa}</p></div>
+        {!correct && (
+          <div className="text-red-700"><p className="font-bold">今回の誤答の理由</p><p className="mt-1">{selected
+            ? feedback.distractorReasons[selected] ?? '選んだ形は、この文脈の正答と一致しません。正答の理由を確認してください。'
+            : `今回の語順「${selectedOrderText}」は、この文脈で受理される語順と一致しません。正解文と主語・動詞・修飾語の位置を比べてください。`}</p></div>
+        )}
+        {((isGrammarClozeItem(item) && otherDistractors.length > 0) || feedback.alternativeNotesJa.length > 0) && (
+          <details><summary className="cursor-pointer font-bold text-slate-600">他の選択肢・別の語順を確認</summary>
+            <div className="mt-2 space-y-2 text-slate-600">
+              {isGrammarClozeItem(item) && otherDistractors.map(([option, reason]) => <p key={option}><span className="font-bold">{option}: </span>{reason}</p>)}
+              {feedback.alternativeNotesJa.map(note => <p key={note}>{note}</p>)}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
   const renderGrammarItem = (item: GrammarPracticeItem) => {
     const isChecked = Boolean(checkedGrammarItems[item.id]);
 
@@ -773,13 +800,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       const selected = grammarSelections[item.id];
       const correct = selected === item.answer;
       return (
-        <article key={item.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+        <article key={item.id} data-testid="grammar-practice-question" data-question-id={item.feedback?.questionId} className="rounded-lg border border-slate-200 bg-white px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
               {item.grammarScope.curriculumCategoryLabelJa || item.grammarFocus}
             </span>
             {showScopeHint && <span className="text-xs font-bold text-slate-400">{item.grammarScope.labelJa}</span>}
           </div>
+          {item.feedback && <p className="mt-3 text-xs font-bold text-slate-500">{LEVEL_LABELS[item.feedback.level]} · {item.feedback.recommendedGradeJa}</p>}
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.prompt}</p>
           <p className="mt-4 text-lg font-black leading-relaxed text-slate-950">{item.clozeSentence}</p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {item.options.map((option) => (
@@ -804,7 +833,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={!selected || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -815,23 +844,25 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               </span>
             )}
           </div>
-          {isChecked && <p className="mt-3 text-sm font-bold leading-relaxed text-slate-600">例文: {item.sourceSentence}</p>}
+          {isChecked && renderGrammarFeedback(item, correct, selected)}
         </article>
       );
     }
 
     if (isEnglishWordOrderItem(item)) {
       const orderedChipIds = grammarOrders[item.id] || [];
-      const correct = isOrderCorrect(orderedChipIds, item.correctChipIds);
+      const correct = isGrammarPracticeOrderCorrect(item, orderedChipIds);
       const chipById = new Map(item.chips.map((chip) => [chip.id, chip.text]));
       return (
-        <article key={item.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4">
+        <article key={item.id} data-testid="grammar-practice-question" data-question-id={item.feedback?.questionId} className="rounded-lg border border-slate-200 bg-white px-4 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
               {item.grammarScope.curriculumCategoryLabelJa || item.grammarScope.labelJa}
             </span>
             {showScopeHint && <span className="text-xs font-bold text-slate-400">{item.grammarScope.labelJa}</span>}
           </div>
+          {item.feedback && <p className="mt-3 text-xs font-bold text-slate-500">{LEVEL_LABELS[item.feedback.level]} · {item.feedback.recommendedGradeJa}</p>}
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">{item.prompt}</p>
           <p className="mt-4 text-sm font-bold text-slate-500">英単語を正しい順番に並べ替えます。大文字・ピリオドの手がかりは消しています。</p>
           <div className="mt-4 min-h-14 rounded-lg border border-dashed border-medace-200 bg-medace-50/60 px-3 py-3">
             <div className="flex flex-wrap gap-2">
@@ -869,7 +900,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={orderedChipIds.length !== item.correctChipIds.length || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -877,7 +908,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={isChecked}
               onClick={() => setGrammarOrders((current) => ({ ...current, [item.id]: [] }))}
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
             >
               クリア
             </button>
@@ -888,6 +919,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               </span>
             )}
           </div>
+          {isChecked && renderGrammarFeedback(item, correct)}
         </article>
       );
     }
@@ -947,17 +979,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            aria-pressed={randomScopeMode}
-            onClick={() => setRandomScopeMode((current) => !current)}
-            className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-black ${
-              randomScopeMode ? 'border-medace-500 bg-medace-50 text-medace-800' : 'border-slate-200 bg-white text-slate-600'
-            }`}
-          >
-            <Shuffle className="h-4 w-4" />
-            ランダム演習
-          </button>
           <button
             type="button"
             aria-pressed={showScopeHint}
@@ -1103,10 +1124,29 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           <div className="text-xs font-black text-medace-700">今回の問題</div>
           <h2 className="mt-1 text-xl font-black text-slate-950">選んだ範囲から {grammarItems.length} 問</h2>
           <p className="mt-1 text-sm font-bold leading-relaxed text-slate-600">
-            選択範囲の例文で練習します。
+            一問ずつ解いて、理由を確認します。
           </p>
         </div>
-        {grammarItems.map(renderGrammarItem)}
+        {grammarItems.length === 0 ? (
+          <div role="status" data-testid="grammar-empty-pool" className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-relaxed text-slate-600">
+            <p className="font-bold text-slate-900">{excludedGrammarQuestionIds.length > 0 ? 'この範囲で未出題の問題はありません。' : 'この範囲とレベルで出題できる問題はありません。'}</p>
+            <p className="mt-2">選択範囲: {selectedScopes.map(scope => scope.labelJa).join(' / ') || '未選択'} · 上限 {LEVEL_LABELS[practiceLevel]}</p>
+            <p className="mt-2">範囲を変更して、別の問題へ進んでください。</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm font-bold text-slate-600" aria-live="polite">{grammarQuestionIndex + 1} / {grammarItems.length} 問</p>
+            {renderGrammarItem(grammarItems[Math.min(grammarQuestionIndex, grammarItems.length - 1)])}
+            <div className="flex flex-wrap gap-2">
+              {grammarQuestionIndex > 0 && <button type="button" onClick={() => setGrammarQuestionIndex(grammarQuestionIndex - 1)} className="min-h-11 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold">前の問題を確認</button>}
+              {grammarQuestionIndex < grammarItems.length - 1 ? (
+                <button type="button" disabled={!checkedGrammarItems[grammarItems[grammarQuestionIndex]?.id]} onClick={() => setGrammarQuestionIndex(grammarQuestionIndex + 1)} className="min-h-11 rounded-lg bg-steady-action px-4 py-2 text-sm font-bold text-steady-on-action disabled:bg-slate-300">次の問題へ</button>
+              ) : checkedGrammarItems[grammarItems[grammarQuestionIndex]?.id] && (
+                <button type="button" onClick={resetGeneratedPractice} className="min-h-11 rounded-lg bg-steady-action px-4 py-2 text-sm font-bold text-steady-on-action">次のセットへ</button>
+              )}
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
@@ -1282,7 +1322,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {Object.values(EnglishLevel).map((level) => {
-              const isChallengeLevel = compareEnglishLevels(level, userLevel) > 0;
+              const isChallengeLevel = !isUndiagnosed && compareEnglishLevels(level, userLevel) > 0;
               return (
                 <button
                   key={level}
@@ -1595,28 +1635,33 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderPracticeMeta = () => (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
-        {LEVEL_LABELS[userLevel]}
+      <span data-testid="english-practice-difficulty" className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
+        {LEVEL_LABELS[practiceLevel]}
       </span>
       <span className="rounded-md border border-medace-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
-        {wordsLoading ? '単語を準備中' : samplePracticeActive ? 'お試し問題' : `${sessionWords.length}語で練習`}
+        {activeLane === 'grammar' ? '文法問題で練習' : wordsLoading ? '単語を準備中' : samplePracticeActive ? 'お試し問題' : `${sessionWords.length}語で練習`}
       </span>
       <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
       </span>
+      {isUndiagnosed && (
+        <p data-testid="english-practice-undiagnosed-note" className="w-full text-sm leading-relaxed text-slate-700">
+          未診断のため入門から始めます。表示レベルは練習の難しさで、診断結果ではありません。あとから変更できます。
+        </p>
+      )}
     </div>
   );
 
   const renderPracticeNotices = () => (
     <>
-      {wordsLoading && sessionWords.length === 0 && (
+      {activeLane !== 'grammar' && wordsLoading && sessionWords.length === 0 && (
         <section role="status" aria-live="polite" className="mb-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
           <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
           単語を読み込み中です。
         </section>
       )}
 
-      {samplePracticeActive && (
+      {activeLane !== 'grammar' && samplePracticeActive && (
         <section className="mb-4 rounded-lg border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
           お試し問題です。復習対象には入りません。
         </section>

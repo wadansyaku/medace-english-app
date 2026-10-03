@@ -1,5 +1,6 @@
+import { exposeStudentDemo } from './smoke-support';
 import { expect, test } from './diagnostics';
-import { MOBILE_FLOW_TEST_IDS } from './smoke-support';
+import { MOBILE_FLOW_TEST_IDS, openDashboardReference } from './smoke-support';
 
 test('dashboard recovery keeps failed data unknown and retries without creating a book', async ({ page }) => {
   let shouldFail = true;
@@ -17,6 +18,7 @@ test('dashboard recovery keeps failed data unknown and retries without creating 
   });
 
   await page.goto('/');
+  await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await expect(page.getByTestId('dashboard-load-error')).toBeVisible();
   await expect(page.getByTestId('student-dashboard')).toHaveCount(0);
@@ -30,6 +32,8 @@ test('dashboard recovery keeps failed data unknown and retries without creating 
   await expect(page.getByTestId('student-hero-primary-cta')).toBeVisible();
   await expect(page.getByTestId('dashboard-load-error')).toHaveCount(0);
   expect(dashboardRequests).toBe(failedRequestCount + 1);
+  await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+  await openDashboardReference(page, 'library');
   if (await page.getByTestId('dashboard-library-empty').count()) {
     await expect(page.getByTestId('dashboard-command-metrics')).toHaveCount(0);
     await expect(page.getByText('今日の進捗', { exact: true })).toHaveCount(0);
@@ -37,12 +41,16 @@ test('dashboard recovery keeps failed data unknown and retries without creating 
     await expect(page.getByTestId('dashboard-plan-anchor')).toHaveCount(0);
   }
 
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('dashboard-reference-panel')).toHaveCount(0);
+  await expect(page.getByTestId('dashboard-task-reference-library')).toBeFocused();
+
   const evidenceDirectory = process.env.MEDACE_UI_EVIDENCE_DIR;
   if (evidenceDirectory) {
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.screenshot({ path: `${evidenceDirectory}/ui-dashboard-desktop.png`, fullPage: true, animations: 'disabled' });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByTestId('dashboard-mobile-quick-nav')).toBeVisible();
+    await expect(page.getByTestId('dashboard-task-overview-rail')).toBeVisible();
     await page.screenshot({ path: `${evidenceDirectory}/ui-dashboard-mobile.png`, fullPage: true, animations: 'disabled' });
   }
 });

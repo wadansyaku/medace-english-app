@@ -1,3 +1,4 @@
+import type { QuizAttemptReceipt } from '../../shared/quizAttempt';
 import type {
   ActivityLog,
   AdminDashboardSnapshot,
@@ -6,6 +7,8 @@ import type {
   AiGeneratedProblemReviewQueueResponse,
   BookMetadata,
   BookProgress,
+  BookStudyOverview,
+  StudyWordRange,
   DashboardSnapshot,
   GrammarCurriculumScopeId,
   InterventionKind,
@@ -83,6 +86,7 @@ export interface CatalogStorageService {
 export interface LearningStorageService {
   getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
   getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
+  getBookStudyOverview(uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview>;
   getDueCount(uid: string): Promise<number>;
   saveSRSHistory(
     uid: string,
@@ -105,7 +109,8 @@ export interface LearningStorageService {
     generatedProblemId?: string,
     grammarScopeId?: GrammarCurriculumScopeId,
     translationFeedback?: JapaneseTranslationFeedback,
-  ): Promise<void>;
+    clientAttemptId?: string,
+  ): Promise<QuizAttemptReceipt | null>;
   recordEnglishPracticeAttempt(uid: string, payload: EnglishPracticeAttemptPayload): Promise<EnglishPracticeAttemptResult>;
   listAiGeneratedProblemReviewQueue(payload?: AiGeneratedProblemReviewQueueRequest): Promise<AiGeneratedProblemReviewQueueResponse>;
   reviewAiGeneratedProblem(payload: AiGeneratedProblemReviewPayload): Promise<AiGeneratedProblemReviewQueueItem>;

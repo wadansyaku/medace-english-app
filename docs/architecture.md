@@ -44,13 +44,17 @@ Cloudflare/D1が本番の正本。IndexedDBは個人デモ・ローカル学習�
 
 SRSは識別子付き回答と履歴更新を原子的に扱う。DB変更は新しいmigrationで加え、既存履歴を作り直さない。同じ利用者とattempt IDの再送は同じ回答として扱い、内容のすり替えは拒否する。トランザクションと条件付き更新で、別回答の競合と同じ回答の再送を区別する。派生集計の失敗を新しい回答に変換しない。
 
+小テストはSRSとは別の`quiz_attempt_receipts`を使う。同じ利用者・`clientAttemptId`の内容をSHA-256で照合し、同内容の再送は元のreceipt、異内容は409を返す。履歴・QUIZイベント・指定されたCBT/和訳feedbackは一つのD1 batchで確定し、historyとCBTの全計算入力をCASで照合する。新クライアントは最初の解答IDと送信内容を再試行まで保持する。旧IDなしクライアントは204互換を維持し、複数要求の重複排除は保証しない。認可はreceipt再送でも毎回行う。
+
+小テストのweakness/missionは確定後の派生投影。失敗はreceiptにPENDINGとして残り、同じ解答の再送で元のmission/日時を使って再構築する。回答receiptは投影の並行競合修復や自動outboxを保証しない。IDBは端末内の履歴・event・専用receiptを同一native transactionで保存し、transaction完了後にのみ返す。サーバーの認可やCBT/feedback永続化と同じ保証ではない。
+
 missionは一意な単語集合で目標を評価する。丸めた表示率は達成判定に使用せず、全必須目標の実数で判定する。更新は保存前の進捗とのCASで行い、競合時は上限を設けて再読込・再計算する。完了やアーカイブを古い要求で巻き戻さない。
 
-IDB v7への更新が旧タブに阻まれた場合は明示的に失敗し、旧タブの閉鎖と再読込を案内する。失敗後にopenが成功しても不要な接続を残さず、今後のversionchangeでは接続を閉じる。
+IDB v8への更新が旧タブに阻まれた場合は明示的に失敗し、旧タブの閉鎖と再読込を案内する。失敗後にopenが成功しても不要な接続を残さず、今後のversionchangeでは接続を閉じる。
 
 ## 未完の境界
 
-quiz / English practice 全体のreceipt統一、XPのサーバー算出と一意な授与、Writing外部AI処理のclaim/lease、派生集計の永続outboxと自動修復は次期。SRSの修正で全保存経路のexactly-onceを保証したとは扱わない。IDB教材削除後の孤立履歴/receipt、in-memoryのmission、weaknessの競合投影と保存receiptの保持期限も未完の範囲。
+English practice 全体のreceipt統一、XPのサーバー算出と一意な授与、Writing外部AI処理のclaim/lease、派生集計の永続outboxと自動修復は次期。SRSの修正で全保存経路のexactly-onceを保証したとは扱わない。IDB教材削除後の孤立履歴/receipt、in-memoryのmission、weaknessの競合投影と保存receiptの保持期限も未完の範囲。
 
 ## 品質・運用
 

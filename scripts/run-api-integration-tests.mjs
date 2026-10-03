@@ -248,7 +248,12 @@ const getAvailablePort = () => new Promise((resolve, reject) => {
   const server = net.createServer();
   server.unref();
   server.on('error', reject);
-  server.listen(0, '127.0.0.1', () => {
+  const requestedPort = Number(process.env.API_TEST_PORT || 0);
+  if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
+    reject(new Error('API_TEST_PORT must be an available TCP port'));
+    return;
+  }
+  server.listen(requestedPort, '127.0.0.1', () => {
     const address = server.address();
     if (!address || typeof address === 'string') {
       reject(new Error('Failed to resolve an available port.'));
@@ -1278,6 +1283,47 @@ const main = async () => {
       questionMode: 'JA_TO_EN',
       responseTimeMs: 850,
     });
+
+    const quizReceiptPayload = {
+      wordId: reviewWords[0].id, bookId: reviewBook.id, correct: true,
+      questionMode: 'JA_TO_EN', responseTimeMs: 735,
+      clientAttemptId: 'api-quiz-lost-response', missionAssignmentId: assignedMission.id,
+    };
+    const quizCountsSql = `SELECT
+      (SELECT attempt_count FROM learning_histories WHERE user_id='${orgStudentUser.uid}' AND word_id='${reviewWords[0].id}') AS attempts,
+      (SELECT COUNT(*) FROM learning_interaction_events WHERE user_id='${orgStudentUser.uid}' AND word_id='${reviewWords[0].id}') AS events,
+      (SELECT COUNT(*) FROM quiz_attempt_receipts WHERE user_id='${orgStudentUser.uid}' AND client_attempt_id='api-quiz-lost-response') AS receipts`;
+    const quizCountsBefore = (await queryLocalSql(persistDir, quizCountsSql))[0];
+    // The first database response is deliberately not delivered to a quiz UI.
+    const lostQuizResponse = await orgStudent.storageRaw('recordQuizAttempt', quizReceiptPayload);
+    assert(lostQuizResponse.status === 200 && lostQuizResponse.data.clientAttemptId === quizReceiptPayload.clientAttemptId,
+      'explicit quiz id should receive a committed receipt');
+    const quizRetries = await Promise.all(Array.from({ length: 5 }, () => orgStudent.storageRaw('recordQuizAttempt', quizReceiptPayload)));
+    assert(quizRetries.every(result => result.status === 200 && JSON.stringify(result.data) === JSON.stringify(lostQuizResponse.data)),
+      'lost-response and parallel quiz retries must return the original receipt');
+    const quizCountsAfter = (await queryLocalSql(persistDir, quizCountsSql))[0];
+    assert(quizCountsAfter.attempts === quizCountsBefore.attempts + 1 && quizCountsAfter.events === quizCountsBefore.events + 1 && quizCountsAfter.receipts === 1,
+      'quiz receipt retries must commit one canonical history increment and event');
+    const changedQuiz = await orgStudent.storageRaw('recordQuizAttempt', { ...quizReceiptPayload, correct: false });
+    assert(changedQuiz.status === 409, 'changed quiz content under one id must conflict');
+    const invalidQuizId = await orgStudent.storageRaw('recordQuizAttempt', { ...quizReceiptPayload, clientAttemptId: 'invalid id' });
+    assert(invalidQuizId.status === 400, 'quiz attempt id must be validated');
+    for (const clientAttemptId of ['', null]) {
+      const invalid = await orgStudent.storageRaw('recordQuizAttempt', { ...quizReceiptPayload, clientAttemptId });
+      assert(invalid.status === 400, 'explicit empty/null quiz id cannot fall back to a legacy write');
+    }
+    const mismatchedQuizWord = await orgStudent.storageRaw('recordQuizAttempt', { ...quizReceiptPayload, wordId: 'missing-quiz-word' });
+    assert(mismatchedQuizWord.status === 404, 'quiz receipt replay must still validate the word');
+    const foreignQuizMission = await cohortStudent.storageRaw('recordQuizAttempt', quizReceiptPayload);
+    assert(foreignQuizMission.status === 400, 'quiz mission receipt may only be saved by its assigned learner');
+    const badQuizProblem = await orgStudent.storageRaw('recordQuizAttempt', { ...quizReceiptPayload, generatedProblemId: 'missing-problem' });
+    assert(badQuizProblem.status === 400, 'quiz replay must authorize its generated problem before receipt lookup');
+    await executeLocalSql(persistDir, `UPDATE material_source_ledger SET review_status='needs_review' WHERE book_id='${reviewBook.id}'`);
+    const revokedQuizReplay = await orgStudent.storageRaw('recordQuizAttempt', quizReceiptPayload);
+    assert(revokedQuizReplay.status === 403, 'a receipt cannot bypass a revoked material approval');
+    await executeLocalSql(persistDir, `UPDATE material_source_ledger SET review_status='approved' WHERE book_id='${reviewBook.id}'`);
+    assert((await queryLocalSql(persistDir, quizCountsSql))[0].attempts === quizCountsAfter.attempts,
+      'rejected quiz replays must not mutate canonical history');
 
     const masteryAfterQuiz = await orgStudent.storage('getMasteryDistribution');
     assert(masteryAfterQuiz.total === 1, 'quiz attempt on a studied word should not create an extra mastery row');

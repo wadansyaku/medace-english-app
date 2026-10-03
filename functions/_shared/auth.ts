@@ -195,7 +195,8 @@ export const mapUserRowToProfile = (row: DbUserRow): UserProfile => ({
   subscriptionPlan: (row.subscription_plan as SubscriptionPlan | null) || SubscriptionPlan.TOC_FREE,
   organizationName: row.organization_name || undefined,
   studyMode: (row.study_mode as UserStudyMode | null) || UserStudyMode.FOCUS,
-  needsOnboarding: row.role === UserRole.STUDENT && !row.english_level,
+  diagnosticDeferredAt: row.diagnostic_deferred_at || undefined,
+  needsOnboarding: row.role === UserRole.STUDENT && !row.english_level && !row.diagnostic_deferred_at,
   stats: normalizeStats(row),
 });
 

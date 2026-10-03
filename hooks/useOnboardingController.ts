@@ -10,18 +10,20 @@ import {
   UserGrade,
 } from '../types';
 
-export type OnboardingStep = 'PROFILE' | 'TEST' | 'RESULT';
+export type OnboardingStep = 'CHOICE' | 'PROFILE' | 'TEST' | 'RESULT';
 
 interface UseOnboardingControllerParams {
   user: UserProfile;
   onComplete: (updatedUser: UserProfile) => void;
+  isRetake?: boolean;
 }
 
 export const useOnboardingController = ({
   user,
   onComplete,
+  isRetake = false,
 }: UseOnboardingControllerParams) => {
-  const [step, setStep] = useState<OnboardingStep>('PROFILE');
+  const [step, setStep] = useState<OnboardingStep>(isRetake ? 'PROFILE' : 'CHOICE');
   const [selectedGrade, setSelectedGrade] = useState<UserGrade>(user.grade || UserGrade.ADULT);
   const [selfAssessment, setSelfAssessment] = useState<SelfAssessmentKey | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -31,6 +33,7 @@ export const useOnboardingController = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const savingRef = useRef(false);
+  const completedRef = useRef(false);
 
   const currentQuestion = DIAGNOSTIC_QUESTIONS[currentQuestionIndex];
   const currentAnswer = currentQuestion ? userAnswers[currentQuestion.id] ?? '' : '';
@@ -38,12 +41,50 @@ export const useOnboardingController = ({
   const progressPercent = Math.round((((step === 'RESULT' ? DIAGNOSTIC_QUESTIONS.length : currentQuestionIndex + 1)) / DIAGNOSTIC_QUESTIONS.length) * 100);
 
   const handleStart = () => {
-    if (!selfAssessment) return;
+    if (!selfAssessment || savingRef.current || completedRef.current) return;
     setCurrentQuestionIndex(0);
     setUserAnswers({});
     setResult(null);
     setFinalLevel(null);
     setStep('TEST');
+  };
+
+  const handleChooseDiagnostic = () => {
+    if (savingRef.current || completedRef.current) return;
+    setSaveError(null);
+    setStep('PROFILE');
+  };
+
+  const handleReturnToChoice = () => {
+    if (isRetake || savingRef.current || completedRef.current) return;
+    setCurrentQuestionIndex(0);
+    setUserAnswers({});
+    setResult(null);
+    setFinalLevel(null);
+    setSaveError(null);
+    setStep('CHOICE');
+  };
+
+  const deferDiagnostic = async () => {
+    if (isRetake || step !== 'CHOICE' || savingRef.current || completedRef.current) return;
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const updatedUser: UserProfile = {
+        ...user,
+        needsOnboarding: false,
+        diagnosticDeferredAt: Date.now(),
+      };
+      await sessionService.updateSessionUser(updatedUser);
+      completedRef.current = true;
+      onComplete(updatedUser);
+    } catch {
+      setSaveError('学習開始の設定を保存できませんでした。通信を確認して、もう一度お試しください。');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   const handleSelectAnswer = (answer: string) => {
@@ -76,7 +117,7 @@ export const useOnboardingController = ({
   };
 
   const saveResult = async () => {
-    if (!finalLevel || savingRef.current) return;
+    if (!finalLevel || savingRef.current || completedRef.current) return;
     savingRef.current = true;
     setIsSaving(true);
     setSaveError(null);
@@ -106,6 +147,7 @@ export const useOnboardingController = ({
       }
       // Complete onboarding only after its recommended learning preferences are saved.
       await sessionService.updateSessionUser(updatedUser);
+      completedRef.current = true;
       onComplete(updatedUser);
     } catch {
       setSaveError('診断結果を保存できませんでした。結果はこの画面に残っています。通信を確認して、もう一度保存してください。');
@@ -132,6 +174,9 @@ export const useOnboardingController = ({
     isSavePending: () => savingRef.current,
     saveError,
     handleStart,
+    handleChooseDiagnostic,
+    handleReturnToChoice,
+    deferDiagnostic,
     handleSelectAnswer,
     handleNext,
     handleBack,

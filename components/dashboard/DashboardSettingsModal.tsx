@@ -203,7 +203,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     className="inline-flex min-h-11 items-center gap-1 rounded-full border border-medace-200 bg-white px-4 py-2 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    再診断
+                    {currentEnglishLevel ? '再診断' : 'レベルを確認する'}
                   </button>
                 </div>
                 {accountOverview && (
@@ -675,7 +675,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
                     className="inline-flex items-center gap-1 rounded-full border border-medace-200 bg-white px-4 py-2.5 text-sm font-bold text-medace-700 hover:bg-medace-50"
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    レベル診断を再受講
+                    {currentEnglishLevel ? 'レベル診断を再受講' : 'レベルを確認する'}
                   </button>
                 </div>
               </div>

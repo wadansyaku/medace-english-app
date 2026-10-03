@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from '../../config/workspace';
 import { BRAND } from '../../config/brand';
 import { expect, test } from './diagnostics';
-import { loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, seedPhrasebook, storageAction } from './smoke-support';
+import { loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
 
 for (const role of ['student'] as const) {
   for (const width of [320, 390]) {
@@ -19,7 +19,7 @@ for (const role of ['student'] as const) {
       const book = books.find(item => item.title === title);
       expect(book).toBeTruthy();
       await page.reload();
-      await page.getByTestId('dashboard-task-reference-library').click();
+      await openDashboardReference(page, 'library');
       const study = page.getByTestId(`book-study-${book!.id}`);
       const quiz = page.getByTestId(`book-quiz-${book!.id}`);
       const measurements = [];
@@ -52,7 +52,7 @@ for (const role of ['student'] as const) {
       await expect(quiz).toBeFocused();
       await writeFile(testInfo.outputPath('catalog-action-layout.json'), JSON.stringify({ role, width, measurements }, null, 2));
       await study.click();
-      await expect(page.getByTestId('study-book-label')).toHaveText(book!.title);
+      await expect(page.getByTestId('study-book-label')).toHaveText(`${book!.title} / 教材学習`);
     });
   }
 }
@@ -162,19 +162,43 @@ test('teacher mobile and landscape headers leave the workspace controls usable',
   await page.setViewportSize({ width: 390, height: 844 });
   await loginInstructorDemo(page);
   await expect(page.getByTestId('instructor-dashboard')).toBeVisible();
+  const overview = page.getByTestId('instructor-action-overview');
+  await expect(overview).toBeVisible();
+  await expect(overview.getByRole('heading')).toHaveCount(2);
+  await expect(overview.getByRole('heading', { name: '対応が必要な生徒' })).toBeVisible();
+  await expect(overview.getByRole('heading', { name: '提出・返却' })).toBeVisible();
+  await expect(overview.getByRole('button', { name: '閲覧できる生徒すべて', exact: true })).toBeVisible();
+  await expect(page.getByTestId('instructor-dashboard').getByRole('button', { name: '更新', exact: true })).toBeVisible();
   const header = page.getByTestId('app-sticky-header');
   expect((await header.boundingBox())!.height).toBeLessThan(220);
   await expect(page.getByTestId('demo-banner-toggle')).toHaveAttribute('aria-expanded', 'false');
-  await page.getByRole('button', { name: '小テスト・印刷', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: '講師の作業', exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-testid^="workspace-tab-"]')).toHaveCount(INSTRUCTOR_WORKSPACE_SECTIONS.length);
+  await page.getByTestId('workspace-tab-worksheets').click();
   await expect(page.getByRole('heading', { name: '今日の小テストを準備する', exact: true })).toBeVisible();
   const imagePath = testInfo.outputPath('teacher-mobile.png');
   await page.screenshot({ path: imagePath });
   await testInfo.attach('teacher-mobile.png', { path: imagePath, contentType: 'image/png' });
   await page.setViewportSize({ width: 844, height: 390 });
   await expect(header).toHaveCSS('position', 'static');
-  await page.getByRole('button', { name: '担当生徒', exact: true }).click();
+  await page.getByTestId('workspace-tab-students').click();
   await expect(page.getByRole('heading', { name: '担当生徒を確認する', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
+  const viewHeadings = [
+    ['overview', '今日の対応を確認する'],
+    ['students', '担当生徒を確認する'],
+    ['writing', '課題を配り、提出へ返す'],
+    ['worksheets', '今日の小テストを準備する'],
+    ['catalog', '教材と学習画面を確認する'],
+  ] as const;
+  for (const [view, title] of viewHeadings) {
+    const tab = page.getByTestId(`workspace-tab-${view}`);
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('instructor-dashboard').getByRole('heading', { name: title, exact: true })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: '講師の作業', exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844);
+  }
 });
 
 test('learner keeps the selected book identity and can leave a scrolled quiz', async ({ page }) => {
@@ -192,7 +216,7 @@ test('learner keeps the selected book identity and can leave a scrolled quiz', a
   await page.getByTestId('quiz-back-button').click();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
   await page.goto(`/study/${book!.id}`);
-  await expect(page.getByTestId('study-book-label')).toHaveText(title);
+  await expect(page.getByTestId('study-book-label')).toHaveText(`${title} / 教材学習`);
   await page.getByRole('button', { name: '学習を中断してダッシュボードに戻る', exact: true }).click();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
 });

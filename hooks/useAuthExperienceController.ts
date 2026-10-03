@@ -29,6 +29,8 @@ export const shouldPreserveCurrentRoute = (
       return Boolean(navigationState.selectedTask);
     case 'englishPractice':
       return nextHomeView === 'dashboard';
+    case 'guestTrial':
+      return nextHomeView === 'dashboard' && !navigationState.authPanelMode;
     case 'resetPassword':
       return true;
     default:

@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import {
-  BookOpen,
-  FileStack,
-  LayoutDashboard,
-  Loader2,
-  RefreshCw,
-  ScanText,
-  Users,
-} from 'lucide-react';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 import { InstructorWorkspaceView, type UserProfile } from '../types';
 import { useInstructorDashboardData } from '../hooks/useInstructorDashboardData';
@@ -26,8 +18,8 @@ interface InstructorDashboardProps {
 
 const VIEW_COPY: Record<InstructorWorkspaceView, { title: string; body: string }> = {
   [InstructorWorkspaceView.OVERVIEW]: {
-    title: '生徒の次の一歩を、一緒に。',
-    body: '担当生徒の様子を確かめ、今日の声かけから始めましょう。',
+    title: '今日の対応を確認する',
+    body: 'フォローが必要な生徒と、返却する提出を確認します。',
   },
   [InstructorWorkspaceView.STUDENTS]: {
     title: '担当生徒を確認する',
@@ -46,14 +38,6 @@ const VIEW_COPY: Record<InstructorWorkspaceView, { title: string; body: string }
     body: '利用できる単語帳を開き、生徒が取り組む内容を確かめます。',
   },
 };
-
-const VIEWS = [
-  { view: InstructorWorkspaceView.OVERVIEW, label: '今日のフォロー', icon: LayoutDashboard },
-  { view: InstructorWorkspaceView.STUDENTS, label: '担当生徒', icon: Users },
-  { view: InstructorWorkspaceView.WORKSHEETS, label: '小テスト・印刷', icon: FileStack },
-  { view: InstructorWorkspaceView.WRITING, label: '課題・提出・返却', icon: ScanText },
-  { view: InstructorWorkspaceView.CATALOG, label: '教材', icon: BookOpen },
-];
 
 const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   user,
@@ -117,57 +101,30 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   return (
     <div data-testid="instructor-dashboard" className="space-y-6 pb-12">
       {storageMode.capabilities.organization.usesMockData && <B2BStorageModeBanner />}
-      <header className="rounded-[28px] border border-medace-100 bg-white px-5 py-6 sm:px-8 sm:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-medace-800">
-            <span className="rounded-full bg-medace-50 px-3 py-1.5">講師ワークスペース</span>
-            {user.organizationName && <span>{user.organizationName}</span>}
-          </div>
+      <header className="flex flex-wrap items-start justify-between gap-3 px-1">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-black leading-snug text-medace-900">{viewCopy.title}</h2>
+          {user.organizationName && <p className="content-safe mt-1 text-xs text-slate-500">{user.organizationName}</p>}
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{viewCopy.body}</p>
+        </div>
+        <div className="shrink-0 sm:text-right">
           <button
             type="button"
             onClick={() => void data.refresh()}
             disabled={data.loading}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            <RefreshCw
-              aria-hidden="true"
-              className={`h-4 w-4 ${data.loading ? 'animate-spin' : ''}`}
-            />
-            {data.loading ? '更新中' : '最新の状況へ更新'}
+            <RefreshCw aria-hidden="true" className={`h-4 w-4 ${data.loading ? 'animate-spin' : ''}`} />
+            {data.loading ? '更新中' : '更新'}
           </button>
+          {data.updatedAt && (
+            <p className="mt-1 text-xs text-slate-500">
+              最終取得{' '}
+              {new Date(data.updatedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
         </div>
-        <h2 className="mt-5 text-2xl font-black leading-snug tracking-tight text-medace-900 sm:text-3xl">
-          {viewCopy.title}
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">{viewCopy.body}</p>
-        {data.updatedAt && (
-          <p className="mt-3 text-xs text-slate-500">
-            最終取得{' '}
-            {new Date(data.updatedAt).toLocaleTimeString('ja-JP', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </p>
-        )}
       </header>
-
-      <nav
-        aria-label="講師の作業"
-        className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5"
-      >
-        {VIEWS.map(({ view, label, icon: Icon }) => (
-          <button
-            key={view}
-            type="button"
-            onClick={() => onChangeView(view)}
-            aria-current={view === activeView ? 'page' : undefined}
-            className={`inline-flex min-h-11 flex-shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${view === activeView ? 'bg-medace-50 text-medace-900 ring-1 ring-inset ring-medace-200' : 'text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Icon aria-hidden="true" className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </nav>
 
       {controller.notice && (
         <div

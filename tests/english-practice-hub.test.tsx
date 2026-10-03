@@ -15,6 +15,17 @@ const createUser = (): UserProfile => ({
 });
 
 describe('EnglishPracticeHub', () => {
+  it('starts undiagnosed learners at introductory practice without claiming a diagnostic result', () => {
+    const undiagnosed = { ...createUser(), englishLevel: undefined };
+    const rendered = renderToStaticMarkup(<EnglishPracticeHub user={undiagnosed} initialLane="reading" />);
+    expect(rendered).toMatch(/data-testid="english-practice-difficulty"[^>]*>A1 入門</);
+    expect(rendered).toContain('未診断のため入門から始めます。');
+    expect(rendered).toContain('練習の難しさで、診断結果ではありません');
+    expect(rendered).toContain('あとから変更できます');
+    expect(rendered).not.toContain('・挑戦');
+    expect(undiagnosed.englishLevel).toBeUndefined();
+  });
+
   it('renders the canonical integrated practice shell without a separate practice home', () => {
     const rendered = renderToStaticMarkup(
       <EnglishPracticeHub
@@ -32,7 +43,7 @@ describe('EnglishPracticeHub', () => {
       '英作文',
       '文法範囲を選ぶ',
       'B1 標準',
-      '単語を準備中',
+      '文法問題で練習',
     ].forEach((copy) => {
       expect(rendered).toContain(copy);
     });
@@ -54,6 +65,8 @@ describe('EnglishPracticeHub', () => {
     expect(rendered).not.toContain('英語演習のおすすめ');
     expect(rendered).not.toContain('<main');
     expect(rendered).toContain('aria-label="英語演習"');
+    expect(rendered).toMatch(/data-testid="english-practice-difficulty"[^>]*>B1 標準</);
+    expect(rendered).not.toContain('english-practice-undiagnosed-note');
   });
 
   it('keeps the stable lane test ids and orange brand classes on the route shell', () => {

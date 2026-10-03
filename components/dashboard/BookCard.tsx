@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Book, BookOpen, Play, ShieldCheck, Star, Trash2, Trophy } from 'lucide-react';
 import { BookCatalogSource, type BookMetadata, type BookProgress } from '../../types';
+import { NARU_BOOK_ID } from '../../shared/naruBook';
 import {
   getLearnerMaterialQualityMessage,
   isBookApprovedForLearner,
@@ -81,7 +82,9 @@ const BookCard: React.FC<BookCardProps> = ({
         <p className="mt-1.5 min-h-8 line-clamp-2 text-[13px] leading-relaxed text-slate-500 sm:mt-2 sm:min-h-9 sm:text-sm">
           {isMine
             ? (book.sourceContext ? `取り込みメモ: ${book.sourceContext}` : 'オリジナル単語帳')
-            : (book.description || (isLicensed ? 'ビジネス版向けの既存公式教材' : 'ビジネス版向けの公式教材'))}
+            : book.id === NARU_BOOK_ID
+              ? '動詞・名詞・副詞・形容詞を、品詞ごとに学習できます。'
+              : (book.description || (isLicensed ? 'ビジネス版向けの既存公式教材' : 'ビジネス版向けの公式教材'))}
         </p>
         {!canStart && !isMine && (
           <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">

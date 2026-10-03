@@ -1,3 +1,4 @@
+import type { QuizAttemptReceipt } from '../shared/quizAttempt';
 import {
   ActivityLog,
   AdminDashboardSnapshot,
@@ -18,6 +19,8 @@ import {
   BookCatalogSource,
   BookMetadata,
   BookProgress,
+  BookStudyOverview,
+  StudyWordRange,
   ClassroomWorksheetLifecycleEventResult,
   ClassroomWorksheetLifecycleStatus,
   ClassroomWorksheetSource,
@@ -324,6 +327,10 @@ export interface StorageActionMap {
     payload: { bookId: string; limit: number; taskIntent?: LearningTaskIntent };
     response: WordData[];
   };
+  getBookStudyOverview: {
+    payload: { bookId: string; wordRange?: StudyWordRange };
+    response: BookStudyOverview;
+  };
   getDashboardSnapshot: {
     payload: undefined;
     response: DashboardSnapshot;
@@ -375,8 +382,9 @@ export interface StorageActionMap {
       generatedProblemId?: string;
       grammarScopeId?: GrammarCurriculumScopeId;
       translationFeedback?: JapaneseTranslationFeedback;
+      clientAttemptId?: string;
     };
-    response: null;
+    response: QuizAttemptReceipt | null;
   };
   recordEnglishPracticeAttempt: {
     payload: EnglishPracticeAttemptPayload;
@@ -559,6 +567,7 @@ export const STORAGE_ACTIONS = [
   'prepareBookExamples',
   'getDailySessionWords',
   'getBookSession',
+  'getBookStudyOverview',
   'getDashboardSnapshot',
   'getAdminDashboardSnapshot',
   'updatePasswordRecoveryRequest',
