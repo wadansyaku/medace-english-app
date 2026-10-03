@@ -3,6 +3,55 @@ import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from
 import { expect, test } from './diagnostics';
 import { loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, seedPhrasebook, storageAction } from './smoke-support';
 
+for (const role of ['student'] as const) {
+  for (const width of [320, 390]) {
+    test(`catalog actions keep Japanese labels readable for ${role} at ${width}px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 844 });
+      await loginBusinessStudentDemo(page);
+      const title = `Synthetic catalog actions ${width}`;
+      await seedPhrasebook(page, title);
+      const books = await storageAction<Array<{ id: string; title: string; catalogSource: string }>>(page, 'getBooks');
+      const book = books.find(item => item.title === title);
+      expect(book).toBeTruthy();
+      await page.reload();
+      await page.getByTestId('dashboard-task-reference-library').click();
+      const study = page.getByTestId(`book-study-${book!.id}`);
+      const quiz = page.getByTestId(`book-quiz-${book!.id}`);
+      const measurements = [];
+      for (const action of [study, quiz]) {
+        await expect(action).toBeEnabled();
+        const layout = await action.evaluate(button => {
+          const bounds = button.getBoundingClientRect();
+          const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+          const textRects = [];
+          while (walker.nextNode()) {
+            if (!walker.currentNode.textContent?.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(walker.currentNode);
+            textRects.push(...Array.from(range.getClientRects()).filter(r => r.width > 0).map(r => ({ y: r.y, left: r.left, right: r.right })));
+          }
+          return { height: bounds.height, left: bounds.left, right: bounds.right, textRects };
+        });
+        expect(layout.height).toBeGreaterThanOrEqual(44);
+        expect(layout.textRects.length).toBeGreaterThan(0);
+        expect(new Set(layout.textRects.map(r => Math.round(r.y))).size).toBe(1);
+        for (const rect of layout.textRects) {
+          expect(rect.left).toBeGreaterThanOrEqual(layout.left);
+          expect(rect.right).toBeLessThanOrEqual(layout.right);
+        }
+        measurements.push(layout);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      await study.focus();
+      await page.keyboard.press('Tab');
+      await expect(quiz).toBeFocused();
+      await writeFile(testInfo.outputPath('catalog-action-layout.json'), JSON.stringify({ role, width, measurements }, null, 2));
+      await study.click();
+      await expect(page.getByTestId('study-book-label')).toHaveText(book!.title);
+    });
+  }
+}
+
 for (const role of ['instructor', 'group-admin'] as const) {
   for (const viewport of [
     { width: 320, height: 568 }, { width: 390, height: 844 },

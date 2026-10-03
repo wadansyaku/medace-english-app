@@ -73,7 +73,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
   const approvedOfficialBookCount = officialBooks.filter(isBookApprovedForLearner).length;
 
   return (
-    <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="rounded-[32px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="rounded-2xl border border-medace-100 bg-medace-50 p-3 text-medace-700">
@@ -116,7 +116,7 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
               : 'スターター導線で使うオリジナル単語データベース教材です。';
 
             return (
-              <div key={book.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+              <div key={book.id} data-testid={`catalog-book-${book.id}`} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   {book.isPriority && (
                     <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800">
@@ -151,16 +151,16 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                   </div>
                 )}
 
-                <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="mt-5 flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       if (canStart) onSelectBook(book.id, 'study');
                     }}
                     disabled={!canStart}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    className="inline-flex flex-1 basis-28 items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-700 hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                   >
-                    <BookOpen className="h-4 w-4" />
+                    <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" />
                     学習
                   </button>
                   <button
@@ -169,9 +169,9 @@ const OfficialCatalogAccessPanel: React.FC<OfficialCatalogAccessPanelProps> = ({
                       if (canStart) onSelectBook(book.id, 'quiz');
                     }}
                     disabled={!canStart}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                    className="inline-flex flex-1 basis-28 items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-steady-action px-3 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
                   >
-                    <Play className="h-4 w-4 fill-current" />
+                    <Play className="h-4 w-4 shrink-0 fill-current" aria-hidden="true" />
                     テスト
                   </button>
                 </div>

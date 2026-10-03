@@ -48,11 +48,12 @@ D1のfile importはSQLにBEGIN/COMMITを入れず、一文100,000bytes以下を�
 
 ## 公開前の確認
 
-- `verify:fast`: 135ファイル/892unit成功。最終承認の座標変更拒否回帰を追加したため、最終候補では再確認する。
-- Build・API回帰成功。全ブラウザー回帰はChrome指定で実行中。最初の実行はMacにPlaywright標準Chromiumが無い起動エラーであり、UI成功として扱わない。
-- 専用local D1 `41878`: 一冊の1530語と全原本読戻し・承認済みを確認。320/390/844横向き/tablet768/desktop1366で46シーン、学習保存・reload保持、品詞5presetの候補数、講師カタログ・印刷教材selectを確認。横幅overflowとpage errorは0。
+- `verify:fast`: 135ファイル/893unit成功。型、44 migration replay、到達性、依存境界と循環確認を含む。
+- Build・API回帰成功。Chrome指定の全ブラウザー回帰105件・IDB3件成功、preview専用の2件はlocalではskip。最初の実行はMacにPlaywright標準Chromiumが無い起動エラーであり、UI成功として扱わない。
+- 専用local D1 `41878`: 一冊の1530語と全原本読戻し・承認済みを確認。320/390/844横向き/tablet768/desktop1366でauthを含む56シーン、学習保存・reload保持、品詞5presetの候補数、講師カタログ・印刷教材selectを確認。横幅overflowとpage errorは0。
 - `cf:doctor`: ok53/warn1/error0。warnはこの新branchの配備がまだ無いこと。
-- 公開前security監査で、Tailwind3が依存するbracesの新勧告を検出。監査例外を追加せず、独立環境でビルド依存の修正を準備している。[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)。修正後に監査と全回帰を完了するまで配備しない。
+- 公開前security監査で、Tailwind3が依存するbracesの新勧告を検出。Tailwind/PostCSS 4.3.3へ更新し、監査例外追加なしで成功。Chrome/WebKitの5幅×3画面で文字・位置・色・focusを比較し、writing/worksheet22件と統合後の全回帰も成功。[移行と対応ブラウザー](../tailwind-v4-build-security.md)、[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)。
+- 最終画像で生徒320px・講師390pxの教材ボタン名の途中改行を確認。ラベルを一行に保ち、カード内幅が足りない場合だけボタンを縦に折り返す。講師のモバイル内余白も調整する。既存suiteへ生徒320/390pxの文字矩形・44px操作領域・keyboard・教材遷移の回帰を追加した。
 
 実生徒での新教材学習は未検証。合成D1の成功を本番本人の学習成功とは呼ばない。公開URLの非認証確認と、本番DBの集計・全原本照合を別に記録する。
 

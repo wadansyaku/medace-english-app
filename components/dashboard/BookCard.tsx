@@ -117,16 +117,16 @@ const BookCard: React.FC<BookCardProps> = ({
             {preparingExamples ? '例文を準備中...' : '例文を準備'}
           </button>
         )}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => {
               if (canStart) onSelect(book.id, 'study');
             }}
             disabled={!canStart}
             data-testid={`book-study-${book.id}`}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none"
+            className="flex min-h-11 flex-1 basis-28 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none sm:gap-2 sm:px-3"
           >
-            <BookOpen className="h-4 w-4" aria-hidden="true" /> 学習する
+            <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" /> 学習する
           </button>
           <button
             onClick={() => {
@@ -134,9 +134,9 @@ const BookCard: React.FC<BookCardProps> = ({
             }}
             disabled={!canStart}
             data-testid={`book-quiz-${book.id}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-medace-100 bg-medace-50 px-3 py-2.5 text-sm font-bold text-medace-900 transition-colors hover:border-medace-200 hover:bg-medace-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500"
+            className="flex min-h-11 flex-1 basis-28 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-medace-100 bg-medace-50 px-2 py-2.5 text-sm font-bold text-medace-900 transition-colors hover:border-medace-200 hover:bg-medace-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 sm:gap-2 sm:px-3"
           >
-            <Play className="h-4 w-4 fill-current" aria-hidden="true" /> 小テスト
+            <Play className="h-4 w-4 shrink-0 fill-current" aria-hidden="true" /> 小テスト
           </button>
         </div>
       </div>
