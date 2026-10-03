@@ -474,7 +474,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                     data-testid="weekly-mission-issue-submit"
                     onClick={controller.handleIssueMission}
                     disabled={missionIssueDisabled}
-                    className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-60"
+                    className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:opacity-60"
                   >
                     配布する
                   </button>

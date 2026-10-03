@@ -142,7 +142,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
                 data-testid="business-admin-send-first-notification"
                 onClick={() => onSendActivationNotification(snapshot.nextRequiredActionTarget!)}
                 disabled={activationNotificationPending}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-60"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-60"
               >
                 {activationNotificationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
                 最初の通知を送る
@@ -151,7 +151,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
               <button
                 type="button"
                 onClick={() => onFollowActivationTarget(primaryActionTarget, nextActionView)}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
               >
                 {nextActionButtonLabel} <ArrowRight className="h-4 w-4" />
               </button>
@@ -410,7 +410,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
             <button
               type="button"
               onClick={() => onChangeView(BusinessAdminWorkspaceView.ASSIGNMENTS)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+              className="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
             >
               割当を更新する
             </button>

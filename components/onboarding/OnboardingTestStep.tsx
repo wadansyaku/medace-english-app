@@ -48,7 +48,7 @@ const OnboardingTestStep: React.FC<OnboardingTestStepProps> = ({
           data-testid="onboarding-next-button"
           onClick={onNext}
           disabled={!currentAnswer}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-50 md:min-w-[180px]"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:opacity-50 md:min-w-[180px]"
         >
           {currentQuestionIndex === DIAGNOSTIC_QUESTIONS.length - 1 ? '判定を見る' : '次へ'}
           <ChevronRight className="h-4 w-4" />

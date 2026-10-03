@@ -23,12 +23,12 @@ const PLATFORM_HIGHLIGHTS = [
   {
     icon: <Building2 className="h-4 w-4" />,
     label: '学校・教室運用',
-    detail: '講師フォロー、担当割当、教材権限まで同じ画面群で運用できます。',
+    detail: '講師のフォロー、担当の割り当て、教材の権限を同じ画面で管理できます。',
   },
   {
     icon: <Sparkles className="h-4 w-4" />,
     label: '教材活用',
-    detail: '既存の公式単語帳と My単語帳を目的に応じて切り替えられます。',
+    detail: '既存の公式単語帳とMy単語帳を目的に応じて切り替えられます。',
   },
 ];
 
@@ -55,8 +55,8 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         snapshot={motivationSnapshot}
         loading={motivationLoading}
         error={motivationError}
-        title="公開ページで見える学習ライブ"
-        description="ログイン前でも、いま動いている学習量とアプリ全体の積み上がりを確認できます。"
+        title="ログイン前に見られる学習状況"
+        description="ログイン前でも、現在の学習量とアプリ全体の学習の累計を確認できます。"
       />
 
       {(runtimeFlags.appOnlineOnly || !runtimeFlags.enablePublicBusinessDemo) && (
@@ -68,12 +68,12 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
             <div className="space-y-2 text-sm leading-relaxed text-amber-900">
               {runtimeFlags.appOnlineOnly && (
                 <p>
-                  現在の pilot はオンライン接続前提です。ホーム画面追加やオフライン同期は、公開前の段階実装を完了するまで対象外です。
+                  現在の試験運用ではオンライン接続が必要です。ホーム画面への追加やオフライン同期は、公開前の段階的な実装が終わるまで対象外です。
                 </p>
               )}
               {!runtimeFlags.enablePublicBusinessDemo && (
                 <p>
-                  学校・教室向けアカウントは公開画面からは発行せず、招待または手動発行の案内とセットで進めます。
+                  学校・教室向けアカウントは公開画面からは発行せず、招待または手動発行の案内に沿って手続きを進めます。
                 </p>
               )}
             </div>
@@ -84,14 +84,14 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
         <div className="border-b border-slate-100 bg-medace-50 p-8 md:p-10">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold tracking-[0.12em] text-medace-500">Role Links</p>
+            <p className="text-sm font-bold tracking-[0.12em] text-medace-500">役割別の案内</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
               役割別の
               <br />
               専用リンク
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-[1.05rem]">
-              Steady Study は、生徒・講師・学校管理者・サービス管理者を分けて、それぞれの作業画面へ直接入れる設計に整理しています。
+              Steady Studyでは、生徒・講師・学校管理者・サービス管理者がそれぞれの作業画面を直接開けます。
             </p>
           </div>
 

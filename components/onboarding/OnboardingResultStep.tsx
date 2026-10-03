@@ -9,6 +9,7 @@ export interface OnboardingResultStepProps {
   result: DiagnosticResult;
   finalLevel: EnglishLevel;
   isSaving: boolean;
+  saveError?: string | null;
   isRetake: boolean;
   historySummary?: string;
   onCancel?: () => void;
@@ -19,6 +20,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
   result,
   finalLevel,
   isSaving,
+  saveError,
   isRetake,
   historySummary,
   onCancel,
@@ -35,13 +37,15 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
           data-testid="onboarding-save-button"
           onClick={onSave}
           disabled={isSaving}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-base font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:opacity-50 md:mx-auto md:max-w-sm"
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-base font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:opacity-50 md:mx-auto md:max-w-sm"
         >
-          {isSaving ? '保存中...' : 'このレベルで学習を始める'}
+          {isSaving ? '保存中...' : saveError ? '診断結果をもう一度保存する' : 'このレベルで学習を始める'}
           {!isSaving && <ChevronRight className="h-5 w-5" />}
         </button>
       }
     >
+      {saveError && <p role="alert" data-testid="onboarding-save-error" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold leading-relaxed text-red-800">{saveError}</p>}
+      {isSaving && <p role="status" aria-live="polite" className="text-center text-sm font-bold text-slate-600">診断結果を保存しています。このままお待ちください。</p>}
       <section className="grid gap-3 xl:grid-cols-[0.92fr_1.08fr] xl:gap-4">
         <div className="space-y-4">
           <div data-testid="onboarding-result-mobile-hero" className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-xl md:rounded-[32px] md:p-7">
@@ -56,6 +60,7 @@ const OnboardingResultStep: React.FC<OnboardingResultStepProps> = ({
               {isRetake && onCancel && (
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={onCancel}
                   className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
                 >

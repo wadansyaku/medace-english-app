@@ -3,6 +3,7 @@ import type {
   CatalogImportRequest,
   CatalogImportRow,
 } from '../contracts/storage';
+import type { WordPartOfSpeech } from '../types';
 
 const slugifySegment = (value: string): string => value
   .normalize('NFKC')
@@ -33,14 +34,15 @@ export const createImportedBookId = (
   return `${ownerSegment}${slug}-${suffix}`;
 };
 
-const parseCsvLine = (line: string): string[] => {
-  const cells: string[] = [];
+const parseCsvRows = (text: string): string[][] | null => {
+  const rows: string[][] = [];
+  let cells: string[] = [];
   let current = '';
   let inQuotes = false;
 
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const nextChar = line[index + 1];
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
 
     if (char === '"' && inQuotes && nextChar === '"') {
       current += '"';
@@ -59,11 +61,22 @@ const parseCsvLine = (line: string): string[] => {
       continue;
     }
 
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') index += 1;
+      cells.push(current);
+      if (cells.some((cell) => cell.trim())) rows.push(cells);
+      cells = [];
+      current = '';
+      continue;
+    }
+
     current += char;
   }
 
+  if (inQuotes) return null;
   cells.push(current);
-  return cells;
+  if (cells.some((cell) => cell.trim())) rows.push(cells);
+  return rows;
 };
 
 const normalizeHeaderKey = (value: string): string => value
@@ -84,6 +97,10 @@ const HEADER_ALIASES = {
   section: ['section', 'セクション'],
   sourceSheet: ['sourcesheet', 'sheet', 'シート', '出典シート'],
   sourceEntryId: ['sourceentryid', 'entryid', 'sourceid', '出典番号'],
+  partOfSpeech: ['partofspeech', 'pos', '品詞'],
+  inflections: ['inflections', '活用', '活用形'],
+  pronunciation: ['pronunciation', '発音', '発音記号'],
+  sourceNote: ['sourcenote', '注記', '原本注記'],
 } as const;
 
 const KNOWN_HEADER_KEYS: Set<string> = new Set(
@@ -111,6 +128,10 @@ export interface NormalizedCatalogImportRow {
   number: number;
   word: string;
   definition: string;
+  partOfSpeech?: WordPartOfSpeech;
+  inflections?: string;
+  pronunciation?: string;
+  sourceNote?: string;
   exampleSentence?: string;
   exampleMeaning?: string;
   category?: string;
@@ -125,6 +146,36 @@ export interface NormalizedCatalogImport {
   warnings: CatalogImportIssue[];
 }
 
+const BLOCKED_CONTENT_MARKERS = ['[未抽出]', '[要確認]', '未抽出', '要確認', '未設定', 'TODO', 'TBD', 'N/A'] as const;
+const CONTENT_QA_FIELDS = ['word', 'definition', 'exampleSentence', 'exampleMeaning', 'category', 'subcategory', 'section', 'sourceSheet', 'sourceEntryId', 'partOfSpeech', 'inflections', 'pronunciation', 'sourceNote'] as const;
+
+const hasBlockedContentMarker = (value: unknown): boolean => {
+  const normalized = String(value ?? '').normalize('NFKC').trim().toLowerCase();
+  if (!normalized) return false;
+  return BLOCKED_CONTENT_MARKERS.some((marker) => (
+    normalized === marker.toLowerCase()
+    || ((marker.includes('[') || marker.includes('未抽出') || marker.includes('要確認')) && normalized.includes(marker.toLowerCase()))
+  ));
+};
+
+export interface CatalogImportContentQa {
+  requiredBlankRows: number;
+  rowsWithSentinel: number;
+  sentinelValueCount: number;
+}
+
+// Inspect the values themselves; catalog labels and a client-supplied profile
+// cannot attest that the imported content is complete or approved.
+export const inspectCatalogImportContent = (rows: readonly Partial<Record<(typeof CONTENT_QA_FIELDS)[number], unknown>>[]): CatalogImportContentQa => (
+  rows.reduce((qa, row) => {
+    if (!String(row.word ?? '').trim() || !String(row.definition ?? '').trim()) qa.requiredBlankRows += 1;
+    const sentinelCount = CONTENT_QA_FIELDS.filter((field) => hasBlockedContentMarker(row[field])).length;
+    if (sentinelCount > 0) qa.rowsWithSentinel += 1;
+    qa.sentinelValueCount += sentinelCount;
+    return qa;
+  }, { requiredBlankRows: 0, rowsWithSentinel: 0, sentinelValueCount: 0 })
+);
+
 const normalizeRow = (
   row: CatalogImportRow,
   defaultBookName: string,
@@ -134,13 +185,26 @@ const normalizeRow = (
   const word = row.word.trim();
   const definition = row.definition.trim();
   const parsedNumber = Number.parseInt(String(row.number || rowNumber), 10);
-  const parsedSourceEntryId = Number.parseInt(String(row.sourceEntryId || '').trim(), 10);
+  const sourceEntryText = String(row.sourceEntryId ?? '').trim();
+  const parsedSourceEntryId = sourceEntryText ? Number(sourceEntryText) : undefined;
   const exampleSentence = typeof row.exampleSentence === 'string' ? row.exampleSentence.trim() : '';
   const exampleMeaning = typeof row.exampleMeaning === 'string' ? row.exampleMeaning.trim() : '';
   const category = typeof row.category === 'string' ? row.category.trim() : '';
   const subcategory = typeof row.subcategory === 'string' ? row.subcategory.trim() : '';
   const section = typeof row.section === 'string' ? row.section.trim() : '';
   const sourceSheet = typeof row.sourceSheet === 'string' ? row.sourceSheet.trim() : '';
+  const partOfSpeech = typeof row.partOfSpeech === 'string' ? row.partOfSpeech.trim() : '';
+  const inflections = typeof row.inflections === 'string' ? row.inflections.trim() : '';
+  const pronunciation = typeof row.pronunciation === 'string' ? row.pronunciation.trim() : '';
+  const sourceNote = typeof row.sourceNote === 'string' ? row.sourceNote.trim() : '';
+
+  if (partOfSpeech && !['verb', 'noun', 'adverb', 'adjective'].includes(partOfSpeech)) {
+    return { warning: { code: 'INVALID_PART_OF_SPEECH', message: '品詞は verb / noun / adverb / adjective を指定してください。', rowNumber } };
+  }
+
+  if (sourceEntryText && (!/^\d+$/.test(sourceEntryText) || !Number.isSafeInteger(parsedSourceEntryId) || parsedSourceEntryId! <= 0)) {
+    return { warning: { code: 'INVALID_SOURCE_ENTRY_ID', message: '出典番号は正の安全な整数を指定してください。行をスキップしました。', rowNumber } };
+  }
 
   if (!word) {
     return {
@@ -162,19 +226,27 @@ const normalizeRow = (
     };
   }
 
+  if (inspectCatalogImportContent([{ ...row, word, definition }]).rowsWithSentinel > 0) {
+    return { warning: { code: 'BLOCKED_CONTENT_MARKER', message: '未抽出・要確認など未完成の値を含む行をスキップしました。', rowNumber } };
+  }
+
   return {
     row: {
       bookName,
       number: Number.isFinite(parsedNumber) && parsedNumber > 0 ? parsedNumber : rowNumber,
       word,
       definition,
+      ...(partOfSpeech ? { partOfSpeech: partOfSpeech as WordPartOfSpeech } : {}),
+      ...(inflections ? { inflections } : {}),
+      ...(pronunciation ? { pronunciation } : {}),
+      ...(sourceNote ? { sourceNote } : {}),
       ...(exampleSentence ? { exampleSentence } : {}),
       ...(exampleMeaning ? { exampleMeaning } : {}),
       ...(category ? { category } : {}),
       ...(subcategory ? { subcategory } : {}),
       ...(section ? { section } : {}),
       ...(sourceSheet ? { sourceSheet } : {}),
-      ...(Number.isFinite(parsedSourceEntryId) && parsedSourceEntryId > 0 ? { sourceEntryId: parsedSourceEntryId } : {}),
+      ...(parsedSourceEntryId !== undefined ? { sourceEntryId: parsedSourceEntryId } : {}),
     },
   };
 };
@@ -192,10 +264,11 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
   }
 
   const csvText = request.source.csvText.replace(/^\uFEFF/, '');
-  const lines = csvText
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0);
+  const lines = parseCsvRows(csvText);
+
+  if (lines === null) {
+    return { rows: [], warnings: [{ code: 'INVALID_CSV', message: 'CSV の引用符が閉じていません。取り込みを中止しました。' }] };
+  }
 
   if (lines.length === 0) {
     return {
@@ -204,7 +277,7 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
     };
   }
 
-  const firstCells = parseCsvLine(lines[0]);
+  const firstCells = lines[0];
   const headers = firstCells.map(normalizeHeaderKey);
   const shouldUseHeaderRow = hasHeaderSignal(headers) && !looksLikePositionalDataRow(firstCells);
   const bookIndex = findHeaderIndex(headers, HEADER_ALIASES.bookName);
@@ -218,11 +291,14 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
   const sectionIndex = findHeaderIndex(headers, HEADER_ALIASES.section);
   const sourceSheetIndex = findHeaderIndex(headers, HEADER_ALIASES.sourceSheet);
   const sourceEntryIdIndex = findHeaderIndex(headers, HEADER_ALIASES.sourceEntryId);
+  const partOfSpeechIndex = findHeaderIndex(headers, HEADER_ALIASES.partOfSpeech);
+  const inflectionsIndex = findHeaderIndex(headers, HEADER_ALIASES.inflections);
+  const pronunciationIndex = findHeaderIndex(headers, HEADER_ALIASES.pronunciation);
+  const sourceNoteIndex = findHeaderIndex(headers, HEADER_ALIASES.sourceNote);
 
   if (!shouldUseHeaderRow) {
     const warnings: CatalogImportIssue[] = [];
-    const rows = lines.flatMap((line, index) => {
-      const cells = parseCsvLine(line);
+    const rows = lines.flatMap((cells, index) => {
       const normalized = normalizeRow({
         bookName: cells[0] || request.defaultBookName,
         number: cells[1] || index + 1,
@@ -235,6 +311,10 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
         section: cells[8] || undefined,
         sourceSheet: cells[9] || undefined,
         sourceEntryId: cells[10] || undefined,
+        partOfSpeech: (cells[11] || undefined) as WordPartOfSpeech | undefined,
+        inflections: cells[12] || undefined,
+        pronunciation: cells[13] || undefined,
+        sourceNote: cells[14] || undefined,
       }, request.defaultBookName, index + 1);
       if (normalized.warning) warnings.push(normalized.warning);
       return normalized.row ? [normalized.row] : [];
@@ -254,8 +334,7 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
   }
 
   const warnings: CatalogImportIssue[] = [];
-  const rows = lines.slice(1).flatMap((line, index) => {
-    const cells = parseCsvLine(line);
+  const rows = lines.slice(1).flatMap((cells, index) => {
     const normalized = normalizeRow({
       bookName: bookIndex >= 0 ? cells[bookIndex] : request.defaultBookName,
       number: numberIndex >= 0 ? cells[numberIndex] : index + 1,
@@ -268,6 +347,10 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
       section: sectionIndex >= 0 ? cells[sectionIndex] || '' : undefined,
       sourceSheet: sourceSheetIndex >= 0 ? cells[sourceSheetIndex] || '' : undefined,
       sourceEntryId: sourceEntryIdIndex >= 0 ? cells[sourceEntryIdIndex] || '' : undefined,
+      partOfSpeech: (partOfSpeechIndex >= 0 ? cells[partOfSpeechIndex] || undefined : undefined) as WordPartOfSpeech | undefined,
+      inflections: inflectionsIndex >= 0 ? cells[inflectionsIndex] : undefined,
+      pronunciation: pronunciationIndex >= 0 ? cells[pronunciationIndex] : undefined,
+      sourceNote: sourceNoteIndex >= 0 ? cells[sourceNoteIndex] : undefined,
     }, request.defaultBookName, index + 2);
     if (normalized.warning) warnings.push(normalized.warning);
     return normalized.row ? [normalized.row] : [];
@@ -277,3 +360,9 @@ export const normalizeCatalogImport = (request: CatalogImportRequest): Normalize
 };
 
 export const normalizeCatalogImportRows = normalizeCatalogImport;
+
+// Equal headwords/meanings may still be distinct examples, senses, or sources.
+export const catalogRowsAreEquivalent = (left: Partial<NormalizedCatalogImportRow>, right: Partial<NormalizedCatalogImportRow>): boolean => (
+  ['word', 'definition', 'exampleSentence', 'exampleMeaning', 'partOfSpeech', 'inflections', 'pronunciation', 'sourceNote', 'category', 'subcategory', 'section', 'sourceSheet', 'sourceEntryId']
+    .every((field) => String(left[field] ?? '').trim() === String(right[field] ?? '').trim())
+);

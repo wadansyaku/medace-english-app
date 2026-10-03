@@ -10,7 +10,7 @@ import {
 interface BookCardProps {
   book: BookMetadata;
   isMine?: boolean;
-  progress: BookProgress;
+  progress?: BookProgress;
   preparingExamples?: boolean;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
   onPrepareExamples?: (book: BookMetadata) => void;
@@ -30,19 +30,20 @@ const BookCard: React.FC<BookCardProps> = ({
   const qualityGate = resolveLearnerMaterialQualityGate(book);
   const canStart = isBookApprovedForLearner(book);
   const learnerQualityMessage = getLearnerMaterialQualityMessage(qualityGate);
+  const progressPercent = progress ? Math.max(0, Math.min(100, progress.percentage)) : null;
   const qualityBadgeClass = qualityGate?.isApprovedForLearner
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-amber-200 bg-amber-50 text-amber-800';
 
   return (
-    <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+    <div className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-card border border-medace-100 bg-white shadow-sm transition-shadow hover:shadow-panel">
       <div className="relative z-10 flex-grow p-4 sm:p-6">
         <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4">
           <div className={`rounded-lg p-2.5 sm:p-3 ${book.isPriority ? 'bg-medace-50 text-medace-700' : 'bg-slate-100 text-slate-500'}`}>
             <Book className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="flex items-center gap-2">
-            {progress.percentage >= 100 ? (
+            {progressPercent !== null && progressPercent >= 100 ? (
               <span className="flex items-center gap-1 rounded-full border border-green-200 bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
                 <Trophy className="h-3 w-3 fill-current" /> 完了
               </span>
@@ -63,8 +64,9 @@ const BookCard: React.FC<BookCardProps> = ({
             {isMine && (
               <button
                 onClick={(event) => onDelete(event, book.id, book.title)}
-                className="z-20 cursor-pointer rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                className="z-20 cursor-pointer rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 shadow-sm transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-500"
                 title="削除する"
+                aria-label={`${book.title}を削除する`}
                 data-testid={`book-delete-${book.id}`}
               >
                 <Trash2 className="h-4 w-4" />
@@ -73,7 +75,7 @@ const BookCard: React.FC<BookCardProps> = ({
           </div>
         </div>
 
-        <h3 className="line-clamp-2 text-base font-bold leading-snug text-slate-800 transition-colors group-hover:text-medace-600 sm:text-xl" title={book.title}>
+        <h3 className="line-clamp-2 text-base font-black leading-snug text-steady-ink sm:text-lg" title={book.title}>
           {book.title}
         </h3>
         <p className="mt-1.5 min-h-8 line-clamp-2 text-[13px] leading-relaxed text-slate-500 sm:mt-2 sm:min-h-9 sm:text-sm">
@@ -89,17 +91,17 @@ const BookCard: React.FC<BookCardProps> = ({
 
         <div className="mt-3 space-y-2 sm:mt-5">
           <div className="flex justify-between text-[13px] font-bold text-slate-700 sm:text-sm">
-            <span>進捗率</span>
-            <span>{progress.percentage}%</span>
+            <span>{book.wordCount.toLocaleString('ja-JP')}語</span>
+            <span>{progressPercent === null ? '進捗未確認' : `${progressPercent}% 学習済み`}</span>
           </div>
           <div className="relative h-3 overflow-hidden rounded-full border border-slate-100 bg-slate-100">
             <div
-              className={`h-full rounded-full transition-all duration-1000 ease-out ${progress.percentage === 100 ? 'bg-green-500' : 'bg-medace-500'}`}
-              style={{ width: `${progress.percentage}%` }}
+              className={`h-full rounded-full transition-[width] ${progressPercent === 100 ? 'bg-green-500' : 'bg-medace-500'}`}
+              style={{ width: `${progressPercent ?? 0}%` }}
             ></div>
           </div>
-          <p className="text-right font-mono text-xs text-slate-400">
-            {progress.learnedCount} <span className="text-slate-300">/</span> {progress.totalCount} 単語
+          <p className="text-right font-mono text-xs text-slate-500">
+            {progress ? `${progress.learnedCount} / ${progress.totalCount} 語を学習済み` : '学習を開いて記録を確認できます'}
           </p>
         </div>
       </div>
@@ -115,16 +117,16 @@ const BookCard: React.FC<BookCardProps> = ({
             {preparingExamples ? '例文を準備中...' : '例文を準備'}
           </button>
         )}
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => {
               if (canStart) onSelect(book.id, 'study');
             }}
             disabled={!canStart}
             data-testid={`book-study-${book.id}`}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 disabled:shadow-none"
+            className="flex min-h-11 flex-1 basis-28 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-medace-500 hover:text-medace-800 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 disabled:shadow-none sm:gap-2 sm:px-3"
           >
-            <BookOpen className="h-4 w-4" /> 学習
+            <BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" /> 学習する
           </button>
           <button
             onClick={() => {
@@ -132,9 +134,9 @@ const BookCard: React.FC<BookCardProps> = ({
             }}
             disabled={!canStart}
             data-testid={`book-quiz-${book.id}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/70 px-3 py-2.5 text-[13px] font-bold text-slate-500 transition-all hover:border-medace-300 hover:text-medace-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 sm:flex-1 sm:bg-slate-200 sm:text-sm sm:text-slate-600 sm:shadow-sm sm:hover:bg-medace-700 sm:hover:text-slate-950 sm:disabled:bg-slate-100 sm:disabled:text-slate-400"
+            className="flex min-h-11 flex-1 basis-28 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-medace-100 bg-medace-50 px-2 py-2.5 text-sm font-bold text-medace-900 transition-colors hover:border-medace-200 hover:bg-medace-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-500 sm:gap-2 sm:px-3"
           >
-            <Play className="h-4 w-4 fill-current" /> テスト設定
+            <Play className="h-4 w-4 shrink-0 fill-current" aria-hidden="true" /> 小テスト
           </button>
         </div>
       </div>

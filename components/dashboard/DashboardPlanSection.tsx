@@ -100,7 +100,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <button
           onClick={onGeneratePlan}
           disabled={generatingPlan || !hasStudyBooks}
-          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-2 rounded-lg bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
         >
           {generatingPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           プランを作る

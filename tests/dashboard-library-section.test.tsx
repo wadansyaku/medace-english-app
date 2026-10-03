@@ -60,7 +60,18 @@ const makeUngatedOfficialBook = (): BookMetadata => ({
 });
 
 describe('DashboardLibrarySection', () => {
-  it('keeps the first material creation action out of the library empty state', () => {
+  it('shows the plan constraint and an available grammar action in an empty free library', () => {
+    const rendered = renderToStaticMarkup(<DashboardLibrarySection
+      books={[]} myBooks={[]} primaryRecommendedBook={null} secondaryRecommendedBooks={[]}
+      progressMap={{}} showLibrary={false} canCreateBook={false} onTryGrammar={() => undefined}
+      onToggleLibrary={() => undefined} onOpenCreateModal={() => undefined}
+      onDelete={() => undefined} onPrepareExamples={() => undefined} onSelect={() => undefined}
+    />);
+    expect(rendered).toContain('現在のプランではMy単語帳の作成は利用できません');
+    expect(rendered).toContain('教材なしで文法を試す');
+    expect(rendered).not.toContain('library-create-first-personal-book');
+  });
+  it('offers the first material creation action within the library empty state', () => {
     const rendered = renderToStaticMarkup(
       <DashboardLibrarySection
         books={[]}
@@ -79,8 +90,8 @@ describe('DashboardLibrarySection', () => {
 
     expect(rendered).toContain('まだMy単語帳がありません');
     expect(rendered).toContain('最初の教材を作ると、ここに単語帳と進捗が表示されます。');
-    expect(rendered).not.toContain('今すぐ作成する');
-    expect(rendered).not.toContain('新規作成');
+    expect(rendered).toContain('library-create-first-personal-book');
+    expect(rendered).toContain('My単語帳を作る');
   });
 
   it('keeps additional material creation available after a personal book exists', () => {
@@ -125,6 +136,7 @@ describe('DashboardLibrarySection', () => {
     expect(rendered).toContain('配布教材 1 冊は確認中です。承認後に学習・テストで使えます。');
     expect(rendered).toContain('この教材は確認中です。承認後に学習やテストで使えます。');
     expect(rendered).toContain('disabled=""');
+    expect(rendered).toContain('library-create-first-personal-book');
   });
 
   it('treats official books without quality gates as confirmation-pending material', () => {

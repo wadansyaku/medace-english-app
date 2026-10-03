@@ -90,9 +90,9 @@ test('desktop student dashboard keeps the command center calm and above the fold
   });
   expect(palette.centerBackground).toBe('rgb(255, 255, 255)');
   expect(palette.centerBackgroundImage).toBe('none');
-  expect(palette.ctaBackground).toBe('rgb(15, 118, 110)');
-  expect(palette.ctaForeground).toBe('rgb(255, 255, 255)');
-  await expect(page.getByTestId('app-shell')).toHaveCSS('background-color', 'rgb(244, 248, 247)');
+  expect(palette.ctaBackground).toBe('rgb(246, 109, 11)');
+  expect(palette.ctaForeground).toBe('rgb(47, 22, 9)');
+  await expect(page.getByTestId('app-shell')).toHaveCSS('background-color', 'rgb(253, 243, 237)');
   await expect(page.getByTestId('app-shell')).toHaveCSS('background-image', 'none');
 
   await page.setViewportSize({ width: 1024, height: 768 });
@@ -149,13 +149,17 @@ test('desktop student dashboard keeps the command center calm and above the fold
     if (await page.getByTestId('phrasebook-create-modal').count()) {
       return 'phrasebook';
     }
+    if (await page.getByTestId('english-practice-hub').count()) {
+      await expect(page).toHaveURL(/\/english-practice\/grammar$/);
+      return 'practice';
+    }
     const mainText = await page.locator('main').innerText({ timeout: 1000 }).catch(() => '');
     if (mainText.includes('今日のクエスト') && mainText.includes('答えを確認')) {
       return 'study';
     }
     return 'pending';
   }, {
-    message: 'primary CTA should open study mode or the phrasebook creation modal',
+    message: 'primary CTA should open the available study, grammar trial, or phrasebook creation route',
     timeout: 20000,
   }).not.toBe('pending');
 });
@@ -212,15 +216,26 @@ test('desktop dashboard keeps lower details full-width when the right rail is pr
     await expect(studentPage.getByTestId('dashboard-reference-rail')).toBeVisible();
     await expect(studentPage.getByTestId('dashboard-reference-sections')).toBeVisible();
 
-    const commandBox = await studentPage.getByTestId('dashboard-command-center').boundingBox();
-    const railBox = await studentPage.getByTestId('dashboard-reference-rail').boundingBox();
-    const referenceBox = await studentPage.getByTestId('dashboard-reference-sections').boundingBox();
-    const libraryBox = await studentPage.getByTestId('dashboard-library-section').boundingBox();
+    // Compare a single layout frame. Async measurements can straddle scrollbar creation.
+    const { commandBox, railBox, referenceBox, libraryBox } = await studentPage.evaluate(() => {
+      const box = (testId: string) => {
+        const element = document.querySelector(`[data-testid="${testId}"]`);
+        if (!element) return null;
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      return {
+        commandBox: box('dashboard-command-center'),
+        railBox: box('dashboard-reference-rail'),
+        referenceBox: box('dashboard-reference-sections'),
+        libraryBox: box('dashboard-library-section'),
+      };
+    });
     expect(commandBox).not.toBeNull();
     expect(railBox).not.toBeNull();
     expect(referenceBox).not.toBeNull();
     expect(libraryBox).not.toBeNull();
-    expect(Math.round(referenceBox!.x)).toBe(Math.round(commandBox!.x));
+    expect(Math.abs(referenceBox!.x - commandBox!.x)).toBeLessThanOrEqual(1);
     expect(referenceBox!.width).toBeGreaterThanOrEqual(commandBox!.width - 2);
     expect(referenceBox!.x).toBeLessThan(railBox!.x - 16);
     expect(referenceBox!.width).toBeGreaterThan(railBox!.width * 1.8);

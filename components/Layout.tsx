@@ -9,6 +9,7 @@ import useNetworkStatus from '../hooks/useNetworkStatus';
 import { getDemoAccessWindowLabel, isDemoEmail } from '../utils/demo';
 import useIsStandalone from '../hooks/useIsStandalone';
 import useIsStudentMobileShell from '../hooks/useIsStudentMobileShell';
+import useIsMobileViewport from '../hooks/useIsMobileViewport';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -60,9 +61,10 @@ const Layout: React.FC<LayoutProps> = ({
   const isDemoUser = isDemoEmail(user?.email);
   const isStandalone = useIsStandalone();
   const compactStudentShell = useIsStudentMobileShell(user);
+  const compactHeader = useIsMobileViewport('(max-width: 767px), (max-height: 500px)') || compactStudentShell;
   const runtimeFlags = getClientRuntimeFlags();
   const isOnline = useNetworkStatus();
-  const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactStudentShell);
+  const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactHeader);
   const showOfflineBlocker = runtimeFlags.appOnlineOnly && !isOnline;
   const isPreviewDeployment = runtimeFlags.deployment.isPagesPreviewHost;
   const isStudentPracticeView = user?.role === UserRole.STUDENT && currentView === 'englishPractice';
@@ -76,8 +78,8 @@ const Layout: React.FC<LayoutProps> = ({
   }, [isStandalone]);
 
   React.useEffect(() => {
-    setShowDemoBannerDetails(!compactStudentShell);
-  }, [compactStudentShell, user?.email]);
+    setShowDemoBannerDetails(!compactHeader);
+  }, [compactHeader, user?.email]);
 
   React.useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -110,16 +112,17 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div data-testid="app-shell" className="flex min-h-screen flex-col bg-steady-canvas font-sans">
+      <a href="#study-main-content" className="skip-to-content">本文へ移動</a>
       {showOfflineBlocker && (
         <div
           data-testid="offline-blocking-banner"
           className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/72 px-4"
         >
           <div className="max-w-lg rounded-panel border border-white/15 bg-slate-950 px-6 py-6 text-white shadow-2xl">
-            <p className="text-xs font-black text-amber-300">オンライン専用テスト</p>
+            <p className="text-xs font-black text-amber-300">ネットワーク接続を確認してください</p>
             <h2 className="mt-3 text-2xl font-black">オフラインでは操作を継続できません</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-200">
-              この導入 pilot はオンライン接続前提です。ネットワーク接続を戻してから、学習・教材更新・履歴保存を再開してください。
+              学習記録を保存するにはインターネット接続が必要です。接続が戻ると、この画面から学習を続けられます。
             </p>
             <button
               type="button"
@@ -153,12 +156,12 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header className={`sticky top-0 z-50 border-b border-slate-200 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.04)] ${
+      <header data-testid="app-sticky-header" className={`${compactStudentShell ? 'sticky top-0' : 'md:sticky md:top-0'} [@media(max-height:500px)]:static z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
           <div className="border-b border-[#f3b80a]/40 bg-[#fff9df]">
-            {compactStudentShell ? (
+            {compactHeader ? (
               <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -170,6 +173,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <button
                     type="button"
                     data-testid="demo-banner-toggle"
+                    aria-expanded={showDemoBannerDetails}
                     onClick={() => setShowDemoBannerDetails((previous) => !previous)}
                     className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-[#f3b80a]/70 bg-white px-3 py-2 text-xs font-black text-slate-800 transition-colors hover:bg-[#fff7d4]"
                   >
@@ -213,38 +217,38 @@ const Layout: React.FC<LayoutProps> = ({
             )}
           </div>
         )}
-        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between ${
-          compactStudentShell ? 'min-h-[62px] py-1' : 'min-h-[80px] py-2'
+        <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 ${
+          compactHeader ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <button
             type="button"
             className="flex min-h-11 items-center gap-3 rounded-xl text-left transition-colors hover:bg-medace-50 focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-medace-200"
             onClick={() => onChangeView(homeView)}
-            aria-label={`${BRAND.productLabel} ホームへ戻る`}
+            aria-label={`${BRAND.officialName} ホームへ戻る`}
           >
-            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactStudentShell ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
-              <BookOpen className={`text-medace-700 ${compactStudentShell ? 'h-5 w-5' : 'w-6 h-6'}`} />
+            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactHeader ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
+              <BookOpen className={`text-medace-700 ${compactHeader ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
-            <div className={compactStudentShell ? 'block' : 'hidden sm:block'}>
-              <h1 className={`font-black tracking-tight text-medace-900 ${compactStudentShell ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
-                {compactStudentShell ? BRAND.productLabel : BRAND.officialName}
+            <div className="block">
+              <h1 className={`font-black tracking-tight text-medace-900 ${compactHeader ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
+                {BRAND.officialName}
               </h1>
-              <p className={`font-bold tracking-[0.14em] text-medace-700/70 ${compactStudentShell ? 'text-[10px]' : 'text-xs'}`}>
-                {compactStudentShell ? '生徒モバイル' : BRAND.productLabel}
+              <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactHeader ? 'text-[10px]' : 'text-xs'}`}>
+                {BRAND.productLabel}
               </p>
             </div>
           </button>
 
           {user && (
-            <div className={`flex items-center flex-1 justify-end ${compactStudentShell ? 'gap-2' : 'gap-4'}`}>
+            <div className={`flex items-center flex-1 justify-end ${compactHeader ? 'gap-2' : 'gap-4'}`}>
               
               {/* Gamification HUD */}
-              {user.role === UserRole.STUDENT && isGameMode && !compactStudentShell && (
+              {user.role === UserRole.STUDENT && isGameMode && !compactHeader && (
                   <div className="flex items-center gap-3 rounded-xl border border-medace-200 bg-white/90 px-4 py-2.5 shadow-sm md:gap-6">
                       {/* Streak */}
                       <div className="flex items-center gap-1.5" title={`${stats.currentStreak}日連続学習中！`}>
                           <Zap className={`w-4 h-4 ${stats.currentStreak > 0 ? 'text-[#f3b80a] fill-[#f3b80a]' : 'text-slate-300'}`} />
-                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                          <span className={`text-sm font-bold ${stats.currentStreak > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
                               {stats.currentStreak}
                           </span>
                       </div>
@@ -277,9 +281,10 @@ const Layout: React.FC<LayoutProps> = ({
                 <button 
                   onClick={() => onChangeView(homeView)}
                   data-testid="layout-nav-home"
+                  aria-current={currentView === homeView ? 'page' : undefined}
                   className={`rounded-xl px-4 py-3 text-[0.95rem] font-bold transition-colors ${
                     currentView === homeView
-                      ? 'bg-medace-600 text-slate-950'
+                      ? 'bg-medace-50 text-medace-950'
                       : 'text-slate-700 hover:bg-medace-50 hover:text-medace-700'
                   }`}
                 >
@@ -289,7 +294,7 @@ const Layout: React.FC<LayoutProps> = ({
                   <span
                     data-testid="layout-nav-english-practice-current"
                     aria-current="page"
-                    className="rounded-xl bg-medace-600 px-4 py-3 text-[0.95rem] font-bold text-slate-950"
+                    className="rounded-xl bg-medace-50 px-4 py-3 text-[0.95rem] font-bold text-medace-950"
                   >
                     英語演習
                   </span>
@@ -297,19 +302,19 @@ const Layout: React.FC<LayoutProps> = ({
               </nav>
 
               <div className="flex items-center gap-2">
-                <div className={`text-right ${compactStudentShell ? 'hidden' : 'hidden lg:block'}`}>
+                <div className={`text-right ${compactHeader ? 'hidden' : 'hidden lg:block'}`}>
                   <p className="text-[0.95rem] font-bold text-slate-900">{user.displayName}</p>
                   <p className="text-xs font-bold tracking-[0.12em] uppercase text-slate-500">{workspaceLabel}</p>
                 </div>
                 <button 
                   onClick={onLogout}
                   aria-label="ログアウト"
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
-                    compactStudentShell ? 'p-2.5' : 'p-3'
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-transparent text-slate-500 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500 ${
+                    compactHeader ? 'p-2.5' : 'p-3'
                   }`}
                   title="ログアウト"
                 >
-                  <LogOut className={compactStudentShell ? 'h-[18px] w-[18px]' : 'w-5 h-5'} />
+                  <LogOut className={compactHeader ? 'h-[18px] w-[18px]' : 'w-5 h-5'} />
                 </button>
               </div>
             </div>
@@ -317,22 +322,37 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
         {user && workspaceSections.length > 0 && onSelectWorkspaceSection && activeWorkspaceSection && (
           <div className="border-t border-medace-200 bg-white/90 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 py-2 sm:py-3 sm:px-6 lg:px-8">
               {workspaceSections.map((section) => (
                 <button
                   key={section.id}
                   type="button"
                   onClick={() => onSelectWorkspaceSection(section.id)}
+                  onFocus={(event) => {
+                    const item = event.currentTarget;
+                    const scroller = item.parentElement;
+                    if (!scroller) return;
+                    const itemBounds = item.getBoundingClientRect();
+                    const scrollBounds = scroller.getBoundingClientRect();
+                    const focusInset = 8;
+                    const delta = itemBounds.left < scrollBounds.left + focusInset
+                      ? itemBounds.left - scrollBounds.left - focusInset
+                      : itemBounds.right > scrollBounds.right - focusInset
+                        ? itemBounds.right - scrollBounds.right + focusInset
+                        : 0;
+                    if (delta) scroller.scrollBy({ left: delta, behavior: 'auto' });
+                  }}
                   data-testid={`workspace-tab-${section.id.toLowerCase()}`}
-                  className={`shrink-0 rounded-xl border px-4 py-3 text-left transition-colors ${
+                  aria-current={activeWorkspaceSection === section.id ? 'page' : undefined}
+                  className={`relative min-h-11 shrink-0 rounded-xl border px-4 py-2 sm:py-3 text-left transition-colors ${
                     activeWorkspaceSection === section.id
-                      ? 'border-medace-600 bg-medace-600 text-slate-950'
+                      ? 'border-medace-200 bg-medace-50 text-medace-950'
                       : 'border-medace-100 bg-white text-slate-600 hover:border-medace-300 hover:text-medace-700'
                   }`}
                 >
                   <div className="text-sm font-bold">{section.label}</div>
                   {section.description && (
-                    <div className={`mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-white/72' : 'text-slate-400'}`}>
+                    <div className={`sr-only md:not-sr-only md:mt-1 text-xs leading-relaxed ${activeWorkspaceSection === section.id ? 'text-medace-900' : 'text-slate-500'}`}>
                       {section.description}
                     </div>
                   )}
@@ -345,9 +365,9 @@ const Layout: React.FC<LayoutProps> = ({
       )}
 
       {/* Main Content */}
-      <main className={immersiveContent
+      <main id="study-main-content" tabIndex={-1} className={immersiveContent
         ? 'flex-grow'
-        : `flex-grow container mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-3 sm:py-8' : 'py-10'}`
+        : `flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-4 sm:py-8' : 'py-8 lg:py-10'}`
       }>
         {children}
       </main>
@@ -358,11 +378,11 @@ const Layout: React.FC<LayoutProps> = ({
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>
         {compactStudentShell ? (
-          <div className="mx-auto max-w-7xl px-4 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+          <div className="mx-auto max-w-7xl px-4 text-center text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             {BRAND.productLabel}
           </div>
         ) : (
-          <div className="mx-auto max-w-7xl px-4 text-center text-[0.95rem] font-medium text-slate-400">
+          <div className="mx-auto max-w-7xl px-4 text-center text-[0.95rem] font-medium text-slate-500">
             &copy; {new Date().getFullYear()} {BRAND.footerLabel}.
           </div>
         )}

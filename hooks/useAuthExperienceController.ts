@@ -43,11 +43,13 @@ export const useAuthExperienceController = ({
 }: UseAuthExperienceControllerParams) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const authRequestInFlightRef = useRef(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [authMode, setAuthMode] = useState<AuthMode>('LOGIN');
+  const [authMode, setAuthMode] = useState<AuthMode>(navigationState.authPanelMode || 'LOGIN');
   const [authError, setAuthError] = useState<string | null>(null);
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [passwordRecoveryLoading, setPasswordRecoveryLoading] = useState(false);
@@ -66,9 +68,27 @@ export const useAuthExperienceController = ({
   } = usePublicMotivationSnapshot(!user);
   const navigationStateRef = useRef(navigationState);
 
+  navigationStateRef.current = navigationState;
+
   useEffect(() => {
-    navigationStateRef.current = navigationState;
-  }, [navigationState]);
+    if (navigationState.authPanelMode) setAuthMode(navigationState.authPanelMode);
+    setAuthError(null);
+    setShowPasswordRecovery(false);
+    setPasswordRecoveryMessage(null);
+    setPassword('');
+    setConfirmPassword('');
+  }, [navigationState.authPanelMode]);
+
+  const navigateAfterAuthentication = (loggedInUser: UserProfile) => {
+    const currentNavigation = navigationStateRef.current;
+    const homeView = getHomeAppRoute(loggedInUser);
+    if (shouldPreserveCurrentRoute(currentNavigation, homeView)) {
+      if (currentNavigation.authPanelMode) dispatchNavigation({ type: 'close-auth', historyMode: 'replace' });
+    } else {
+      dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
+    }
+  };
+
 
   useEffect(() => {
     const initSession = async () => {
@@ -76,10 +96,7 @@ export const useAuthExperienceController = ({
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);
-          const homeView = getHomeAppRoute(sessionUser);
-          if (!shouldPreserveCurrentRoute(navigationStateRef.current, homeView)) {
-            dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
-          }
+          navigateAfterAuthentication(sessionUser);
         }
       } catch (error) {
         console.error('Session restore failed', error);
@@ -106,8 +123,12 @@ export const useAuthExperienceController = ({
     organizationRole?: OrganizationRole,
     demoPassword?: string,
   ) => {
+    if (authRequestInFlightRef.current) return;
+    authRequestInFlightRef.current = true;
     setAuthError(null);
-    setAuthLoading(true);
+    const blocksExistingWorkspace = Boolean(user);
+    if (blocksExistingWorkspace) setAuthLoading(true);
+    setAuthSubmitting(true);
     try {
       const loggedInUser = await sessionService.login(role, demoPassword, organizationRole);
       if (!loggedInUser) {
@@ -115,19 +136,19 @@ export const useAuthExperienceController = ({
         return;
       }
       setUser(loggedInUser);
-      const homeView = getHomeAppRoute(loggedInUser);
-      if (!shouldPreserveCurrentRoute(navigationState, homeView)) {
-        dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
-      }
+      navigateAfterAuthentication(loggedInUser);
     } catch (error: any) {
       console.error('Login failed', error);
       setAuthError(error?.message || 'ログインエラーが発生しました。');
     } finally {
-      setAuthLoading(false);
+      authRequestInFlightRef.current = false;
+      setAuthSubmitting(false);
+      if (blocksExistingWorkspace) setAuthLoading(false);
     }
   };
 
   const handleDemoLogin = async (role: UserRole, organizationRole?: OrganizationRole) => {
+    if (authRequestInFlightRef.current) return;
     if (role === UserRole.ADMIN) {
       setPendingAdminDemoRole({ role, organizationRole });
       setAdminDemoPassword('');
@@ -161,10 +182,11 @@ export const useAuthExperienceController = ({
 
   const handleEmailAuth = async (event: FormEvent) => {
     event.preventDefault();
+    if (authRequestInFlightRef.current) return;
     setAuthError(null);
     setPasswordRecoveryMessage(null);
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setAuthError('メールアドレスとパスワードを入力してください。');
       return;
     }
@@ -184,10 +206,11 @@ export const useAuthExperienceController = ({
       }
     }
 
-    setAuthLoading(true);
+    authRequestInFlightRef.current = true;
+    setAuthSubmitting(true);
     try {
       const loggedInUser = await sessionService.authenticate(
-        email,
+        email.trim(),
         password,
         authMode === 'SIGNUP',
         undefined,
@@ -195,19 +218,20 @@ export const useAuthExperienceController = ({
       );
       if (loggedInUser) {
         setUser(loggedInUser);
-        const homeView = getHomeAppRoute(loggedInUser);
-        if (!shouldPreserveCurrentRoute(navigationState, homeView)) {
-          dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
-        }
+        navigateAfterAuthentication(loggedInUser);
+      } else {
+        setAuthError('ログインに失敗しました。入力内容を確認してもう一度お試しください。');
       }
     } catch (error: any) {
-      setAuthError(error.message || '認証エラーが発生しました。');
+      setAuthError(error?.message || '認証エラーが発生しました。');
     } finally {
-      setAuthLoading(false);
+      authRequestInFlightRef.current = false;
+      setAuthSubmitting(false);
     }
   };
 
   const handleOpenPasswordRecovery = () => {
+    if (authRequestInFlightRef.current) return;
     setAuthMode('LOGIN');
     setAuthError(null);
     setPasswordRecoveryMessage(null);
@@ -215,22 +239,25 @@ export const useAuthExperienceController = ({
   };
 
   const handleClosePasswordRecovery = () => {
+    if (authRequestInFlightRef.current) return;
     setAuthError(null);
     setPasswordRecoveryMessage(null);
     setShowPasswordRecovery(false);
   };
 
   const handleRequestPasswordRecovery = async () => {
+    if (authRequestInFlightRef.current) return;
     const recoveryEmail = email.trim();
     setAuthError(null);
     setPasswordRecoveryMessage(null);
 
-    if (!recoveryEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) {
       setAuthError('再設定に使うメールアドレスを入力してください。');
       setShowPasswordRecovery(true);
       return;
     }
 
+    authRequestInFlightRef.current = true;
     setPasswordRecoveryLoading(true);
     try {
       const result = await sessionService.requestPasswordRecovery(recoveryEmail, 'login');
@@ -242,15 +269,29 @@ export const useAuthExperienceController = ({
       setAuthError(error?.message || '再設定リクエストを受け付けられませんでした。');
       setShowPasswordRecovery(true);
     } finally {
+      authRequestInFlightRef.current = false;
       setPasswordRecoveryLoading(false);
     }
   };
 
   const switchAuthMode = (mode: AuthMode) => {
+    if (authRequestInFlightRef.current) return;
+    if (navigationState.authPanelMode === mode) return;
+    dispatchNavigation({ type: 'open-auth', mode, historyMode: navigationState.authPanelMode ? 'replace' : 'push' });
     setAuthMode(mode);
     setAuthError(null);
     setPasswordRecoveryMessage(null);
     setShowPasswordRecovery(false);
+    setPassword('');
+    setConfirmPassword('');
+  };
+
+  const closeAuthPanel = () => {
+    if (authRequestInFlightRef.current) return;
+    dispatchNavigation({ type: 'close-auth', historyMode: 'replace' });
+    setAuthError(null);
+    setShowPasswordRecovery(false);
+    setPasswordRecoveryMessage(null);
     setPassword('');
     setConfirmPassword('');
   };
@@ -274,6 +315,10 @@ export const useAuthExperienceController = ({
 
   const authExperienceProps = {
     authMode,
+    authPanelMode: navigationState.authPanelMode,
+    authSubmitting,
+    onOpenAuth: switchAuthMode,
+    onCloseAuth: closeAuthPanel,
     displayName,
     email,
     password,
@@ -287,10 +332,10 @@ export const useAuthExperienceController = ({
     motivationLoading: publicMotivationLoading,
     motivationError: publicMotivationError,
     onChangeAuthMode: switchAuthMode,
-    onDisplayNameChange: setDisplayName,
-    onEmailChange: setEmail,
-    onPasswordChange: setPassword,
-    onConfirmPasswordChange: setConfirmPassword,
+    onDisplayNameChange: (value: string) => { if (!authRequestInFlightRef.current) setDisplayName(value); },
+    onEmailChange: (value: string) => { if (!authRequestInFlightRef.current) setEmail(value); },
+    onPasswordChange: (value: string) => { if (!authRequestInFlightRef.current) setPassword(value); },
+    onConfirmPasswordChange: (value: string) => { if (!authRequestInFlightRef.current) setConfirmPassword(value); },
     onSubmitEmailAuth: handleEmailAuth,
     onOpenPasswordRecovery: handleOpenPasswordRecovery,
     onClosePasswordRecovery: handleClosePasswordRecovery,

@@ -9,11 +9,12 @@ import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { isBookSelectableForToday } from '../../shared/materialQuality';
+import { inspectCatalogImportContent } from '../../shared/catalogImport';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
 import { generateMeteredGeminiSentence } from './ai-actions';
-import { normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
+import { catalogRowsAreEquivalent, normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
 import { HttpError } from './http';
 import { readLearningPlanBookIds } from './learning-plan-books';
 import { readWeaknessProfile } from './weakness-actions';
@@ -175,15 +176,18 @@ const upsertOfficialMaterialSourceLedger = async (
   meta: BookMetadata & { createdBy: string | null; },
   words: WordData[],
   payload: CatalogImportRequest,
+  sourceContextChanged: boolean,
 ): Promise<void> => {
   if (meta.createdBy) return;
 
   const catalogSource = meta.catalogSource || BookCatalogSource.LICENSED_PARTNER;
-  const isApprovedOriginal = catalogSource === BookCatalogSource.STEADY_STUDY_ORIGINAL;
   const now = Date.now();
+  const contentQa = inspectCatalogImportContent(words);
   const sourceKind = typeof payload.source?.kind === 'string' ? payload.source.kind : 'unknown';
+  const sourceFileName = payload.source.kind === 'csv' ? payload.source.fileName?.trim().split(/[\\/]/).pop() : undefined;
+  const sourceFile = `api-import/${sourceKind}${sourceFileName ? `/${sourceFileName}` : ''}`;
   const sourceCoverageRate = toCoverageRate(
-    words.filter((word) => Boolean(word.sourceSheet) && typeof word.sourceEntryId === 'number').length,
+    words.filter((word) => Boolean(word.sourceSheet?.trim()) && Number.isSafeInteger(word.sourceEntryId) && word.sourceEntryId! > 0).length,
     words.length,
   );
   const examplePairCoverageRate = toCoverageRate(
@@ -214,13 +218,20 @@ const upsertOfficialMaterialSourceLedger = async (
       notes,
       created_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(book_id) DO UPDATE SET
       source_id = excluded.source_id,
       catalog_source = excluded.catalog_source,
       book_title = excluded.book_title,
       edition = excluded.edition,
-      rights_status = excluded.rights_status,
+      rights_status = CASE
+        WHEN material_source_ledger.rights_status = 'blocked' THEN 'blocked'
+        WHEN material_source_ledger.catalog_source = excluded.catalog_source
+          AND material_source_ledger.source_file = excluded.source_file
+          AND ${sourceContextChanged ? 0 : 1} = 1
+          THEN material_source_ledger.rights_status
+        ELSE 'pending'
+      END,
       review_status = excluded.review_status,
       source_file = excluded.source_file,
       extracted_at = excluded.extracted_at,
@@ -241,19 +252,20 @@ const upsertOfficialMaterialSourceLedger = async (
     catalogSource,
     meta.title,
     'api-import',
-    isApprovedOriginal ? 'approved' : 'pending',
-    isApprovedOriginal ? 'approved' : 'needs_review',
-    `api-import/${sourceKind}`,
+    'pending',
+    'needs_review',
+    sourceFile,
     new Date(now).toISOString(),
     'normalizeCatalogImport + handleBatchImportWords',
     'api-import-inline-content-qa',
     words.length,
+    contentQa.requiredBlankRows,
+    contentQa.rowsWithSentinel,
+    contentQa.sentinelValueCount,
     countDuplicateHeadwords(words),
     sourceCoverageRate,
     examplePairCoverageRate,
-    isApprovedOriginal
-      ? 'Steady Study original import. Required fields were normalized and blocked markers were rejected before storage.'
-      : 'Official import registered for review. Rights evidence and source granularity must be approved before Today Focus selection.',
+    'Content QA measured accepted rows. New official imports require rights approval; every content import resets review to needs_review. Existing rights decisions are retained only for an unchanged catalog/source identity, and never granted by catalogSource.',
     now,
     now,
   ).run();
@@ -287,6 +299,13 @@ export const handleBatchImportWords = async (
   const isOfficialImport = user.role === UserRole.ADMIN && !createdByUid;
   if (isOfficialImport && runtimeFlags && !runtimeFlags.enableDestructiveAdminActions) {
     throw new HttpError(403, '本番環境では公式教材の更新を API から実行できません。バックアップ付き運用手順を使用してください。');
+  }
+  if (isOfficialImport && optionCatalogSource === BookCatalogSource.USER_GENERATED) {
+    throw new HttpError(400, '所有者のない公式教材に個人作成の分類は指定できません。');
+  }
+  if (isOfficialImport && normalized.warnings.length > 0) {
+    const issue = normalized.warnings[0];
+    throw new HttpError(400, `公式教材の取り込みを保存前に停止しました。${issue.rowNumber ? `${issue.rowNumber}行目: ` : ''}${issue.message}`);
   }
 
   const ownerId = isOfficialImport ? null : user.id;
@@ -329,11 +348,11 @@ export const handleBatchImportWords = async (
     const definition = row.definition.trim();
     const number = row.number || group.words.length + 1;
 
-    if (group.words.some((candidate) => candidate.word === word && candidate.definition === definition)) {
+    if (group.words.some((candidate) => catalogRowsAreEquivalent(candidate, row))) {
       skippedRowCount += 1;
       warnings.push({
         code: 'DUPLICATE_ROW',
-        message: '同じ単語と意味の重複行をスキップしました。',
+        message: '単語・意味・用例・品詞・出典がすべて同じ重複行をスキップしました。',
         rowNumber: index + 1,
       });
       return;
@@ -346,6 +365,10 @@ export const handleBatchImportWords = async (
       word,
       definition,
       searchKey: word.toLowerCase(),
+      ...(row.partOfSpeech ? { partOfSpeech: row.partOfSpeech } : {}),
+      ...(row.inflections ? { inflections: row.inflections } : {}),
+      ...(row.pronunciation ? { pronunciation: row.pronunciation } : {}),
+      ...(row.sourceNote ? { sourceNote: row.sourceNote } : {}),
       ...(row.category?.trim() ? { category: row.category.trim() } : {}),
       ...(row.subcategory?.trim() ? { subcategory: row.subcategory.trim() } : {}),
       ...(row.section?.trim() ? { section: row.section.trim() } : {}),
@@ -355,6 +378,20 @@ export const handleBatchImportWords = async (
       ...(row.exampleMeaning?.trim() ? { exampleMeaning: row.exampleMeaning.trim() } : {}),
     });
   });
+
+  // Check every book before the first DELETE/INSERT so a rejected request
+  // cannot remove previously reviewed material or its learning histories.
+  const changedSourceContextBookIds = new Set<string>();
+  for (const { meta, words } of grouped.values()) {
+    const qa = inspectCatalogImportContent(words);
+    if (qa.requiredBlankRows > 0 || qa.rowsWithSentinel > 0) {
+      throw new HttpError(400, '不完全な教材を含むため、取り込みを保存前に停止しました。');
+    }
+    if (!meta.createdBy) {
+      const existing = await readFirst<{ source_context: string | null }>(env, 'SELECT source_context FROM books WHERE id = ?', meta.id);
+      if (existing && (existing.source_context || '') !== (meta.sourceContext || '')) changedSourceContextBookIds.add(meta.id);
+    }
+  }
 
   for (const { meta, words } of grouped.values()) {
     meta.wordCount = words.length;
@@ -390,12 +427,12 @@ export const handleBatchImportWords = async (
       Date.now(),
     ).run();
 
-    await upsertOfficialMaterialSourceLedger(env, meta, words, payload);
+    await upsertOfficialMaterialSourceLedger(env, meta, words, payload, changedSourceContextBookIds.has(meta.id));
 
     const statements = words.map((word) => env.DB.prepare(`
       INSERT INTO words (
-        id, book_id, word_number, word, definition, search_key, category, subcategory, section, source_sheet, source_entry_id, example_sentence, example_meaning, is_reported, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        id, book_id, word_number, word, definition, search_key, category, subcategory, section, source_sheet, source_entry_id, example_sentence, example_meaning, part_of_speech, inflections, pronunciation, source_note, is_reported, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         word = excluded.word,
         definition = excluded.definition,
@@ -405,6 +442,10 @@ export const handleBatchImportWords = async (
         section = excluded.section,
         source_sheet = excluded.source_sheet,
         source_entry_id = excluded.source_entry_id,
+        part_of_speech = excluded.part_of_speech,
+        inflections = excluded.inflections,
+        pronunciation = excluded.pronunciation,
+        source_note = excluded.source_note,
         example_sentence = COALESCE(excluded.example_sentence, example_sentence),
         example_meaning = COALESCE(excluded.example_meaning, example_meaning),
         updated_at = excluded.updated_at
@@ -422,6 +463,10 @@ export const handleBatchImportWords = async (
       word.sourceEntryId || null,
       word.exampleSentence || null,
       word.exampleMeaning || null,
+      word.partOfSpeech || null,
+      word.inflections || null,
+      word.pronunciation || null,
+      word.sourceNote || null,
       Date.now(),
       Date.now(),
     ));

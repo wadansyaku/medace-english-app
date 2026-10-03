@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { WritingSubmissionDetailResponse } from '../contracts/writing';
 import { workspaceService } from '../services/workspace';
@@ -48,6 +48,8 @@ type BusyAction = 'generate' | 'issue' | 'review' | null;
 export const useWritingOpsController = () => {
   const [tab, setTab] = useState<WritingOpsTab>('CREATE');
   const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const [templates, setTemplates] = useState<WritingPromptTemplate[]>([]);
   const [students, setStudents] = useState<StudentSummary[]>([]);
@@ -57,6 +59,9 @@ export const useWritingOpsController = () => {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState('');
   const [selectedSubmissionId, setSelectedSubmissionId] = useState('');
   const [detail, setDetail] = useState<WritingSubmissionDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailRetry, setDetailRetry] = useState(0);
   const [selectedStudentUid, setSelectedStudentUid] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [topicHint, setTopicHint] = useState('');
@@ -69,9 +74,19 @@ export const useWritingOpsController = () => {
   const [scannerManualTranscript, setScannerManualTranscript] = useState('');
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   const [submittingScan, setSubmittingScan] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const operationLock = useRef(false);
+  const refreshVersion = useRef(0);
+  const detailVersion = useRef(0);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const selectedSubmissionRef = useRef(selectedSubmissionId);
+  selectedSubmissionRef.current = selectedSubmissionId;
 
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
     setLoading(true);
+    setLoadError(null);
     try {
       const [templateResponse, studentRows, assignmentResponse, queueResponse, historyResponse] = await Promise.all([
         listWritingTemplates(),
@@ -81,25 +96,45 @@ export const useWritingOpsController = () => {
         listWritingReviewQueue('HISTORY'),
       ]);
 
+      if (version !== refreshVersion.current) return;
       setTemplates(templateResponse.templates);
       setStudents(studentRows.filter((student) => student.subscriptionPlan === 'TOB_PAID'));
       setAssignments(assignmentResponse.assignments);
       setQueue(queueResponse.items);
       setHistory(historyResponse.items);
+      setHasData(true);
     } catch (error) {
+      if (version !== refreshVersion.current) return;
       console.error(error);
-      setNotice({
-        tone: 'error',
-        message: (error as Error).message || '自由英作文データの読み込みに失敗しました。',
-      });
+      setLoadError((error as Error).message || '自由英作文データの読み込みに失敗しました。');
     } finally {
-      setLoading(false);
+      if (version === refreshVersion.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+    return () => { refreshVersion.current += 1; detailVersion.current += 1; };
   }, [refresh]);
+
+  const changeTab = useCallback((nextTab: WritingOpsTab) => {
+    if (operationLock.current || nextTab === tabRef.current) return;
+    tabRef.current = nextTab;
+    detailVersion.current += 1;
+    setDetail(null);
+    setDetailError(null);
+    setTab(nextTab);
+  }, []);
+
+  const selectSubmission = useCallback((id: string) => {
+    if (operationLock.current) return;
+    if (id === selectedSubmissionRef.current) return;
+    selectedSubmissionRef.current = id;
+    detailVersion.current += 1;
+    setDetail(null);
+    setDetailError(null);
+    setSelectedSubmissionId(id);
+  }, []);
 
   const reviewList = useMemo(() => (
     getReviewListForTab(tab, queue, history)
@@ -117,6 +152,9 @@ export const useWritingOpsController = () => {
 
     const nextSubmissionId = resolveSelectedSubmissionId(reviewList, selectedSubmissionId);
     if (nextSubmissionId !== selectedSubmissionId) {
+      selectedSubmissionRef.current = nextSubmissionId;
+      detailVersion.current += 1;
+      setDetail(null);
       setSelectedSubmissionId(nextSubmissionId);
       return;
     }
@@ -127,18 +165,19 @@ export const useWritingOpsController = () => {
   }, [reviewList, selectedSubmissionId, tab]);
 
   useEffect(() => {
-    if (tab !== 'QUEUE' && tab !== 'HISTORY') return;
-    if (!selectedSubmissionId) {
-      setDetail(null);
+    const version = ++detailVersion.current;
+    setDetail(null);
+    setDetailError(null);
+    setDetailLoading(false);
+    if ((tab !== 'QUEUE' && tab !== 'HISTORY') || !selectedSubmissionId) {
       return;
     }
-
-    let cancelled = false;
+    setDetailLoading(true);
 
     const loadDetail = async () => {
       try {
         const nextDetail = await getStaffWritingSubmissionDetail(selectedSubmissionId);
-        if (cancelled) return;
+        if (version !== detailVersion.current) return;
 
         setDetail(nextDetail);
         setReviewPublicComment(
@@ -148,20 +187,26 @@ export const useWritingOpsController = () => {
         setReviewPrivateMemo(nextDetail.submission.teacherReview?.privateMemo || '');
         setSelectedEvaluationId(resolveSelectedEvaluationId(nextDetail));
       } catch (error) {
-        if (cancelled) return;
+        if (version !== detailVersion.current) return;
         console.error(error);
-        setNotice({
-          tone: 'error',
-          message: (error as Error).message || '提出詳細の取得に失敗しました。',
-        });
+        setDetailError((error as Error).message || '提出詳細の取得に失敗しました。');
+      } finally {
+        if (version === detailVersion.current) setDetailLoading(false);
       }
     };
 
     void loadDetail();
     return () => {
-      cancelled = true;
+      detailVersion.current += 1;
     };
-  }, [selectedSubmissionId, tab]);
+  }, [selectedSubmissionId, tab, detailRetry]);
+
+  const currentDetail = detail?.submission.id === selectedSubmissionId && !detailLoading && !detailError
+    ? detail
+    : null;
+  const retryDetail = useCallback(() => {
+    if (!operationLock.current) setDetailRetry((value) => value + 1);
+  }, []);
 
   const selectedAssignment = useMemo(() => (
     assignments.find((assignment) => assignment.id === selectedAssignmentId) || null
@@ -173,20 +218,24 @@ export const useWritingOpsController = () => {
     students.find((student) => student.uid === selectedStudentUid) || null
   ), [selectedStudentUid, students]);
   const selectedEvaluation = useMemo(() => (
-    detail?.submission.evaluations.find((evaluation) => evaluation.id === selectedEvaluationId)
-      || detail?.submission.evaluations.find((evaluation) => evaluation.isDefault)
-      || detail?.submission.evaluations[0]
-  ), [detail, selectedEvaluationId]);
+    currentDetail?.submission.evaluations.find((evaluation) => evaluation.id === selectedEvaluationId)
+      || currentDetail?.submission.evaluations.find((evaluation) => evaluation.isDefault)
+      || currentDetail?.submission.evaluations[0]
+  ), [currentDetail, selectedEvaluationId]);
 
-  const resetScanner = useCallback(() => {
+  const clearScanner = useCallback(() => {
     setScannerFiles([]);
     setScannerManualTranscript('');
     setScannerTarget(null);
+    setScannerError(null);
   }, []);
+  const resetScanner = useCallback(() => {
+    if (!operationLock.current) clearScanner();
+  }, [clearScanner]);
 
   const handleGenerate = useCallback(async () => {
-    if (!selectedStudentUid || !selectedTemplateId) return;
-
+    if (operationLock.current || !selectedStudentUid || !selectedTemplateId) return;
+    operationLock.current = true;
     setBusyAction('generate');
     try {
       const assignment = await generateWritingAssignment({
@@ -206,13 +255,14 @@ export const useWritingOpsController = () => {
       console.error(error);
       setNotice({ tone: 'error', message: (error as Error).message || '課題生成に失敗しました。' });
     } finally {
+      operationLock.current = false;
       setBusyAction(null);
     }
   }, [notes, refresh, selectedStudentUid, selectedTemplateId, topicHint]);
 
   const handleIssue = useCallback(async () => {
-    if (!selectedAssignment) return;
-
+    if (operationLock.current || !selectedAssignment) return;
+    operationLock.current = true;
     setBusyAction('issue');
     try {
       const issued = await issueWritingAssignment(selectedAssignment.id);
@@ -223,16 +273,17 @@ export const useWritingOpsController = () => {
       console.error(error);
       setNotice({ tone: 'error', message: (error as Error).message || '課題配布に失敗しました。' });
     } finally {
+      operationLock.current = false;
       setBusyAction(null);
     }
   }, [refresh, selectedAssignment]);
 
   const handleApprove = useCallback(async () => {
-    if (!detail || !selectedEvaluationId || !reviewPublicComment.trim()) return;
-
+    if (operationLock.current || tabRef.current !== 'QUEUE' || !currentDetail || selectedSubmissionRef.current !== currentDetail.submission.id || !selectedEvaluationId || !reviewPublicComment.trim()) return;
+    operationLock.current = true;
     setBusyAction('review');
     try {
-      const nextDetail = await approveWritingReturn(detail.submission.id, {
+      const nextDetail = await approveWritingReturn(currentDetail.submission.id, {
         selectedEvaluationId,
         publicComment: reviewPublicComment,
         privateMemo: reviewPrivateMemo,
@@ -248,16 +299,17 @@ export const useWritingOpsController = () => {
       console.error(error);
       setNotice({ tone: 'error', message: (error as Error).message || '返却確定に失敗しました。' });
     } finally {
+      operationLock.current = false;
       setBusyAction(null);
     }
-  }, [detail, refresh, reviewPrivateMemo, reviewPublicComment, selectedEvaluationId]);
+  }, [currentDetail, refresh, reviewPrivateMemo, reviewPublicComment, selectedEvaluationId]);
 
   const handleRequestRevision = useCallback(async () => {
-    if (!detail || !selectedEvaluationId || !reviewPublicComment.trim()) return;
-
+    if (operationLock.current || tabRef.current !== 'QUEUE' || !currentDetail || selectedSubmissionRef.current !== currentDetail.submission.id || !selectedEvaluationId || !reviewPublicComment.trim()) return;
+    operationLock.current = true;
     setBusyAction('review');
     try {
-      const nextDetail = await requestWritingRevision(detail.submission.id, {
+      const nextDetail = await requestWritingRevision(currentDetail.submission.id, {
         selectedEvaluationId,
         publicComment: reviewPublicComment,
         privateMemo: reviewPrivateMemo,
@@ -273,13 +325,14 @@ export const useWritingOpsController = () => {
       console.error(error);
       setNotice({ tone: 'error', message: (error as Error).message || '再提出依頼に失敗しました。' });
     } finally {
+      operationLock.current = false;
       setBusyAction(null);
     }
-  }, [detail, refresh, reviewPrivateMemo, reviewPublicComment, selectedEvaluationId]);
+  }, [currentDetail, refresh, reviewPrivateMemo, reviewPublicComment, selectedEvaluationId]);
 
   const handleComplete = useCallback(async () => {
-    if (!detail) return;
-    if (detail.assignment.status !== WritingAssignmentStatus.RETURNED) {
+    if (operationLock.current || tabRef.current !== 'HISTORY' || !currentDetail || selectedSubmissionRef.current !== currentDetail.submission.id) return;
+    if (currentDetail.assignment.status !== WritingAssignmentStatus.RETURNED) {
       setNotice({
         tone: 'error',
         message: '講師コメントを返却してから、課題を完了にできます。',
@@ -287,9 +340,18 @@ export const useWritingOpsController = () => {
       return;
     }
 
+    operationLock.current = true;
     setBusyAction('review');
     try {
-      const assignment = await completeWritingAssignment(detail.assignment.id);
+      const assignment = await completeWritingAssignment(currentDetail.assignment.id);
+      setDetail((previous) => (
+        tabRef.current === 'HISTORY'
+        && selectedSubmissionRef.current === currentDetail.submission.id
+        && previous?.submission.id === currentDetail.submission.id
+        && previous.assignment.id === assignment.id
+          ? { ...previous, assignment }
+          : previous
+      ));
       setNotice({
         tone: 'success',
         message: appendWritingSideEffectWarning('課題を完了済みにしました。', assignment),
@@ -299,18 +361,21 @@ export const useWritingOpsController = () => {
       console.error(error);
       setNotice({ tone: 'error', message: (error as Error).message || '完了処理に失敗しました。' });
     } finally {
+      operationLock.current = false;
       setBusyAction(null);
     }
-  }, [detail, refresh]);
+  }, [currentDetail, refresh]);
 
   const handleScannerSubmit = useCallback(async () => {
-    if (!scannerTarget || scannerFiles.length === 0) return;
+    if (operationLock.current || !scannerTarget || scannerFiles.length === 0) return;
     const validation = validateWritingSubmissionFiles(scannerFiles);
     if (!validation.valid) {
-      setNotice({ tone: 'error', message: validation.message });
+      setScannerError(validation.message);
       return;
     }
 
+    operationLock.current = true;
+    setScannerError(null);
     setSubmittingScan(true);
     try {
       const assetIds: string[] = [];
@@ -340,20 +405,23 @@ export const useWritingOpsController = () => {
         tone: 'success',
         message: appendWritingSideEffectWarning('校舎スキャナー経由の答案を登録しました。', detail),
       });
-      resetScanner();
+      clearScanner();
       setTab('QUEUE');
       await refresh();
     } catch (error) {
       console.error(error);
-      setNotice({ tone: 'error', message: (error as Error).message || 'スキャナー提出の登録に失敗しました。' });
+      setScannerError((error as Error).message || 'スキャナー提出の登録に失敗しました。');
     } finally {
+      operationLock.current = false;
       setSubmittingScan(false);
     }
-  }, [refresh, resetScanner, scannerFiles, scannerManualTranscript, scannerTarget]);
+  }, [refresh, clearScanner, scannerFiles, scannerManualTranscript, scannerTarget]);
 
   return {
     tab,
     loading,
+    hasData,
+    loadError,
     notice,
     templates,
     students,
@@ -363,7 +431,10 @@ export const useWritingOpsController = () => {
     reviewList,
     selectedAssignmentId,
     selectedSubmissionId,
-    detail,
+    detail: currentDetail,
+    detailLoading,
+    detailError,
+    retryDetail,
     selectedStudentUid,
     selectedTemplateId,
     topicHint,
@@ -380,19 +451,20 @@ export const useWritingOpsController = () => {
     scannerManualTranscript,
     busyAction,
     submittingScan,
-    setTab,
-    setSelectedAssignmentId,
-    setSelectedSubmissionId,
-    setSelectedStudentUid,
-    setSelectedTemplateId,
-    setTopicHint,
-    setNotes,
-    setReviewPublicComment,
-    setReviewPrivateMemo,
-    setSelectedEvaluationId,
-    setScannerTarget,
-    setScannerFiles,
-    setScannerManualTranscript,
+    scannerError,
+    setTab: changeTab,
+    setSelectedAssignmentId: (value: string) => { if (!operationLock.current) setSelectedAssignmentId(value); },
+    setSelectedSubmissionId: selectSubmission,
+    setSelectedStudentUid: (value: string) => { if (!operationLock.current) setSelectedStudentUid(value); },
+    setSelectedTemplateId: (value: string) => { if (!operationLock.current) setSelectedTemplateId(value); },
+    setTopicHint: (value: string) => { if (!operationLock.current) setTopicHint(value); },
+    setNotes: (value: string) => { if (!operationLock.current) setNotes(value); },
+    setReviewPublicComment: (value: string) => { if (!operationLock.current) setReviewPublicComment(value); },
+    setReviewPrivateMemo: (value: string) => { if (!operationLock.current) setReviewPrivateMemo(value); },
+    setSelectedEvaluationId: (value: string) => { if (!operationLock.current) setSelectedEvaluationId(value); },
+    setScannerTarget: (value: WritingAssignment) => { if (!operationLock.current) { clearScanner(); setScannerTarget(value); } },
+    setScannerFiles: (value: File[]) => { if (!operationLock.current) { setScannerFiles(value); setScannerError(null); } },
+    setScannerManualTranscript: (value: string) => { if (!operationLock.current) { setScannerManualTranscript(value); setScannerError(null); } },
     resetScanner,
     refresh,
     handleGenerate,

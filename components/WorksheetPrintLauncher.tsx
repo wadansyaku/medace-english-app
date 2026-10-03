@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   STATUS_LABELS,
   type BookMetadata,
@@ -33,6 +33,7 @@ interface WorksheetPrintLauncherProps {
 }
 
 type WorksheetPrintVariant = 'HANDOUT' | 'ANSWER_KEY';
+type WorksheetLoadTarget = 'students' | 'snapshot' | 'books' | 'words';
 
 const STATUS_FILTER_COPY: Record<WorksheetStatusFilter, { label: string; description: string; }> = {
   ALL: {
@@ -501,6 +502,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const [books, setBooks] = useState<BookMetadata[]>([]);
   const [booksLoading, setBooksLoading] = useState(false);
   const [catalogWords, setCatalogWords] = useState<WordData[]>([]);
+  const [catalogWordsBookId, setCatalogWordsBookId] = useState('');
   const [catalogWordsLoading, setCatalogWordsLoading] = useState(false);
   const [selectedCatalogBookId, setSelectedCatalogBookId] = useState('');
   const [rangeStart, setRangeStart] = useState(1);
@@ -511,87 +513,114 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const [questionMode, setQuestionMode] = useState<WorksheetQuestionMode>('EN_TO_JA');
   const [statusFilter, setStatusFilter] = useState<WorksheetStatusFilter>('ALL');
   const [error, setError] = useState<string | null>(null);
+  const [loadErrors, setLoadErrors] = useState<Partial<Record<WorksheetLoadTarget, string>>>({});
+  const [reloadRequests, setReloadRequests] = useState({ students: 0, snapshot: 0, books: 0, words: 0 });
   const [showPreview, setShowPreview] = useState(false);
   const [previewVariant, setPreviewVariant] = useState<WorksheetPrintVariant>('HANDOUT');
   const [worksheetShuffleToken, setWorksheetShuffleToken] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const controlsId = useId();
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     if (!open || sourceMode !== 'STUDENT_HISTORY') return;
+    let cancelled = false;
 
     const loadStudents = async () => {
       setStudentsLoading(true);
-      setError(null);
+      setStudents([]);
+      setLoadErrors(current => ({ ...current, students: undefined }));
       try {
         const nextStudents = await workspaceService.getAllStudentsProgress();
+        if (cancelled) return;
         setStudents(nextStudents);
-        if (!selectedStudentUid && nextStudents[0]) {
-          setSelectedStudentUid(nextStudents[0].uid);
-        }
+        setSelectedStudentUid(current => nextStudents.some(student => student.uid === current)
+          ? current : (nextStudents[0]?.uid || ''));
       } catch (loadError) {
+        if (cancelled) return;
         console.error(loadError);
-        setError((loadError as Error).message || '生徒一覧の取得に失敗しました。');
+        setLoadErrors(current => ({ ...current, students: (loadError as Error).message || '生徒一覧の取得に失敗しました。' }));
       } finally {
-        setStudentsLoading(false);
+        if (!cancelled) setStudentsLoading(false);
       }
     };
 
-    loadStudents();
-  }, [open, selectedStudentUid, sourceMode]);
+    void loadStudents();
+    return () => { cancelled = true; };
+  }, [open, sourceMode, user.uid, reloadRequests.students]);
 
   useEffect(() => {
     if (!open || sourceMode !== 'STUDENT_HISTORY' || !selectedStudentUid) return;
+    let cancelled = false;
 
     const loadSnapshot = async () => {
       setSnapshotLoading(true);
+      setSnapshot(null);
+      setSelectedBookId('ALL');
+      setShowPreview(false);
       setError(null);
+      setLoadErrors(current => ({ ...current, snapshot: undefined }));
       try {
         const nextSnapshot = await workspaceService.getStudentWorksheetSnapshot(selectedStudentUid);
+        if (cancelled) return;
         setSnapshot(nextSnapshot);
       } catch (loadError) {
+        if (cancelled) return;
         console.error(loadError);
-        setError((loadError as Error).message || '印刷対象データの取得に失敗しました。');
+        setLoadErrors(current => ({ ...current, snapshot: (loadError as Error).message || '印刷対象データの取得に失敗しました。' }));
       } finally {
-        setSnapshotLoading(false);
+        if (!cancelled) setSnapshotLoading(false);
       }
     };
 
-    loadSnapshot();
-  }, [open, selectedStudentUid, sourceMode]);
+    void loadSnapshot();
+    return () => { cancelled = true; };
+  }, [open, selectedStudentUid, sourceMode, user.uid, reloadRequests.snapshot]);
 
   useEffect(() => {
     if (!open || sourceMode !== 'BOOK_RANGE') return;
+    let cancelled = false;
 
     const loadBooks = async () => {
       setBooksLoading(true);
-      setError(null);
+      setBooks([]);
+      setLoadErrors(current => ({ ...current, books: undefined }));
       try {
         const nextBooks = await learningService.getBooks();
+        if (cancelled) return;
         setBooks(nextBooks);
-        if (!selectedCatalogBookId && nextBooks[0]) {
-          setSelectedCatalogBookId(nextBooks[0].id);
-        }
+        setSelectedCatalogBookId(current => nextBooks.some(book => book.id === current)
+          ? current : (nextBooks[0]?.id || ''));
       } catch (loadError) {
+        if (cancelled) return;
         console.error(loadError);
-        setError((loadError as Error).message || '単語帳一覧の取得に失敗しました。');
+        setLoadErrors(current => ({ ...current, books: (loadError as Error).message || '単語帳一覧の取得に失敗しました。' }));
       } finally {
-        setBooksLoading(false);
+        if (!cancelled) setBooksLoading(false);
       }
     };
 
-    loadBooks();
-  }, [open, selectedCatalogBookId, sourceMode]);
+    void loadBooks();
+    return () => { cancelled = true; };
+  }, [open, sourceMode, user.uid, reloadRequests.books]);
 
   useEffect(() => {
     if (!open || sourceMode !== 'BOOK_RANGE' || !selectedCatalogBookId) return;
+    let cancelled = false;
 
     const loadBookWords = async () => {
       setCatalogWordsLoading(true);
+      setCatalogWords([]);
+      setCatalogWordsBookId('');
+      setShowPreview(false);
       setError(null);
+      setLoadErrors(current => ({ ...current, words: undefined }));
       try {
         const nextWords = await learningService.getWordsByBook(selectedCatalogBookId);
+        if (cancelled) return;
         const sortedWords = [...nextWords].sort((left, right) => left.number - right.number);
         setCatalogWords(sortedWords);
+        setCatalogWordsBookId(selectedCatalogBookId);
         if (sortedWords.length > 0) {
           const nextStart = Math.min(...sortedWords.map((word) => word.number));
           const nextEnd = Math.max(...sortedWords.map((word) => word.number));
@@ -599,16 +628,25 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
           setRangeEnd(nextEnd);
         }
       } catch (loadError) {
+        if (cancelled) return;
         console.error(loadError);
-        setCatalogWords([]);
-        setError((loadError as Error).message || '単語帳の語彙取得に失敗しました。');
+        setLoadErrors(current => ({ ...current, words: (loadError as Error).message || '単語帳の語彙取得に失敗しました。' }));
       } finally {
-        setCatalogWordsLoading(false);
+        if (!cancelled) setCatalogWordsLoading(false);
       }
     };
 
-    loadBookWords();
-  }, [open, selectedCatalogBookId, sourceMode]);
+    void loadBookWords();
+    return () => { cancelled = true; };
+  }, [open, selectedCatalogBookId, sourceMode, user.uid, reloadRequests.words]);
+
+  const failedLoadTarget: WorksheetLoadTarget | null = sourceMode === 'BOOK_RANGE'
+    ? (loadErrors.books ? 'books' : loadErrors.words ? 'words' : null)
+    : (loadErrors.students ? 'students' : loadErrors.snapshot ? 'snapshot' : null);
+  const activeLoadError = failedLoadTarget ? loadErrors[failedLoadTarget] : null;
+  const retryFailedLoad = () => {
+    if (failedLoadTarget) setReloadRequests(current => ({ ...current, [failedLoadTarget]: current[failedLoadTarget] + 1 }));
+  };
 
   const selectedStudent = students.find((student) => student.uid === selectedStudentUid);
   const selectedCatalogBook = books.find((book) => book.id === selectedCatalogBookId);
@@ -617,7 +655,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const normalizedCatalogRange = normalizeQuizRange(rangeStart, rangeEnd, minCatalogWordNumber, maxCatalogWordNumber);
 
   const catalogWorksheetWords = useMemo(() => {
-    if (!selectedCatalogBook) return [];
+    if (!selectedCatalogBook || catalogWordsBookId !== selectedCatalogBookId) return [];
     const scopedWords = getQuizCandidateWords({
       words: catalogWords,
       selectionMode: 'RANGE_RANDOM',
@@ -642,6 +680,8 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     }));
   }, [
     catalogWords,
+    catalogWordsBookId,
+    selectedCatalogBookId,
     maxCatalogWordNumber,
     minCatalogWordNumber,
     normalizedCatalogRange.end,
@@ -650,7 +690,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   ]);
 
   const catalogSnapshot = useMemo<StudentWorksheetSnapshot | null>(() => {
-    if (!selectedCatalogBook) return null;
+    if (!selectedCatalogBook || catalogWordsBookId !== selectedCatalogBookId || loadErrors.books || loadErrors.words) return null;
     return {
       studentUid: 'book-range',
       studentName: '配布プリント',
@@ -661,13 +701,18 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     };
   }, [
     catalogWorksheetWords,
+    catalogWordsBookId,
+    selectedCatalogBookId,
+    loadErrors.books,
+    loadErrors.words,
     normalizedCatalogRange.end,
     normalizedCatalogRange.start,
     selectedCatalogBook,
     user.organizationName,
   ]);
 
-  const activeSnapshot = sourceMode === 'BOOK_RANGE' ? catalogSnapshot : snapshot;
+  const activeSnapshot = sourceMode === 'BOOK_RANGE' ? catalogSnapshot
+    : (snapshot?.studentUid === selectedStudentUid && !loadErrors.students && !loadErrors.snapshot ? snapshot : null);
   const activeStudent = sourceMode === 'BOOK_RANGE' ? undefined : selectedStudent;
   const isPrintDataLoading = sourceMode === 'BOOK_RANGE'
     ? booksLoading || catalogWordsLoading
@@ -731,6 +776,18 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   const previewVariantCopy = PRINT_VARIANT_COPY[previewVariant];
 
   useEffect(() => {
+    if (!open || !showPreview || !printableHtml) {
+      setPreviewUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([printableHtml], { type: 'text/html;charset=utf-8' }));
+    setPreviewUrl(url);
+    // A tab clicked immediately before closing or switching variants must finish
+    // loading its document. Opening with noopener does not return a Window handle.
+    return () => { window.setTimeout(() => URL.revokeObjectURL(url), 60_000); };
+  }, [open, showPreview, printableHtml]);
+
+  useEffect(() => {
     if (!open) {
       setShowPreview(false);
       setPreviewVariant('HANDOUT');
@@ -738,7 +795,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
   }, [open]);
 
   const handleOpenPreview = (variant: WorksheetPrintVariant) => {
-    if (generatedQuestions.length === 0) {
+    if (isPrintDataLoading || !activeSnapshot || generatedQuestions.length === 0) {
       setError('問題に使える単語が不足しています。条件を緩めてください。');
       return;
     }
@@ -751,6 +808,16 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
     const previewWindow = previewFrameRef.current?.contentWindow;
     if (!previewWindow || !printableHtml) {
       setError('印刷プレビューの準備ができていません。もう一度お試しください。');
+      return;
+    }
+
+    try {
+      previewWindow.focus();
+      previewWindow.print();
+      setError(null);
+    } catch (printError) {
+      console.error(printError);
+      setError('印刷を開始できませんでした。新しいタブで開いて印刷してください。');
       return;
     }
 
@@ -771,26 +838,6 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
         console.error(recordError);
       });
     }
-
-    previewWindow.focus();
-    previewWindow.print();
-  };
-
-  const handleOpenInNewTab = () => {
-    if (!printableHtml) {
-      setError('プレビュー用データを作成できませんでした。');
-      return;
-    }
-
-    const blob = new Blob([printableHtml], { type: 'text/html;charset=utf-8' });
-    const previewUrl = URL.createObjectURL(blob);
-    const printWindow = window.open(previewUrl, '_blank', 'noopener,noreferrer,width=1200,height=900');
-    if (!printWindow) {
-      URL.revokeObjectURL(previewUrl);
-      setError('プレビュータブを開けませんでした。ポップアップを許可してください。');
-      return;
-    }
-    window.setTimeout(() => URL.revokeObjectURL(previewUrl), 60_000);
   };
 
   return (
@@ -813,6 +860,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
             <button
               type="button"
               onClick={() => setOpen(false)}
+              aria-label="PDF問題作成を閉じる"
               className="absolute right-4 top-4 rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
             >
               <X className="h-5 w-5" />
@@ -821,7 +869,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 md:flex-row md:items-end md:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">PDF Worksheet</p>
-	                <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+	                <h3 className="mt-2 pr-16 text-2xl font-black tracking-tight text-slate-950">
 	                  {sourceMode === 'BOOK_RANGE'
 	                    ? '単語帳の範囲から A4 配布プリントを作る'
 	                    : '学習済み単語を A4 1枚で確認する'}
@@ -837,9 +885,14 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
               </div>
             </div>
 
-            {error && (
-              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
+            {(activeLoadError || error) && (
+              <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <p>{activeLoadError || error}</p>
+                {activeLoadError && (
+                  <button type="button" onClick={retryFailedLoad} className="mt-3 min-h-11 rounded-xl border border-red-300 bg-white px-4 py-2 font-bold hover:bg-red-50">
+                    もう一度読み込む
+                  </button>
+                )}
               </div>
             )}
 
@@ -855,6 +908,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                           type="button"
                           data-testid={`worksheet-source-${mode.toLowerCase()}`}
                           onClick={() => setSourceMode(mode)}
+                          aria-pressed={sourceMode === mode}
                           className={`rounded-2xl border px-4 py-4 text-left transition-all ${
                             sourceMode === mode
                               ? 'border-medace-500 bg-medace-50'
@@ -872,8 +926,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 {sourceMode === 'STUDENT_HISTORY' ? (
                   <>
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">対象生徒</label>
+                      <label htmlFor={`${controlsId}-student`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">対象生徒</label>
                       <select
+                        id={`${controlsId}-student`}
                         value={selectedStudentUid}
                         onChange={(event) => setSelectedStudentUid(event.target.value)}
                         disabled={studentsLoading}
@@ -889,8 +944,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">出題書籍</label>
+                      <label htmlFor={`${controlsId}-history-book`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">出題書籍</label>
                       <select
+                        id={`${controlsId}-history-book`}
                         value={selectedBookId}
                         onChange={(event) => setSelectedBookId(event.target.value)}
                         disabled={snapshotLoading || bookOptions.length === 0}
@@ -906,8 +962,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 ) : (
                   <>
                     <div>
-                      <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">単語帳</label>
+                      <label htmlFor={`${controlsId}-catalog-book`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">単語帳</label>
                       <select
+                        id={`${controlsId}-catalog-book`}
                         value={selectedCatalogBookId}
                         onChange={(event) => setSelectedCatalogBookId(event.target.value)}
                         disabled={booksLoading || books.length === 0}
@@ -925,8 +982,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">開始番号</label>
+                        <label htmlFor={`${controlsId}-range-start`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">開始番号</label>
                         <input
+                          id={`${controlsId}-range-start`}
                           type="number"
                           min={minCatalogWordNumber}
                           max={maxCatalogWordNumber}
@@ -936,8 +994,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">終了番号</label>
+                        <label htmlFor={`${controlsId}-range-end`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">終了番号</label>
                         <input
+                          id={`${controlsId}-range-end`}
                           type="number"
                           min={minCatalogWordNumber}
                           max={maxCatalogWordNumber}
@@ -961,6 +1020,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         key={mode}
                         type="button"
                         onClick={() => setQuestionMode(mode)}
+                        aria-pressed={questionMode === mode}
                         className={`rounded-2xl border px-4 py-4 text-left transition-all ${
                           questionMode === mode
                             ? 'border-medace-500 bg-medace-50'
@@ -983,6 +1043,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         key={filter}
                         type="button"
                         onClick={() => setStatusFilter(filter)}
+                        aria-pressed={statusFilter === filter}
                         className={`rounded-2xl border px-4 py-4 text-left transition-all ${
                           statusFilter === filter
                             ? 'border-medace-500 bg-medace-50'
@@ -998,8 +1059,9 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 )}
 
 	                <div>
-	                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">問題数</label>
+	                  <label htmlFor={`${controlsId}-question-count`} className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-500">問題数</label>
                   <input
+                    id={`${controlsId}-question-count`}
                     type="number"
                     min={4}
                     max={MAX_PRINTABLE_WORDS}
@@ -1025,7 +1087,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
 
               <div className="rounded-[28px] border border-slate-200 bg-[#fff8f1] p-5">
                 {isPrintDataLoading ? (
-                  <div className="flex min-h-[420px] flex-col items-center justify-center text-slate-500">
+                  <div role="status" className="flex min-h-[420px] flex-col items-center justify-center text-slate-500">
                     <Loader2 className="h-8 w-8 animate-spin text-medace-500" />
                     <div className="mt-3 text-sm font-medium">印刷データを準備中...</div>
                   </div>
@@ -1158,7 +1220,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                         type="button"
                         onClick={() => handleOpenPreview('ANSWER_KEY')}
                         disabled={generatedQuestions.length === 0}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-medace-600 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700 disabled:opacity-50"
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
                       >
                         <Eye className="h-4 w-4" />
                         解答を開く
@@ -1169,8 +1231,8 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                   <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white text-slate-500">
                     <div className="text-sm">
                       {sourceMode === 'BOOK_RANGE'
-                        ? '単語帳を選ぶと印刷候補を表示します。'
-                        : '生徒を選ぶと印刷候補を表示します。'}
+                        ? (activeLoadError ? '単語帳を取得できませんでした。もう一度読み込んでください。' : books.length === 0 ? '印刷できる単語帳がありません。教材を追加してからお試しください。' : '単語帳を選ぶと印刷候補を表示します。')
+                        : (activeLoadError ? '生徒のデータを取得できませんでした。もう一度読み込んでください。' : students.length === 0 ? '対象となる生徒がいません。担当生徒の設定を確認してください。' : '生徒を選ぶと印刷候補を表示します。')}
                     </div>
                   </div>
                 )}
@@ -1208,6 +1270,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                       key={variant}
                       type="button"
                       onClick={() => setPreviewVariant(variant)}
+                      aria-pressed={previewVariant === variant}
                       className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
                         previewVariant === variant
                           ? 'border-medace-500 bg-medace-50 text-medace-700'
@@ -1220,18 +1283,20 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOpenInNewTab}
+                <a
+                  href={previewUrl || undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-disabled={!previewUrl}
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
                 >
                   <ExternalLink className="h-4 w-4" />
                   この版を新しいタブで開く
-                </button>
+                </a>
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-medace-700"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
                 >
                   <Printer className="h-4 w-4" />
                   この版を印刷 / PDF保存
@@ -1239,6 +1304,7 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPreview(false)}
+                  aria-label="印刷プレビューを閉じる"
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50"
                 >
                   <X className="h-4 w-4" />
@@ -1246,6 +1312,10 @@ const WorksheetPrintLauncher: React.FC<WorksheetPrintLauncherProps> = ({
                 </button>
               </div>
             </div>
+
+            {error && (
+              <div role="alert" className="mx-5 my-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+            )}
 
             <div className="min-h-0 flex-1 bg-slate-100 p-3">
               {printableHtml ? (

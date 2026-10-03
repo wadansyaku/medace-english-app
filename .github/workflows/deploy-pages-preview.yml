@@ -176,7 +176,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home starts with the learner CTA and edge login before auth|public readonly session endpoint is reachable before login|preview deployment surfaces a visible preview banner and noindex marker|preview deployment supports demo login, D1 read, and Writing visibility"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home offers clear account and learner trial actions before auth|public readonly session endpoint is reachable before login|preview deployment surfaces a visible preview banner and noindex marker|preview deployment supports demo login, D1 read, and Writing visibility"
 
       - name: Upload preview deployed smoke artifacts
         if: failure()

@@ -29,6 +29,7 @@ export type StudentDashboardCommand = MissionContext & (
 
 export interface StudentDashboardCommandInput {
   hasStudyBooks: boolean;
+  canCreateBook?: boolean;
   canShowWritingSection: boolean;
   hasActionableWriting: boolean;
   primaryMission: PrimaryMissionSnapshot | null;
@@ -44,6 +45,9 @@ export const resolveStudentDashboardCommand = (
   input: StudentDashboardCommandInput,
 ): StudentDashboardCommand => {
   const { primaryMission: mission } = input;
+  const emptyLearningCommand: StudentDashboardCommand = input.canCreateBook === false
+    ? { type: 'open_practice', lane: 'grammar' }
+    : { type: 'create_book' };
   const missionContext: MissionContext = mission?.assignmentId
     ? { missionAssignmentId: mission.assignmentId }
     : {};
@@ -53,7 +57,7 @@ export const resolveStudentDashboardCommand = (
     case 'companion':
       return input.hasStudyBooks
         ? { type: 'start_learning', task: createTodayFocusTaskIntent({ preferredBookIds: input.preferredBookIds }) }
-        : { type: 'create_book' };
+        : emptyLearningCommand;
     case 'mission': {
       if (!mission) return { type: 'open_plan' };
       if (mission.nextActionType === MissionNextActionType.OPEN_PLAN) {
@@ -64,7 +68,9 @@ export const resolveStudentDashboardCommand = (
           ? { type: 'open_section', sectionId: 'writing', ...missionContext }
           : { type: 'open_plan', ...missionContext };
       }
-      if (!input.hasStudyBooks) return { type: 'create_book', ...missionContext };
+      if (!input.hasStudyBooks) return input.canCreateBook === false
+        ? { type: 'open_section', sectionId: 'library', ...missionContext }
+        : { type: 'create_book', ...missionContext };
       const task = mission.nextTaskIntent || createMissionTaskIntent(mission);
       return task
         ? { type: 'start_learning', task, ...missionContext }
@@ -81,11 +87,11 @@ export const resolveStudentDashboardCommand = (
       }
       return input.hasStudyBooks
         ? { type: 'start_learning', task: createWeaknessTaskIntent(input.topWeakness) }
-        : { type: 'create_book' };
+        : emptyLearningCommand;
     case 'coach': {
       if (input.coachRecommendedActionType === RecommendedActionType.OPEN_PLAN) return { type: 'open_plan' };
       if (!input.coachRecommendedActionType) return { type: 'open_section', sectionId: 'coach' };
-      if (!input.hasStudyBooks) return { type: 'create_book' };
+      if (!input.hasStudyBooks) return emptyLearningCommand;
       const task = createCoachTaskIntent({
         recommendedActionType: input.coachRecommendedActionType,
         hasLearningPlan: input.hasLearningPlan,

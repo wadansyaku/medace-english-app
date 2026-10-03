@@ -47,7 +47,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
         </div>
         <h2 className="text-3xl font-black text-slate-900">テスト完了</h2>
         <p className="mt-2 text-sm text-slate-500">
-          {currentModeLabel} で確認しました。点数より、次に直すところだけ見れば十分です。
+          {currentModeLabel} で確認しました。点数より、次に見直すところだけ確認すれば十分です。
         </p>
         <div className="mt-3 text-sm font-bold text-slate-500">{activeSummary}</div>
         <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-medace-50 px-4 py-2 text-sm font-bold text-medace-700">
@@ -81,7 +81,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                         {question.translationFeedback.score} / {question.translationFeedback.maxScore}・{question.translationFeedback.verdictLabel}
                       </div>
                       <div className="mt-1">改善訳: {question.translationFeedback.improvedTranslation}</div>
-                      <div className="mt-1">次ドリル: {question.translationFeedback.nextDrillJa}</div>
+                      <div className="mt-1">次の練習: {question.translationFeedback.nextDrillJa}</div>
                     </div>
                   )}
                 </div>
@@ -89,24 +89,24 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-              直しが必要な単語はありません。このセットはそのまま卒業で大丈夫です。
+              見直しが必要な単語はありません。この問題セットはここで終えて大丈夫です。
             </div>
           )}
         </div>
 
         <div className="rounded-3xl border border-medace-100 bg-[#fff8ef] p-5">
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次の一手</div>
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次にすること</div>
           <div className="mt-4 space-y-3 text-sm text-slate-600">
             <div className="rounded-2xl bg-white px-4 py-4">
-              <div className="font-bold text-slate-900">次の復習タイミング</div>
+              <div className="font-bold text-slate-900">次に復習する時期</div>
               <div className="mt-1 leading-relaxed">{nextReviewCopy}</div>
             </div>
             <div className="rounded-2xl bg-white px-4 py-4">
-              <div className="font-bold text-slate-900">おすすめの次アクション</div>
+              <div className="font-bold text-slate-900">次におすすめすること</div>
               <div className="mt-1 leading-relaxed">
                 {reviewTargets.length > 0
                   ? 'いまは再挑戦より、間違えた語だけ先に見直すほうが効率的です。'
-                  : '余裕があれば別の出題方向で1回だけ確認すると、想起の幅が広がります。'}
+                  : '余裕があれば別の出題方向で1回だけ確認すると、思い出し方の幅が広がります。'}
               </div>
             </div>
           </div>
@@ -142,7 +142,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                       <div className="mt-1 text-sm font-bold leading-relaxed text-slate-900">{feedback.improvedTranslation}</div>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                      <div className="text-xs font-black text-slate-500">次ドリル</div>
+                      <div className="text-xs font-black text-slate-500">次の練習</div>
                       <div className="mt-1 text-sm font-bold leading-relaxed text-slate-900">{feedback.nextDrillJa}</div>
                     </div>
                   </div>
@@ -160,7 +160,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
           type="button"
           data-testid="quiz-result-retry"
           onClick={onRetry}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover"
         >
           <RotateCcw className="h-4 w-4" /> 同じ条件で再挑戦
         </button>

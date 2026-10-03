@@ -53,6 +53,7 @@ import {
   WorksheetQuestionMode,
   WordHintAssetType,
   WordData,
+  WordPartOfSpeech,
 } from '../types';
 import type {
   EnglishPracticeAttemptMode,
@@ -64,6 +65,10 @@ export interface CatalogImportRow {
   number?: number | string;
   word: string;
   definition: string;
+  partOfSpeech?: WordPartOfSpeech;
+  inflections?: string;
+  pronunciation?: string;
+  sourceNote?: string;
   exampleSentence?: string;
   exampleMeaning?: string;
   category?: string;
@@ -108,6 +113,10 @@ export interface CatalogImportIssue {
     | 'EMPTY_WORD'
     | 'EMPTY_DEFINITION'
     | 'INVALID_NUMBER'
+    | 'INVALID_PART_OF_SPEECH'
+    | 'INVALID_SOURCE_ENTRY_ID'
+    | 'BLOCKED_CONTENT_MARKER'
+    | 'INVALID_CSV'
     | 'DUPLICATE_ROW';
   message: string;
   rowNumber?: number;

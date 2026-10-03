@@ -469,12 +469,18 @@ export interface UserProfile {
   studyMode?: UserStudyMode;
 }
 
+export type WordPartOfSpeech = 'verb' | 'noun' | 'adverb' | 'adjective';
+
 export interface WordData {
   id: string;
   bookId: string;
   number: number;
   word: string;
   definition: string;
+  partOfSpeech?: WordPartOfSpeech;
+  inflections?: string;
+  pronunciation?: string;
+  sourceNote?: string;
   searchKey?: string;
   category?: string;
   subcategory?: string;

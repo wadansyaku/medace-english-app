@@ -80,7 +80,7 @@ export const StudyReportDialogs: React.FC<StudyReportDialogsProps> = ({
         <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
           <button
             onClick={onCloseNotice}
-            className="w-full rounded-2xl bg-medace-600 px-4 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-700"
+            className="w-full rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover"
           >
             閉じる
           </button>

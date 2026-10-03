@@ -332,6 +332,7 @@ export const useQuizModeController = ({
   const [setupConfig, setSetupConfig] = useState<QuizSessionConfig>(createDefaultQuizConfig(1, 1));
   const [activeConfig, setActiveConfig] = useState<QuizSessionConfig | null>(null);
   const [allWords, setAllWords] = useState<WordData[]>([]);
+  const [bookTitle, setBookTitle] = useState<string | null>(null);
   const [studiedWordIds, setStudiedWordIds] = useState<string[]>([]);
   const [questions, setQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -362,11 +363,20 @@ export const useQuizModeController = ({
   const [missedQuestions, setMissedQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState(buildQuizLoadingMessage('EN_TO_JA'));
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [studiedWordsError, setStudiedWordsError] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [questionSourceNotice, setQuestionSourceNotice] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const questionStartedAtRef = useRef(Date.now());
   const quizStartedEventRef = useRef(false);
   const spellingStartedEventRef = useRef(false);
+  const generationRef = useRef(0);
+  const startingRef = useRef(false);
+  const failedStartRef = useRef<{ config: QuizSessionConfig; words: WordData[] } | null>(null);
+  const historyLoadingRef = useRef(false);
 
   const minWordNumber = useMemo(() => {
     if (allWords.length === 0) return 1;
@@ -454,6 +464,8 @@ export const useQuizModeController = ({
     setScreen('SETUP');
     setShowExitConfirm(false);
     setQuestionSourceNotice(null);
+    setStartError(null);
+    failedStartRef.current = null;
     resetAttemptState();
   };
 
@@ -486,7 +498,11 @@ export const useQuizModeController = ({
   };
 
   const startQuizWithWords = async (config: QuizSessionConfig, candidateWords: WordData[]) => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    const generation = generationRef.current;
     setLoading(true);
+    setStartError(null);
     setLoadingMessage(buildQuizLoadingMessage(config.questionMode));
     setQuestionSourceNotice(null);
     const eligibleCandidateWords = filterWorksheetQuestionCandidates(candidateWords, config.questionMode);
@@ -528,6 +544,7 @@ export const useQuizModeController = ({
         );
       }
       nextQuestions = applyGrammarScopeVisibility(nextQuestions, config);
+      if (generation !== generationRef.current) return;
 
       if (nextQuestions.length === 0) {
         setActiveConfig(null);
@@ -542,18 +559,42 @@ export const useQuizModeController = ({
       resetAttemptState();
       setQuestions(nextQuestions);
       setQuestionSourceNotice(nextQuestionSourceNotice);
+      failedStartRef.current = null;
       setScreen('RUNNING');
+    } catch {
+      if (generation !== generationRef.current) return;
+      failedStartRef.current = { config, words: candidateWords };
+      setStartError('問題を準備できませんでした。教材と出題条件は保持しています。通信を確認して、もう一度準備してください。');
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) {
+        startingRef.current = false;
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     let cancelled = false;
+    setBookTitle(null);
+    if (!isSmartSessionBookId(bookId)) {
+      void Promise.resolve().then(() => learningService.getBooks()).then((books) => {
+        if (!cancelled) setBookTitle(books.find((book) => book.id === bookId)?.title || null);
+      }).catch(() => {
+        // Optional title context must not prevent a loaded quiz from starting.
+      });
+    }
+    generationRef.current += 1;
+    startingRef.current = false;
+    failedStartRef.current = null;
+    historyLoadingRef.current = false;
+    setHistoryLoading(false);
 
     const loadQuizState = async () => {
       try {
         setLoading(true);
+        setLoadError(null);
+        setStartError(null);
+        setStudiedWordsError(null);
         setLoadingMessage(buildQuizLoadingMessage('EN_TO_JA'));
         const autoStart = Boolean(taskIntent?.autoStart);
         const [nextWords, nextStudiedWordIds] = await Promise.all([
@@ -566,7 +607,7 @@ export const useQuizModeController = ({
             : learningService.getWordsByBook(bookId),
           isSmartSessionBookId(bookId)
             ? Promise.resolve<string[]>([])
-            : learningService.getStudiedWordIdsByBook(user.uid, bookId).catch(() => []),
+            : learningService.getStudiedWordIdsByBook(user.uid, bookId).catch(() => null),
         ]);
         if (cancelled) return;
 
@@ -578,7 +619,10 @@ export const useQuizModeController = ({
         const nextMax = sortedWords.length > 0 ? Math.max(...sortedWords.map((word) => word.number)) : 1;
 
         setAllWords(sortedWords);
-        setStudiedWordIds(nextStudiedWordIds);
+        setStudiedWordIds(nextStudiedWordIds ?? []);
+        setStudiedWordsError(nextStudiedWordIds === null
+          ? '学習済みの記録を確認できませんでした。「学習済みのみ」は記録の取得後に使えます。全範囲や番号指定では、このまま小テストを始められます。'
+          : null);
         const defaultConfig = createDefaultQuizConfig(nextMin, nextMax);
         const presetQuestionMode = taskIntent?.targetQuestionModes?.[0] || defaultConfig.questionMode;
         const presetConfig: QuizSessionConfig = autoStart
@@ -605,6 +649,7 @@ export const useQuizModeController = ({
           setStudiedWordIds([]);
           setSetupConfig(createDefaultQuizConfig(1, 1));
           resetToSetup();
+          setLoadError('小テストの教材を読み込めませんでした。通信を確認して、もう一度読み込んでください。');
         }
       } finally {
         if (!cancelled) {
@@ -617,8 +662,10 @@ export const useQuizModeController = ({
 
     return () => {
       cancelled = true;
+      generationRef.current += 1;
+      startingRef.current = false;
     };
-  }, [bookId, taskIntent, user.uid]);
+  }, [bookId, taskIntent, user.uid, loadAttempt]);
 
   useEffect(() => {
     setLoadingMessage(buildQuizLoadingMessage(setupConfig.questionMode));
@@ -676,6 +723,7 @@ export const useQuizModeController = ({
 
   const setupEmptyCopy = useMemo(() => {
     if (allWords.length === 0) return '学習する単語がまだありません。先に単語帳を1冊用意してください。';
+    if (setupConfig.selectionMode === 'LEARNED_ONLY' && studiedWordsError) return studiedWordsError;
     if (
       setupConfig.questionMode === 'GRAMMAR_CLOZE'
       || setupConfig.questionMode === 'EN_WORD_ORDER'
@@ -691,9 +739,31 @@ export const useQuizModeController = ({
       return `No. ${normalizedSetupRange.start} - ${normalizedSetupRange.end} には出題できる単語がありません。範囲を広げてください。`;
     }
     return '出題条件に合う単語がありません。';
-  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode]);
+  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode, studiedWordsError]);
+
+  const retryStudiedWords = async () => {
+    if (historyLoadingRef.current || isSmartSessionBookId(bookId)) return;
+    historyLoadingRef.current = true;
+    setHistoryLoading(true);
+    const generation = generationRef.current;
+    try {
+      const ids = await learningService.getStudiedWordIdsByBook(user.uid, bookId);
+      if (generation !== generationRef.current) return;
+      setStudiedWordIds(ids);
+      setStudiedWordsError(null);
+    } catch {
+      if (generation !== generationRef.current) return;
+      setStudiedWordsError('学習済みの記録を確認できませんでした。「学習済みのみ」は記録の取得後に使えます。全範囲や番号指定では、このまま小テストを始められます。');
+    } finally {
+      if (generation === generationRef.current) {
+        historyLoadingRef.current = false;
+        setHistoryLoading(false);
+      }
+    }
+  };
 
   const startQuiz = (config: QuizSessionConfig) => {
+    if (config.selectionMode === 'LEARNED_ONLY' && (studiedWordsError || historyLoadingRef.current)) return;
     const normalizedRange = normalizeQuizRange(
       config.rangeStart,
       config.rangeEnd,
@@ -987,6 +1057,7 @@ export const useQuizModeController = ({
     setupConfig,
     activeConfig,
     allWords,
+    bookTitle,
     questions,
     currentQIndex,
     showOptions,
@@ -998,6 +1069,16 @@ export const useQuizModeController = ({
     score,
     loading,
     loadingMessage,
+    loadError,
+    retryLoad: () => setLoadAttempt((previous) => previous + 1),
+    studiedWordsError,
+    historyLoading,
+    retryStudiedWords,
+    startError,
+    retryStart: () => {
+      const failed = failedStartRef.current;
+      if (failed) void startQuizWithWords(failed.config, failed.words);
+    },
     questionSourceNotice,
     showExitConfirm,
     saveError,

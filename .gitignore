@@ -25,6 +25,9 @@ dist-ssr
 output/playwright/
 output/spreadsheet/
 output/simulator/
+output/meeting-preview/
+output/meeting-video/
+output/content-audit/
 test-results/
 test-results-rerun/
 playwright-report/

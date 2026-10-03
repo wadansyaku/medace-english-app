@@ -7,6 +7,7 @@ import type {
 } from '../../types';
 import { WORKSHEET_MODE_COPY } from '../../utils/worksheet';
 import { getGrammarScopesForMode } from '../../utils/grammarScope';
+import { getNaruRangeSelection, isNaruRangeSelected, NARU_BOOK_ID, NARU_RANGE_PRESETS } from '../../shared/naruBook';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import {
   QUESTION_COUNT_OPTIONS,
@@ -16,12 +17,14 @@ import {
 } from '../../config/quizFlow';
 
 interface QuizSetupViewProps {
+  bookId?: string;
   setupConfig: QuizSessionConfig;
   setupSummary: string;
   setupCandidateWordsLength: number;
   setupActualQuestionCount: number;
   setupEmptyCopy: string;
   allWordsLength: number;
+  learnedSelectionUnavailable?: boolean;
   normalizedSetupRange: { start: number; end: number };
   minWordNumber: number;
   maxWordNumber: number;
@@ -30,11 +33,13 @@ interface QuizSetupViewProps {
 }
 
 const QuizSetupView: React.FC<QuizSetupViewProps> = ({
+  bookId,
   setupConfig,
   setupSummary,
   setupCandidateWordsLength,
   setupActualQuestionCount,
   setupEmptyCopy,
+  learnedSelectionUnavailable = false,
   normalizedSetupRange,
   minWordNumber,
   maxWordNumber,
@@ -65,6 +70,31 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         >
           {setupSummary} / {activeModeCopy.label} / 候補 {setupCandidateWordsLength}語
         </div>
+
+        {bookId === NARU_BOOK_ID && (
+          <fieldset data-testid="naru-range-presets" className="min-w-0">
+            <legend className="text-sm font-bold text-slate-900">品詞から選ぶ</legend>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">同じ1冊の中から出題します。番号は詳細設定でも変更できます。</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {NARU_RANGE_PRESETS.map((preset) => {
+                const isActive = isNaruRangeSelected(setupConfig, preset);
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    data-testid={`naru-range-${preset.id}`}
+                    aria-pressed={isActive}
+                    onClick={() => onUpdateSetupConfig(getNaruRangeSelection(preset))}
+                    className={`min-h-11 rounded-xl border px-3 py-2 text-left transition-colors ${isActive ? 'border-medace-500 bg-medace-50 text-medace-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    <span className="block text-sm font-bold">{preset.label}</span>
+                    <span className="block text-xs">No. {preset.start}–{preset.end}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
 
         {setupActualQuestionCount < setupConfig.questionCount && setupCandidateWordsLength > 0 && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -120,8 +150,10 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                     key={item.key}
                     type="button"
                     data-testid={`quiz-selection-${item.key.toLowerCase()}`}
+                    disabled={item.key === 'LEARNED_ONLY' && learnedSelectionUnavailable}
+                    aria-pressed={isActive}
                     onClick={() => onUpdateSetupConfig({ selectionMode: item.key })}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    className={`rounded-2xl border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                       isActive
                         ? 'border-medace-500 bg-medace-50 text-medace-900'
                         : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -130,7 +162,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                     <span className="flex items-center justify-between gap-3">
                       <span className="min-w-0">
                         <span className="block text-sm font-black text-slate-950">{item.label}</span>
-                        <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.description}</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-slate-500">{item.key === 'LEARNED_ONLY' && learnedSelectionUnavailable ? '学習記録を確認できていません。再取得後に使えます。' : item.description}</span>
                       </span>
                       <span className={`h-4 w-4 shrink-0 rounded-full border-2 ${isActive ? 'border-medace-500 bg-medace-500' : 'border-slate-300 bg-white'}`} />
                     </span>
@@ -285,7 +317,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
           data-testid="quiz-setup-primary-cta"
           disabled={setupActualQuestionCount === 0}
           onClick={onAdvanceToReady}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
         >
           {primaryCtaCopy} <ChevronRight className="h-4 w-4" />
         </button>

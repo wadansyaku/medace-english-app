@@ -24,6 +24,21 @@ const createUser = (role: UserRole): UserProfile => ({
 });
 
 describe('app navigation paths', () => {
+  it('falls back safely for malformed encoded IDs and preserves valid encoded IDs', () => {
+    const fallback = parseNavigationPath('/');
+    for (const path of ['/study/%', '/quiz/%E0%A4%A']) {
+      expect(() => parseNavigationPath(path)).not.toThrow();
+      expect(parseNavigationPath(path)).toEqual(fallback);
+    }
+    for (const view of ['study', 'quiz'] as const) {
+      for (const bookId of ['日本語の教材', 'two words', 'part/one']) {
+        const state = parseNavigationPath(`/${view}/${encodeURIComponent(bookId)}`);
+        expect(getTaskRouteBookId(state.selectedTask!)).toBe(bookId);
+        const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+        expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+      }
+    }
+  });
   it('parses top-level and book detail routes', () => {
     expect(parseNavigationPath('/public')).toEqual({
       currentView: 'publicInfo',
@@ -226,5 +241,29 @@ describe('app navigation paths', () => {
       publicRole: 'service-admin',
       englishPracticeLane: null,
     });
+  });
+});
+
+// Overlay state belongs to the URL, so a refresh and browser Back/Forward can
+// recover the same form without discarding a pending lesson's deep link.
+describe('routed authentication overlay', () => {
+  it.each(['login', 'signup'])('round-trips %s on the home and public-role routes', (mode) => {
+    for (const path of ['/', getPublicBusinessRoleDirectPath('instructor')]) {
+      const state = parseNavigationPath(path, `?auth=${mode}`);
+      expect(state.authPanelMode).toBe(mode === 'login' ? 'LOGIN' : 'SIGNUP');
+      const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+      expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+    }
+  });
+  it('retains the exact lesson intent when a login form is opened from a deep link', () => {
+    const original = parseNavigationPath('/study/book-1');
+    const state = { ...original, authPanelMode: 'LOGIN' as const };
+    const url = new URL(buildNavigationPath(state), 'https://example.invalid');
+    expect(parseNavigationPath(url.pathname, url.search)).toEqual(state);
+    expect(parseNavigationPath(url.pathname, url.search).selectedTask).toEqual(original.selectedTask);
+  });
+  it('ignores invalid auth values and keeps password-reset links independent', () => {
+    expect(parseNavigationPath('/', '?auth=admin')).toEqual(parseNavigationPath('/'));
+    expect(parseNavigationPath('/reset-password', '?token=abc&auth=login').authPanelMode).toBeUndefined();
   });
 });

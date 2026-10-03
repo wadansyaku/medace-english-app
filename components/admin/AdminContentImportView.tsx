@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { AlertTriangle, BookOpen, FileText, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
 
 import {
@@ -55,8 +55,10 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
   onOpenResetModal,
   destructiveActionsEnabled,
   destructiveActionsMessage,
-}) => (
-  <div className="space-y-8">
+}) => {
+  const fileInput = useRef<HTMLInputElement>(null);
+  return (
+  <div className="space-y-8" aria-busy={uploading}>
     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
         <h2 className="text-3xl font-bold text-medace-900">教材運用</h2>
@@ -64,13 +66,17 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       </div>
       <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
         <button
+          type="button"
           onClick={() => onModeChange('ai')}
+          disabled={uploading}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${mode === 'ai' ? 'bg-white text-medace-700 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
         >
           <Sparkles className="w-4 h-4" /> AI生成
         </button>
         <button
+          type="button"
           onClick={() => onModeChange('csv')}
+          disabled={uploading}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${mode === 'csv' ? 'bg-white text-medace-700 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
         >
           <FileText className="w-4 h-4" /> CSV / 名詞workbook
@@ -93,7 +99,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
               key={source}
               type="button"
               onClick={() => onCatalogSourceChange(source)}
-              disabled={!destructiveActionsEnabled}
+              disabled={!destructiveActionsEnabled || uploading}
               className={`rounded-2xl border px-4 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${catalogSource === source ? 'border-medace-500 bg-medace-50 text-medace-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
             >
               <div className="font-bold">{BOOK_CATALOG_SOURCE_LABELS[source]}</div>
@@ -134,7 +140,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
                   value={contentTitle}
                   onChange={(event) => onContentTitleChange(event.target.value)}
                   placeholder="例: 中3定期テスト対策 Lesson 4"
-                  disabled={!destructiveActionsEnabled}
+                  disabled={!destructiveActionsEnabled || uploading}
                   className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 font-bold text-slate-700 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-200"
                 />
               </div>
@@ -146,7 +152,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
                 value={rawText}
                 onChange={(event) => onRawTextChange(event.target.value)}
                 placeholder="ここに英文を貼り付けてください..."
-                disabled={!destructiveActionsEnabled}
+                disabled={!destructiveActionsEnabled || uploading}
                 className="h-48 w-full rounded-xl border border-slate-300 p-4 font-mono text-sm text-slate-600 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-200"
               />
             </div>
@@ -154,7 +160,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
             <button
               onClick={onAiImport}
               disabled={!destructiveActionsEnabled || uploading || !rawText || !contentTitle}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-white shadow-lg transition-all ${!destructiveActionsEnabled || uploading || !rawText ? 'cursor-not-allowed bg-medace-200' : 'bg-medace-600 hover:bg-medace-700'}`}
+              className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-steady-on-action shadow-lg transition-all ${!destructiveActionsEnabled || uploading || !rawText ? 'cursor-not-allowed bg-medace-200' : 'bg-steady-action hover:bg-steady-action-hover'}`}
             >
               {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {uploading ? '生成中...' : '教材を生成する'}
@@ -177,26 +183,29 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
           <div className="rounded-xl border-2 border-dashed border-medace-200 bg-[#fff8ef] p-10 text-center transition-colors hover:border-medace-400">
             <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
             <p className="mb-4 text-slate-600">
-              {file ? `選択中: ${file.name}` : 'ここに CSV をドラッグ＆ドロップ、またはクリックして選択'}
+              {file ? `選択中: ${file.name}` : 'CSV ファイルを選択してください'}
             </p>
-            <input type="file" accept=".csv" onChange={onFileChange} className="hidden" id="csv-upload" disabled={!destructiveActionsEnabled} />
-            <label
-              htmlFor="csv-upload"
+            <input ref={fileInput} type="file" accept=".csv" onChange={onFileChange} className="hidden" id="csv-upload" disabled={!destructiveActionsEnabled || uploading} />
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              disabled={!destructiveActionsEnabled || uploading}
+              aria-controls="csv-upload"
               className={`inline-block rounded-lg border border-medace-200 bg-white px-6 py-3 font-medium text-medace-800 shadow-sm transition-all ${
-                destructiveActionsEnabled
+                destructiveActionsEnabled && !uploading
                   ? 'cursor-pointer hover:border-medace-500 hover:bg-medace-50 hover:text-medace-700'
                   : 'cursor-not-allowed opacity-60'
               }`}
             >
               ファイルを選択
-            </label>
+            </button>
           </div>
 
           {file && (
             <button
               onClick={onCsvUpload}
               disabled={!destructiveActionsEnabled || uploading}
-              className={`w-full rounded-xl py-3 font-bold text-white transition-colors ${!destructiveActionsEnabled || uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-medace-600 hover:bg-medace-700'}`}
+              className={`w-full rounded-xl py-3 font-bold text-steady-on-action transition-colors ${!destructiveActionsEnabled || uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-steady-action hover:bg-steady-action-hover'}`}
             >
               {uploading ? '処理中...' : 'CSVを取り込む'}
             </button>
@@ -267,7 +276,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
               <button
                 type="button"
                 onClick={() => onPrepareExamples(book)}
-                disabled={preparingExamplesBookId === book.id}
+                disabled={uploading || preparingExamplesBookId === book.id}
                 className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
               >
                 {preparingExamplesBookId === book.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -289,7 +298,7 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       </p>
       <button
         onClick={onOpenResetModal}
-        disabled={!destructiveActionsEnabled}
+        disabled={!destructiveActionsEnabled || uploading}
         className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 transition-colors hover:bg-red-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:bg-white disabled:text-red-300"
       >
         <Trash2 className="w-4 h-4" /> データをリセット
@@ -297,5 +306,6 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
     </div>
   </div>
 );
+};
 
 export default AdminContentImportView;

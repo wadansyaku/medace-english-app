@@ -450,7 +450,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               data-testid="translation-feedback-next"
               onClick={onAdvanceAfterTranslationFeedback}
               disabled={!translationAwaitingAdvance || isInputBusy || Boolean(saveError && hasPendingAttempt)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               <ArrowRight className="h-5 w-5" /> {translationAdvanceLabel}
             </button>
@@ -459,7 +459,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               <button
                 type="submit"
                 disabled={!answerInput.trim() || !!inputResult || isInputBusy}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
               </button>
@@ -613,7 +613,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             data-testid="quiz-order-submit"
             onClick={() => void onOrderSubmit()}
             disabled={!canSubmitOrder}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-medace-600 px-4 py-4 font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <CheckCircle className="h-5 w-5" /> {persistingAttempt ? '保存中...' : '判定する'}
           </button>

@@ -522,7 +522,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
               data-testid="settings-save-button"
               onClick={onSave}
               disabled={isSavingProfile}
-              className="min-h-11 rounded-2xl bg-medace-600 px-6 py-3 text-base font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="min-h-11 rounded-2xl bg-steady-action px-6 py-3 text-base font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSavingProfile ? '保存中...' : '変更を保存'}
             </button>
@@ -908,7 +908,7 @@ const DashboardSettingsModal: React.FC<DashboardSettingsModalProps> = ({
           <button
             onClick={onSave}
             disabled={isSavingProfile}
-            className="min-h-11 rounded-2xl bg-medace-600 px-6 py-3 text-base font-bold text-slate-950 shadow-lg transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="min-h-11 rounded-2xl bg-steady-action px-6 py-3 text-base font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {isSavingProfile ? '保存中...' : '変更を保存'}
           </button>

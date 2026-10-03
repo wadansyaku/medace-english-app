@@ -156,7 +156,7 @@ test.describe('student mobile ux', () => {
     expect((box?.y ?? 1000) + (box?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
-  test('public landing keeps signup and edge login inside the first viewport on mobile', async ({ page }) => {
+  test('public landing keeps signup and login inside the first viewport on mobile', async ({ page }) => {
     await page.goto('/');
 
     const signupButton = page.getByTestId('start-first-signup');
@@ -165,11 +165,11 @@ test.describe('student mobile ux', () => {
     expect(signupBox).not.toBeNull();
     expect((signupBox?.y ?? 1000) + (signupBox?.height ?? 0)).toBeLessThanOrEqual(844);
 
-    const edgePanel = page.getByTestId('auth-edge-panel');
-    await expect(edgePanel).toBeVisible();
-    const edgeBox = await edgePanel.boundingBox();
-    expect(edgeBox).not.toBeNull();
-    expect((edgeBox?.y ?? 1000) + (edgeBox?.height ?? 0)).toBeLessThanOrEqual(844);
+    const loginButton = page.getByTestId('start-first-login');
+    await expect(loginButton).toBeVisible();
+    const loginBox = await loginButton.boundingBox();
+    expect(loginBox).not.toBeNull();
+    expect((loginBox?.y ?? 1000) + (loginBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
   test('student dashboard keeps the primary CTA inside the first viewport on mobile', async ({ page }) => {
@@ -450,8 +450,8 @@ test.describe('student mobile ux', () => {
     await page.getByTestId('dashboard-task-reference-plan').click();
     await expect(page.getByTestId('dashboard-plan-anchor')).toBeInViewport();
     await page.getByTestId('dashboard-quicknav-library').click();
-    await page.getByRole('button', { name: '公式コースをもっと見る', exact: true }).click();
-    await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。個人利用では My単語帳 を使って学習を進めてください。')).toBeVisible();
+    await page.getByRole('button', { name: /配布教材をもっと見る|すべての配布教材を見る/ }).click();
+    await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。教室に所属している場合は、講師に教材の配布をご確認ください。')).toBeVisible();
 
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
@@ -559,22 +559,22 @@ test.describe('student mobile ux', () => {
     expect((saveBox?.y ?? 1000) + (saveBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
-  test('student without books can open phrasebook creation from the hero on mobile', async ({ page }) => {
+  test('free student without books can try grammar and return from the hero on mobile', async ({ page }) => {
     await page.goto('/');
     await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
-    await expect(primaryCta).toContainText('教材を作る');
+    await expect(primaryCta).toContainText('文法演習を試す');
     await primaryCta.click();
 
-    await expect(page.getByTestId('phrasebook-create-modal')).toBeVisible();
-    await expect(page.getByRole('dialog')).toHaveAttribute('aria-labelledby', 'phrasebook-create-title');
-    await expect(page.getByRole('button', { name: '閉じる' })).toBeFocused();
-    await expect(page.getByRole('heading', { name: 'My単語帳 作成' })).toBeVisible();
-    await expect(page.getByTestId('phrasebook-create-submit')).toBeDisabled();
-    await expect(page.getByTestId('phrasebook-create-plan-warning')).toContainText('教材化は使えません');
+    await expect(page).toHaveURL(/\/english-practice\/grammar$/);
+    await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+    await expect(page.getByText('お試し問題です。復習対象には入りません。')).toBeVisible();
+    await expect(page.getByTestId('phrasebook-create-modal')).toHaveCount(0);
+    await page.getByTestId('english-practice-close').click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
   });
 
   test('student with a generated plan can reach the plan editor save action on mobile', async ({ page }) => {

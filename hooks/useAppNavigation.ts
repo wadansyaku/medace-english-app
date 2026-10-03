@@ -22,10 +22,12 @@ import {
 
 export type AppRoute = 'login' | 'resetPassword' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
+export type AuthPanelMode = 'LOGIN' | 'SIGNUP';
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 export type EnglishPracticeRouteLane = EnglishPracticeRouteLaneId;
 
 export interface AppNavigationState {
+  authPanelMode?: AuthPanelMode;
   currentView: AppRoute;
   returnView: HomeAppRoute;
   selectedTask: LearningTaskIntent | null;
@@ -35,6 +37,8 @@ export interface AppNavigationState {
 }
 
 export type AppNavigationAction =
+  | { type: 'open-auth'; mode: AuthPanelMode; historyMode?: NavigationHistoryMode }
+  | { type: 'close-auth'; historyMode?: NavigationHistoryMode }
   | { type: 'reset'; historyMode?: NavigationHistoryMode }
   | { type: 'go-home'; view: HomeAppRoute; historyMode?: NavigationHistoryMode }
   | { type: 'open-english-practice'; lane?: EnglishPracticeRouteLane; historyMode?: NavigationHistoryMode }
@@ -107,7 +111,7 @@ export const canAccessAppView = (user: UserProfile | null, view: AppRoute): bool
   return true;
 };
 
-export const parseNavigationPath = (pathname: string, search = ''): AppNavigationState => {
+const parseBaseNavigationPath = (pathname: string, search = ''): AppNavigationState => {
   const normalizedPath = normalizePathname(pathname);
   const segments = normalizedPath.split('/').filter(Boolean);
   const [root, bookId, roleSlug] = segments;
@@ -178,7 +182,8 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   if (normalizedPath === '/admin') return buildHomeState('admin');
 
   if (root === 'study' && bookId) {
-    const decodedBookId = decodeURIComponent(bookId);
+    let decodedBookId: string;
+    try { decodedBookId = decodeURIComponent(bookId); } catch { return initialNavigationState; }
     return {
       currentView: 'study',
       returnView: 'dashboard',
@@ -189,7 +194,8 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   }
 
   if (root === 'quiz' && bookId) {
-    const decodedBookId = decodeURIComponent(bookId);
+    let decodedBookId: string;
+    try { decodedBookId = decodeURIComponent(bookId); } catch { return initialNavigationState; }
     return {
       currentView: 'quiz',
       returnView: 'dashboard',
@@ -202,7 +208,7 @@ export const parseNavigationPath = (pathname: string, search = ''): AppNavigatio
   return initialNavigationState;
 };
 
-export const buildNavigationPath = (state: AppNavigationState): string => {
+const buildBaseNavigationPath = (state: AppNavigationState): string => {
   switch (state.currentView) {
     case 'publicInfo':
       return '/public';
@@ -236,9 +242,30 @@ export const buildNavigationPath = (state: AppNavigationState): string => {
   }
 };
 
+// The auth form is a routed overlay. Preserve the intended lesson and its query
+// when opening it so Back/Forward and a copied auth link reconstruct the same UI.
+export const parseNavigationPath = (pathname: string, search = ''): AppNavigationState => {
+  const state = parseBaseNavigationPath(pathname, search);
+  if (state.currentView === 'resetPassword') return state;
+  const mode = new URLSearchParams(search).get('auth');
+  return mode === 'login' || mode === 'signup'
+    ? { ...state, authPanelMode: mode === 'login' ? 'LOGIN' : 'SIGNUP' }
+    : state;
+};
+
+export const buildNavigationPath = (state: AppNavigationState): string => {
+  const path = buildBaseNavigationPath(state);
+  if (!state.authPanelMode || state.currentView === 'resetPassword') return path;
+  const [pathname, search = ''] = path.split('?');
+  const params = new URLSearchParams(search);
+  params.set('auth', state.authPanelMode === 'LOGIN' ? 'login' : 'signup');
+  return `${pathname}?${params.toString()}`;
+};
+
 const getDefaultHistoryMode = (action: AppNavigationAction): NavigationHistoryMode => {
   switch (action.type) {
     case 'reset':
+    case 'close-auth':
     case 'finish-book-view':
     case 'close-public-info':
     case 'close-public-role':
@@ -250,11 +277,17 @@ const getDefaultHistoryMode = (action: AppNavigationAction): NavigationHistoryMo
   }
 };
 
-const navigationReducer = (
+export const navigationReducer = (
   state: AppNavigationState,
   action: AppNavigationAction,
 ): AppNavigationState => {
   switch (action.type) {
+    case 'open-auth':
+      return { ...state, authPanelMode: action.mode };
+    case 'close-auth': {
+      const { authPanelMode: _authPanelMode, ...rest } = state;
+      return rest;
+    }
     case 'reset':
       return initialNavigationState;
     case 'go-home':
@@ -298,11 +331,13 @@ const navigationReducer = (
         currentView: 'publicInfo',
         publicRole: null,
         englishPracticeLane: null,
+        authPanelMode: undefined,
       };
     case 'open-public-role':
       return {
         ...state,
         currentView: 'publicRole',
+        authPanelMode: undefined,
         publicRole: action.role,
         englishPracticeLane: null,
       };
@@ -316,6 +351,7 @@ const navigationReducer = (
         currentView: 'publicInfo',
         publicRole: null,
         englishPracticeLane: null,
+        authPanelMode: undefined,
       };
     case 'sync-from-location':
       return action.state;

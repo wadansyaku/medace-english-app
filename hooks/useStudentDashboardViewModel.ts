@@ -246,6 +246,7 @@ export const useStudentDashboardViewModel = ({
   const canGenerateAiPlan = currentPlanPolicy.allowedAiActions.includes('generateLearningPlan');
   const canCreateFromText = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromText');
   const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
+  const canCreateBook = canCreateFromText || canCreateFromFile;
 
   const fallbackPlanSuggestion = hasStudyBooks
     ? buildFallbackLearningPlan({
@@ -285,15 +286,19 @@ export const useStudentDashboardViewModel = ({
   const heroTitle = !hasStudyBooks
     ? blockedOfficialBookCount > 0
       ? '配布教材を確認中'
-      : '教材を1冊作る'
+      : canCreateBook ? '教材を1冊作る' : '教材なしで文法を試す'
     : remainingWords > 0
       ? `あと${remainingWords}語`
       : '今日は完了';
 
   const heroCopy = !hasStudyBooks
     ? blockedOfficialBookCount > 0
-      ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
-      : '教科書・PDF・本文から作成。1ページ分で始められます。'
+      ? canCreateBook
+        ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
+        : '配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。'
+      : canCreateBook
+        ? '教科書・PDF・本文から作成。1ページ分で始められます。'
+        : '利用できる単語帳はまだありません。文法のお試し問題から始められます。'
     : remainingWords > 0
       ? dueCount > 0
         ? `まず復習${reviewFirstCount}語。そのあと残りへ。`
@@ -301,7 +306,7 @@ export const useStudentDashboardViewModel = ({
       : '余力があれば、英語演習を1セットだけ追加します。';
 
   const questButtonLabel = !hasStudyBooks
-    ? blockedOfficialBookCount > 0
+    ? !canCreateBook ? '文法演習を試す' : blockedOfficialBookCount > 0
       ? 'My単語帳を作る'
       : '教材を作る'
     : remainingWords > 0
@@ -395,7 +400,7 @@ export const useStudentDashboardViewModel = ({
       id: 'today' as const,
       title: '今日の学習',
       body: !hasStudyBooks
-        ? 'My単語帳を1冊作ると、学習を始められます。'
+        ? canCreateBook ? 'My単語帳を1冊作ると、学習を始められます。' : '教材がなくても、文法のお試し問題を解けます。'
         : remainingWords > 0
           ? dueCount > 0
             ? `復習から入り、残り${remainingWords}語へ進みます。`
@@ -537,8 +542,8 @@ export const useStudentDashboardViewModel = ({
     {
       id: 'library',
       title: '教材',
-      body: hasStudyBooks ? '使う教材と進捗を確認します。' : '最初の教材を作ります。',
-      ctaLabel: hasStudyBooks ? '教材を見る' : '教材を作る',
+      body: hasStudyBooks ? '使う教材と進捗を確認します。' : canCreateBook ? '最初の教材を作ります。' : '教材の配布・利用条件を確認します。',
+      ctaLabel: hasStudyBooks ? '教材を見る' : canCreateBook ? '教材を作る' : '教材を確認',
       metricLabel: `${planningBooks.length}冊`,
       stateLabel: hasStudyBooks ? '利用中' : '準備',
       tone: 'reference',
@@ -616,6 +621,7 @@ export const useStudentDashboardViewModel = ({
     ...task,
     command: resolveStudentDashboardCommand(task.id, {
       hasStudyBooks,
+      canCreateBook,
       canShowWritingSection,
       hasActionableWriting,
       primaryMission,

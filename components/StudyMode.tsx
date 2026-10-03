@@ -29,6 +29,7 @@ import { useStudyModeController } from '../hooks/useStudyModeController';
 import { recordClientProductEvent } from '../services/productEvents';
 import StudyFinishedView from './study/StudyFinishedView';
 import StudyReportDialogs from './study/StudyReportDialogs';
+import WordSourceDetails from './study/WordSourceDetails';
 
 interface StudyModeProps {
   user: UserProfile;
@@ -228,6 +229,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
 
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <h2 className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
+          <WordSourceDetails word={controller.currentWord} compact />
         </div>
 
         <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-3 text-center text-xs font-medium text-slate-400">
@@ -297,6 +299,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden">
           <div ref={controller.backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
+            <WordSourceDetails word={controller.currentWord} />
             {!controller.showHints ? (
               <button
                 type="button"
@@ -548,6 +551,11 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
         onCloseNotice={() => controller.setReportNotice(null)}
       />
 
+      {(controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel) && (
+        <p data-testid="study-book-label" className="mb-2 break-words text-xs font-bold text-medace-800">
+          {controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel}
+        </p>
+      )}
       <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
         <button type="button" aria-label="学習を中断してダッシュボードに戻る" onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
@@ -584,7 +592,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
       </div>
 
       <MobileStickyActionBar
-        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4"
+        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4 [@media(max-height:500px)]:static"
       >
         {controller.saveError ? (
           <div ref={controller.actionBarRef} role="alert" data-testid="study-save-error" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -623,7 +631,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
               onClick={controller.openBack}
               disabled={controller.isEditing || controller.isAdvancingCard}
               className={`flex min-h-12 items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
-                controller.isEditing || controller.isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-medace-600 text-slate-950 hover:bg-medace-700'
+                controller.isEditing || controller.isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
               }`}
             >
               <RotateCw className="h-5 w-5" /> 答えを確認

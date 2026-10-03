@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { normalizeCatalogImport } from '../functions/_shared/catalog-import';
+import { inspectCatalogImportContent } from '../shared/catalogImport';
 
 describe('normalizeCatalogImport', () => {
   it('skips empty row values from row-based imports and reports row numbers', () => {
@@ -112,5 +113,52 @@ describe('normalizeCatalogImport', () => {
     expect(result.warnings).toEqual([
       expect.objectContaining({ code: 'EMPTY_WORD', rowNumber: 3 }),
     ]);
+  });
+
+  it.each(['3oops', '3.8', 3.8, '1e3', '0', 0, -1, '9007199254740992', Number.MAX_SAFE_INTEGER + 1])('does not silently convert source ID %s to another source entry', (sourceEntryId) => {
+    const rowsResult = normalizeCatalogImport({
+      defaultBookName: 'Synthetic provenance',
+      source: { kind: 'rows', rows: [{ word: 'care', definition: '注意', sourceEntryId }] },
+    });
+    expect(rowsResult.rows).toEqual([]);
+    expect(rowsResult.warnings).toEqual([expect.objectContaining({ code: 'INVALID_SOURCE_ENTRY_ID', rowNumber: 1 })]);
+    const csvResult = normalizeCatalogImport({
+      defaultBookName: 'Synthetic provenance',
+      source: { kind: 'csv', csvText: `Word,Meaning,SourceEntryId\ncare,注意,${sourceEntryId}` },
+    });
+    expect(csvResult.rows).toEqual([]);
+    expect(csvResult.warnings).toEqual([expect.objectContaining({ code: 'INVALID_SOURCE_ENTRY_ID', rowNumber: 2 })]);
+  });
+
+  it.each([3, '003', ' 3 '])('keeps the exact positive integer source ID %s', (sourceEntryId) => {
+    const result = normalizeCatalogImport({
+      defaultBookName: 'Synthetic provenance',
+      source: { kind: 'rows', rows: [{ word: 'care', definition: '注意', sourceEntryId }] },
+    });
+    expect(result.rows[0].sourceEntryId).toBe(3);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it.each(['[未抽出]', '［未抽出］', '訳: 未抽出', '[要確認]', '未設定', 'TODO', 'tbd', 'n/a'])('excludes incomplete definition %s from normalized learning content', (definition) => {
+    const result = normalizeCatalogImport({
+      defaultBookName: 'Synthetic incomplete',
+      source: { kind: 'rows', rows: [{ word: 'care', definition }] },
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.warnings).toEqual([expect.objectContaining({ code: 'BLOCKED_CONTENT_MARKER', rowNumber: 1 })]);
+  });
+
+  it('inspects actual required values and all learner/source fields without matching ordinary sentences', () => {
+    expect(inspectCatalogImportContent([
+      { word: '', definition: 'N/A', exampleMeaning: '未抽出' },
+      { word: 'care', definition: '注意', sourceSheet: '［要確認］' },
+      { word: 'heal', definition: '治す', exampleSentence: 'The to-do list is long.' },
+    ])).toEqual({ requiredBlankRows: 1, rowsWithSentinel: 2, sentinelValueCount: 3 });
+    const result = normalizeCatalogImport({
+      defaultBookName: 'Synthetic notes',
+      source: { kind: 'rows', rows: [{ word: 'care', definition: '注意', sourceNote: '[要確認]' }] },
+    });
+    expect(result.rows).toEqual([]);
+    expect(result.warnings[0].code).toBe('BLOCKED_CONTENT_MARKER');
   });
 });

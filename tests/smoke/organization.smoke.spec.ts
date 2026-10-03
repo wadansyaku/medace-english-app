@@ -364,7 +364,8 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
   expect(visibleStudentB).toBeUndefined();
 
   await instructorPage.getByTestId('workspace-tab-students').click();
-  await instructorPage.getByRole('button', { name: getInstructorSegmentLabel(visibleStudentA), exact: true }).first().click();
+  await instructorPage.getByRole('button', { name: '閲覧できる生徒すべて', exact: true }).click();
+  await instructorPage.getByRole('button', { name: new RegExp(getInstructorSegmentLabel(visibleStudentA)) }).first().click();
   await expect(instructorPage.getByTestId(`instructor-student-row-${studentAUser!.uid}`)).toBeVisible();
   await expect(instructorPage.getByTestId(`instructor-student-row-${studentBUser!.uid}`)).toHaveCount(0);
 
@@ -420,7 +421,7 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   await expect(draftField).not.toHaveValue('');
 
   await instructorPage.getByTestId('notification-send-submit').click();
-  await expect(instructorPage.getByText(/フォロー通知を保存しました。/)).toBeVisible();
+  await expect(instructorPage.getByText(/アプリ内通知を保存しました。/)).toBeVisible();
 
   await adminContext.close();
   await instructorContext.close();

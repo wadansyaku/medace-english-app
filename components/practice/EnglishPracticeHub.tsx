@@ -427,11 +427,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           ? (index * 3 + practiceSeed) % activeScopePool.length
           : index % activeScopePool.length;
         const scope = activeScopePool[scopeIndex];
-        return buildGrammarPracticeItemsForWord(word, {
-          seed: `english-practice:${practiceSeed}:${grammarMode}:${scope.id}:${index}`,
+        const questionSeed = `english-practice:${practiceSeed}:${grammarMode}:${scope.id}:${index}`;
+        const item = buildGrammarPracticeItemsForWord(word, {
+          seed: questionSeed,
           requestedScopeId: scope.id,
           userLevel: practiceLevel,
         }).find((item) => item.kind === targetGrammarKind) ?? null;
+        // A short word pool repeats within the five-question set. Keep each
+        // occurrence's answer separate, including when its scope changes.
+        return item ? { ...item, id: `${item.id}:${questionSeed}` } : null;
       })
       .filter((item): item is GrammarPracticeItem => Boolean(item))
       .slice(0, grammarQuestionCount);
@@ -800,7 +804,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={!selected || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -865,7 +869,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
               type="button"
               disabled={orderedChipIds.length !== item.correctChipIds.length || isChecked}
               onClick={() => handleGrammarCheck(item, correct)}
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               判定する
             </button>
@@ -1181,7 +1185,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       <button
                         type="button"
                         onClick={resetGeneratedPractice}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700"
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover"
                       >
                         次の和訳へ <ArrowRight className="h-4 w-4" />
                       </button>
@@ -1203,7 +1207,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                         type="button"
                         disabled={!trimmedTranslationInput || checkingTranslationId === item.id || repeatedSubmittedTranslation}
                         onClick={() => void handleTranslationSubmit(item)}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
                         {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         答案チェック
@@ -1252,7 +1256,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                       type="button"
                       disabled={orderedChipIds.length !== item.correctChipIds.length || orderChecked}
                       onClick={() => handleTranslationOrderCheck(item, orderCorrect)}
-                      className="inline-flex min-h-10 items-center rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                      className="inline-flex min-h-10 items-center rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                       判定する
                     </button>
@@ -1530,7 +1534,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                 type="button"
                 disabled={!writingDraft.trim()}
                 onClick={handleWritingRecord}
-                className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-medace-600 px-4 py-2 text-sm font-black text-slate-950 transition-colors hover:bg-medace-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 英検英作文の練習として記録
               </button>

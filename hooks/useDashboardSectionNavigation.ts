@@ -69,21 +69,28 @@ export const useDashboardSectionNavigation = ({
     { id: 'library', label: '教材', kind: 'library', ref: librarySectionRef },
   ]), [fallbackQuickNavTarget, missionQuickNavTarget, writingQuickNavTarget]);
 
-  const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
-    const element = ref.current;
-    if (!element) return;
+  const scrollToElement = React.useCallback((element: HTMLElement) => {
     const details = element.closest('details');
     if (details) details.open = true;
     window.requestAnimationFrame(() => {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const header = document.querySelector('[data-testid="app-sticky-header"]');
+      const headerHeight = header?.getBoundingClientRect().height ?? 0;
+      const top = Math.max(0, element.getBoundingClientRect().top + window.scrollY - headerHeight - 16);
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }, []);
+
+  const scrollToSection = React.useCallback((ref: React.RefObject<HTMLDivElement | null>) => {
+    if (ref.current) scrollToElement(ref.current);
+  }, [scrollToElement]);
 
   React.useEffect(() => {
     if (!isStudentMobileShell || typeof window === 'undefined') return undefined;
 
     const updateActiveQuickNav = () => {
-      const threshold = 132;
+      const header = document.querySelector('[data-testid="app-sticky-header"]');
+      const threshold = (header?.getBoundingClientRect().height ?? 100) + 32;
       let nextActiveId = mobileQuickNavItems[0]?.id || 'today';
 
       mobileQuickNavItems.forEach((item) => {
@@ -117,6 +124,7 @@ export const useDashboardSectionNavigation = ({
     activeQuickNavId,
     mobileQuickNavItems,
     scrollToSection,
+    scrollToElement,
     mobileAnchorStyle: isStudentMobileShell
       ? { scrollMarginTop: 'calc(5.5rem + var(--safe-top))' }
       : undefined,

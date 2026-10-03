@@ -180,7 +180,7 @@ jobs:
           PLAYWRIGHT_SKIP_WEBSERVER: '1'
           PLAYWRIGHT_TRACE_MODE: retain-on-failure
           PLAYWRIGHT_VIDEO_MODE: retain-on-failure
-        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home starts with the learner CTA and edge login before auth|public readonly session endpoint is reachable before login|public role link hub keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe|service admin dedicated access link resolves to the protected admin entrypoint"
+        run: node scripts/run-smoke-tests.mjs --suite sentinel --grep "public home offers clear account and learner trial actions before auth|public readonly session endpoint is reachable before login|public role link hub keeps the business role previews visible|public role pages always emit a noindex robots tag and service admin action stays safe|service admin dedicated access link resolves to the protected admin entrypoint"
 
       - name: Upload production deployed smoke artifacts
         if: failure()
