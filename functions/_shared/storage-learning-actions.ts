@@ -54,8 +54,8 @@ import {
 import { HttpError } from './http';
 import { commitStudyAttempt } from './study-attempt-receipts';
 import { validateStudyAttempt } from '../../shared/srs';
-import { commitQuizAttempt, toQuizAttemptReceipt } from './quiz-attempt-receipts';
-import { validateQuizAttempt, type QuizAttemptReceipt } from '../../shared/quizAttempt';
+import { commitQuizAttempt, readQuizAttemptReceipt, toQuizAttemptReceipt } from './quiz-attempt-receipts';
+import { createEnglishPracticeQuizAttemptId, validateQuizAttempt, type QuizAttemptReceipt } from '../../shared/quizAttempt';
 
 const rebuildOrganizationKpiForUser = async (env: AppEnv, userId: string, dateKeys: string[]): Promise<void> => {
   const organization = await readActiveOrganizationContextForUser(env, userId);
@@ -402,10 +402,25 @@ export const handleRecordQuizAttempt = async (
       } catch (metadataError) { console.warn('Quiz projection status update failed:', metadataError); }
     }
   }
-  return clientAttemptId ? toQuizAttemptReceipt(receipt) : null;
+  // Read the durable status after projection attempts. Another replay may have
+  // completed it concurrently; failed metadata/readback never implies COMPLETE.
+  let confirmedReceipt = receipt;
+  if (receipt.projection_status === 'PENDING') {
+    try {
+      confirmedReceipt = await readQuizAttemptReceipt(env, user.id, receipt.client_attempt_id) || receipt;
+    } catch { console.warn('Quiz projection confirmation pending readback.'); }
+  }
+  // Legacy callers keep their successful 204. A pending legacy answer instead
+  // exposes its generated ID for recovery; throwing after commit would invite
+  // an ID-less retry that writes the same canonical answer again.
+  return clientAttemptId || confirmedReceipt.projection_status === 'PENDING'
+    ? toQuizAttemptReceipt(confirmedReceipt) : null;
 };
 
 const validateEnglishPracticeAttemptPayload = (payload: EnglishPracticeAttemptPayload): void => {
+  if (typeof payload.clientAttemptId !== 'string' || !payload.clientAttemptId.trim()) {
+    throw new HttpError(400, '英語演習の記録識別子が不正です。');
+  }
   const laneModeAllowed: Record<EnglishPracticeLaneId, readonly EnglishPracticeAttemptMode[]> = {
     grammar: ['GRAMMAR_CLOZE', 'EN_WORD_ORDER'],
     translation: ['JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'],
@@ -501,8 +516,16 @@ export const handleRecordEnglishPracticeAttempt = async (
     ).run();
   }
 
-  if (shouldDelegateQuizAttempt && (!existing || !existing.delegated_quiz_attempt)) {
-    await handleRecordQuizAttempt(
+  let projectionStatus: EnglishPracticeAttemptResult['projectionStatus'] = 'COMPLETE';
+  const delegatedAttemptId = shouldDelegateQuizAttempt
+    ? await createEnglishPracticeQuizAttemptId(user.id, payload.clientAttemptId) : undefined;
+  const delegatedReceipt = delegatedAttemptId
+    ? await readQuizAttemptReceipt(env, user.id, delegatedAttemptId) : null;
+  // Replays of new delegated records reauthorize and check the immutable quiz
+  // fingerprint even after completion. Legacy completed records have no stable
+  // receipt mapping; do not create a second canonical answer for those rows.
+  if (shouldDelegateQuizAttempt && (!existing?.delegated_quiz_attempt || delegatedReceipt)) {
+    const receipt = await handleRecordQuizAttempt(
       env,
       user,
       payload.wordId!,
@@ -515,18 +538,33 @@ export const handleRecordEnglishPracticeAttempt = async (
       payload.generatedProblemId,
       payload.grammarScopeId,
       payload.translationFeedback,
+      delegatedAttemptId,
     );
-    await env.DB.prepare(`
-      UPDATE english_practice_attempts
-      SET delegated_quiz_attempt = 1, synced_at = ?
-      WHERE user_id = ? AND client_attempt_id = ?
-    `).bind(now, user.id, payload.clientAttemptId).run();
+    projectionStatus = receipt?.projectionStatus || 'PENDING';
+    if (projectionStatus === 'COMPLETE' && !existing?.delegated_quiz_attempt) {
+      try {
+        const result = await env.DB.prepare(`
+          UPDATE english_practice_attempts
+          SET delegated_quiz_attempt = 1, synced_at = ?
+          WHERE user_id = ? AND client_attempt_id = ?
+        `).bind(now, user.id, payload.clientAttemptId).run();
+        if (result.success === false || (result.meta.changes ?? 0) !== 1) {
+          projectionStatus = 'PENDING';
+        }
+      } catch {
+        // The canonical answer is already durable. Keep the original English
+        // attempt queued until its delegation confirmation can be written.
+        console.warn('English practice delegation confirmation pending.');
+        projectionStatus = 'PENDING';
+      }
+    }
   }
 
   return {
     id: existing?.id || id,
     deduplicated: Boolean(existing),
     delegatedQuizAttempt: shouldDelegateQuizAttempt,
+    projectionStatus,
   };
 };
 

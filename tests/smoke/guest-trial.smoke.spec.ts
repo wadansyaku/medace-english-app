@@ -223,7 +223,7 @@ test('guest account switch does not import the previous account-bound trial', as
   await expect(page.getByTestId('guest-import-message')).toBeVisible();
   const bound = await readDevice(page);
   await page.unroute('**/api/guest-trial/import');
-  const other = await page.request.post('/api/auth', { data: { action: 'email-auth', isSignUp: true, email: `other-trial-${Date.now()}@example.test`, password: 'synthetic-other-pass', displayName: '別の合成生徒' } });
+  const other = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin }, data: { action: 'email-auth', isSignUp: true, email: `other-trial-${Date.now()}@example.test`, password: 'synthetic-other-pass', displayName: '別の合成生徒' } });
   expect(other.status()).toBe(200);
   await page.reload();
   await expect(page.getByTestId('guest-trial-import')).toContainText('このアカウントには引き継げません');

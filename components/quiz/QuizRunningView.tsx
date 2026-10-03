@@ -678,7 +678,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           disabled={persistingAttempt}
           className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-red-200 bg-white px-4 py-2.5 font-bold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {persistingAttempt ? '再保存中...' : 'もう一度保存する'}
+          {persistingAttempt ? '確認中...' : '保存と進捗を再確認する'}
         </button>
       </div>
     )}

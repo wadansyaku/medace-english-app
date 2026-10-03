@@ -208,6 +208,7 @@ export interface EnglishPracticeAttemptResult {
   id: string;
   deduplicated: boolean;
   delegatedQuizAttempt: boolean;
+  projectionStatus: 'PENDING' | 'COMPLETE';
 }
 
 export interface GenerateWordHintAssetPayload {

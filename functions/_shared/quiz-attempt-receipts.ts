@@ -20,7 +20,13 @@ export interface DbQuizAttemptReceipt {
 export const toQuizAttemptReceipt = (receipt: DbQuizAttemptReceipt): QuizAttemptReceipt => ({
   clientAttemptId: receipt.client_attempt_id, wordId: receipt.word_id,
   bookId: receipt.book_id, committedAt: receipt.created_at, storageMode: 'cloudflare',
+  projectionStatus: receipt.projection_status,
 });
+
+export const readQuizAttemptReceipt = (env: AppEnv, userId: string, clientAttemptId: string) => (
+  readFirst<DbQuizAttemptReceipt>(env,
+    'SELECT * FROM quiz_attempt_receipts WHERE user_id = ? AND client_attempt_id = ?', userId, clientAttemptId)
+);
 
 // The caller authorizes the current user, material, word and explicit mission
 // before entering this function, including on receipt reads/replays.
@@ -36,8 +42,7 @@ export const commitQuizAttempt = async (
   const clientAttemptId = input.clientAttemptId || crypto.randomUUID();
   const fingerprint = await quizAttemptFingerprint(input);
   const commitToken = crypto.randomUUID();
-  const readReceipt = () => readFirst<DbQuizAttemptReceipt>(env,
-    'SELECT * FROM quiz_attempt_receipts WHERE user_id = ? AND client_attempt_id = ?', userId, clientAttemptId);
+  const readReceipt = () => readQuizAttemptReceipt(env, userId, clientAttemptId);
   const checkReceipt = (receipt: DbQuizAttemptReceipt) => {
     if (receipt.request_fingerprint !== fingerprint) throw new HttpError(409, '同じ小テスト記録の識別子で異なる解答は保存できません。');
     return receipt;

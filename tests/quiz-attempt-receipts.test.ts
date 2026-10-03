@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { commitQuizAttempt } from '../functions/_shared/quiz-attempt-receipts';
-import { handleRecordQuizAttempt } from '../functions/_shared/storage-learning-actions';
+import { handleRecordEnglishPracticeAttempt, handleRecordQuizAttempt } from '../functions/_shared/storage-learning-actions';
 import { commitStudyAttempt } from '../functions/_shared/study-attempt-receipts';
 import { quizAttemptFingerprint, type QuizAttemptInput } from '../shared/quizAttempt';
 import { formatDateKey } from '../utils/date';
@@ -114,9 +114,9 @@ describe('authorized replay and derived recovery',()=>{
   it('keeps committed receipt pending on projection failure and rebuilds on same-answer retry',async()=>{
     const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
     fixture.beforeRun((sql)=>{if(sql.includes('INSERT INTO student_weakness_signals'))throw new Error('derived failure');});
-    const receipt=await call(fixture,input);expect(receipt).toMatchObject({clientAttemptId:'quiz-1',storageMode:'cloudflare'});
+    const receipt=await call(fixture,input);expect(receipt).toMatchObject({clientAttemptId:'quiz-1',storageMode:'cloudflare',projectionStatus:'PENDING'});
     expect(fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()).toMatchObject({projection_status:'PENDING'});
-    fixture.beforeRun(undefined);expect(await call(fixture,input)).toEqual(receipt);
+    fixture.beforeRun(undefined);expect(await call(fixture,input)).toEqual({...receipt,projectionStatus:'COMPLETE'});
     expect(fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()).toMatchObject({projection_status:'COMPLETE',projection_failed_at:null});
     expect(fixture.history()?.attempt_count).toBe(1);
   });
@@ -127,7 +127,7 @@ describe('authorized replay and derived recovery',()=>{
     fixture.sqlite.exec(`INSERT INTO weekly_missions(id,created_by_user_id,learning_track,title,rationale,due_at,created_at,updated_at)VALUES('mission-1','student-1','SCHOOL_TERM','Synthetic','Synthetic',9999999999999,1,1);
       INSERT INTO weekly_mission_assignments(id,mission_id,student_user_id,assigned_by_user_id,status,assigned_at,updated_at)VALUES('mission-new','mission-1','student-1','student-1','ASSIGNED',1,1);`);
     fixture.beforeRun(undefined);vi.spyOn(Date,'now').mockReturnValue((receipt?.committedAt||0)+86_400_000);
-    expect(await call(fixture,input)).toEqual(receipt);
+    expect(await call(fixture,input)).toEqual({...receipt,projectionStatus:'COMPLETE'});
     expect(fixture.sqlite.prepare('SELECT * FROM weekly_mission_assignments').get()).toMatchObject({quiz_day_keys_json:'[]'});
   });
   it('rebuilds the original mission day after delayed recovery without crediting a later mission',async()=>{
@@ -137,16 +137,130 @@ describe('authorized replay and derived recovery',()=>{
     fixture.beforeRun((sql)=>{if(sql.includes('INSERT INTO student_weakness_signals'))throw new Error('derived failure');});
     const receipt=await call(fixture,input);
     fixture.beforeRun(undefined);vi.spyOn(Date,'now').mockReturnValue((receipt?.committedAt||0)+86_400_000);
-    expect(await call(fixture,input)).toEqual(receipt);
+    expect(await call(fixture,input)).toEqual({...receipt,projectionStatus:'COMPLETE'});
     expect(fixture.sqlite.prepare('SELECT * FROM weekly_mission_assignments WHERE id=?').get('mission-original')).toMatchObject({quiz_day_keys_json:JSON.stringify([formatDateKey(receipt!.committedAt)])});
     fixture.sqlite.exec(`UPDATE weekly_mission_assignments SET status='ARCHIVED' WHERE id='mission-original';
       INSERT INTO weekly_mission_assignments(id,mission_id,student_user_id,assigned_by_user_id,status,assigned_at,updated_at)VALUES('mission-later','mission-1','student-1','student-1','ASSIGNED',2,2);`);
-    expect(await call(fixture,input)).toEqual(receipt);
+    expect(await call(fixture,input)).toEqual({...receipt,projectionStatus:'COMPLETE'});
     expect(fixture.sqlite.prepare('SELECT * FROM weekly_mission_assignments WHERE id=?').get('mission-later')).toMatchObject({quiz_day_keys_json:'[]'});
     expect(fixture.history()?.attempt_count).toBe(1);
   });
   it.each([{responseTimeMs:-1},{responseTimeMs:Infinity},{responseTimeMs:3_600_001},{clientAttemptId:''},{clientAttemptId:'x'.repeat(161)},{questionMode:'invalid'}])('rejects malformed input before D1 access: %s',async(change)=>{
     const prepare=vi.fn();const fixture={env:{DB:{prepare}},user:{id:'student-1'}};
     await expect(call(fixture as never,{...input,...change} as QuizAttemptInput)).rejects.toMatchObject({status:400});expect(prepare).not.toHaveBeenCalled();
+  });
+  it('keeps progress pending if completion metadata fails after projections succeeded',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.beforeRun((sql)=>{if(sql.includes("SET projection_status = 'COMPLETE'"))throw new Error('metadata failure');});
+    const receipt=await call(fixture,input);
+    expect(receipt?.projectionStatus).toBe('PENDING');expect(fixture.history()?.attempt_count).toBe(1);
+    fixture.beforeRun(undefined);
+    expect(await call(fixture,input)).toEqual({...receipt,projectionStatus:'COMPLETE'});
+    expect(fixture.count('learning_interaction_events')).toBe(1);
+  });
+  it('does not claim projection confirmation when its durable readback fails',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    const prepare: typeof fixture.DB.prepare=fixture.DB.prepare.bind(fixture.DB);let reads=0;
+    vi.spyOn(fixture.DB,'prepare').mockImplementation(sql=>{
+      const statement=prepare(sql);
+      if(sql.startsWith('SELECT * FROM quiz_attempt_receipts')) {
+        const first=statement.first.bind(statement) as typeof statement.first;
+        statement.first=async<TRow>()=>{if(++reads===2)throw new Error('readback failure');return first<TRow>();};
+      }
+      return statement;
+    });
+    const pending=await call(fixture,input);expect(pending?.projectionStatus).toBe('PENDING');
+    expect(fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()).toMatchObject({projection_status:'COMPLETE'});
+    expect(await call(fixture,input)).toEqual({...pending,projectionStatus:'COMPLETE'});
+    expect(fixture.history()?.attempt_count).toBe(1);
+  });
+  it('reads a concurrent completed receipt after this replay fails to write completion metadata',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.beforeRun(sql=>{
+      if(sql.includes("SET projection_status = 'COMPLETE'")) {
+        fixture.sqlite.exec("UPDATE quiz_attempt_receipts SET projection_status='COMPLETE',projection_failed_at=NULL");
+        throw new Error('completion won by another replay');
+      }
+    });
+    expect((await call(fixture,input))?.projectionStatus).toBe('COMPLETE');
+    expect(fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()).toMatchObject({projection_status:'COMPLETE',projection_failed_at:null});
+    expect(fixture.history()?.attempt_count).toBe(1);
+  });
+  it('exposes the generated stable receipt for a pending legacy call instead of a completion 204',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.beforeRun((sql)=>{if(sql.includes('INSERT INTO student_weakness_signals'))throw new Error('derived failure');});
+    const receipt=await call(fixture,{...input,clientAttemptId:undefined});
+    expect(receipt).toMatchObject({projectionStatus:'PENDING',wordId:input.wordId});
+    expect(receipt?.clientAttemptId).toBeTruthy();
+    fixture.beforeRun(undefined);
+    expect(await call(fixture,{...input,clientAttemptId:receipt!.clientAttemptId})).toEqual({...receipt,projectionStatus:'COMPLETE'});
+    expect(fixture.history()?.attempt_count).toBe(1);
+  });
+  it('recovers mission projection on concurrent stable retries without counting the mission day twice',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.sqlite.exec(`INSERT INTO weekly_missions(id,created_by_user_id,learning_track,title,rationale,due_at,created_at,updated_at)VALUES('mission-1','student-1','SCHOOL_TERM','Synthetic','Synthetic',9999999999999,1,1);
+      INSERT INTO weekly_mission_assignments(id,mission_id,student_user_id,assigned_by_user_id,status,assigned_at,updated_at)VALUES('mission-original','mission-1','student-1','student-1','ASSIGNED',1,1);`);
+    fixture.beforeRun((sql)=>{if(sql.includes('UPDATE weekly_mission_assignments'))throw new Error('mission failure');});
+    const receipt=await call(fixture,input);expect(receipt?.projectionStatus).toBe('PENDING');
+    fixture.beforeRun(undefined);
+    const recovered=await Promise.all(Array.from({length:5},()=>call(fixture,input)));
+    recovered.forEach(result=>expect(result).toEqual({...receipt,projectionStatus:'COMPLETE'}));
+    expect(fixture.sqlite.prepare('SELECT * FROM weekly_mission_assignments').get()).toMatchObject({quiz_day_keys_json:JSON.stringify([formatDateKey(receipt!.committedAt)])});
+    expect(fixture.history()?.attempt_count).toBe(1);expect(fixture.count('learning_interaction_events')).toBe(1);
+  });
+});
+
+describe('English practice stable quiz delegation recovery',()=>{
+  const payload={clientAttemptId:'english-original-1',lane:'grammar' as const,mode:'GRAMMAR_CLOZE' as const,
+    wordId:'word-1',bookId:'book-1',correct:true,responseTimeMs:120,generatedProblemId:'problem-1'};
+  it('does not mark delegation complete while progress is pending, then recovers the same canonical answer',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.beforeRun(sql=>{if(sql.includes('INSERT INTO student_weakness_signals'))throw new Error('derived failure');});
+    const first=await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload);
+    expect(first).toMatchObject({deduplicated:false,delegatedQuizAttempt:true,projectionStatus:'PENDING'});
+    expect(fixture.sqlite.prepare('SELECT * FROM english_practice_attempts').get()).toMatchObject({client_attempt_id:payload.clientAttemptId,delegated_quiz_attempt:0});
+    const stored=fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()!;
+    expect(stored.client_attempt_id).toMatch(/^english-practice-[a-f0-9]{64}$/);
+    fixture.beforeRun(undefined);
+    const retries=await Promise.all(Array.from({length:5},()=>handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload)));
+    retries.forEach(result=>expect(result).toMatchObject({id:first.id,deduplicated:true,projectionStatus:'COMPLETE'}));
+    expect(fixture.sqlite.prepare('SELECT * FROM english_practice_attempts').get()).toMatchObject({delegated_quiz_attempt:1});
+    expect(fixture.sqlite.prepare('SELECT * FROM quiz_attempt_receipts').get()).toMatchObject({client_attempt_id:stored.client_attempt_id,projection_status:'COMPLETE'});
+    expect(fixture.history()?.attempt_count).toBe(1);expect(fixture.count('learning_interaction_events')).toBe(1);expect(fixture.count('quiz_attempt_receipts')).toBe(1);
+    expect(fixture.sqlite.prepare('SELECT * FROM cbt_learner_profiles').get()).toMatchObject({attempt_count:1});
+  });
+  it('recovers a failed delegation flag update without repeating history or CBT effects',async()=>{
+    const fixture=setup();vi.spyOn(console,'warn').mockImplementation(()=>{});
+    fixture.beforeRun(sql=>{if(sql.includes('SET delegated_quiz_attempt = 1'))throw new Error('flag failure');});
+    expect((await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload)).projectionStatus).toBe('PENDING');
+    fixture.beforeRun(undefined);
+    expect((await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload)).projectionStatus).toBe('COMPLETE');
+    expect(fixture.history()?.attempt_count).toBe(1);expect(fixture.count('learning_interaction_events')).toBe(1);
+  });
+  it('rechecks immutable content and authorization on completed delegated retries',async()=>{
+    const fixture=setup();await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload);
+    await expect(handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,{...payload,correct:false})).rejects.toMatchObject({status:409});
+    fixture.sqlite.exec("UPDATE books SET created_by='student-2' WHERE id='book-1'");
+    await expect(handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload)).rejects.toMatchObject({status:403});
+    expect(fixture.history()?.attempt_count).toBe(1);
+  });
+  it('keeps direct quiz IDs and each user English identity separate',async()=>{
+    const fixture=setup();await call(fixture,{...input,clientAttemptId:payload.clientAttemptId});
+    await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload);
+    fixture.sqlite.exec("UPDATE books SET created_by='student-2' WHERE id='book-1'");
+    const other=fixture.sqlite.prepare('SELECT * FROM users WHERE id=?').get('student-2') as unknown as DbUserRow;
+    await handleRecordEnglishPracticeAttempt(fixture.env,other,payload);
+    const ids=fixture.sqlite.prepare('SELECT client_attempt_id FROM quiz_attempt_receipts').all().map(row=>row.client_attempt_id);
+    expect(new Set(ids).size).toBe(3);
+  });
+  it('completes nondelegated practice without adding quiz receipts',async()=>{
+    const fixture=setup();const result=await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,{clientAttemptId:'original-reading-1',lane:'reading',mode:'READING',correct:true});
+    expect(result).toMatchObject({delegatedQuizAttempt:false,projectionStatus:'COMPLETE'});expect(fixture.count('quiz_attempt_receipts')).toBe(0);
+  });
+  it('preserves already-completed legacy delegation without creating another canonical answer',async()=>{
+    const fixture=setup();await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload);
+    fixture.sqlite.exec("DELETE FROM quiz_attempt_receipts");
+    expect((await handleRecordEnglishPracticeAttempt(fixture.env,fixture.user,payload)).projectionStatus).toBe('COMPLETE');
+    expect(fixture.count('quiz_attempt_receipts')).toBe(0);expect(fixture.history()?.attempt_count).toBe(1);
   });
 });

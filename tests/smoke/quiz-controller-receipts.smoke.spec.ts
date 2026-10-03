@@ -39,7 +39,7 @@ Object.assign(learningService, {
     f.saves.push(structuredClone({ uid, payload }));
     return new Promise((resolve, reject) => f.pendingSaves.push({
       resolve: (receiptOverride) => resolve(receiptOverride === undefined
-        ? { clientAttemptId, wordId, bookId, committedAt: Date.now(), storageMode: 'cloudflare' }
+        ? { clientAttemptId, wordId, bookId, committedAt: Date.now(), storageMode: 'cloudflare', projectionStatus: 'COMPLETE' }
         : receiptOverride),
       reject: () => reject(new Error('synthetic-response-lost')),
     }));
@@ -225,6 +225,34 @@ test('different choices in one tick preserve the first payload, visible choice a
   await testInfo.attach('first-choice-and-score', { path: screenshot, contentType: 'image/png' });
 });
 
+test('committed pending projection stays on the answer until an identical retry confirms progress', async ({ page }, testInfo) => {
+  await start(page, 'choice');
+  await page.evaluate(() => {
+    const f = (window as FixtureWindow).__quizControllerFixture;
+    void f.controller.handleOptionClick(f.controller.currentQuestion!.answer);
+  });
+  await expect.poll(() => saves(page).then(items => items.length)).toBe(1);
+  const original = (await saves(page))[0];
+  await page.evaluate(() => {
+    const f = (window as FixtureWindow).__quizControllerFixture;
+    const p = f.saves[0].payload;
+    f.pendingSaves[0].resolve({clientAttemptId:p.clientAttemptId,wordId:p.wordId,bookId:p.bookId,
+      committedAt:Date.now(),storageMode:'cloudflare',projectionStatus:'PENDING'});
+  });
+  await expect(page.getByTestId('quiz-save-error')).toContainText('解答は保存済み');
+  await page.clock.runFor(10000);
+  await expect.poll(() => state(page)).toMatchObject({saving:false,score:0,index:0});
+  await page.screenshot({path:testInfo.outputPath('answer-saved-progress-pending.png'),fullPage:true});
+  await page.getByTestId('quiz-save-retry').evaluate((button:HTMLButtonElement) => {button.click();button.click();});
+  await expect.poll(() => saves(page).then(items => items.length)).toBe(2);
+  expect((await saves(page))[1]).toEqual(original);
+  await settleSave(page,1);
+  await expect(page.getByTestId('quiz-save-error')).toHaveCount(0);
+  await expect.poll(() => state(page)).toMatchObject({saving:false,score:1,index:0});
+  await page.clock.runFor(900);
+  await expect.poll(() => state(page)).toMatchObject({score:1,index:1});
+});
+
 test('lost-response retry keeps the complete original payload and double retry starts one request', async ({ page }) => {
   await start(page, 'translation');
   await page.clock.runFor(500);
@@ -332,7 +360,7 @@ test('missing or invalid receipts keep the answer unconfirmed until the same pay
       const f = (window as FixtureWindow).__quizControllerFixture;
       const payload = f.saves[index].payload;
       const receipt = { clientAttemptId: payload.clientAttemptId, wordId: payload.wordId,
-        bookId: payload.bookId, committedAt: Date.now(), storageMode: 'cloudflare' };
+        bookId: payload.bookId, committedAt: Date.now(), storageMode: 'cloudflare', projectionStatus: 'COMPLETE' };
       if (kind === 'wrong-attempt') receipt.clientAttemptId = 'another-attempt';
       if (kind === 'wrong-word') receipt.wordId = 'another-word';
       if (kind === 'wrong-book') receipt.bookId = 'another-book';

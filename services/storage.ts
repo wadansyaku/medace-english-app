@@ -1,4 +1,4 @@
-import type { QuizAttemptReceipt } from '../shared/quizAttempt';
+import { createEnglishPracticeQuizAttemptId, type QuizAttemptReceipt } from '../shared/quizAttempt';
 
 import {
   ActivityLog,
@@ -409,6 +409,7 @@ export class IndexedDBStorageService implements IStorageService {
     uid: string,
     payload: EnglishPracticeAttemptPayload,
   ): Promise<EnglishPracticeAttemptResult> {
+    let projectionStatus: EnglishPracticeAttemptResult['projectionStatus'] = 'COMPLETE';
     const delegatedQuizAttempt = Boolean(
       payload.wordId
       && payload.bookId
@@ -416,7 +417,7 @@ export class IndexedDBStorageService implements IStorageService {
       && ['GRAMMAR_CLOZE', 'EN_WORD_ORDER', 'JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'].includes(payload.mode),
     );
     if (delegatedQuizAttempt) {
-      await this.recordQuizAttempt(
+      const receipt = await this.recordQuizAttempt(
         uid,
         payload.wordId!,
         payload.bookId!,
@@ -428,12 +429,16 @@ export class IndexedDBStorageService implements IStorageService {
         payload.generatedProblemId,
         payload.grammarScopeId,
         payload.translationFeedback,
+        await createEnglishPracticeQuizAttemptId(uid, payload.clientAttemptId),
       );
+      if (!receipt) throw new Error('英語演習の保存確認を取得できませんでした。');
+      projectionStatus = receipt.projectionStatus;
     }
     return {
       id: payload.clientAttemptId,
       deduplicated: false,
       delegatedQuizAttempt,
+      projectionStatus,
     };
   }
 

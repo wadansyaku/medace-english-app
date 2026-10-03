@@ -101,7 +101,7 @@ beforeEach(() => {
   api.getBooks.mockResolvedValue([]);
   api.recordClientProductEvent.mockResolvedValue(undefined);
   api.recordQuizAttempt.mockImplementation(async (...args: unknown[]) => ({
-    clientAttemptId: args[11], wordId: args[1], bookId: args[2], committedAt: 1,
+    clientAttemptId: args[11], wordId: args[1], bookId: args[2], committedAt: 1, projectionStatus: 'COMPLETE',
   }));
 });
 afterEach(() => {
@@ -180,6 +180,30 @@ describe('chapter spelling session preserves its actual range and return destina
     expect(controller(foreignTask).isScopedSession).toBe(false);
     expect(controller(foreignTask).loadError).toBeTruthy();
     expect(api.getBookSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps a committed answer pending until its progress projection is confirmed and retries the identical request', async () => {
+    api.recordQuizAttempt.mockImplementationOnce(async (...args: unknown[]) => ({
+      clientAttemptId: args[11], wordId: args[1], bookId: args[2], committedAt: 1, projectionStatus: 'PENDING',
+    }));
+    await load();
+    controller().setAnswerInput(controller().currentQuestion.answer);
+    await controller().handleHintSubmit({ preventDefault: vi.fn() } as any);
+    expect(controller().score).toBe(0);
+    expect(controller().currentQIndex).toBe(0);
+    expect(controller().exitBlocked).toBe(true);
+    expect(controller().saveError).toContain('解答は保存済み');
+    expect(window.setTimeout).not.toHaveBeenCalled();
+    const original = [...api.recordQuizAttempt.mock.calls[0]];
+    await controller().handleRetrySave();
+    expect(api.recordQuizAttempt.mock.calls[1]).toEqual(original);
+    expect(controller().score).toBe(1);
+    expect(controller().saveError).toBeNull();
+    expect(controller().pendingAttempt).toBeNull();
+    expect(window.setTimeout).toHaveBeenCalledTimes(1);
+    await controller().handleRetrySave();
+    expect(api.recordQuizAttempt).toHaveBeenCalledTimes(2);
+    expect(controller().score).toBe(1);
   });
 
   it('blocks same-tick and failed-save exit without discarding the answer, then retries the identical receipt request', async () => {

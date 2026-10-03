@@ -1,6 +1,6 @@
 # Steady Study — プロダクト方針
 
-更新日: 2026-10-03。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。
+更新日: 2026-10-03。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
 
 ## 誰の何を解決するか
 

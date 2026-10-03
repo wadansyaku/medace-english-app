@@ -911,6 +911,14 @@ export const useQuizModeController = ({
         || !Number.isFinite(receipt.committedAt)) {
         throw new Error('小テスト保存のreceiptを確認できませんでした。');
       }
+      if (receipt.projectionStatus === 'PENDING') {
+        saved.status = 'PENDING';
+        if (saved.generation !== generationRef.current || savedAttemptRef.current !== saved) return;
+        dispatchAttempt({ type: 'PERSIST_FAILED',
+          message: '解答は保存済みです。課題の進捗をまだ確認できていません。同じ解答で保存と進捗を再確認してください。' });
+        return;
+      }
+      if (receipt.projectionStatus !== 'COMPLETE') throw new Error('小テストの進捗確認が完了していません。');
     } catch (error) {
       saved.status = 'PENDING';
       if (saved.generation !== generationRef.current || savedAttemptRef.current !== saved) return;

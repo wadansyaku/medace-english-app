@@ -297,6 +297,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   ));
   const [writingDraft, setWritingDraft] = useState('');
   const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
+  const [practiceSyncRetry, setPracticeSyncRetry] = useState(0);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
   const pendingPracticeSyncRef = React.useRef<Set<string>>(new Set());
 
@@ -345,8 +346,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       void learningService.recordEnglishPracticeAttempt(
         user.uid,
         toEnglishPracticeStoragePayload(attempt),
-      ).then(() => {
+      ).then((result) => {
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+        if (result?.projectionStatus === 'PENDING') {
+          setPracticeSyncError('回答は保存済みです。課題の進捗をまだ確認できていません。同じ回答で保存と進捗を再確認できます。');
+          return;
+        }
+        if (result?.projectionStatus !== 'COMPLETE') throw new Error('英語演習の保存と進捗を確認できませんでした。');
         setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, attempt.clientAttemptId));
       }).catch((error) => {
         console.error('English practice attempt sync failed', error);
@@ -354,7 +360,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         setPracticeSyncError('結果を保存できませんでした。次に開いたとき、もう一度保存を試します。');
       });
     });
-  }, [practiceProgress, user.uid]);
+  }, [practiceProgress, user.uid, practiceSyncRetry]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -1667,9 +1673,12 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         </section>
       )}
 
-      {practiceSyncError && (
-        <section role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-          {practiceSyncError}
+      {practiceSyncError && getPendingEnglishPracticeAttempts(practiceProgress).length > 0 && (
+        <section role="alert" data-testid="english-practice-save-error" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+          <p>{practiceSyncError}</p>
+          <button type="button" data-testid="english-practice-save-retry" disabled={pendingPracticeSyncRef.current.size > 0}
+            onClick={() => { setPracticeSyncError(null); setPracticeSyncRetry(value => value + 1); }}
+            className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold disabled:opacity-60">保存と進捗を再確認する</button>
         </section>
       )}
     </>

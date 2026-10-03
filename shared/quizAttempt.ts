@@ -21,7 +21,17 @@ export interface QuizAttemptReceipt {
   bookId: string;
   committedAt: number;
   storageMode: 'cloudflare' | 'idb';
+  projectionStatus: 'PENDING' | 'COMPLETE';
 }
+
+// Keep delegated English Practice answers separate from direct quiz attempts,
+// while preserving one identifier across retries, devices and lost responses.
+export const createEnglishPracticeQuizAttemptId = async (uid: string, clientAttemptId: string): Promise<string> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
+    JSON.stringify(['english-practice-quiz-v1', uid, clientAttemptId]),
+  ));
+  return `english-practice-${[...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+};
 
 export const validateQuizAttempt = (input: QuizAttemptInput): void => {
   if (typeof input.wordId !== 'string' || !input.wordId.trim() || typeof input.bookId !== 'string' || !input.bookId.trim()) {

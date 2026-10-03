@@ -1,6 +1,6 @@
 # 実装・運用バックログ
 
-更新日: 2026-10-03。プロダクト方針は [project](./project.md)、根拠と全体WBSは [再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)。完了は実装と検証が揃った項目だけに付ける。
+更新日: 2026-10-03。プロダクト方針は [project](./project.md)、根拠と全体WBSは [再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)。完了は実装と検証が揃った項目だけに付ける。以下の非公開候補記録に対し、後続の本人承認で [PR54の公開作業](./docs/analysis/2026-10-03-ui-start-release.md) を開始した。最初のpreviewは成功し、保存レビュー修正後の最終gateを進めている。
 
 ## 2026.10.03 Start版 — 非公開の次版候補
 

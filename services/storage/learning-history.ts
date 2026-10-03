@@ -686,7 +686,7 @@ export const recordQuizAttempt = async (
         } else {
           committedReceipt = {
             clientAttemptId: receipt.clientAttemptId, wordId: receipt.wordId,
-            bookId: receipt.bookId, committedAt: receipt.committedAt, storageMode: 'idb',
+            bookId: receipt.bookId, committedAt: receipt.committedAt, storageMode: 'idb', projectionStatus: 'COMPLETE',
           };
           resolve();
         }
@@ -708,7 +708,7 @@ export const recordQuizAttempt = async (
             taskIntentType,
           };
           const receipt = {
-            clientAttemptId: attemptId, wordId, bookId, committedAt: now, storageMode: 'idb',
+            clientAttemptId: attemptId, wordId, bookId, committedAt: now, storageMode: 'idb', projectionStatus: 'COMPLETE',
           } satisfies QuizAttemptReceipt;
           historyStore.put({
             id,
@@ -729,9 +729,10 @@ export const recordQuizAttempt = async (
   try {
     await rebuildWeaknessSignals(context, uid);
   } catch {
+    if (committedReceipt) committedReceipt.projectionStatus = 'PENDING';
     console.warn('[quiz] Saved locally; learning trend refresh deferred.');
   }
-  return clientAttemptId === undefined ? null : committedReceipt;
+  return clientAttemptId === undefined && committedReceipt?.projectionStatus !== 'PENDING' ? null : committedReceipt;
 };
 
 export const getStudiedWordIdsByBook = async (

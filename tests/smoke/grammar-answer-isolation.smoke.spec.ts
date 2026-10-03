@@ -21,7 +21,7 @@ export const learningService = {
   },
   recordEnglishPracticeAttempt: (_uid, payload) => {
     fixture.attempts.push(payload);
-    return Promise.resolve();
+    return Promise.resolve({ id: payload.clientAttemptId, deduplicated: false, delegatedQuizAttempt: false, projectionStatus: 'COMPLETE' });
   },
 };
 `;

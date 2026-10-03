@@ -83,10 +83,30 @@ beforeEach(() => {
   hooks.slots = []; hooks.cursor = 0; hooks.effects.clear(); currentUser = user;
   vi.clearAllMocks();
   api.getDailySessionWords.mockRejectedValue(new Error('Synthetic unavailable vocabulary'));
-  api.recordEnglishPracticeAttempt.mockResolvedValue(undefined);
+  api.recordEnglishPracticeAttempt.mockImplementation(async (_uid, payload) => ({
+    id: payload.clientAttemptId, deduplicated: false, delegatedQuizAttempt: false, projectionStatus: 'COMPLETE',
+  }));
 });
 
 describe('authored grammar in the practice hub', () => {
+  it('keeps a committed pending attempt for an explicit identical retry and clears the notice only after progress is confirmed', async () => {
+    api.recordEnglishPracticeAttempt.mockImplementationOnce(async (_uid, payload) => ({
+      id: payload.clientAttemptId, deduplicated: false, delegatedQuizAttempt: true, projectionStatus: 'PENDING',
+    }));
+    let tree = await settle();
+    const source = authoredQuestion(tree);
+    button(tree, source.answer).props.onClick(); tree = render();
+    button(tree, '判定する').props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    expect(renderToStaticMarkup(tree)).toContain('回答は保存済み');
+    const original = structuredClone(api.recordEnglishPracticeAttempt.mock.calls[0][1]);
+    button(tree, '保存と進捗を再確認する').props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(2);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[1][1]).toEqual(original);
+    expect(renderToStaticMarkup(tree)).not.toContain('english-practice-save-error');
+    expect(renderToStaticMarkup(tree)).toContain(source.explanationJa);
+  });
+
   it('starts undiagnosed grammar with A1 and lets practice difficulty change without assigning a diagnosed level', async () => {
     currentUser = { ...user, englishLevel: undefined };
     let tree = await settle();
