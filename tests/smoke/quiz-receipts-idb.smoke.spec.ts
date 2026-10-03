@@ -292,8 +292,8 @@ test('legacy quiz returns null, quiz and SRS ids stay separate, and derived refr
   expect(result.afterLegacy.events).toHaveLength(2);
   expect(result.afterLegacy.receipts).toHaveLength(2);
   expect(result.afterStudy.studyReceipts).toBe(1);
-  expect(result.receipt).toMatchObject({ clientAttemptId: 'shared-id', storageMode: 'idb' });
-  expect(result.retry).toEqual(result.receipt);
+  expect(result.receipt).toMatchObject({ clientAttemptId: 'shared-id', storageMode: 'idb', projectionStatus: 'PENDING' });
+  expect(result.retry).toEqual({ ...result.receipt, projectionStatus: 'COMPLETE' });
   expect(result.afterRefreshFailure.histories[0].data).toMatchObject({
     attemptCount: 4, interactionSource: 'STUDY',
     interval: result.afterStudy.histories[0].data.interval,
