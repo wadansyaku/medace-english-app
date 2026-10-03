@@ -1,9 +1,8 @@
 import { build } from 'esbuild';
 import { readFile, writeFile } from 'node:fs/promises';
 import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
+import tailwindcss from '@tailwindcss/postcss';
 import { expect, test, type Page } from '@playwright/test';
-import tailwindConfig from '../../tailwind.config.js';
 
 // Real ReactDOM renders and native controls; only application services are synthetic.
 // This fixture never contacts an application server or AI provider.
@@ -75,7 +74,7 @@ test.beforeAll(async () => {
     } }],
   });
   bundle = output.outputFiles[0].text;
-  stylesheet = (await postcss([tailwindcss(tailwindConfig)]).process(
+  stylesheet = (await postcss([tailwindcss()]).process(
     await readFile('styles.css', 'utf8'), { from: 'styles.css' },
   )).css;
 });

@@ -1,0 +1,11 @@
+# Tailwind 4 build security migration
+
+Tailwind CSS and its PostCSS plugin are pinned to 4.3.3. This removes the Tailwind 3 build-time dependency paths through `braces`, `chokidar`, `fast-glob`, and `micromatch`, which are affected by [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm). The existing npm audit policy and its documented local-workbook exception remain unchanged.
+
+The [official upgrade guide](https://tailwindcss.com/docs/upgrade-guide) specifies Safari 16.4+, Chrome 111+, and Firefox 128+ as the minimum browser versions for Tailwind 4. Older browsers require Tailwind 3; the build no longer supports them. Verification used installed Chrome and Playwright WebKit 26.0; the minimum Safari version was not run directly.
+
+`styles.css` explicitly loads the existing JavaScript config and declares the previous production source scope. `tailwind-compat.css` preserves the existing RGB palettes, small shadow/blur/radius scales, default ring, pixel breakpoints, and responsive font-size line-height resets. The official MedAce orange, cream, dark text, fonts, and custom spacing continue to come from the existing theme. The mobile font preferences and keyboard focus rules preserve their previous precedence under native cascade layers. Invisible outlines retain the forced-colors fallback. Tailwind 4 applies hover variants only when the primary input supports hover, avoiding sticky touch hover.
+
+The isolated migration clone owns its dependencies. No shared `node_modules`, authentication logic, API authorization, billing, source books, or approval gates are changed. The two browser fixtures use `@tailwindcss/postcss` with the same production stylesheet and config.
+
+Validation: the unchanged security audit passed with its one existing workbook exception; `verify:fast` passed 133 test files / 871 unit tests; the writing and worksheet browser fixtures passed 22 tests. Before/after Chrome and WebKit captures cover landing, login, and signup at 320, 390, 844 landscape, 768, and 1440 pixels. Measured control geometry, fonts, line heights, colors, borders, and focus match within 0.1 pixels, with no horizontal overflow. Screenshot differences are limited to browser compositing rounding (at most two RGB levels). The generated CSS increases from 14.36 kB to 17.40 kB compressed.

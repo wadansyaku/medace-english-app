@@ -1,8 +1,19 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@import "./tailwind-compat.css";
+@config "./tailwind.config.js";
+@source "./index.html";
+@source "./App.tsx";
+@source "./index.tsx";
+@source "./components";
 
 @layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
   :root {
     color-scheme: light;
     font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Space Grotesk", system-ui, sans-serif;
@@ -101,6 +112,15 @@
     touch-action: manipulation;
   }
 
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  :disabled {
+    cursor: default;
+  }
+
   p,
   li,
   label,
@@ -113,21 +133,6 @@
   textarea::placeholder {
     color: rgb(var(--color-muted));
     opacity: 1;
-  }
-
-  button:focus-visible,
-  input:focus-visible,
-  textarea:focus-visible,
-  select:focus-visible,
-  a:focus-visible {
-    outline: 3px solid rgb(var(--color-medace-900));
-    outline-offset: 3px;
-  }
-
-  summary:focus-visible {
-    outline: 3px solid rgb(var(--color-medace-900));
-    outline-offset: 3px;
-    border-radius: var(--radius-control);
   }
 
   *,
@@ -149,6 +154,29 @@
   h4 {
     overflow-wrap: anywhere;
   }
+}
+
+/* Preserve v3's invisible outline, including its forced-colors fallback. */
+.outline-none,
+.ui-input {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Keep branded keyboard focus above utilities in v4's native cascade layers. */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgb(var(--color-medace-900));
+  outline-offset: 3px;
+}
+
+summary:focus-visible {
+  outline: 3px solid rgb(var(--color-medace-900));
+  outline-offset: 3px;
+  border-radius: var(--radius-control);
 }
 
 @layer components {
@@ -496,13 +524,15 @@
 }
 
 @media (max-width: 639px) {
-  :root {
-    --ui-font-size: 16px;
-    --ui-line-height: 1.6;
-    --ui-control-min-height: 2.85rem;
-    --radius-panel: 20px;
-    --radius-card: 16px;
-    --radius-control: 12px;
+  @layer base {
+    :root {
+      --ui-font-size: 16px;
+      --ui-line-height: 1.6;
+      --ui-control-min-height: 2.85rem;
+      --radius-panel: 20px;
+      --radius-card: 16px;
+      --radius-control: 12px;
+    }
   }
 
   .ui-panel,

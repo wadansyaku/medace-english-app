@@ -1,7 +1,7 @@
 import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
 import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
+import tailwindcss from '@tailwindcss/postcss';
 import { expect, test, type Page } from '@playwright/test';
 
 // Exercise the actual ReactDOM component and native browser controls. Only services
@@ -37,10 +37,7 @@ export const workspaceService = {
 let bundle: string;
 let stylesheet: string;
 test.beforeAll(async () => {
-  stylesheet = (await postcss([tailwindcss({
-    config: `${process.cwd()}/tailwind.config.js`,
-    content: ['./components/WorksheetPrintLauncher.tsx', './components/ModalOverlay.tsx'],
-  })]).process(await readFile('styles.css', 'utf8'), { from: 'styles.css' })).css;
+  stylesheet = (await postcss([tailwindcss()]).process(await readFile('styles.css', 'utf8'), { from: 'styles.css' })).css;
   const output = await build({
     stdin: {
       contents: `import React from 'react'; import { createRoot } from 'react-dom/client';
