@@ -7,6 +7,9 @@ from pathlib import Path
 import re
 import subprocess
 
+NARU_BOOK_TITLE = 'Naruシスト'
+NARU_WORD_COUNT = 1530
+
 
 def timestamp(value):
     h, m, s, ms = [int(part) for part in re.split('[:,]', value)]
@@ -49,12 +52,15 @@ def main():
         assert clip['pageErrorCount'] == 0 and (base / 'capture' / clip['video']).is_file()
         if name in ['mobile', 'instructor']:
             assert clip['beforeHtml'] == clip['afterHtml']
+            assert clip['beforeHtml']['status'] == 200
             assert clip['beforeHtml']['sha256'] == manifest['runtimeEvidence']['expectedHtmlSha256']
             assert clip['beforeHtml']['module'] == manifest['runtimeEvidence']['expectedModule']
             for stage in ['authenticatedBefore', 'authenticatedAfter']:
                 assert clip[stage]['sessionStatus'] == 200
-                assert clip[stage]['originalBookCount'] == 4
-                assert clip[stage]['originalWordCount'] == 1530
+                assert clip[stage]['catalogReadStatus'] == 200
+                assert type(clip[stage]['originalBookCount']) is int and clip[stage]['originalBookCount'] == 1
+                assert type(clip[stage]['originalWordCount']) is int and clip[stage]['originalWordCount'] == NARU_WORD_COUNT
+                assert clip[stage]['originalBooks'] == [{'title': NARU_BOOK_TITLE, 'wordCount': NARU_WORD_COUNT}]
     edits = json.loads((base / 'capture/edit-evidence.json').read_text())
     assert edits['sameActualLearningSession'] is True
     decoded = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-threads', '4',
@@ -73,6 +79,7 @@ def main():
         'japaneseSubtitleCues': len(cues), 'subtitlesWithinDuration': True,
         'allThreeActualCaptureContextsWithoutPageErrors': True,
         'mobileAndTeacherFixedHtmlModuleSessionAnd1530WordsBeforeAfter': True,
+        'originalMaterial': {'title': NARU_BOOK_TITLE, 'bookCount': 1, 'wordCount': NARU_WORD_COUNT},
         'earlierLearnerHashNotCaptured': True,
         'repeatedLearningOperationsEditedWithinSameSession': True,
         'visualInspectionRequired': [f'inspection/chapter-{i:02}.jpg' for i in range(1, 8)],

@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from '../../config/workspace';
+import { BRAND } from '../../config/brand';
 import { expect, test } from './diagnostics';
 import { loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, seedPhrasebook, storageAction } from './smoke-support';
 
@@ -8,6 +9,10 @@ for (const role of ['student'] as const) {
     test(`catalog actions keep Japanese labels readable for ${role} at ${width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 844 });
       await loginBusinessStudentDemo(page);
+      const header = page.getByTestId('app-sticky-header');
+      await expect(header).toContainText(BRAND.officialName);
+      await expect(header).toContainText(BRAND.productLabel);
+      await expect(header).not.toContainText(/MedAse|メッドエース/);
       const title = `Synthetic catalog actions ${width}`;
       await seedPhrasebook(page, title);
       const books = await storageAction<Array<{ id: string; title: string; catalogSource: string }>>(page, 'getBooks');
@@ -60,6 +65,10 @@ for (const role of ['instructor', 'group-admin'] as const) {
     test(`workspace navigation keeps overflow internal and keyboard items reachable for ${role} at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
       await page.setViewportSize(viewport);
       await (role === 'instructor' ? loginInstructorDemo(page) : loginGroupAdminDemo(page));
+      const appHeader = page.getByTestId('app-sticky-header');
+      await expect(appHeader).toContainText(BRAND.officialName);
+      await expect(appHeader).toContainText(BRAND.productLabel);
+      await expect(appHeader).not.toContainText(/MedAse|メッドエース/);
       const sections = role === 'instructor' ? INSTRUCTOR_WORKSPACE_SECTIONS : BUSINESS_ADMIN_WORKSPACE_SECTIONS;
       const buttons = page.locator('[data-testid^="workspace-tab-"]');
       await expect(buttons).toHaveCount(sections.length);

@@ -234,7 +234,7 @@ const Layout: React.FC<LayoutProps> = ({
                 {BRAND.officialName}
               </h1>
               <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactHeader ? 'text-[10px]' : 'text-xs'}`}>
-                {compactHeader ? 'メッドエース 学習スペース' : 'MedAse Study Space / 英単語学習'}
+                {BRAND.productLabel}
               </p>
             </div>
           </button>

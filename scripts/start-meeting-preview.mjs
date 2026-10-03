@@ -27,12 +27,34 @@ await run(['node_modules/wrangler/bin/wrangler.js', 'd1', 'migrations', 'apply',
 await access(importPath);
 await run(['node_modules/wrangler/bin/wrangler.js', 'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir, '--file', path.resolve(importPath)]);
 const localProject = await createLocalWranglerProject();
-console.log(`Meeting preview (local D1, synthetic demo accounts): http://127.0.0.1:${port}`);
-const server = spawn(process.execPath, [
-  path.resolve('node_modules/wrangler/bin/wrangler.js'), '--cwd', localProject.cwd,
-  'pages', 'dev', previewBuildDir, '--ip', '127.0.0.1', '--port', port, '--persist-to', persistDir,
-], { env, stdio: 'inherit' });
-process.once('SIGINT', () => server.kill('SIGINT'));
-process.once('SIGTERM', () => server.kill('SIGTERM'));
-await new Promise(resolve => server.once('exit', resolve));
-await localProject.cleanup();
+let server;
+let requestedExitSignal;
+const requestStop = signal => {
+  if (!server || server.exitCode !== null || server.signalCode !== null) return;
+  requestedExitSignal ??= signal;
+  server.kill(signal);
+};
+const onSigint = () => requestStop('SIGINT');
+const onSigterm = () => requestStop('SIGTERM');
+
+try {
+  console.log(`Meeting preview (local D1, synthetic demo accounts): http://127.0.0.1:${port}`);
+  server = spawn(process.execPath, [
+    path.resolve('node_modules/wrangler/bin/wrangler.js'), '--cwd', localProject.cwd,
+    'pages', 'dev', previewBuildDir, '--ip', '127.0.0.1', '--port', port, '--persist-to', persistDir,
+  ], { env, stdio: 'inherit' });
+  process.once('SIGINT', onSigint);
+  process.once('SIGTERM', onSigterm);
+  const { code, signal } = await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  if (!requestedExitSignal && (code !== 0 || signal)) {
+    console.error(`Meeting preview server failed (code=${code ?? 'null'}, signal=${signal ?? 'none'}).`);
+    process.exitCode = code ?? (signal && os.constants.signals[signal] ? 128 + os.constants.signals[signal] : 1);
+  }
+} finally {
+  process.removeListener('SIGINT', onSigint);
+  process.removeListener('SIGTERM', onSigterm);
+  await localProject.cleanup();
+}

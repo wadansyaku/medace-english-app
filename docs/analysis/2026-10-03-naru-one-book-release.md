@@ -2,7 +2,7 @@
 
 ## 現在の状態
 
-2026-10-03時点の公開前候補。**まだ本番へ反映していない**。本番は `5853d1dc3701ace947865b064723161b3e0aee86`、公開先は既存の `https://medace-english-app.pages.dev`。公開済みと確認済みを分け、配備後にこの項目を更新する。
+2026-10-03時点の公開前候補。PR #53のCIとpreview配備は成功し、previewには一冊1530語を全原本照合の上で承認済み。previewの56シーン実操作も成功した。**まだ本番へ反映していない**。本番は `5853d1dc3701ace947865b064723161b3e0aee86`、公開先は既存の `https://medace-english-app.pages.dev`。追加レビュー修正を含む新しいheadで必須checksを再確認してから公開する。
 
 本人の四原本を「Naruシスト」一冊にする依頼を受け、先行する四冊の名称変更を置き換える。原本バイト、教材SQL、教材全行のJSON、DBバックアップ、合成アカウントのcookieは公開Gitへ追加しない。
 
@@ -54,9 +54,12 @@ D1のfile importはSQLにBEGIN/COMMITを入れず、一文100,000bytes以下を�
 - `cf:doctor`: ok53/warn1/error0。warnはこの新branchの配備がまだ無いこと。
 - 公開前security監査で、Tailwind3が依存するbracesの新勧告を検出。Tailwind/PostCSS 4.3.3へ更新し、監査例外追加なしで成功。Chrome/WebKitの5幅×3画面で文字・位置・色・focusを比較し、writing/worksheet22件と統合後の全回帰も成功。[移行と対応ブラウザー](../tailwind-v4-build-security.md)、[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)。
 - 最終画像で生徒320px・講師390pxの教材ボタン名の途中改行を確認。ラベルを一行に保ち、カード内幅が足りない場合だけボタンを縦に折り返す。講師のモバイル内余白も調整する。既存suiteへ生徒320/390pxの文字矩形・44px操作領域・keyboard・教材遷移の回帰を追加した。
+- PRの追加レビュー3件を実装と規約で再確認。動画QAは旧四冊条件を一冊「Naruシスト」1530語の厳密条件へ直し、正常ケースと61の拒否ケースを合成ファイルで検証する。既存の映像・音声・字幕・HTML/module/hash検査を維持する。録画自体の再収録・実decodeとは別の検証である。
+- ログイン後ヘッダーは既存の正式表示名 `Steady Study` と `BRAND.productLabel` に統一。教材名「Naruシスト」はそのまま保持する。生徒320/390pxと講師・組織管理者の5幅、計12件の実ブラウザー操作で表示名・ナビゲーション・ラベル・keyboardを確認した。
+- ローカルpreviewのserver非正常終了を親processへ伝え、spawn errorを含め一時projectのcleanupを行う。実OS child processを使って終了0/17、予期しないSIGINT/SIGTERM/SIGKILL、spawn ENOENT、利用者からのSIGINT/SIGTERM停止を確認する。利用者が所有するD1 stateは削除しない。
 
 実生徒での新教材学習は未検証。合成D1の成功を本番本人の学習成功とは呼ばない。公開URLの非認証確認と、本番DBの集計・全原本照合を別に記録する。
 
 ## 全体改善との関係
 
-[包括監査と改善計画](./2026-10-03-medace-improvement-plan.md)は確定した破綻とコード上の候補を区別する。今回のUI/auth、取得失敗・保存通知、講師導線、worksheet競合、ナビゲーション・横向きの修正は候補branchへ統合済み。次の保存基盤P1として小テストの同一回答再送receipt・履歴/event原子確定を独立branchで開発中。未完のquiz/EnglishPractice/XP/Writingを公開済み・修正済みと数えない。
+[包括監査と改善計画](./2026-10-03-medace-improvement-plan.md)は確定した破綻とコード上の候補を区別する。今回のUI/auth、取得失敗・保存通知、講師導線、worksheet競合、ナビゲーション・横向きの修正は候補branchへ統合済み。次の保存基盤P1として小テストの同一回答再送receipt・履歴/event原子確定を独立branchで実装・検証した。独立レビューでの34件中1件timeoutは専用tmp cloneで34件すべて成功し、再現しなかった。この候補は今回のPRへ含めず、依存更新との統合と公開gateを別に行う。未公開のquiz/EnglishPractice/XP/Writingを公開済み・修正済みと数えない。
