@@ -2,6 +2,8 @@
 
 更新日: 2026-09-07。プロダクト方針は [project](./project.md)、根拠と全体WBSは [再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)。完了は実装と検証が揃った項目だけに付ける。
 
+2026-10-03追加: [Naruシスト一冊化と公開検証](./docs/analysis/2026-10-03-naru-one-book-release.md)を進行中。ローカル一冊1530語の原本照合と実操作は成功、preview・productionは未反映。新しいビルド依存脆弱性の解消と最終全回帰を公開前条件とする。[包括改善計画](./docs/analysis/2026-10-03-medace-improvement-plan.md)に従い、小テスト保存receiptを別段階で開発する。
+
 ## 今回: 学習と保存の基盤を再構築
 
 - [x] **R0 現状確定**: 既存109パス保全、初期110ファイル/598テスト、不要ソースとartifact候補の確認。

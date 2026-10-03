@@ -1,9 +1,10 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import QuizSetupView from '../components/quiz/QuizSetupView';
 import { getDefaultGrammarScopeIdForMode } from '../config/quizFlow';
+import { NARU_BOOK_ID } from '../shared/naruBook';
 import type { QuizSessionConfig } from '../types';
 
 const noop = () => {};
@@ -36,6 +37,56 @@ const renderSetup = (overrides: Partial<React.ComponentProps<typeof QuizSetupVie
 );
 
 describe('QuizSetupView compact setup', () => {
+  it('applies preset button clicks through the existing setup update callback', () => {
+    const update = vi.fn();
+    const view = QuizSetupView({
+      bookId: NARU_BOOK_ID, setupConfig: baseConfig, setupSummary: '全範囲から5問',
+      setupCandidateWordsLength: 1530, setupActualQuestionCount: 5,
+      setupEmptyCopy: '', allWordsLength: 1530, normalizedSetupRange: { start: 1, end: 1530 },
+      minWordNumber: 1, maxWordNumber: 1530, onUpdateSetupConfig: update, onAdvanceToReady: noop,
+    });
+    if (!React.isValidElement(view)) throw new Error('Quiz setup did not return an element.');
+    const buttons = new Map<string, () => void>();
+    const visit = (node: React.ReactNode) => React.Children.forEach(node, (child) => {
+      if (!React.isValidElement<{ children?: React.ReactNode; 'data-testid'?: string; onClick?: () => void }>(child)) return;
+      if (child.type === 'button' && child.props['data-testid']?.startsWith('naru-range-') && child.props.onClick) {
+        buttons.set(child.props['data-testid'], child.props.onClick);
+      }
+      visit(child.props.children);
+    });
+    visit(view);
+    for (const [id, start, end] of [
+      ['verb', 1, 353], ['noun', 354, 1285], ['adverb', 1286, 1371], ['adjective', 1372, 1530],
+    ] as const) {
+      buttons.get(`naru-range-${id}`)!();
+      expect(update).toHaveBeenLastCalledWith({ selectionMode: 'RANGE_RANDOM', rangeStart: start, rangeEnd: end });
+    }
+    buttons.get('naru-range-all')!();
+    expect(update).toHaveBeenLastCalledWith({ selectionMode: 'FULL_RANDOM', rangeStart: 1, rangeEnd: 1530 });
+  });
+
+  it('offers part-of-speech ranges only for the canonical Naru book', () => {
+    const rendered = renderSetup({ bookId: NARU_BOOK_ID });
+    for (const id of ['all', 'verb', 'noun', 'adverb', 'adjective']) {
+      expect(rendered).toContain(`data-testid="naru-range-${id}"`);
+    }
+    expect(rendered).toContain('No. 354–1285');
+    expect(rendered).toContain('同じ1冊の中から出題します。');
+    expect(renderSetup({ bookId: 'other-book' })).not.toContain('naru-range-presets');
+    expect(renderSetup({ bookId: 'naru-shisto-original-v2' })).not.toContain('naru-range-presets');
+    expect(renderSetup()).not.toContain('naru-range-presets');
+  });
+
+  it('marks the exact preset and keeps custom number ranges available', () => {
+    const nounConfig: QuizSessionConfig = { ...baseConfig, selectionMode: 'RANGE_RANDOM', rangeStart: 354, rangeEnd: 1285 };
+    const rendered = renderSetup({ bookId: NARU_BOOK_ID, setupConfig: nounConfig, normalizedSetupRange: { start: 354, end: 1285 } });
+    expect(rendered).toContain('data-testid="naru-range-noun" aria-pressed="true"');
+    expect(rendered).toContain('開始番号');
+    expect(rendered).toContain('value="354"');
+    const custom = renderSetup({ bookId: NARU_BOOK_ID, setupConfig: { ...nounConfig, rangeEnd: 400 } });
+    expect(custom).toContain('data-testid="naru-range-noun" aria-pressed="false"');
+  });
+
   it('centers the default path on a five-question start and keeps details collapsed', () => {
     const rendered = renderSetup();
 

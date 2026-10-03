@@ -112,6 +112,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
 
       {controller.screen === 'SETUP' && (
         <QuizSetupView
+          bookId={bookId}
           setupConfig={controller.setupConfig}
           setupSummary={controller.setupSummary}
           setupCandidateWordsLength={controller.setupCandidateWords.length}

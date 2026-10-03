@@ -7,6 +7,8 @@ This directory keeps operational docs and historical design notes for Steady Stu
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。
 
 - [Product charter](../project.md): 対象、価値、原則、観測する指標。
+- [Naruシスト一冊化・公開検証](./analysis/2026-10-03-naru-one-book-release.md): 原本保持、投入ガード、preview・本番の状態。
+- [包括UI・保存基盤改善計画](./analysis/2026-10-03-medace-improvement-plan.md): 確定した破綻と追加候補、優先順位・受入条件。
 - [Current backlog](../todo.md): 今回と次期の作業、受入条件、配備前の未完了事項。
 - [Rebuild audit and plan 2026-09-07](./analysis/rebuild-plan-2026-09-07.md): 課題・実装・削除根拠・検証記録。
 - [Production rebuild release 2026-09-07](./analysis/production-rebuild-release-2026-09-07.md): PR、migration、プレビュー・本番の実確認を段階別に記録。

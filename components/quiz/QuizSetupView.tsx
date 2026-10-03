@@ -7,6 +7,7 @@ import type {
 } from '../../types';
 import { WORKSHEET_MODE_COPY } from '../../utils/worksheet';
 import { getGrammarScopesForMode } from '../../utils/grammarScope';
+import { getNaruRangeSelection, isNaruRangeSelected, NARU_BOOK_ID, NARU_RANGE_PRESETS } from '../../shared/naruBook';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import {
   QUESTION_COUNT_OPTIONS,
@@ -16,6 +17,7 @@ import {
 } from '../../config/quizFlow';
 
 interface QuizSetupViewProps {
+  bookId?: string;
   setupConfig: QuizSessionConfig;
   setupSummary: string;
   setupCandidateWordsLength: number;
@@ -31,6 +33,7 @@ interface QuizSetupViewProps {
 }
 
 const QuizSetupView: React.FC<QuizSetupViewProps> = ({
+  bookId,
   setupConfig,
   setupSummary,
   setupCandidateWordsLength,
@@ -67,6 +70,31 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         >
           {setupSummary} / {activeModeCopy.label} / 候補 {setupCandidateWordsLength}語
         </div>
+
+        {bookId === NARU_BOOK_ID && (
+          <fieldset data-testid="naru-range-presets" className="min-w-0">
+            <legend className="text-sm font-bold text-slate-900">品詞から選ぶ</legend>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">同じ1冊の中から出題します。番号は詳細設定でも変更できます。</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {NARU_RANGE_PRESETS.map((preset) => {
+                const isActive = isNaruRangeSelected(setupConfig, preset);
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    data-testid={`naru-range-${preset.id}`}
+                    aria-pressed={isActive}
+                    onClick={() => onUpdateSetupConfig(getNaruRangeSelection(preset))}
+                    className={`min-h-11 rounded-xl border px-3 py-2 text-left transition-colors ${isActive ? 'border-medace-500 bg-medace-50 text-medace-900' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    <span className="block text-sm font-bold">{preset.label}</span>
+                    <span className="block text-xs">No. {preset.start}–{preset.end}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        )}
 
         {setupActualQuestionCount < setupConfig.questionCount && setupCandidateWordsLength > 0 && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

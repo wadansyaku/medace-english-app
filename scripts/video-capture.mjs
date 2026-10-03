@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, dirname, basename } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
-import { ORIGINAL_WORKBOOKS } from './_shared/original-workbook-import.mjs';
+import { NARU_BOOK_ID, NARU_BOOK_TITLE } from './_shared/naru-workbook-import.mjs';
 
 const argv = process.argv.slice(2);
 const value = (flag) => argv[argv.indexOf(flag) + 1];
@@ -78,16 +78,16 @@ try {
         headers: { Origin: base.origin, Referer: base.origin + '/' }, data: { action: 'getBooks' } });
       const books = response.status() === 200 ? await response.json() : [];
       const originals = Array.isArray(books) ? books.filter((book) =>
-        /^workbook-(?:verb|noun|adverb|adjective)-[a-f0-9]{16}$/.test(book.id)
+        book.id === NARU_BOOK_ID
         && book.catalogSource === 'STEADY_STUDY_ORIGINAL'
-        && ORIGINAL_WORKBOOKS.some(({ key, title }) => book.id.startsWith(`workbook-${key}-`) && book.title === title)) : [];
+        && book.title === NARU_BOOK_TITLE) : [];
       const check = { sessionStatus: session.status(), catalogReadStatus: response.status(),
         originalBookCount: originals.length,
         originalWordCount: originals.reduce((sum, book) => sum + book.wordCount, 0),
         originalBooks: originals.map(({ title, wordCount }) => ({ title, wordCount })) };
       if (check.sessionStatus !== 200 || check.catalogReadStatus !== 200 ||
-        check.originalBookCount !== 4 || check.originalWordCount !== 1530) {
-        throw new Error('Authenticated local D1 runtime/original four-book aggregate check failed.');
+        check.originalBookCount !== 1 || check.originalWordCount !== 1530) {
+        throw new Error('Authenticated local D1 runtime/original one-book aggregate check failed.');
       }
       return check;
     };
