@@ -138,3 +138,37 @@ test('learner keeps the selected book identity and can leave a scrolled quiz', a
   await page.getByRole('button', { name: '学習を中断してダッシュボードに戻る', exact: true }).click();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
 });
+
+for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }]) {
+  test(`short landscape study keeps the word clear of answer controls at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await loginBusinessStudentDemo(page);
+    const title = 'Synthetic landscape study';
+    await seedPhrasebook(page, title);
+    const books = await storageAction<Array<{ id: string; title: string }>>(page, 'getBooks');
+    const book = books.find(item => item.title === title)!;
+    await page.goto(`/study/${book.id}`);
+    const word = page.getByTestId('study-card-front').getByRole('heading');
+    await expect(word).toHaveText('triage');
+    const bar = page.locator('.mobile-sticky-action-bar');
+    await expect(bar).toHaveCSS('position', 'static');
+    const wordBounds = await word.boundingBox();
+    const barBounds = await bar.boundingBox();
+    expect(wordBounds!.y + wordBounds!.height).toBeLessThanOrEqual(barBounds!.y);
+    await word.evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(word).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: testInfo.outputPath('landscape-word-visible.png') });
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-card-back')).toBeVisible();
+    await page.getByTestId('study-rate-3').evaluate(element => element.scrollIntoView({ block: 'center' }));
+    await expect(page.getByTestId('study-rate-3')).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: testInfo.outputPath('landscape-answer-controls.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(bar).toHaveCSS('position', 'sticky');
+    await expect(page.getByTestId('study-rate-3')).toBeVisible();
+    await page.getByTestId('study-rate-3').click();
+    await expect(page.getByTestId('study-card-front')).toContainText('stabilize');
+    const progress = await storageAction<{ learnedCount: number }>(page, 'getBookProgress', { bookId: book.id });
+    expect(progress.learnedCount).toBe(1);
+  });
+}

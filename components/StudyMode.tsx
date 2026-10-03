@@ -592,7 +592,7 @@ const StudyMode: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack,
       </div>
 
       <MobileStickyActionBar
-        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4"
+        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4 [@media(max-height:500px)]:static"
       >
         {controller.saveError ? (
           <div ref={controller.actionBarRef} role="alert" data-testid="study-save-error" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
