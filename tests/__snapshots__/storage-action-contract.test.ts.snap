@@ -63,7 +63,9 @@ exports[`storage action contract > matches the storage action contract snapshot 
     "alias": "prepareBookExamples",
     "domain": "catalog",
     "requiresDestructiveAdminFlag": false,
-    "roles": null,
+    "roles": [
+      "ADMIN",
+    ],
   },
   {
     "action": "getDailySessionWords",

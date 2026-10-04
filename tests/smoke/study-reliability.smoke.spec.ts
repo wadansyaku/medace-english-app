@@ -1,5 +1,5 @@
 import { exposeStudentDemo } from './smoke-support';
-import type { Page, Route } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import type { WordData } from '../../types';
 import { expect, test } from './diagnostics';
 import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook } from './smoke-support';
@@ -27,15 +27,6 @@ const loadFixtureWords = (page: Page, bookId: string): Promise<WordData[]> => pa
   if (!response.ok) throw new Error('Could not load study fixture words');
   return response.json();
 }, bookId);
-
-const openExampleHint = async (page: Page) => {
-  await page.getByTestId('study-flip-button').click();
-  await page.getByRole('button', { name: /追加のヒント/ }).click();
-  await page.getByRole('button', { name: '例文を作る', exact: true }).evaluate((button: HTMLButtonElement) => {
-    button.click();
-    button.click();
-  });
-};
 
 test.describe('study reliability', () => {
   test.use({ viewport: { width: 390, height: 844 } });
@@ -164,82 +155,79 @@ test.describe('study reliability', () => {
     expect(awards).toEqual([expectedXp]);
   });
 
-  test('late hints cannot replace the next card or clear its pending hint', async ({ page }) => {
+  test('missing examples have no generation controls or paid requests', async ({ page }, testInfo) => {
+    const bookId = await prepareStudy(page);
+    const paidRequests: string[] = [];
+    page.on('request', request => {
+      if (request.url().includes('/api/ai')) paidRequests.push(request.url());
+      if (request.url().endsWith('/api/storage') && ['generateWordHintAsset', 'prepareBookExamples'].includes(request.postDataJSON()?.action)) paidRequests.push(request.postData() || '');
+    });
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-example-missing')).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('study-missing-example-mobile.png'), fullPage: true });
+    await expect(page.getByRole('button', { name: /例文を作る|別の例文|画像を作る|新しく作る|追加のヒント/ })).toHaveCount(0);
+    await page.getByTestId('study-rate-3').click();
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-example-missing')).toBeVisible();
+    expect(paidRequests).toEqual([]);
+  });
+
+  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
+  test(`saved examples and images are read without paid calls and follow the current card at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
     const bookId = await prepareStudy(page);
     const words = await loadFixtureWords(page, bookId);
-    const pending: Array<{ route: Route; wordId: string }> = [];
-    await page.route('**/api/storage', async (route) => {
-      const body = route.request().postDataJSON();
-      if (body?.action === 'generateWordHintAsset') {
-        pending.push({ route, wordId: body.payload.wordId });
+    const paidRequests: string[] = [];
+    page.on('request', request => {
+      if (request.url().includes('/api/ai')) paidRequests.push(request.url());
+      if (request.url().endsWith('/api/storage') && ['generateWordHintAsset', 'prepareBookExamples'].includes(request.postDataJSON()?.action)) paidRequests.push(request.postData() || '');
+    });
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action === 'getBookSession') {
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify(words.map((word, index) => ({
+          ...word,
+          exampleSentence: `Saved example card ${index + 1}.`,
+          exampleMeaning: `保存済みの訳${index + 1}。`,
+          exampleGeneratedAt: 1, exampleAuditStatus: 'APPROVED',
+          exampleImageUrl: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="80" height="80" fill="orange"/></svg>'),
+          exampleImageGeneratedAt: 1, exampleImageAuditStatus: 'APPROVED',
+        }))) });
         return;
       }
       await route.continue();
     });
     await page.getByTestId(`book-study-${bookId}`).click();
-    await openExampleHint(page);
-    await expect.poll(() => pending.length).toBe(1);
-    await page.getByTestId('study-rate-3').click();
-    await expect(page.getByTestId('study-card-front')).toContainText('stabilize');
-    await openExampleHint(page);
-    await expect.poll(() => pending.length).toBe(2);
-
-    await Promise.all([
-      page.waitForEvent('requestfinished', { predicate: (request) => request === pending[0].route.request() }),
-      pending[0].route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-        ...words.find((word) => word.id === pending[0].wordId),
-        exampleSentence: 'Stale first card hint.', exampleMeaning: '古いカードのヒント',
-      }) }),
-    ]);
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-    await expect(page.getByText('例文を作成中...', { exact: true })).toBeVisible();
-    await expect(page.getByText('Stale first card hint.')).toHaveCount(0);
-    await pending[1].route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-      ...words.find((word) => word.id === pending[1].wordId),
-      exampleSentence: 'Current second card hint.', exampleMeaning: '現在のカードのヒント',
-    }) });
-    await expect(page.getByText('Current second card hint.')).toBeVisible();
-    await expect(page.getByText('Stale first card hint.')).toHaveCount(0);
-  });
-
-  test('a lesson change invalidates a pending hint even at the same card index', async ({ page }) => {
-    const firstBookId = await prepareStudy(page);
-    const secondImport = await seedPhrasebook(page, 'Second Study Reliability Fixture');
-    const secondBookId = secondImport.importedBookIds[0] as string;
-    const words = await loadFixtureWords(page, firstBookId);
-    let pending: { route: Route; wordId: string } | undefined;
-    const answers: Array<{ word: { bookId: string; id: string } }> = [];
-    await page.route('**/api/storage', async (route) => {
-      const body = route.request().postDataJSON();
-      if (body?.action === 'generateWordHintAsset') {
-        pending = { route, wordId: body.payload.wordId };
-        return;
-      }
-      if (body?.action === 'saveSRSHistory') answers.push(body.payload);
-      await route.continue();
-    });
-    await page.getByTestId(`book-study-${firstBookId}`).click();
-    await openExampleHint(page);
-    await expect.poll(() => Boolean(pending)).toBe(true);
-    await page.evaluate((id) => {
-      window.history.pushState(null, '', `/study/${encodeURIComponent(id)}`);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    }, secondBookId);
-    await expect(page.getByTestId('study-flip-button')).toBeVisible();
-    const oldHint = pending!;
-    await oldHint.route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-      ...words.find((word) => word.id === oldHint.wordId),
-      word: 'stale-other-lesson', exampleSentence: 'Stale other lesson hint.',
-    }) });
     await page.getByTestId('study-flip-button').click();
-    await page.getByRole('button', { name: /追加のヒント/ }).click();
-    await expect(page.getByText('Stale other lesson hint.')).toHaveCount(0);
+    await expect(page.getByTestId('study-original-example')).toContainText('Saved example card 1.');
+    await page.getByRole('button', { name: '例文の訳を表示', exact: true }).click();
+    await expect(page.getByTestId('study-original-example')).toContainText('保存済みの訳1。');
+    await page.getByRole('button', { name: /保存済みの画像ヒント/ }).click();
+    const savedImage = page.getByRole('img', { name: /保存済み画像ヒント/ });
+    const imageDialog = page.getByRole('dialog', { name: '保存済みの画像ヒント', exact: true });
+    await expect(imageDialog).toBeVisible();
+    await expect(savedImage).toBeVisible();
+    await expect(savedImage).toBeInViewport({ ratio: 1 });
+    await page.screenshot({ path: testInfo.outputPath(`study-saved-example-image-${viewport.width}x${viewport.height}.png`) });
+    await page.keyboard.press('Escape');
+    await expect(imageDialog).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /保存済みの画像ヒント/ })).toBeFocused();
+    await expect(page.getByRole('button', { name: /例文を作る|別の例文|画像を作る|新しく作る/ })).toHaveCount(0);
     await page.getByTestId('study-rate-3').click();
-    await expect(page.getByTestId('study-card-front')).toContainText('stabilize');
-    expect(answers).toHaveLength(1);
-    expect(answers[0].word.bookId).toBe(secondBookId);
-    expect(answers[0].word.id).not.toBe(oldHint.wordId);
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-original-example')).toContainText('Saved example card 2.');
+    await expect(page.getByText('Saved example card 1.', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '例文の訳を表示', exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /保存済み画像ヒント/ })).toHaveCount(0);
+    await page.getByRole('button', { name: '定義を編集', exact: true }).click();
+    await page.getByLabel('単語の意味', { exact: true }).fill('語義が変わった合成fixture');
+    await page.getByRole('button', { name: '定義の変更を保存', exact: true }).click();
+    await expect(page.getByTestId('study-original-example')).toHaveCount(0);
+    await expect(page.getByTestId('study-card-back').getByRole('status')).toContainText('例文を見直し中');
+    await expect(page.getByRole('button', { name: /保存済みの画像ヒント/ })).toHaveCount(0);
+    expect(paidRequests).toEqual([]);
   });
+  }
 
   test('failed definition edits preserve the input and support a retry', async ({ page }) => {
     const bookId = await prepareStudy(page);

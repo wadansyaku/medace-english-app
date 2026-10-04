@@ -1,6 +1,21 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), details > summary:first-of-type, [tabindex]:not([tabindex="-1"])';
+const getFocusableControls = (panel: HTMLElement): HTMLElement[] => Array.from(panel.querySelectorAll(FOCUSABLE_SELECTOR))
+  .filter((element): element is HTMLElement => {
+    if (!(element instanceof HTMLElement) || element.hasAttribute('disabled') || element.tabIndex < 0 || element.getClientRects().length === 0) return false;
+    // Chrome can expose layout boxes for controls inside closed details.
+    // Only that details element's first summary remains keyboard reachable.
+    for (let ancestor = element.parentElement; ancestor && ancestor !== panel; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLDetailsElement && !ancestor.open) {
+        const summary = Array.from(ancestor.children).find(child => child.tagName === 'SUMMARY');
+        if (!summary?.contains(element)) return false;
+      }
+    }
+    return true;
+  });
+
 const openPanels: HTMLDivElement[] = [];
 let scrollStyleBeforeModals: { bodyOverflow: string; htmlOverflow: string; bodyPaddingRight: string } | null = null;
 
@@ -67,9 +82,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     const initialFocusTarget = initialFocusSelector
         ? panel?.querySelector<HTMLElement>(initialFocusSelector)
         : null;
-    const fallbackFocusTarget = panel?.querySelector<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+    const fallbackFocusTarget = getFocusableControls(panel)[0];
     (initialFocusTarget || fallbackFocusTarget || panel)?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -85,15 +98,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
         return;
       }
 
-      const focusableElements = Array.from(
-        panelRef.current.querySelectorAll(
-          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element): element is HTMLElement => (
-        element instanceof HTMLElement
-          && !element.hasAttribute('disabled')
-          && element.offsetParent !== null
-      ));
+      const focusableElements = getFocusableControls(panelRef.current);
 
       if (focusableElements.length === 0) {
         event.preventDefault();

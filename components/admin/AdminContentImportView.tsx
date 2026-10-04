@@ -238,11 +238,11 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
           <div className="text-xs font-bold text-slate-400">例文準備</div>
           <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">公式教材の例文を先に保存する</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-            生徒の学習中にAIを呼ばないため、公式教材はここで未生成の例文だけを先に準備します。
+            生徒の学習中にAIを呼ばないため、公式教材の例文は事前に保存します。準備前に欠損一覧と費用見積もりを確認できます。
           </p>
         </div>
         <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
-          学習中のAI生成は停止済み
+          単語の例文・画像生成は学習画面から撤去
         </div>
       </div>
 
@@ -276,11 +276,11 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
               <button
                 type="button"
                 onClick={() => onPrepareExamples(book)}
-                disabled={uploading || preparingExamplesBookId === book.id}
+                disabled={uploading || preparingExamplesBookId !== null}
                 className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
               >
                 {preparingExamplesBookId === book.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {preparingExamplesBookId === book.id ? '例文を準備中...' : '例文を準備'}
+                {preparingExamplesBookId === book.id ? '例文を準備中...' : '欠損・見積もりを確認'}
               </button>
             </article>
           ))}

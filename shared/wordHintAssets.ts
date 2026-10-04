@@ -51,9 +51,9 @@ export const isGeneratedAssetVisibleToLearner = (input: {
   if (input.auditStatus !== GeneratedAssetAuditStatus.APPROVED) return false;
   if (!input.auditedAt || input.auditedAt < input.generatedAt) return false;
 
-  const now = input.now ?? Date.now();
-  const staleMs = input.staleMs ?? WORD_HINT_AUDIT_STALE_MS;
-  return now - input.auditedAt < staleMs;
+  // A fixed, approved asset stays approved until its content/provenance or review changes.
+  // Automatic paid re-audits are retired; elapsed time alone does not revoke approval.
+  return true;
 };
 
 export const getLearnerGeneratedAssetAuditStatus = (input: {
@@ -120,56 +120,6 @@ export const projectWordHintAssetsForLearner = (
     exampleImageAuditStatus: imageMissingGenerationProvenance
       ? GeneratedAssetAuditStatus.REVIEW_REQUIRED
       : getLearnerGeneratedAssetAuditStatus(imageAuditInput),
-  };
-};
-
-const escapeSvgText = (value: string): string => value
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
-
-export const createWordImagePlaceholderDataUrl = (word: string, definition: string): string => {
-  const safeWord = escapeSvgText((word || '?').slice(0, 18));
-  const safeDefinition = escapeSvgText((definition || '').slice(0, 28));
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
-      <defs>
-        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#fff7ed" />
-          <stop offset="100%" stop-color="#fde68a" />
-        </linearGradient>
-      </defs>
-      <rect width="640" height="640" rx="56" fill="url(#bg)" />
-      <rect x="38" y="38" width="564" height="564" rx="42" fill="#ffffff" stroke="#fdba74" stroke-width="8" />
-      <text x="320" y="282" text-anchor="middle" font-family="Hiragino Sans, Noto Sans JP, sans-serif" font-size="72" font-weight="700" fill="#9a3412">${safeWord}</text>
-      <text x="320" y="360" text-anchor="middle" font-family="Hiragino Sans, Noto Sans JP, sans-serif" font-size="26" fill="#7c2d12">${safeDefinition}</text>
-    </svg>
-  `.trim();
-
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-};
-
-export const createLocalExampleHint = (
-  word: string,
-  definition: string,
-  generation: number,
-): { sentence: string; translation: string } => {
-  const sentenceVariants = [
-    `We use "${word}" when talking about ${definition}.`,
-    `The teacher explained "${word}" during today's lesson.`,
-    `I remembered "${word}" by linking it to ${definition}.`,
-  ];
-  const translationVariants = [
-    `「${word}」は ${definition} の話をするときに使います。`,
-    `先生は今日の授業で「${word}」を説明しました。`,
-    `「${word}」を ${definition} と結びつけて覚えました。`,
-  ];
-  const index = generation % sentenceVariants.length;
-  return {
-    sentence: sentenceVariants[index],
-    translation: translationVariants[index],
   };
 };
 

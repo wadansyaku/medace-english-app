@@ -6,6 +6,7 @@ import {
   LearningPreference,
   StudentRiskLevel,
   UserGrade,
+  UserRole,
   WordData,
   type GrammarCurriculumScopeId,
   type JapaneseTranslationFeedback,
@@ -29,7 +30,6 @@ import {
   type GenerateGrammarPracticeQuestionsPayload,
   type GenerateInstructorFollowUpPayload,
   type GenerateLearningPlanPayload,
-  type GenerateWordImagePayload,
   type GeneratedContext,
   type GrammarQuestionMode,
   type InstructorFollowUpDraft,
@@ -60,6 +60,7 @@ import {
   recordAiGeneratedProblem,
 } from './ai-cache-cbt';
 import { HttpError } from './http';
+import { requireRole } from './auth';
 import { AppEnv, DbUserRow } from './types';
 
 const getAiClient = (env: AppEnv): GoogleGenAI => {
@@ -217,6 +218,7 @@ export const generateMeteredGeminiSentence = async (
   },
   logContext?: AiUsageLogContext,
 ): Promise<GeneratedContext> => {
+  requireRole(user, [UserRole.ADMIN]);
   return runMeteredAiAction(
     env,
     user,
@@ -225,49 +227,6 @@ export const generateMeteredGeminiSentence = async (
     logContext,
     {
       providerInputUnits: 1,
-      providerOutputUnits: 1,
-    },
-  );
-};
-
-const generateWordImage = async (env: AppEnv, payload: GenerateWordImagePayload): Promise<string | null> => {
-  const ai = getAiClient(env);
-
-  try {
-    const response = await ai.models.generateImages({
-      model: 'imagen-4.0-generate-001',
-      prompt: `A minimal, flat vector icon representing "${payload.word}" (Meaning: ${payload.definition}). Simple geometric shapes, white background.`,
-      config: {
-        numberOfImages: 1,
-        outputMimeType: 'image/jpeg',
-        aspectRatio: '1:1',
-      },
-    });
-
-    const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-    return base64ImageBytes ? `data:image/jpeg;base64,${base64ImageBytes}` : null;
-  } catch (error) {
-    handleAiError(error, '画像生成に失敗しました。');
-  }
-};
-
-export const generateMeteredWordImage = async (
-  env: AppEnv,
-  user: DbUserRow,
-  payload: {
-    word: string;
-    definition: string;
-  },
-  logContext?: AiUsageLogContext,
-): Promise<string | null> => {
-  return runMeteredAiAction(
-    env,
-    user,
-    'generateWordImage',
-    () => generateWordImage(env, payload),
-    logContext,
-    {
-      providerAssetCount: 1,
       providerOutputUnits: 1,
     },
   );
@@ -1319,6 +1278,13 @@ export const handleAiAction = async (
   body: unknown,
   logContext?: AiUsageLogContext,
 ): Promise<unknown> => {
+  const action = body && typeof body === 'object' && 'action' in body ? body.action : undefined;
+  if (action === 'generateWordImage') {
+    throw new HttpError(410, '単語画像の生成は終了しました。保存済みの画像をご利用ください。');
+  }
+  if (action === 'generateGeminiSentence') {
+    throw new HttpError(410, '学習中の例文生成は終了しました。保存済みの例文をご利用ください。');
+  }
   let request: AnyAiActionRequest;
   try {
     request = validateAiActionRequest(body);
@@ -1330,10 +1296,6 @@ export const handleAiAction = async (
   }
 
   switch (request.action) {
-    case 'generateGeminiSentence':
-      return runMeteredAiAction(env, user, 'generateGeminiSentence', () => generateGeminiSentence(env, request.payload), logContext);
-    case 'generateWordImage':
-      return runMeteredAiAction(env, user, 'generateWordImage', () => generateWordImage(env, request.payload), logContext);
     case 'generateAIQuiz':
       return runMeteredAiAction(env, user, 'generateAIQuiz', () => generateAIQuiz(env, request.payload), logContext);
     case 'generateGrammarPracticeQuestions': {

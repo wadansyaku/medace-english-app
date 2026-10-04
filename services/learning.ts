@@ -17,7 +17,6 @@ type LearningCatalogSurface = Pick<CatalogClient,
   | 'getWordsByBook'
   | 'reportWord'
   | 'updateWord'
-  | 'generateWordHintAsset'
 >;
 
 type LearningDashboardSurface = Pick<DashboardClient, 'getDashboardSnapshot'>;
@@ -72,7 +71,6 @@ export const learningService: LearningService = {
   saveSRSHistory: (uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId) => (
     learningClient.saveSRSHistory(uid, word, rating, responseTimeMs, missionAssignmentId, taskIntentType, clientAttemptId)
   ),
-  generateWordHintAsset: (payload) => catalogClient.generateWordHintAsset(payload),
   updateWord: (word) => catalogClient.updateWord(word),
 };
 

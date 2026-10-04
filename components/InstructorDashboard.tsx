@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 
 import { InstructorWorkspaceView, type UserProfile } from '../types';
@@ -8,6 +8,7 @@ import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import InstructorDashboardModals from './dashboard/InstructorDashboardModals';
 import InstructorDashboardSections from './dashboard/InstructorDashboardSections';
+import ProductFeedbackPanel from './ProductFeedbackPanel';
 
 interface InstructorDashboardProps {
   user: UserProfile;
@@ -45,6 +46,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
   activeView,
   onChangeView,
 }) => {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const data = useInstructorDashboardData(user.uid);
   const controller = useInstructorDashboardController({
     students: data.students,
@@ -100,6 +102,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
 
   return (
     <div data-testid="instructor-dashboard" className="space-y-6 pb-12">
+      <ProductFeedbackPanel key={user.uid} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       {storageMode.capabilities.organization.usesMockData && <B2BStorageModeBanner />}
       <header className="flex flex-wrap items-start justify-between gap-3 px-1">
         <div className="min-w-0 flex-1">
@@ -108,6 +111,7 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{viewCopy.body}</p>
         </div>
         <div className="shrink-0 sm:text-right">
+          <button type="button" onClick={() => setFeedbackOpen(true)} className="mb-2 mr-2 min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-3 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
           <button
             type="button"
             onClick={() => void data.refresh()}

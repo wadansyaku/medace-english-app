@@ -5,7 +5,6 @@ import {
   type BookMetadata,
   type UserProfile,
   type WordData,
-  WordHintAssetType,
 } from '../../types';
 import type {
   CatalogImportRequest,
@@ -13,15 +12,10 @@ import type {
   GenerateWordHintAssetPayload,
   PrepareBookExamplesResult,
 } from '../../contracts/storage';
-import {
-  createLocalExampleHint,
-  createWordImagePlaceholderDataUrl,
-  projectWordHintAssetsForLearner,
-} from '../../shared/wordHintAssets';
+import { projectWordHintAssetsForLearner } from '../../shared/wordHintAssets';
 import { canAccessOfficialBook, normalizeBookVisibilityPolicy } from '../../utils/bookAccess';
-import { generateGeminiSentence, generateWordImage } from '../gemini';
 import { catalogRowsAreEquivalent, createImportedBookId, normalizeCatalogImportRows } from './catalog-import';
-import { putStoreRecord, STORES, type GetStore, waitForTransaction } from './idb-support';
+import { STORES, type GetStore, waitForTransaction } from './idb-support';
 import { isBookOwnedByUser } from './mockData';
 
 export interface LocalCatalogStorageContext {
@@ -267,7 +261,22 @@ export const updateWordLocal = async (
   word: WordData,
 ): Promise<void> => {
   const store = await context.getStore(STORES.WORDS, 'readwrite');
-  await putStoreRecord(store, word);
+  // The caller holds a learner projection. Preserve stored, hidden hints instead
+  // of replacing their content with null values from that projection.
+  await mutateWordAndWaitForTransaction(store, word.id, current => {
+    const changed = current.word !== word.word || current.definition !== word.definition;
+    return {
+      ...current,
+      word: word.word,
+      definition: word.definition,
+      ...(changed && (current.exampleGeneratedAt || current.exampleAuditStatus)
+        ? { exampleAuditStatus: GeneratedAssetAuditStatus.REVIEW_REQUIRED }
+        : {}),
+      ...(changed && (current.exampleImageGeneratedAt || current.exampleImageAuditStatus)
+        ? { exampleImageAuditStatus: GeneratedAssetAuditStatus.REVIEW_REQUIRED }
+        : {}),
+    };
+  }, '単語の変更を保存できませんでした。');
 };
 
 export const reportWordLocal = async (
@@ -287,109 +296,17 @@ export const reportWordLocal = async (
   );
 };
 
-const readWordRecordLocal = async (
-  context: Pick<LocalCatalogStorageContext, 'getStore'>,
-  wordId: string,
-): Promise<WordData | undefined> => {
-  const store = await context.getStore(STORES.WORDS, 'readonly');
-  return new Promise((resolve, reject) => {
-    const request = store.get(wordId);
-    request.onsuccess = () => resolve(request.result as WordData | undefined);
-    request.onerror = () => reject(request.error || new Error('単語キャッシュの読み込みに失敗しました。'));
-  });
-};
-
-const writeWordRecordLocal = async (
-  context: Pick<LocalCatalogStorageContext, 'getStore'>,
-  word: WordData,
-): Promise<void> => {
-  const store = await context.getStore(STORES.WORDS, 'readwrite');
-  await putStoreRecord(store, word);
-};
-
+// Compatibility entry points fail before reading or changing learner storage.
 export const generateWordHintAssetLocal = async (
-  context: Pick<LocalCatalogStorageContext, 'getStore'>,
-  payload: GenerateWordHintAssetPayload,
+  _context: Pick<LocalCatalogStorageContext, 'getStore'>,
+  _payload: GenerateWordHintAssetPayload,
 ): Promise<WordData> => {
-  const word = await readWordRecordLocal(context, payload.wordId);
-  if (!word) {
-    throw new Error('対象の単語が見つかりません。');
-  }
-
-  const nextWord: WordData = { ...word };
-  if (payload.assetType === WordHintAssetType.EXAMPLE) {
-    if (!payload.forceRefresh && nextWord.exampleSentence?.trim()) {
-      return projectWordHintAssetsForLearner(nextWord);
-    }
-
-    const generatedAt = Date.now();
-    const generated = await generateGeminiSentence(nextWord.word, nextWord.definition)
-      || createLocalExampleHint(nextWord.word, nextWord.definition, generatedAt);
-    const nextSentence = 'english' in generated ? generated.english : generated.sentence;
-    const nextTranslation = 'japanese' in generated ? generated.japanese : generated.translation;
-
-    nextWord.exampleSentence = nextSentence;
-    nextWord.exampleMeaning = nextTranslation;
-    nextWord.exampleGeneratedAt = generatedAt;
-    nextWord.exampleAuditStatus = GeneratedAssetAuditStatus.PENDING;
-  } else {
-    if (!payload.forceRefresh && nextWord.exampleImageUrl?.trim()) {
-      return projectWordHintAssetsForLearner(nextWord);
-    }
-
-    const generatedAt = Date.now();
-    const imageUrl = await generateWordImage(nextWord.word, nextWord.definition)
-      || createWordImagePlaceholderDataUrl(nextWord.word, nextWord.definition);
-
-    nextWord.exampleImageUrl = imageUrl;
-    nextWord.exampleImageGeneratedAt = generatedAt;
-    nextWord.exampleImageAuditStatus = GeneratedAssetAuditStatus.PENDING;
-  }
-
-  await writeWordRecordLocal(context, nextWord);
-  return projectWordHintAssetsForLearner(nextWord);
+  throw new Error('学習中の例文・画像生成は廃止しました。保存済みの内容をご利用ください。');
 };
 
 export const prepareBookExamplesLocal = async (
-  context: Pick<LocalCatalogStorageContext, 'getStore'>,
-  bookId: string,
+  _context: Pick<LocalCatalogStorageContext, 'getStore'>,
+  _bookId: string,
 ): Promise<PrepareBookExamplesResult> => {
-  const words = await readWordsByBookLocal(context, bookId);
-  const targetWords = words.filter((word) => !word.exampleSentence?.trim());
-  const store = await context.getStore(STORES.WORDS, 'readwrite');
-  const transactionComplete = waitForTransaction(store.transaction);
-
-  const mutationsQueued = Promise.all(targetWords.map((word) => new Promise<void>((resolve, reject) => {
-    const request = store.get(word.id);
-    request.onsuccess = () => {
-      try {
-        const current = request.result as WordData | undefined;
-        if (current) {
-          const nextWord: WordData = {
-            ...current,
-            exampleSentence: current.exampleSentence?.trim() || `We study "${current.word}" in today's lesson.`,
-            exampleMeaning: current.exampleMeaning?.trim() || `語義: ${current.definition}`,
-            exampleGeneratedAt: Date.now(),
-            exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
-          };
-          const putRequest = store.put(nextWord);
-          putRequest.onsuccess = () => resolve();
-          putRequest.onerror = () => reject(toIndexedDbError(putRequest.error, '単語例文の保存に失敗しました。'));
-          return;
-        }
-        resolve();
-      } catch (error) {
-        reject(toIndexedDbError(error, '単語例文の保存に失敗しました。'));
-      }
-    };
-    request.onerror = () => reject(toIndexedDbError(request.error, '単語例文の読み込みに失敗しました。'));
-  })));
-
-  await Promise.all([mutationsQueued, transactionComplete]);
-
-  return {
-    bookId,
-    preparedCount: targetWords.length,
-    remainingCount: 0,
-  };
+  throw new Error('例文の事前準備はCloudflareの管理者画面で行ってください。端末内では生成しません。');
 };

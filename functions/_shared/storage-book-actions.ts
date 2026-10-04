@@ -16,8 +16,10 @@ import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
 import { generateMeteredGeminiSentence } from './ai-actions';
+import { assertBudgetAvailable } from './ai-metering';
 import { catalogRowsAreEquivalent, normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
 import { HttpError } from './http';
+import { requireRole } from './auth';
 import { readLearningPlanBookIds } from './learning-plan-books';
 import { readWeaknessProfile } from './weakness-actions';
 import {
@@ -456,6 +458,22 @@ export const handleBatchImportWords = async (
         source_note = excluded.source_note,
         example_sentence = COALESCE(excluded.example_sentence, example_sentence),
         example_meaning = COALESCE(excluded.example_meaning, example_meaning),
+        example_audit_status = CASE WHEN (words.example_generated_at IS NOT NULL OR NULLIF(TRIM(words.example_audit_status), '') IS NOT NULL)
+          AND ((words.word IS NOT excluded.word OR words.definition IS NOT excluded.definition)
+          OR (excluded.example_sentence IS NOT NULL AND words.example_sentence IS NOT excluded.example_sentence)
+          OR (excluded.example_meaning IS NOT NULL AND words.example_meaning IS NOT excluded.example_meaning))
+          THEN 'REVIEW_REQUIRED' ELSE words.example_audit_status END,
+        example_audited_at = CASE WHEN (words.example_generated_at IS NOT NULL OR NULLIF(TRIM(words.example_audit_status), '') IS NOT NULL)
+          AND ((words.word IS NOT excluded.word OR words.definition IS NOT excluded.definition)
+          OR (excluded.example_sentence IS NOT NULL AND words.example_sentence IS NOT excluded.example_sentence)
+          OR (excluded.example_meaning IS NOT NULL AND words.example_meaning IS NOT excluded.example_meaning))
+          THEN NULL ELSE words.example_audited_at END,
+        example_image_audit_status = CASE WHEN (words.example_image_generated_at IS NOT NULL OR NULLIF(TRIM(words.example_image_audit_status), '') IS NOT NULL)
+          AND (words.word IS NOT excluded.word OR words.definition IS NOT excluded.definition)
+          THEN 'REVIEW_REQUIRED' ELSE words.example_image_audit_status END,
+        example_image_audited_at = CASE WHEN (words.example_image_generated_at IS NOT NULL OR NULLIF(TRIM(words.example_image_audit_status), '') IS NOT NULL)
+          AND (words.word IS NOT excluded.word OR words.definition IS NOT excluded.definition)
+          THEN NULL ELSE words.example_image_audited_at END,
         updated_at = excluded.updated_at
     `).bind(
       word.id,
@@ -522,9 +540,29 @@ export const handleUpdateWord = async (env: AppEnv, user: DbUserRow, word: WordD
   await assertBookWriteAccess(env, user, row.book_id);
   await env.DB.prepare(`
     UPDATE words
-    SET word = ?, definition = ?, search_key = ?, updated_at = ?
+    SET word = ?, definition = ?, search_key = ?, updated_at = ?,
+        example_audit_status = CASE WHEN
+          (example_generated_at IS NOT NULL OR NULLIF(TRIM(example_audit_status), '') IS NOT NULL)
+          AND (word IS NOT ? OR definition IS NOT ?)
+          THEN 'REVIEW_REQUIRED' ELSE example_audit_status END,
+        example_audited_at = CASE WHEN
+          (example_generated_at IS NOT NULL OR NULLIF(TRIM(example_audit_status), '') IS NOT NULL)
+          AND (word IS NOT ? OR definition IS NOT ?)
+          THEN NULL ELSE example_audited_at END,
+        example_image_audit_status = CASE WHEN
+          (example_image_generated_at IS NOT NULL OR NULLIF(TRIM(example_image_audit_status), '') IS NOT NULL)
+          AND (word IS NOT ? OR definition IS NOT ?)
+          THEN 'REVIEW_REQUIRED' ELSE example_image_audit_status END,
+        example_image_audited_at = CASE WHEN
+          (example_image_generated_at IS NOT NULL OR NULLIF(TRIM(example_image_audit_status), '') IS NOT NULL)
+          AND (word IS NOT ? OR definition IS NOT ?)
+          THEN NULL ELSE example_image_audited_at END
     WHERE id = ?
-  `).bind(word.word, word.definition, word.word.toLowerCase(), Date.now(), word.id).run();
+  `).bind(
+    word.word, word.definition, word.word.toLowerCase(), Date.now(),
+    word.word, word.definition, word.word, word.definition,
+    word.word, word.definition, word.word, word.definition, word.id,
+  ).run();
 };
 
 export const handleReportWord = async (env: AppEnv, user: DbUserRow, wordId: string, reason: string): Promise<void> => {
@@ -547,6 +585,7 @@ export const handlePrepareBookExamples = async (
   user: DbUserRow,
   bookId: string,
 ): Promise<PrepareBookExamplesResult> => {
+  requireRole(user, [UserRole.ADMIN]);
   await assertBookWriteAccess(env, user, bookId);
 
   const book = await readFirst<{ source_context: string | null }>(
@@ -566,12 +605,32 @@ export const handlePrepareBookExamples = async (
         AND (
           example_sentence IS NULL OR TRIM(example_sentence) = ''
         )
-      ORDER BY word_number ASC`,
+        AND NOT EXISTS (
+          SELECT 1 FROM word_example_generation_claims c WHERE c.word_id = words.id
+        )
+      ORDER BY word_number ASC
+      LIMIT 10`,
     bookId,
   );
 
   let preparedCount = 0;
   for (const word of words) {
+    // Known configuration and budget failures must not consume a durable claim.
+    if (!env.GEMINI_API_KEY) throw new HttpError(503, 'GEMINI_API_KEY が未設定です。');
+    await assertBudgetAvailable(env, user, 'generateGeminiSentence');
+    const claimId = crypto.randomUUID();
+    const claim = await env.DB.prepare(`
+      INSERT INTO word_example_generation_claims (word_id, claim_id, started_at)
+      SELECT id, ?, ? FROM words
+      WHERE id = ? AND book_id = ?
+        AND word IS ? AND definition IS ?
+        AND (example_sentence IS NULL OR TRIM(example_sentence) = '')
+      ON CONFLICT(word_id) DO NOTHING
+    `).bind(claimId, Date.now(), word.id, bookId, word.word, word.definition).run();
+    if ((claim.meta.changes ?? 0) !== 1) continue;
+
+    // Retain the claim after any failure, including uncertain provider responses or
+    // database write failures. Automatically retrying could incur a second charge.
     const context = await generateMeteredGeminiSentence(
       env,
       user,
@@ -583,7 +642,12 @@ export const handlePrepareBookExamples = async (
       },
     );
 
-    await env.DB.prepare(`
+    if (typeof context?.english !== 'string' || !context.english.trim()
+      || typeof context?.japanese !== 'string' || !context.japanese.trim()) {
+      throw new HttpError(502, '例文準備の結果を確認できませんでした。再課金を防ぐため自動再試行は停止しています。');
+    }
+    const generatedAt = Date.now();
+    const saved = await env.DB.prepare(`
       UPDATE words
          SET example_sentence = ?,
              example_meaning = ?,
@@ -592,15 +656,32 @@ export const handlePrepareBookExamples = async (
              example_audit_note = NULL,
              example_audited_at = NULL,
              updated_at = ?
-       WHERE id = ?
+       WHERE id = ? AND book_id = ?
+         AND word IS ? AND definition IS ?
+         AND (example_sentence IS NULL OR TRIM(example_sentence) = '')
+         AND EXISTS (
+           SELECT 1 FROM word_example_generation_claims c
+           WHERE c.word_id = words.id AND c.claim_id = ? AND c.completed_at IS NULL
+         )
     `).bind(
-      context.english,
-      context.japanese,
-      Date.now(),
+      context.english.trim(),
+      context.japanese.trim(),
+      generatedAt,
       GeneratedAssetAuditStatus.PENDING,
-      Date.now(),
+      generatedAt,
       word.id,
+      bookId,
+      word.word,
+      word.definition,
+      claimId,
     ).run();
+    if ((saved.meta.changes ?? 0) !== 1) {
+      throw new HttpError(409, '単語が別の操作で更新されたため、既存の例文を保持しました。再課金を防ぐため自動再試行は停止しています。');
+    }
+    await env.DB.prepare(`
+      UPDATE word_example_generation_claims SET completed_at = ?
+      WHERE word_id = ? AND claim_id = ? AND completed_at IS NULL
+    `).bind(Date.now(), word.id, claimId).run();
     preparedCount += 1;
   }
 

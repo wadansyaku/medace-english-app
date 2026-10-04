@@ -1,19 +1,14 @@
 import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { getSubscriptionPolicy } from '../config/subscription';
 import {
   GeneratedAssetAuditStatus,
-  WordHintAssetType,
   type LearningTaskIntent,
   type UserProfile,
   type WordData,
 } from '../types';
 import { learningService } from '../services/learning';
-import { type GeneratedContext } from '../services/gemini';
-import { ApiError } from '../services/apiClient';
 import { getSmartSessionConfig, normalizeStudySessionLimit } from '../shared/studySession';
 import { calculateStudySessionXp } from '../shared/xp';
-import { resolveExampleTranslation } from '../shared/wordHintAssets';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
 import useIsMobileViewport from './useIsMobileViewport';
@@ -35,12 +30,6 @@ const getSupports3D = (): boolean => {
   return !reducedMotion && supports3D;
 };
 
-const isKnownAuditHold = (status?: GeneratedAssetAuditStatus | null): boolean => (
-  status === GeneratedAssetAuditStatus.PENDING
-  || status === GeneratedAssetAuditStatus.REVIEW_REQUIRED
-  || status === GeneratedAssetAuditStatus.FAILED
-);
-
 export const useStudyModeController = ({
   user,
   bookId,
@@ -48,7 +37,6 @@ export const useStudyModeController = ({
   onSessionComplete,
 }: UseStudyModeControllerParams) => {
   const isMobileViewport = useIsMobileViewport();
-  const subscriptionPolicy = getSubscriptionPolicy(user.subscriptionPlan);
   const [queue, setQueue] = useState<WordData[]>([]);
   const [sessionWordCount, setSessionWordCount] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -60,12 +48,6 @@ export const useStudyModeController = ({
   const [rewardNotice, setRewardNotice] = useState<string | null>(null);
   const [isBookOwner, setIsBookOwner] = useState(false);
   const [bookTitle, setBookTitle] = useState<string | null>(null);
-  const [aiContextLoading, setAiContextLoading] = useState(false);
-  const [aiContext, setAiContext] = useState<GeneratedContext | null>(null);
-  const [aiImage, setAiImage] = useState<string | null>(null);
-  const [aiImageLoading, setAiImageLoading] = useState(false);
-  const [exampleError, setExampleError] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
   const [showTranslation, setShowTranslation] = useState(false);
   const [showHints, setShowHints] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -89,10 +71,6 @@ export const useStudyModeController = ({
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
   const [isAdvancingCard, setIsAdvancingCard] = useState(false);
-  const canGenerateExampleHint = subscriptionPolicy.allowedAiActions.includes('generateGeminiSentence');
-  const canGenerateImageHint = subscriptionPolicy.allowedAiActions.includes('generateWordImage');
-
-  const contextCache = useRef<Map<string, GeneratedContext | null>>(new Map());
   const cardOperationsRef = useRef(createStudyCardOperations());
   const sessionGenerationRef = useRef(0);
   const ratingLockedRef = useRef(false);
@@ -131,8 +109,6 @@ export const useStudyModeController = ({
 
   const cancelCardOperations = () => {
     cardOperationsRef.current.invalidate();
-    setAiContextLoading(false);
-    setAiImageLoading(false);
     setIsSavingEdit(false);
     setIsSubmittingReport(false);
   };
@@ -140,12 +116,6 @@ export const useStudyModeController = ({
   const resetCard = () => {
     cancelCardOperations();
     setIsFlipped(false);
-    setAiContext(null);
-    setAiImage(null);
-    setAiContextLoading(false);
-    setAiImageLoading(false);
-    setExampleError(null);
-    setImageError(null);
     setShowTranslation(false);
     setShowHints(false);
     setIsEditing(false);
@@ -227,7 +197,6 @@ export const useStudyModeController = ({
     setStreakBonusXP(null);
     setLeveledUp(false);
     setIsAdvancingCard(false);
-    contextCache.current.clear();
     ratingLockedRef.current = false;
     settledCardRef.current = null;
     pendingAnswerRef.current = null;
@@ -279,28 +248,6 @@ export const useStudyModeController = ({
   }, [bookId, taskIntent, user.uid, loadAttempt]);
 
   useEffect(() => {
-    if (queue.length === 0 || !showHints) return;
-
-    const current = queue[currentIndex];
-    if (!current) return;
-
-    if (current.exampleSentence?.trim()) {
-      const nextContext = {
-        english: current.exampleSentence,
-        japanese: resolveExampleTranslation(current),
-      };
-      contextCache.current.set(current.id, nextContext);
-      setAiContext(nextContext);
-    } else if (contextCache.current.has(current.id)) {
-      setAiContext(contextCache.current.get(current.id) ?? null);
-    } else {
-      setAiContext(null);
-    }
-
-    setAiImage(current.exampleImageUrl || null);
-  }, [currentIndex, queue, showHints]);
-
-  useEffect(() => {
     if (!loading && currentWord && !isFinished) {
       cardStartedAtRef.current = Date.now();
     }
@@ -326,93 +273,10 @@ export const useStudyModeController = ({
     onSessionComplete(updatedUser || user);
   };
 
-  const resolveHintError = (error: unknown, fallback: string): string => {
-    if (error instanceof ApiError || error instanceof Error) {
-      return error.message || fallback;
-    }
-    return fallback;
-  };
-
   const replaceCurrentWord = (operation: StudyCardOperation, patch: Partial<WordData>) => {
     setQueue((previous) => cardOperationsRef.current.isCurrent(operation)
       ? previous.map((word, index) => index === operation.index && word.id === operation.wordId ? { ...word, ...patch } : word)
       : previous);
-  };
-
-  const generateExampleHint = async (forceRefresh = false) => {
-    if (!currentWord || loading || isFinished || ratingLockedRef.current || isEditing) return;
-    const operation = cardOperationsRef.current.begin('example', currentWord.id, currentIndex);
-    if (!operation) return;
-    setAiContextLoading(true);
-    setExampleError(null);
-
-    try {
-      const updated = await learningService.generateWordHintAsset({
-        wordId: currentWord.id,
-        assetType: WordHintAssetType.EXAMPLE,
-        forceRefresh,
-      });
-      if (!cardOperationsRef.current.isCurrent(operation)) return;
-      if (updated.id !== operation.wordId) throw new Error('生成対象の単語を確認できませんでした。');
-      replaceCurrentWord(operation, {
-        exampleSentence: updated.exampleSentence,
-        exampleMeaning: updated.exampleMeaning,
-        exampleGeneratedAt: updated.exampleGeneratedAt,
-        exampleAuditStatus: updated.exampleAuditStatus,
-      });
-
-      if (updated.exampleSentence?.trim()) {
-        const nextContext = {
-          english: updated.exampleSentence,
-          japanese: resolveExampleTranslation(updated),
-        };
-        contextCache.current.set(updated.id, nextContext);
-        setAiContext(nextContext);
-        setShowTranslation(false);
-      } else {
-        setAiContext(null);
-        setExampleError(isKnownAuditHold(updated.exampleAuditStatus)
-          ? null
-          : '例文は作成できませんでした。');
-      }
-    } catch (error) {
-      if (cardOperationsRef.current.isCurrent(operation)) setExampleError(resolveHintError(error, '例文は作成できませんでした。'));
-    } finally {
-      if (cardOperationsRef.current.finish(operation)) setAiContextLoading(false);
-    }
-  };
-
-  const generateImageHint = async (forceRefresh = false) => {
-    if (!currentWord || loading || isFinished || ratingLockedRef.current || isEditing) return;
-    const operation = cardOperationsRef.current.begin('image', currentWord.id, currentIndex);
-    if (!operation) return;
-    setAiImageLoading(true);
-    setImageError(null);
-
-    try {
-      const updated = await learningService.generateWordHintAsset({
-        wordId: currentWord.id,
-        assetType: WordHintAssetType.IMAGE,
-        forceRefresh,
-      });
-      if (!cardOperationsRef.current.isCurrent(operation)) return;
-      if (updated.id !== operation.wordId) throw new Error('生成対象の単語を確認できませんでした。');
-      replaceCurrentWord(operation, {
-        exampleImageUrl: updated.exampleImageUrl,
-        exampleImageGeneratedAt: updated.exampleImageGeneratedAt,
-        exampleImageAuditStatus: updated.exampleImageAuditStatus,
-      });
-      setAiImage(updated.exampleImageUrl || null);
-      if (!updated.exampleImageUrl) {
-        setImageError(isKnownAuditHold(updated.exampleImageAuditStatus)
-          ? null
-          : '画像は作成できませんでした。');
-      }
-    } catch (error) {
-      if (cardOperationsRef.current.isCurrent(operation)) setImageError(resolveHintError(error, '画像は作成できませんでした。'));
-    } finally {
-      if (cardOperationsRef.current.finish(operation)) setAiImageLoading(false);
-    }
   };
 
   const startEditing = (event: MouseEvent) => {
@@ -448,7 +312,16 @@ export const useStudyModeController = ({
     try {
       await learningService.updateWord(updated);
       if (!cardOperationsRef.current.isCurrent(operation)) return;
-      replaceCurrentWord(operation, { word: updated.word, definition: updated.definition });
+      const changed = currentWord.word !== updated.word || currentWord.definition !== updated.definition;
+      replaceCurrentWord(operation, {
+        word: updated.word, definition: updated.definition,
+        ...(changed && (currentWord.exampleGeneratedAt || currentWord.exampleAuditStatus)
+          ? { exampleSentence: null, exampleMeaning: null, exampleAuditStatus: GeneratedAssetAuditStatus.REVIEW_REQUIRED }
+          : {}),
+        ...(changed && (currentWord.exampleImageGeneratedAt || currentWord.exampleImageAuditStatus)
+          ? { exampleImageUrl: null, exampleImageAuditStatus: GeneratedAssetAuditStatus.REVIEW_REQUIRED }
+          : {}),
+      });
       setIsEditing(false);
     } catch {
       if (cardOperationsRef.current.isCurrent(operation)) setEditError('変更を保存できませんでした。内容を残したまま、もう一度保存できます。');
@@ -577,10 +450,6 @@ export const useStudyModeController = ({
 
   return {
     actionBarRef,
-    aiContext,
-    aiContextLoading,
-    aiImage,
-    aiImageLoading,
     backFaceScrollRef,
     bookTitle,
     closeBack,
@@ -590,14 +459,8 @@ export const useStudyModeController = ({
     editError,
     editWord,
     earnedXP,
-    exampleError,
-    canGenerateExampleHint,
-    canGenerateImageHint,
-    generateExampleHint,
-    generateImageHint,
     handleExit,
     handleRating,
-    imageError,
     isAdvancingCard,
     isBookOwner,
     isEditing,

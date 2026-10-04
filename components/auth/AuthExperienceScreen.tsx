@@ -212,6 +212,11 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
           <p className="mt-1 text-xs leading-relaxed text-slate-500">{getDemoAccessWindowLabel()} 限定の体験です。自分のアカウントに保存するには登録してください。</p>
         </details>
         {!authPanelMode && authError && <p role="alert" data-testid="auth-demo-error" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{authError}</p>}
+        <details data-testid="auth-learning-design" className="mt-4 border-t border-slate-100 pt-3">
+          <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">思い出す練習と復習の仕組み</summary>
+          <p className="mt-2 text-sm leading-relaxed text-slate-600">答えを見る前に意味を思い出し、理解度を選びます。忘れた語は同じ回で再出題し、回答に合わせて次の復習日を調整します。収録済みの例文では使い方も確認できます。</p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">他のアプリとの学習効果の比較は未検証です。継続率・再テストの正答率・時間を置いた後の定着率を確かめ、改善していきます。</p>
+        </details>
       </section>
       <section className="rounded-panel border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="role-entry-heading">
         <h2 id="role-entry-heading" className="text-base font-black text-steady-ink">講師・教室の方へ</h2>

@@ -6,11 +6,9 @@ import {
   Edit2,
   Flag,
   Image as ImageIcon,
-  Languages,
   Loader2,
   RotateCw,
   Save,
-  Sparkles,
   Volume2,
   X,
   Zap,
@@ -25,6 +23,7 @@ import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { getHintAuditTone } from '../shared/wordHintAssets';
 import { getSmartSessionConfig } from '../shared/studySession';
 import MobileStickyActionBar from './mobile/MobileStickyActionBar';
+import ModalOverlay from './ModalOverlay';
 import { useStudyModeController } from '../hooks/useStudyModeController';
 import { recordClientProductEvent } from '../services/productEvents';
 import StudyFinishedView from './study/StudyFinishedView';
@@ -67,30 +66,22 @@ const getHiddenHintReviewState = (
 ): {
   title: string;
   description: string;
-  canRetry: boolean;
-  retryLabel: string;
 } | null => {
   switch (status) {
     case GeneratedAssetAuditStatus.PENDING:
       return {
         title: `${label}を確認中`,
-        description: '作成は終わりました。学習に使える内容か確認でき次第、ここに表示します。',
-        canRetry: false,
-        retryLabel: '',
+        description: '保存済みの内容を確認しています。意味で学習を続けられます。',
       };
     case GeneratedAssetAuditStatus.REVIEW_REQUIRED:
       return {
         title: `${label}を見直し中`,
         description: '内容に気になる点があったため、いまは表示していません。',
-        canRetry: true,
-        retryLabel: `別の${label}を作る`,
       };
     case GeneratedAssetAuditStatus.FAILED:
       return {
         title: `${label}を確認できませんでした`,
         description: '確認処理を完了できなかったため、いまは表示していません。',
-        canRetry: true,
-        retryLabel: `もう一度${label}を作る`,
       };
     default:
       return null;
@@ -185,10 +176,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
     controller.currentWord.exampleAuditStatus,
     '例文',
   );
-  const hiddenImageReviewState = getHiddenHintReviewState(
-    controller.currentWord.exampleImageAuditStatus,
-    '画像ヒント',
-  );
+
 
   if (controller.isFinished) {
     return (
@@ -311,250 +299,27 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         </div>
 
             {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
-              <div className="flex items-center justify-between gap-3"><h3 className="text-xs font-bold text-slate-500">例文</h3><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
+              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
               <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
               {controller.currentWord.exampleMeaning?.trim() && (controller.showTranslation
                 ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">{controller.currentWord.exampleMeaning}</p>
                 : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}
             </section>}
             {hiddenExampleReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenExampleReviewState.title}。{hiddenExampleReviewState.description}</p>}
-            {!controller.showHints && (controller.aiContextLoading || controller.aiImageLoading) && <p role="status" className="mb-3 text-sm text-slate-600">ヒントを作成中です。</p>}
-            {!controller.showHints && (controller.exampleError || controller.imageError) && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{controller.exampleError || controller.imageError}</p>}
-            {!controller.showHints && hiddenImageReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenImageReviewState.title}。{hiddenImageReviewState.description}</p>}
             {(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null))) && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
               <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-600">{controller.currentWord.bookId === NARU_BOOK_ID ? '補足' : '補足・出典'}</summary>
               <WordSourceDetails word={controller.currentWord} />
             </details>}
-            {!controller.showHints ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  controller.setShowHints(true);
-                }}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                <Sparkles className="h-5 w-5 text-medace-300" />
-                <span>追加のヒント</span>
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between rounded-2xl border border-medace-200 bg-white/70 px-4 py-3 text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  <span>ヒントを表示中</span>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      controller.setShowHints(false);
-                    }}
-                    className="rounded-full border border-medace-200 px-3 py-1 text-[11px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
-                  >
-                    閉じる
-                  </button>
-                </div>
-
-                {!hasCoreExample && <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
-                  {controller.aiContextLoading ? (
-                    <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-5 text-medace-800">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span className="text-xs">例文を作成中...</span>
-                    </div>
-                  ) : controller.aiContext ? (
-                    <div className="text-center">
-                      <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-800">
-                        <span className="flex items-center gap-1">
-                          <Sparkles className="h-3 w-3" />
-                          例文ヒント
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {exampleAuditTone ? (
-                            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${exampleAuditTone.className}`}>
-                              {exampleAuditTone.label}
-                            </span>
-                          ) : null}
-                          <button
-                            type="button"
-                            aria-label="例文を読み上げる"
-                            onClick={(event) => controller.speakText(event, controller.aiContext!.english)}
-                            className="transition-colors hover:text-slate-950"
-                          >
-                            <Volume2 className="h-4 w-4" />
-                          </button>
-                          {controller.canGenerateExampleHint && controller.isBookOwner ? (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void controller.generateExampleHint(true);
-                              }}
-                              className="rounded-full border border-medace-200 px-2 py-1 text-[10px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
-                            >
-                              新しく作る
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <p className="mb-3 text-lg font-semibold leading-relaxed text-slate-800 sm:text-[1.45rem]">"{controller.aiContext.english}"</p>
-
-                      {controller.showTranslation ? (
-                        <p className="animate-in fade-in border-t border-medace-200 pt-3 text-sm leading-relaxed text-slate-600 sm:text-base">{controller.aiContext.japanese}</p>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            controller.setShowTranslation(true);
-                          }}
-                          className="mx-auto flex items-center justify-center gap-1 text-xs text-slate-500 transition-colors hover:text-slate-950"
-                        >
-                          <Languages className="h-3 w-3" /> {controller.aiContext.japanese.startsWith('語義:') ? '語義を確認' : '例文の訳を表示'}
-                        </button>
-                      )}
-                      {controller.exampleError ? (
-                        <p role="alert" className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
-                          {controller.exampleError}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="space-y-3 text-center">
-                      <div
-                        role={hiddenExampleReviewState ? 'status' : undefined}
-                        aria-live={hiddenExampleReviewState ? 'polite' : undefined}
-                        aria-label={hiddenExampleReviewState ? `${hiddenExampleReviewState.title}。${hiddenExampleReviewState.description}` : undefined}
-                        className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500"
-                      >
-                        {hiddenExampleReviewState?.title || '例文はまだありません'}
-                      </div>
-                      {hiddenExampleReviewState && exampleAuditTone ? (
-                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${exampleAuditTone.className}`}>
-                          {exampleAuditTone.label}
-                        </span>
-                      ) : null}
-                      <p className="text-base font-semibold leading-relaxed text-slate-700 sm:text-lg">
-                        {hiddenExampleReviewState?.description || '必要なときだけ、ここで新しく作れます。'}
-                      </p>
-                      {!hiddenExampleReviewState ? (
-                        <p className="text-sm leading-relaxed text-slate-500">
-                          「{controller.currentWord.word}」は「{controller.currentWord.definition}」という意味です。
-                        </p>
-                      ) : null}
-                      {controller.exampleError ? (
-                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
-                          {controller.exampleError}
-                        </p>
-                      ) : null}
-                      {controller.canGenerateExampleHint && (
-                        !hiddenExampleReviewState
-                        || (hiddenExampleReviewState.canRetry && controller.isBookOwner)
-                      ) ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void controller.generateExampleHint(Boolean(hiddenExampleReviewState?.canRetry));
-                          }}
-                          className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
-                        >
-                          <Sparkles className="h-4 w-4" />
-                          {hiddenExampleReviewState?.retryLabel || '例文を作る'}
-                        </button>
-                      ) : !hiddenExampleReviewState ? (
-                        <p className="text-xs text-slate-500">このプランでは例文生成は利用できません。</p>
-                      ) : null}
-                    </div>
-                  )}
-                </div>}
-                {hasCoreExample && controller.canGenerateExampleHint && controller.isBookOwner && <button type="button" onClick={event => { event.stopPropagation(); void controller.generateExampleHint(true); }} disabled={controller.aiContextLoading} className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600">{controller.aiContextLoading ? '例文を作成中...' : '別の例文を作る'}</button>}
-                {hasCoreExample && controller.exampleError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{controller.exampleError}</p>}
-                <div className="rounded-2xl border border-medace-200 bg-white/80 p-4">
-                  {controller.aiImageLoading ? (
-                    <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 py-6 text-medace-800">
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      <span className="text-xs text-center">画像ヒントを作成中...</span>
-                    </div>
-                  ) : controller.aiImage ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-medace-800">
-                        <span className="flex items-center gap-1">
-                          <ImageIcon className="h-3 w-3" />
-                          画像ヒント
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {imageAuditTone ? (
-                            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${imageAuditTone.className}`}>
-                              {imageAuditTone.label}
-                            </span>
-                          ) : null}
-                          {controller.canGenerateImageHint && controller.isBookOwner ? (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void controller.generateImageHint(true);
-                              }}
-                              className="rounded-full border border-medace-200 px-2 py-1 text-[10px] font-bold text-slate-700 transition-colors hover:bg-medace-100"
-                            >
-                              新しく作る
-                            </button>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="relative h-44 w-full overflow-hidden rounded-2xl bg-white/70">
-                        <img src={controller.aiImage} alt={`「${controller.currentWord.word}」の画像ヒント`} className="h-full w-full object-contain" />
-                      </div>
-                      {controller.imageError ? (
-                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
-                          {controller.imageError}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="space-y-3 text-center">
-                      <div
-                        role={hiddenImageReviewState ? 'status' : undefined}
-                        aria-live={hiddenImageReviewState ? 'polite' : undefined}
-                        aria-label={hiddenImageReviewState ? `${hiddenImageReviewState.title}。${hiddenImageReviewState.description}` : undefined}
-                        className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500"
-                      >
-                        {hiddenImageReviewState?.title || '画像ヒントはまだありません'}
-                      </div>
-                      {hiddenImageReviewState && imageAuditTone ? (
-                        <span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-bold ${imageAuditTone.className}`}>
-                          {imageAuditTone.label}
-                        </span>
-                      ) : null}
-                      <p className="text-sm leading-relaxed text-slate-600">
-                        {hiddenImageReviewState?.description || 'イメージで覚えたい単語だけ、ここで画像ヒントを作れます。'}
-                      </p>
-                      {controller.imageError ? (
-                        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-700">
-                          {controller.imageError}
-                        </p>
-                      ) : null}
-                      {controller.canGenerateImageHint && (
-                        !hiddenImageReviewState
-                        || (hiddenImageReviewState.canRetry && controller.isBookOwner)
-                      ) ? (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void controller.generateImageHint(Boolean(hiddenImageReviewState?.canRetry));
-                          }}
-                          className="mx-auto flex items-center gap-2 rounded-full border border-medace-200 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-medace-100"
-                        >
-                          <ImageIcon className="h-4 w-4" />
-                          {hiddenImageReviewState?.retryLabel || '画像を作る'}
-                        </button>
-                      ) : !hiddenImageReviewState ? (
-                        <p className="text-xs text-slate-500">画像ヒントは上位プランで利用できます。</p>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
+            {!hasCoreExample && !hiddenExampleReviewState && <p data-testid="study-example-missing" className="mb-3 text-sm leading-relaxed text-slate-600">例文は準備中です。意味で学習を続けられます。</p>}
+            {controller.currentWord.exampleImageUrl && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-3" onClick={event => event.stopPropagation()}>
+                <button type="button" aria-haspopup="dialog" aria-expanded={controller.showHints} onClick={() => controller.setShowHints(!controller.showHints)} className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-slate-600">
+                  <span className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />保存済みの画像ヒント</span>
+                  <span>{controller.showHints ? '閉じる' : '表示'}</span>
+                </button>
               </div>
             )}
+
           </div>
         </div>
       </div>
@@ -575,6 +340,20 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         onSubmitReport={controller.submitReport}
         onCloseNotice={() => controller.setReportNotice(null)}
       />
+
+      {controller.showHints && controller.currentWord.exampleImageUrl && <ModalOverlay
+        ariaLabel="保存済みの画像ヒント"
+        mobileBehavior="sheet"
+        panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6"
+        onClose={() => controller.setShowHints(false)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0"><h2 className="text-lg font-bold text-steady-ink">保存済みの画像ヒント</h2><p className="mt-1 break-words font-bold text-slate-700">{controller.currentWord.word}</p></div>
+          <button type="button" onClick={() => controller.setShowHints(false)} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm font-bold text-slate-700">閉じる</button>
+        </div>
+        {imageAuditTone && <span className={`mt-3 inline-block rounded-full border px-2 py-1 text-xs ${imageAuditTone.className}`}>{imageAuditTone.label}</span>}
+        <img src={controller.currentWord.exampleImageUrl} alt={`「${controller.currentWord.word}」の保存済み画像ヒント`} className="mt-3 h-[45dvh] max-h-[28rem] w-full rounded-xl object-contain" />
+      </ModalOverlay>}
 
       {(controller.bookTitle || taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel) && (
         <p data-testid="study-book-label" className="mb-2 break-words text-xs font-bold text-medace-800">

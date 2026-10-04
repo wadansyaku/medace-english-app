@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { AI_PRICING_VERSION, getAiActionEstimate } from '../config/subscription';
+import { AI_PRICING_VERSION, getAiActionEstimate, SUBSCRIPTION_POLICIES } from '../config/subscription';
 
 describe('AI pricing configuration', () => {
+  it('does not grant learners paid word generation under any plan', () => {
+    for (const policy of Object.values(SUBSCRIPTION_POLICIES)) {
+      expect(policy.allowedAiActions).not.toContain('generateWordImage');
+      expect(policy.allowedAiActions).not.toContain('generateGeminiSentence');
+    }
+  });
   it('exposes a stable pricing version and action estimate', () => {
     expect(AI_PRICING_VERSION).toBe('2026-05-10');
     expect(getAiActionEstimate('generateWordImage')).toMatchObject({

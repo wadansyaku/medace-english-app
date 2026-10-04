@@ -75,7 +75,8 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
 export const apiGet = <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' });
 
-export const apiPost = <T>(path: string, body?: unknown): Promise<T> => request<T>(path, {
+export const apiPost = <T>(path: string, body?: unknown, options?: Pick<RequestInit, 'signal'>): Promise<T> => request<T>(path, {
+  ...options,
   method: 'POST',
   body: body === undefined ? undefined : JSON.stringify(body),
 });

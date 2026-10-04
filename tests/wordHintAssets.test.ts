@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { GeneratedAssetAuditStatus } from '../types';
 import {
-  createLocalExampleHint,
-  createWordImagePlaceholderDataUrl,
   getLearnerGeneratedAssetAuditStatus,
   getHintAuditTone,
   isGeneratedAssetVisibleToLearner,
@@ -34,7 +32,7 @@ describe('word hint asset helpers', () => {
     })).toBe(true);
   });
 
-  it('only shows current and fresh approved generated assets', () => {
+  it('only shows approved assets audited after their generation', () => {
     expect(isGeneratedAssetVisibleToLearner({
       generatedAt: 1_000,
       auditedAt: 1_100,
@@ -63,17 +61,17 @@ describe('word hint asset helpers', () => {
       auditStatus: GeneratedAssetAuditStatus.APPROVED,
       now: 2_100,
       staleMs: 1_000,
-    })).toBe(false);
+    })).toBe(true);
   });
 
-  it('projects stale approvals back to a learner-visible pending state', () => {
+  it('keeps fixed approvals and review holds after elapsed time', () => {
     expect(getLearnerGeneratedAssetAuditStatus({
       generatedAt: 1_000,
       auditedAt: 1_100,
       auditStatus: GeneratedAssetAuditStatus.APPROVED,
       now: 2_100,
       staleMs: 1_000,
-    })).toBe(GeneratedAssetAuditStatus.PENDING);
+    })).toBe(GeneratedAssetAuditStatus.APPROVED);
     expect(getLearnerGeneratedAssetAuditStatus({
       generatedAt: 1_000,
       auditedAt: 1_100,
@@ -175,13 +173,6 @@ describe('word hint asset helpers', () => {
     });
   });
 
-  it('creates deterministic local example fallbacks', () => {
-    expect(createLocalExampleHint('apple', 'a fruit', 0)).toEqual({
-      sentence: 'We use "apple" when talking about a fruit.',
-      translation: '「apple」は a fruit の話をするときに使います。',
-    });
-    expect(createLocalExampleHint('apple', 'a fruit', 1).sentence).toContain('teacher');
-  });
 
   it('falls back to the definition when the example translation is missing', () => {
     expect(resolveExampleTranslation({
@@ -194,11 +185,6 @@ describe('word hint asset helpers', () => {
     })).toBe('鋭い痛み');
   });
 
-  it('creates svg placeholder images', () => {
-    const url = createWordImagePlaceholderDataUrl('orbit', 'round path');
-    expect(url.startsWith('data:image/svg+xml')).toBe(true);
-    expect(url).toContain('orbit');
-  });
 
   it('returns a visible tone for review-required assets', () => {
     expect(getHintAuditTone(GeneratedAssetAuditStatus.REVIEW_REQUIRED)).toEqual({

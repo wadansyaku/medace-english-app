@@ -622,9 +622,25 @@ const main = async () => {
       forceRefresh: true,
     });
     assert(
-      forbiddenSharedHintRefresh.status === 403,
-      'a learner must not force-refresh an existing shared official hint',
+      forbiddenSharedHintRefresh.status === 410,
+      'the retired generation action must reject a learner before refreshing an existing shared official hint',
     );
+    const usageBeforeRetiredCalls = (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM ai_usage_events'))[0].n;
+    for (const client of [freeStudent, admin]) {
+      for (const action of ['generateWordImage', 'generateGeminiSentence']) {
+        const result = await client.request('/api/ai', { method: 'POST', body: JSON.stringify({ action, payload: { word: starterWord.word, definition: starterWord.definition } }) });
+        assert(result.status === 410, `${client.name}: retired AI action ${action} should be gone`);
+      }
+      for (const assetType of ['EXAMPLE', 'IMAGE']) {
+        for (const forceRefresh of [false, true]) {
+          const result = await client.storageRaw('generateWordHintAsset', { wordId: starterWord.id, assetType, forceRefresh });
+          assert(result.status === 410, `${client.name}: retired ${assetType} storage generation should be gone`);
+        }
+      }
+    }
+    const refusedLearnerPreparation = await freeStudent.storageRaw('prepareBookExamples', { bookId: starterHintBook.id });
+    assert(refusedLearnerPreparation.status === 403, 'learner must not start admin example preparation');
+    assert((await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM ai_usage_events'))[0].n === usageBeforeRetiredCalls, 'retired actions must not record provider cost or usage');
     const starterWordsAfterRejectedRefresh = await freeStudent.storage('getWordsByBook', { bookId: starterHintBook.id });
     const starterWordAfterRejectedRefresh = starterWordsAfterRejectedRefresh.find((word) => word.id === starterWord.id);
     assert(

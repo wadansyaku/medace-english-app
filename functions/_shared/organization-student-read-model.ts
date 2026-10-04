@@ -33,6 +33,7 @@ import {
   getMasteryProgressSql,
   getMasterySourceSql,
   readAll,
+  toTokyoDateKey,
   toTokyoDateKeySql,
 } from './storage-support';
 import { isInterventionKind, isRecommendedActionType } from './organization-support';
@@ -166,7 +167,8 @@ const buildEnglishPracticeInsight = (
 
 export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbUserRow): Promise<StudentSummary[]> => {
   const now = Date.now();
-  const activeStudyWindowStart = now - 6 * DAY_MS;
+  // Today and the previous six JST calendar days, through the current instant.
+  const activeStudyWindowStart = Date.parse(`${toTokyoDateKey(now)}T00:00:00+09:00`) - 6 * DAY_MS;
   const organization = currentUser.role === UserRole.ADMIN
     ? null
     : await requireActiveOrganizationContext(env, currentUser);
@@ -217,10 +219,27 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        COALESCE(SUM(CASE WHEN ${selectableHistorySql} THEN h.correct_count ELSE 0 END), 0) AS total_correct,
        COALESCE(SUM(CASE WHEN ${selectableHistorySql} THEN h.attempt_count ELSE 0 END), 0) AS total_attempts,
        MAX(CASE WHEN ${getMasterySourceSql('h')} AND ${selectableHistorySql} THEN h.last_studied_at ELSE NULL END) AS last_active,
-       COUNT(DISTINCT CASE
-         WHEN ${getMasterySourceSql('h')} AND ${selectableHistorySql} AND h.last_studied_at >= ? THEN ${toTokyoDateKeySql('h.last_studied_at')}
-         ELSE NULL
-       END) AS active_study_days_7d,
+       (
+         SELECT COUNT(*) FROM (
+           SELECT ${toTokyoDateKeySql('study_event.created_at')} AS study_day
+           FROM learning_interaction_events study_event
+           JOIN books study_book ON study_book.id = study_event.book_id
+           LEFT JOIN material_source_ledger study_material ON study_material.book_id = study_book.id
+           WHERE study_event.user_id = u.id
+             AND study_event.interaction_source = 'STUDY'
+             AND study_event.created_at >= ? AND study_event.created_at <= ?
+             AND ${buildSelectableBookSql('study_book', 'study_material', 'u')}
+           UNION
+           SELECT ${toTokyoDateKeySql('legacy_study.last_studied_at')} AS study_day
+           FROM learning_histories legacy_study
+           JOIN books legacy_book ON legacy_book.id = legacy_study.book_id
+           LEFT JOIN material_source_ledger legacy_material ON legacy_material.book_id = legacy_book.id
+           WHERE legacy_study.user_id = u.id
+             AND ${getMasterySourceSql('legacy_study')}
+             AND legacy_study.last_studied_at >= ? AND legacy_study.last_studied_at <= ?
+             AND ${buildSelectableBookSql('legacy_book', 'legacy_material', 'u')}
+         )
+       ) AS active_study_days_7d,
        (
          SELECT n.created_at
          FROM instructor_notifications n
@@ -301,6 +320,9 @@ export const handleGetAllStudentsProgress = async (env: AppEnv, currentUser: DbU
        lp.user_id
      ORDER BY last_active DESC, name ASC`,
     activeStudyWindowStart,
+    now,
+    activeStudyWindowStart,
+    now,
     ORGANIZATION_KPI_REACTIVATION_WINDOW_MS,
     UserRole.STUDENT,
     organizationId,

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -32,6 +32,7 @@ import { resolveStorageMode } from '../shared/storageMode';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import BusinessAdminDashboardSections from './dashboard/BusinessAdminDashboardSections';
 import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
+import ProductFeedbackPanel from './ProductFeedbackPanel';
 
 interface BusinessAdminDashboardProps {
   user: UserProfile;
@@ -187,7 +188,7 @@ const BusinessAdminDecisionPanel: React.FC<BusinessAdminDecisionPanelProps> = ({
   </section>
 );
 
-const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
+const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
   user,
   onSelectBook,
   activeView,
@@ -312,16 +313,16 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
       banner={isLocalMockData ? <B2BStorageModeBanner /> : undefined}
       context={(
         <>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          <span className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
             {SUBSCRIPTION_PLAN_LABELS[snapshot.subscriptionPlan]}
           </span>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          <span className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
             グループ管理者
           </span>
         </>
       )}
       userBadge={(
-        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+        <div className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
           {user.displayName}
         </div>
       )}
@@ -378,6 +379,17 @@ const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = ({
       />
     </WorkspaceDashboardShell>
   );
+};
+
+const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = (props) => {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  return <>
+    <ProductFeedbackPanel key={props.user.uid} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+    <div className="mb-4 flex justify-end">
+      <button type="button" onClick={() => setFeedbackOpen(true)} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
+    </div>
+    <BusinessAdminWorkspace {...props} />
+  </>;
 };
 
 export default BusinessAdminDashboard;

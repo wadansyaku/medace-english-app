@@ -12,9 +12,7 @@ interface BookCardProps {
   book: BookMetadata;
   isMine?: boolean;
   progress?: BookProgress;
-  preparingExamples?: boolean;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
-  onPrepareExamples?: (book: BookMetadata) => void;
   onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
@@ -22,9 +20,7 @@ const BookCard: React.FC<BookCardProps> = ({
   book,
   isMine,
   progress,
-  preparingExamples = false,
   onDelete,
-  onPrepareExamples,
   onSelect,
 }) => {
   const isLicensed = book.catalogSource === BookCatalogSource.LICENSED_PARTNER;
@@ -110,16 +106,6 @@ const BookCard: React.FC<BookCardProps> = ({
       </div>
 
       <div className="relative z-10 mt-auto flex flex-col gap-2 border-t border-slate-100 bg-slate-50 p-3 sm:gap-3 sm:p-4">
-        {isMine && onPrepareExamples && (
-          <button
-            type="button"
-            onClick={() => onPrepareExamples(book)}
-            disabled={preparingExamples}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-60"
-          >
-            {preparingExamples ? '例文を準備中...' : '例文を準備'}
-          </button>
-        )}
         <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => {

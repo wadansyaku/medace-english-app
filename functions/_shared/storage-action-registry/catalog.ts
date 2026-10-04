@@ -1,8 +1,9 @@
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
-import { expectEmptyPayload, expectEnum, expectNumber, expectObject, expectOptionalObject, expectString, expectTrimmedString } from '../request-validation';
+import { expectEmptyPayload, expectNumber, expectObject, expectOptionalObject, expectString, expectTrimmedString } from '../request-validation';
 import { normalizeStudyWordRange } from '../../../shared/studyScope';
 import { HttpError } from '../http';
+import { UserRole } from '../../../types';
 import {
   handleBatchImportWords,
   handleDeleteBook,
@@ -73,17 +74,13 @@ export const catalogStorageActionDefinitions = {
     },
   }),
   generateWordHintAsset: defineStorageAction({
-    parse: (payload) => {
-      const record = expectObject(payload);
-      return {
-        wordId: expectString(record, 'wordId'),
-        assetType: expectEnum(record.assetType, ['EXAMPLE', 'IMAGE'], 'assetType'),
-        forceRefresh: typeof record.forceRefresh === 'boolean' ? record.forceRefresh : undefined,
-      } as never;
+    parse: () => {
+      throw new HttpError(410, '学習中の例文・画像生成は終了しました。保存済みの内容をご利用ください。');
     },
     execute: ({ env, user }, payload) => handleGenerateWordHintAsset(env, user, payload),
   }),
   prepareBookExamples: defineStorageAction({
+    roles: [UserRole.ADMIN],
     parse: (payload) => {
       const record = expectObject(payload);
       return { bookId: expectString(record, 'bookId') };

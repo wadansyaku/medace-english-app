@@ -51,7 +51,9 @@ describe('service adapters', () => {
     expect(storageSource).not.toContain('normalizeCatalogImportRows(request)');
     expect(storageSource).not.toContain('createLocalExampleHint(');
     expect(catalogSource).toContain('normalizeCatalogImportRows(request)');
-    expect(catalogSource).toContain('createLocalExampleHint(');
+    expect(catalogSource).not.toContain('createLocalExampleHint(');
+    expect(catalogSource).not.toContain('generateWordImage(');
+    expect(catalogSource).toContain('学習中の例文・画像生成は廃止');
   });
 
   it('keeps local learning plan IndexedDB implementation out of the storage facade body', () => {
