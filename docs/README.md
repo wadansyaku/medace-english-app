@@ -4,6 +4,8 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
+- [有料単語生成廃止の独立候補](./analysis/2026-10-04-paid-generation-only.md): 本番未反映、費用・承認境界と残確認。
+
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。
 
 - [Product charter](../project.md): 対象、価値、原則、観測する指標。

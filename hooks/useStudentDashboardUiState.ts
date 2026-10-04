@@ -43,7 +43,6 @@ export const useStudentDashboardUiState = ({
   const [showPlanEditModal, setShowPlanEditModal] = useState(false);
   const [pageNotice, setPageNotice] = useState<DashboardPageNotice | null>(null);
   const [pendingDeleteBook, setPendingDeleteBook] = useState<PendingDeleteBook | null>(null);
-  const [preparingExamplesBookId, setPreparingExamplesBookId] = useState<string | null>(null);
 
   const [editDailyGoal, setEditDailyGoal] = useState(0);
   const [selectedPlanBooks, setSelectedPlanBooks] = useState<string[]>([]);
@@ -140,8 +139,6 @@ export const useStudentDashboardUiState = ({
     setPageNotice,
     pendingDeleteBook,
     setPendingDeleteBook,
-    preparingExamplesBookId,
-    setPreparingExamplesBookId,
     editDailyGoal,
     setEditDailyGoal,
     selectedPlanBooks,

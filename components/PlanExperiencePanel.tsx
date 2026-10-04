@@ -55,7 +55,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
               <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">AI枠</div>
               <div className="mt-2 text-lg font-black text-slate-950">ライト</div>
-              <div className="mt-1 text-sm text-slate-500">例文生成と小クイズ中心</div>
+              <div className="mt-1 text-sm text-slate-500">保存済み例文と小クイズ中心</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
               <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">次の伸びしろ</div>

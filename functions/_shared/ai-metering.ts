@@ -5,7 +5,7 @@ import {
   getSubscriptionPolicy,
   type MeteredAiAction,
 } from '../../config/subscription';
-import type { WritingAiProvider } from '../../types';
+import { UserRole, type WritingAiProvider } from '../../types';
 import { formatMonthKey } from '../../utils/date';
 import type { ApiRequestLogContext } from './api-routes/runtime';
 import { HttpError } from './http';
@@ -19,6 +19,8 @@ export const assertAiActionAllowed = (
   user: DbUserRow,
   action: MeteredAiAction,
 ): void => {
+  // Only the role-checked admin preparation wrapper can reach this action.
+  if (action === 'generateGeminiSentence' && user.role === UserRole.ADMIN) return;
   const policy = getUserSubscriptionPolicy(user);
   if (!policy.allowedAiActions.includes(action)) {
     throw new HttpError(403, `${policy.label} では ${AI_ACTION_ESTIMATES[action].label} を利用できません。`);

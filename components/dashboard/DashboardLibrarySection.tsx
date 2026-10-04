@@ -14,11 +14,9 @@ interface DashboardLibrarySectionProps {
   progressMap: Record<string, BookProgress>;
   showLibrary: boolean;
   isCompact?: boolean;
-  preparingExamplesBookId?: string | null;
   onToggleLibrary: () => void;
   onOpenCreateModal: () => void;
   onDelete: (event: React.MouseEvent, bookId: string, bookTitle: string) => void;
-  onPrepareExamples: (book: BookMetadata) => void;
   onSelect: (bookId: string, mode: 'study' | 'quiz') => void;
 }
 
@@ -33,11 +31,9 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
   progressMap,
   showLibrary,
   isCompact = false,
-  preparingExamplesBookId,
   onToggleLibrary,
   onOpenCreateModal,
   onDelete,
-  onPrepareExamples,
   onSelect,
 }) => {
   const [query, setQuery] = React.useState('');
@@ -96,9 +92,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
               book={book}
               isMine
               progress={progressMap[book.id]}
-              preparingExamples={preparingExamplesBookId === book.id}
               onDelete={onDelete}
-              onPrepareExamples={onPrepareExamples}
               onSelect={onSelect}
             />
           ))}

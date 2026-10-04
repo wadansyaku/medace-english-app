@@ -45,7 +45,7 @@ describe('official import approval boundary with the complete local schema', () 
     const fixture = createFixture();
     const result = await handleBatchImportWords(fixture.env, admin, request(), localImportFlags);
     const bookId = result.importedBookIds[0];
-    expect(migrations).toHaveLength(46);
+    expect(migrations).toHaveLength(47);
     expect(migrations).toContain('0045_guest_trial_and_optional_diagnostic.sql');
     expect(ledger(fixture, bookId)).toMatchObject({ rights_status: 'pending', review_status: 'needs_review', qa_word_count: 1, qa_required_blank_rows: 0, qa_rows_with_sentinel: 0, qa_sentinel_value_count: 0 });
     await expect(handleGetWordsByBook(fixture.env, learner, bookId)).rejects.toMatchObject({ status: 403 });

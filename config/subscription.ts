@@ -44,11 +44,11 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     priceLabel: '無料',
     pricingNote: '広告付きのセルフサーブ導線。スターター公式教材と基本学習を利用できます',
     monthlyAiBudgetMilliYen: 1200,
-    allowedAiActions: ['generateGeminiSentence', 'generateAIQuiz', 'generateGrammarPracticeQuestions', 'evaluateJapaneseTranslationAnswer', 'generateDiagnosticTest'],
+    allowedAiActions: ['generateAIQuiz', 'generateGrammarPracticeQuestions', 'evaluateJapaneseTranslationAnswer', 'generateDiagnosticTest'],
     featureSummary: [
       'オリジナル単語データベースのスターター教材と通常学習を無理なく始められます',
       '学習プランはAIではなく標準ロジックで自動提案します',
-      'AIは例文生成と小さなクイズ補助を中心に使えます',
+      '保存済み例文で学習し、AIは小さなクイズ補助に使えます',
       'フルの既存公式教材カタログは含めず、低コスト運用を優先します',
     ],
   },
@@ -60,8 +60,6 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     pricingNote: '広告なしの個人向け拡張プラン。スターター公式教材に加えてAI教材化まで利用できます',
     monthlyAiBudgetMilliYen: 12000,
     allowedAiActions: [
-      'generateGeminiSentence',
-      'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
       'evaluateJapaneseTranslationAnswer',
@@ -86,8 +84,6 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     pricingNote: '導入検証用。正式教材カタログと権限運用は本導入前提',
     monthlyAiBudgetMilliYen: 8000,
     allowedAiActions: [
-      'generateGeminiSentence',
-      'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
       'evaluateJapaneseTranslationAnswer',
@@ -111,8 +107,6 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     pricingNote: '費用は導入規模に応じて個別にご案内します。導入費と管理・アップデート費は現時点では未定です。',
     monthlyAiBudgetMilliYen: 40000,
     allowedAiActions: [
-      'generateGeminiSentence',
-      'generateWordImage',
       'generateAIQuiz',
       'generateGrammarPracticeQuestions',
       'evaluateJapaneseTranslationAnswer',

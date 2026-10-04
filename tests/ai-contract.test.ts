@@ -34,7 +34,7 @@ vi.mock('@google/genai', () => ({
 }));
 
 import { validateAiActionRequest } from '../contracts/ai';
-import { handleAiAction } from '../functions/_shared/ai-actions';
+import { generateMeteredGeminiSentence, handleAiAction } from '../functions/_shared/ai-actions';
 
 const createUser = () => ({
   id: 'user-1',
@@ -90,6 +90,35 @@ describe('AI action contract validation', () => {
     assertBudgetAvailableMock.mockReset();
     recordAiUsageEventMock.mockReset();
     generateContentMock.mockReset();
+  });
+
+  it.each(['STUDENT', 'INSTRUCTOR', 'ADMIN'])('rejects direct retired generation for %s before provider, budget or usage', async (role) => {
+    for (const action of ['generateWordImage', 'generateGeminiSentence']) {
+      await expect(handleAiAction({ GEMINI_API_KEY: 'test-key' } as never, { ...createUser(), role } as never, {
+        action, payload: { word: 'acute', definition: '鋭い' },
+      })).rejects.toMatchObject({ status: 410 });
+    }
+    expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
+    expect(recordAiUsageEventMock).not.toHaveBeenCalled();
+    expect(generateContentMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['STUDENT', 'INSTRUCTOR'])('rejects the internal example wrapper for %s before provider, budget or usage', async (role) => {
+    await expect(generateMeteredGeminiSentence({ GEMINI_API_KEY: 'test-key' } as never, { ...createUser(), role } as never, {
+      word: 'acute', definition: '鋭い',
+    })).rejects.toMatchObject({ status: 403 });
+    expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
+    expect(recordAiUsageEventMock).not.toHaveBeenCalled();
+    expect(generateContentMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps budget checks and usage metering for administrator example preparation', async () => {
+    generateContentMock.mockResolvedValueOnce({ text: JSON.stringify({ english: 'Acute pain needs attention.', japanese: '激痛には注意が必要です。' }) });
+    const env = { GEMINI_API_KEY: 'test-key' } as never;
+    const user = { ...createUser(), role: 'ADMIN' } as never;
+    await expect(generateMeteredGeminiSentence(env, user, { word: 'acute', definition: '鋭い' })).resolves.toMatchObject({ english: 'Acute pain needs attention.' });
+    expect(assertBudgetAvailableMock).toHaveBeenCalledWith(env, user, 'generateGeminiSentence');
+    expect(recordAiUsageEventMock).toHaveBeenCalledWith(env, user, expect.objectContaining({ action: 'generateGeminiSentence', usedAi: true }));
   });
 
   it('accepts exact upper-bound payloads at the contract layer', () => {

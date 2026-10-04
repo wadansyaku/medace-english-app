@@ -10,6 +10,7 @@ import {
 import {
   BookAccessScope,
   BookCatalogSource,
+  GeneratedAssetAuditStatus,
   type BookMetadata,
   type WordData,
 } from '../types';
@@ -72,13 +73,16 @@ const createControlledTransaction = (
 const createControlledWriteStore = <T>() => {
   const request = createControlledRequest<T>();
   const transaction = createControlledTransaction();
-  const put = vi.fn(() => request.request);
+  const read = createControlledRequest<WordData>();
+  const put = vi.fn((_value: unknown) => request.request);
   return {
     put,
     request,
+    read,
     transaction,
     store: {
       put,
+      get: vi.fn(() => read.request),
       transaction: transaction.transaction,
     } as unknown as IDBObjectStore,
   };
@@ -218,6 +222,7 @@ describe('local catalog write contracts', () => {
     await flushMicrotasks();
 
     expect(getStore).toHaveBeenCalledWith(STORES.WORDS, 'readwrite');
+    writeStore.read.succeed(makeWord());
     expect(writeStore.put).toHaveBeenCalledWith(makeWord());
     expect(resolved).toBe(false);
 
@@ -237,9 +242,33 @@ describe('local catalog write contracts', () => {
 
     const updatePromise = updateWordLocal({ getStore }, makeWord());
     await flushMicrotasks();
+    writeStore.read.succeed(makeWord());
     writeStore.request.fail(requestError);
 
     await expect(updatePromise).rejects.toThrow('word put failed');
+  });
+
+  it.each([false, true])('preserves hidden saved hints and only invalidates approval on content change (%s)', async changed => {
+    const stored = {
+      ...makeWord(), exampleSentence: 'Stored generated sentence.', exampleMeaning: '保存された生成例文。',
+      exampleGeneratedAt: 1000, exampleAuditStatus: GeneratedAssetAuditStatus.APPROVED,
+      exampleImageUrl: 'data:image/png;base64,stored-image', exampleImageGeneratedAt: 1000,
+      exampleImageAuditStatus: GeneratedAssetAuditStatus.APPROVED,
+    };
+    const writeStore = createControlledWriteStore<IDBValidKey>();
+    const getStore = vi.fn(async () => writeStore.store) as GetStore;
+    const result = updateWordLocal({ getStore }, { ...stored, definition: changed ? '変更された意味' : stored.definition, exampleSentence: null, exampleMeaning: null, exampleImageUrl: null });
+    await flushMicrotasks();
+    writeStore.read.succeed(stored);
+    expect(writeStore.put.mock.calls[0]?.[0]).toMatchObject({
+      exampleSentence: stored.exampleSentence, exampleMeaning: stored.exampleMeaning, exampleImageUrl: stored.exampleImageUrl,
+      exampleGeneratedAt: 1000, exampleImageGeneratedAt: 1000,
+      exampleAuditStatus: changed ? GeneratedAssetAuditStatus.REVIEW_REQUIRED : GeneratedAssetAuditStatus.APPROVED,
+      exampleImageAuditStatus: changed ? GeneratedAssetAuditStatus.REVIEW_REQUIRED : GeneratedAssetAuditStatus.APPROVED,
+    });
+    writeStore.request.succeed('word-1');
+    writeStore.transaction.complete();
+    await result;
   });
 
 });

@@ -175,7 +175,7 @@ npm run release:gate:local
 - `deploy-pages-preview.yml`: preview deploy 前に `npm run release:gate:local` 相当の `security:audit` / `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ preview D1 remote migration / content QA gate / source ledger gate / B2B activation integrity gate / Pages deploy / deployed preview smoke へ進む
 - `deploy-pages.yml`: production deploy 前に `npm run release:gate:local` 相当の `security:audit` / `verify:fast` / build / `test:api` / `node scripts/run-smoke-tests.mjs --suite full` / `cf:doctor` / deploy artifact build を実行し、`cf:doctor` の `Summary` が `error=0` の場合だけ D1 recovery bookmark 採取 / remote D1 migration / content QA gate / source ledger gate / B2B activation integrity gate / Pages deploy / deployed production smoke へ進む
 - `analytics-snapshots.yml`: 毎日 03:40 JST に本番 `/api/internal/analytics-snapshots/run` を叩き、プロダクト KPI の日次 snapshot を保存
-- `word-hint-audit.yml`: 毎日 03:30 JST に本番 `/api/internal/word-hint-audits/run` を叩き、保存済みの例文・画像ヒントを小さなバッチで再監査
+- `word-hint-audit.yml`: 2026-10-04の有料生成廃止の独立候補で有料定期再監査を廃止。scheduleなし、手動実行も説明だけ。公開版e97には未反映。承認・事前準備の境界は[候補の記録](./analysis/2026-10-04-paid-generation-only.md)。
 
 運用 runbook は [`./docs/deployment-ops-runbook.md`](./deployment-ops-runbook.md) を参照してください。
 

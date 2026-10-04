@@ -168,11 +168,9 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         progressMap={viewModel.progressMap}
         showLibrary={controller.showLibrary}
         isCompact={isStudentMobileShell}
-        preparingExamplesBookId={controller.preparingExamplesBookId}
         onToggleLibrary={() => controller.setShowLibrary((previous) => !previous)}
         onOpenCreateModal={() => controller.setShowCreateModal(true)}
         onDelete={controller.handleDeleteBook}
-        onPrepareExamples={controller.handlePrepareBookExamples}
         onSelect={onSelectBook}
       />
     </div>

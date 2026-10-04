@@ -142,38 +142,6 @@ const estimateAdvancedDiagnosticLevel = (
   return EnglishLevel.A1;
 };
 
-export const generateGeminiSentence = async (
-  word: string,
-  definition: string,
-  userLevel: EnglishLevel = EnglishLevel.B1,
-  sourceContext?: string
-): Promise<GeneratedContext | null> => {
-  try {
-    return await callAi('generateGeminiSentence', {
-      word,
-      definition,
-      userLevel,
-      sourceContext,
-    });
-  } catch (error) {
-    if (isRateLimitError(error)) return null;
-    console.error('Sentence generation failed:', error);
-    return null;
-  }
-};
-
-export const generateWordImage = async (word: string, definition: string): Promise<string | null> => {
-  try {
-    return await callAi('generateWordImage', { word, definition });
-  } catch (error) {
-    if (isRateLimitError(error)) {
-      return null;
-    }
-    console.error('Image generation failed:', error);
-    return null;
-  }
-};
-
 export const generateAIQuiz = async (targetWords: WordData[]): Promise<AIQuizQuestion[]> => {
   if (targetWords.length === 0) return [];
 

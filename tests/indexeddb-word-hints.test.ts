@@ -1,19 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { GeneratedAssetAuditStatus, WordHintAssetType, type WordData } from '../types';
-
-const {
-  generateGeminiSentenceMock,
-  generateWordImageMock,
-} = vi.hoisted(() => ({
-  generateGeminiSentenceMock: vi.fn(),
-  generateWordImageMock: vi.fn(),
-}));
-
-vi.mock('../services/gemini', () => ({
-  generateGeminiSentence: generateGeminiSentenceMock,
-  generateWordImage: generateWordImageMock,
-}));
 
 vi.mock('../services/storage/idb-support', async () => {
   const actual = await vi.importActual<typeof import('../services/storage/idb-support')>('../services/storage/idb-support');
@@ -46,20 +33,6 @@ const createRequest = <T>(result?: T, error?: Error) => {
   return request as IDBRequest<T>;
 };
 
-const createCompletingTransaction = () => {
-  let oncomplete: ((event: Event) => void) | null = null;
-  return {
-    error: null,
-    get oncomplete() {
-      return oncomplete;
-    },
-    set oncomplete(handler) {
-      oncomplete = handler;
-      queueMicrotask(() => handler?.(new Event('complete')));
-    },
-  } as unknown as IDBTransaction;
-};
-
 const createWord = (): WordData => ({
   id: 'word-1',
   bookId: 'book-1',
@@ -70,82 +43,24 @@ const createWord = (): WordData => ({
 });
 
 describe('IndexedDBStorageService word hints', () => {
-  beforeEach(() => {
-    generateGeminiSentenceMock.mockReset();
-    generateWordImageMock.mockReset();
+  it.each([WordHintAssetType.EXAMPLE, WordHintAssetType.IMAGE])('rejects retired %s generation before reading or mutating storage', async (assetType) => {
+    const getStore = vi.fn();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const service = new IndexedDBStorageService({ getStore });
+      for (const forceRefresh of [false, true]) {
+        await expect(service.generateWordHintAsset({ wordId: 'word-1', assetType, forceRefresh })).rejects.toThrow('廃止');
+      }
+      expect(getStore).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); }
   });
 
-  it('persists pending examples for audit but returns a learner-safe copy', async () => {
-    const storedWord = createWord();
-    const putMock = vi.fn((value: WordData) => createRequest(value));
-    const readStore = {
-      get: vi.fn(() => createRequest(storedWord)),
-    } as unknown as IDBObjectStore;
-    const writeStore = {
-      put: putMock,
-      transaction: createCompletingTransaction(),
-    } as unknown as IDBObjectStore;
-    const getStoreMock = vi.fn(async (_storeName: string, mode: IDBTransactionMode = 'readonly') => (
-      mode === 'readwrite' ? writeStore : readStore
-    ));
-
-    generateGeminiSentenceMock.mockResolvedValueOnce({
-      english: 'The patient reported acute pain.',
-      japanese: '患者は鋭い痛みを訴えた。',
-    });
-
-    const service = new IndexedDBStorageService({ getStore: getStoreMock });
-    const result = await service.generateWordHintAsset({
-      wordId: 'word-1',
-      assetType: WordHintAssetType.EXAMPLE,
-    });
-
-    expect(getStoreMock).toHaveBeenNthCalledWith(1, 'words', 'readonly');
-    expect(getStoreMock).toHaveBeenNthCalledWith(2, 'words', 'readwrite');
-    expect(putMock).toHaveBeenCalledTimes(1);
-    expect(putMock.mock.calls[0]?.[0]).toMatchObject({
-      id: 'word-1',
-      exampleSentence: 'The patient reported acute pain.',
-      exampleMeaning: '患者は鋭い痛みを訴えた。',
-      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
-    });
-    expect(result).toMatchObject({
-      exampleSentence: null,
-      exampleMeaning: null,
-      exampleAuditStatus: GeneratedAssetAuditStatus.PENDING,
-    });
-  });
-
-  it('persists pending images for audit but never returns their URL to learners', async () => {
-    const storedWord = createWord();
-    const putMock = vi.fn((value: WordData) => createRequest(value));
-    const readStore = {
-      get: vi.fn(() => createRequest(storedWord)),
-    } as unknown as IDBObjectStore;
-    const writeStore = {
-      put: putMock,
-      transaction: createCompletingTransaction(),
-    } as unknown as IDBObjectStore;
-    const getStoreMock = vi.fn(async (_storeName: string, mode: IDBTransactionMode = 'readonly') => (
-      mode === 'readwrite' ? writeStore : readStore
-    ));
-    generateWordImageMock.mockResolvedValueOnce('data:image/png;base64,pending-image');
-
-    const service = new IndexedDBStorageService({ getStore: getStoreMock });
-    const result = await service.generateWordHintAsset({
-      wordId: 'word-1',
-      assetType: WordHintAssetType.IMAGE,
-    });
-
-    expect(putMock.mock.calls[0]?.[0]).toMatchObject({
-      id: 'word-1',
-      exampleImageUrl: 'data:image/png;base64,pending-image',
-      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
-    });
-    expect(result).toMatchObject({
-      exampleImageUrl: null,
-      exampleImageAuditStatus: GeneratedAssetAuditStatus.PENDING,
-    });
+  it('does not fabricate examples in local preparation', async () => {
+    const getStore = vi.fn();
+    const service = new IndexedDBStorageService({ getStore });
+    await expect(service.prepareBookExamples('book-1')).rejects.toThrow('端末内では生成しません');
+    expect(getStore).not.toHaveBeenCalled();
   });
 
   it('withholds pending stored hints when a local book is read again', async () => {

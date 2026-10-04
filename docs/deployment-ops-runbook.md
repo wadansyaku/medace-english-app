@@ -95,7 +95,7 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 - Cloudflare native Git auto-deploy、`*-git` mirror Pages project、Pages project 設定の検査不能は二重 deploy や migration 前 deploy の原因になるため、通常の `cf:doctor` で release-blocking error として扱います。`npm run cf:sync` で auto-deploy を無効化し、不要な mirror project は Cloudflare Dashboard で削除してください。
 - Cloudflare Dashboard の `Deployments paused` / `デプロイを一時停止` は、この repo では GitHub Actions 以外の native Git auto-deploy を止めている表示です。Pages project 自体の公開停止ではありません。`npm run cf:doctor` が `error=0` で、live `/api/session` の `x-deployment-sha` が最新 deploy SHA と一致する場合は、`Resume deployments` を押さずそのまま維持します。
 - `npm run cf:doctor:strict` は deferred AI key も release 条件に含める日の診断用です。通常の local release gate と deploy workflow は `cf:doctor` を正本にします。
-- `INTERNAL_JOB_SECRET` は GitHub scheduled workflow の repository secret と、Pages production / preview の runtime secret の両方に必要です。前者が無いと `analytics-snapshots.yml` / `word-hint-audit.yml` が落ち、後者が無いと内部 endpoint が 503 を返します。
+- `INTERNAL_JOB_SECRET` は GitHub scheduled workflow の repository secret と、Pages production / preview の runtime secret の両方に必要です。前者が無いと `analytics-snapshots.yml` が落ち、後者が無いと内部 endpoint が 503 を返します。2026-10-04の有料生成廃止の独立候補では有料 `word-hint-audit.yml` と監査endpointを停止しています（公開版e97には未反映）。
 - Pages の required secrets は `ADMIN_DEMO_PASSWORD`, `WRITING_AI_MODE`, `INTERNAL_JOB_SECRET` です。`GEMINI_API_KEY` と `OPENAI_API_KEY` は外部 AI を有効化するまで deferred warning として扱います。
 - service admin の本番操作デモを開ける日は、Pages runtime secret `ENABLE_ADMIN_DEMO=true` と GitHub production environment variable `VITE_ENABLE_ADMIN_DEMO=true` を両方設定し、deploy workflow で再 build します。解除するときは両方を `false` に戻して再 deploy してください。
 - `npm run cf:sync` は GitHub environment vars/secrets と preview DB の存在を揃えます。

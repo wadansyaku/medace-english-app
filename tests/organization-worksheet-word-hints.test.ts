@@ -100,7 +100,7 @@ const createExampleAuditCases = (now: number) => [
     generatedAt: now - (16 * DAY_MS),
     auditStatus: GeneratedAssetAuditStatus.APPROVED,
     auditedAt: now - (15 * DAY_MS),
-    visible: false,
+    visible: true,
   },
 ];
 
@@ -132,7 +132,7 @@ describe('organization worksheet generated hint projection', () => {
     readVisibleLearningBookRowsMock.mockReset().mockResolvedValue([{ id: 'book-1', title: 'Book 1' }]);
   });
 
-  it('withholds held and stale generated examples from history-based staff worksheets', async () => {
+  it('withholds held generated examples while retaining fixed approvals in staff worksheets', async () => {
     const cases = createExampleAuditCases(Date.now());
     readAllMock.mockResolvedValueOnce(cases.map((item, index) => ({
       word_id: item.id,
