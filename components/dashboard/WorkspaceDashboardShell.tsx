@@ -25,8 +25,8 @@ interface WorkspaceDashboardShellProps {
 
 const getActionClassName = (variant: WorkspaceHeroAction['variant']) => (
   variant === 'secondary'
-    ? 'border border-white/10 bg-white/10 text-white transition-colors hover:bg-white/15'
-    : 'bg-white text-medace-900 transition-colors hover:bg-medace-50'
+    ? 'border border-[#2F1609]/15 bg-[#FDF3ED] text-[#2F1609] transition-colors hover:bg-white'
+    : 'bg-white text-[#2F1609] transition-colors hover:bg-[#FDF3ED]'
 );
 
 const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
@@ -46,7 +46,7 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
     {notice}
     {banner}
 
-    <section className="relative overflow-hidden rounded-[32px] bg-medace-600 p-8 text-slate-950 shadow-[0_24px_60px_rgba(255,122,0,0.16)]">
+    <section className="relative overflow-hidden rounded-[32px] bg-medace-600 p-8 text-[#2F1609] shadow-[0_24px_60px_rgba(255,122,0,0.16)]">
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -56,9 +56,9 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
         </div>
 
         <div className="mt-6 max-w-3xl">
-          <p className="text-xs font-bold text-white/70">{eyebrow}</p>
+          <p className="text-xs font-bold text-[#2F1609]">{eyebrow}</p>
           <h2 className="mt-3 text-3xl font-black tracking-tight">{title}</h2>
-          <p className="mt-4 text-sm leading-relaxed text-white/78">{body}</p>
+          <p className="mt-4 text-sm leading-relaxed text-[#2F1609]">{body}</p>
         </div>
 
         {actions.length > 0 && (

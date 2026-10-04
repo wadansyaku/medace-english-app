@@ -313,16 +313,16 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
       banner={isLocalMockData ? <B2BStorageModeBanner /> : undefined}
       context={(
         <>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          <span className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
             {SUBSCRIPTION_PLAN_LABELS[snapshot.subscriptionPlan]}
           </span>
-          <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+          <span className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
             グループ管理者
           </span>
         </>
       )}
       userBadge={(
-        <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+        <div className="rounded-full border border-[#2F1609]/15 bg-[#FDF3ED] px-3 py-1 text-xs font-bold text-[#2F1609]">
           {user.displayName}
         </div>
       )}
