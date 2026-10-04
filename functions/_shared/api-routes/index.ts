@@ -1,4 +1,5 @@
 import type { ApiRouteDefinition } from './runtime';
+import { productFeedbackRoutes } from './product-feedback';
 import { aiRoutes } from './ai';
 import { analyticsRoutes } from './analytics';
 import { authProfileRoutes } from './auth-profile';
@@ -10,6 +11,7 @@ import { wordHintRoutes } from './word-hints';
 import { writingRoutes } from './writing';
 
 export const apiRoutes: ApiRouteDefinition[] = [
+  ...productFeedbackRoutes,
   ...analyticsRoutes,
   ...authProfileRoutes,
   ...guestTrialRoutes,

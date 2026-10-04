@@ -4,7 +4,7 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
-- [有料単語生成廃止の独立候補](./analysis/2026-10-04-paid-generation-only.md): 本番未反映、費用・承認境界と残確認。
+- [本番FAQ・製品改善と有料単語生成廃止](./analysis/2026-10-04-production-feedback-loop.md): 実装済み・最終gate/公開待ち。権限・D1保存・費用・移行と検証欄。
 
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。
 
@@ -24,6 +24,8 @@ This directory keeps operational docs and historical design notes for Steady Stu
 - [Brand and PWA principles](./phase-0-brand-pwa-copy.md): 正式名称、色、学習ホームの方針。
 
 ## Reference
+
+- [有料単語生成廃止の独立候補 2026-10-04](./analysis/2026-10-04-paid-generation-only.md): 本番統合前の分離・検証の歴史的証拠。
 
 - [Repository audit 2026-07-11](./analysis/repository-audit-and-improvement-plan-2026-07-11.md)
 - [Writing security review 2026-07-10](./analysis/security-review-2026-07-10.md)

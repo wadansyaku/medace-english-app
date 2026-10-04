@@ -60,10 +60,17 @@ PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで�
 正本: [実装・移行影響・残確認](./docs/analysis/2026-10-03-smart-ui-and-grammar.md)。旧Quiz/印刷fallback・C2追加・本文IDのCloud永続化まで改善済みとはしない。
 
 
-## 2026-10-04 有料単語生成廃止の独立候補
+## 2026-10-04 本番FAQ・製品改善と有料単語生成廃止
 
-- [x] 学習中生成・旧API・有料再監査撤去と管理者費用確認を分離。
-- [ ] 人手承認・結果不明claim回復・和訳欠損整備。
-- [ ] 本人確認と正式公開gate、0046適用、配備後確認。
+実装済み・最終gate/公開待ち。[範囲・保存契約・検証と公開状態](./docs/analysis/2026-10-04-production-feedback-loop.md)。本人の本番開発・PR/merge/deploy承認済み。本番反映済みとはまだ記さない。
 
-本番未反映。[範囲と残確認](./docs/analysis/2026-10-04-paid-generation-only.md)。
+- [x] 有料単語画像/学習中例文生成・旧API・有料再監査を撤去。管理者の最大10件・概算上限1.2円・明示確認・承認待ち保存と0046 claimを保持。
+- [x] D1のFAQ未回答/製品報告、優先度・受入条件、手動JSON引継ぎ、修正版、再テスト成功/失敗と履歴を実装。自動外部送信なし。
+- [x] 講師の自分の報告＋ACTIVE組織、ADMIN全報告のサーバー認可、revision/CAS、操作ID再送を実装。氏名・答案を含めない手順を案内。
+- [x] 講師の日数を教材/権限とJST7暦日で集計。0046/0047は追加migration、利用者/組織削除との互換を維持。
+- [ ] 最終候補の型/unit/API/build/full browser/audit、read-only gateを確認し、検証結果を正本へ追記。
+- [ ] PR必須verify/preview、0046/0047適用、main merge、production deployと公開版確認を完了し、SHA/URL/bookmarkを記録。
+- [ ] 人手承認・結果不明claim回復・和訳欠損を運用で整備。
+- [ ] 母数/期間を固定して継続率・再テスト成績・遅延定着を測定。競争優位性は未実証。
+
+[有料生成廃止の独立候補](./docs/analysis/2026-10-04-paid-generation-only.md)は分離時点の歴史的証拠として保持する。

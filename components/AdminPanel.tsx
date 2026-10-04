@@ -13,6 +13,7 @@ import ModalOverlay from './ModalOverlay';
 import AdminCommercialOpsView from './admin/AdminCommercialOpsView';
 import AdminContentImportView from './admin/AdminContentImportView';
 import AdminDashboardView from './admin/AdminDashboardView';
+import ProductFeedbackPanel from './ProductFeedbackPanel';
 
 const formatCost = (milliYen: number): string => {
   const yen = milliYen / 1000;
@@ -33,6 +34,7 @@ const appendImportSummary = (
 };
 
 const AdminPanel: React.FC = () => {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial'>('dashboard');
   const [mode, setMode] = useState<'csv' | 'ai'>('ai');
   const {
@@ -315,6 +317,7 @@ const AdminPanel: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
+      <ProductFeedbackPanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       {examplePreview && <ModalOverlay ariaLabel="例文の事前準備" mobileBehavior="sheet" panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6" onClose={() => { if (!examplePreparationPending.current) setExamplePreview(null); }}>
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-xl font-bold text-slate-900">例文の事前準備</h2><p className="mt-1 break-words text-sm text-slate-600">{examplePreview.book.title}</p></div><button type="button" disabled={Boolean(preparingExamplesBookId)} onClick={() => setExamplePreview(null)} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm">閉じる</button></div>
         {examplePreview.error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{examplePreview.error}</p>}
@@ -383,6 +386,7 @@ const AdminPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => setFeedbackOpen(true)} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
           <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
             <button
               onClick={() => { if (!importPending.current) setPanelView('dashboard'); }}

@@ -616,6 +616,7 @@ export const handleResetAllData = async (env: AppEnv): Promise<void> => {
   }
 
   const statements = [
+    env.DB.prepare('DELETE FROM product_feedback_reports'),
     env.DB.prepare('DELETE FROM sessions'),
     env.DB.prepare('DELETE FROM writing_teacher_reviews'),
     env.DB.prepare('DELETE FROM writing_ai_evaluations'),
