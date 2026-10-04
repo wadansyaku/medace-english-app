@@ -88,10 +88,10 @@ test('retrying an old committed receipt keeps a newer displayed revision', async
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
   test(`feedback is readable with reachable close and retained inputs at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport); await page.goto('/'); await loginInstructorDemo(page); await open(page);
-    const dialog = page.getByRole('dialog', { name: 'FAQ・製品の報告' }); await expect(page.getByTestId('product-feedback-create')).toBeHidden(); await expect(dialog).toBeVisible(); await page.screenshot({ path: testInfo.outputPath(`feedback-initial-${viewport.width}.png`) });
+    const dialog = page.getByRole('dialog', { name: 'FAQ・製品の報告' }); await expect(page.getByTestId('product-feedback-create')).toBeHidden(); await expect(dialog).toBeVisible(); expect((await page.getByText('学習・報告のよくある質問', { exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44); await page.screenshot({ path: testInfo.outputPath(`feedback-initial-${viewport.width}.png`) });
     const form = await fill(page, `表示の確認 ${randomUUID()}`); await form.getByRole('button', { name: '報告をサーバーに保存' }).scrollIntoViewIfNeeded();
     expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true); expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
-    const close = dialog.getByRole('button', { name: '戻る・閉じる' }); const box = await close.boundingBox(); expect(box).not.toBeNull(); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+    const close = dialog.getByRole('button', { name: '戻る・閉じる' }); const box = await close.boundingBox(); expect(box).not.toBeNull(); expect(box!.y).toBeGreaterThanOrEqual(0); expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height); const headerBox = (await close.locator('..').boundingBox())!; const dialogBox = (await dialog.boundingBox())!; expect(Math.abs(headerBox.y - dialogBox.y)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: testInfo.outputPath(`feedback-form-${viewport.width}.png`) }); await close.click(); await expect(dialog).toHaveCount(0); await open(page); await expect(form.getByLabel('件名', { exact: true })).toHaveValue(/^表示の確認/); await expect(form.getByRole('checkbox')).not.toBeChecked();
   });
 }

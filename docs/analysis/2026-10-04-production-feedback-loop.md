@@ -40,12 +40,14 @@ rollbackは追加0046/0047 schemaを残したコード復旧を優先する。�
 
 正規手順は[deployment runbook](../deployment-ops-runbook.md)を維持する。最終候補でlocalの型/unit/API/build/full browser/audit/migration/境界を確認し、doctorと教材QA/台帳/B2B整合性をread-onlyで確認する。PR必須verifyとpreview deployment、0046/0047適用、main mergeによるproduction workflow、SHA付き公開版受入へ進む。既存キーを使用し、新キー作成や無断外部送信を追加しない。
 
-## 検証結果・公開証拠（最終担当が追記）
+## 検証結果・公開証拠
 
-- 最終候補SHA・差分: 未記入。
-- 型/unit/API/build/audit/migration/境界: 1254unit、型、API統合、build、48migration replay、audit、境界成功。最終UI修正後の全gateを再実行する。
-- Chrome: 最終UIの対象9件成功。5画面幅、Tab/Shift+Tab/Escape、実D1保存/再訪、管理者triage→手動JSON→修正版→再テスト失敗→再修正→成功、実download、応答消失/同内容再送、旧receiptで新版を保持、未認証/生徒拒否を確認。最初の全回帰はCloud142成功/2失敗/2preview限定skip＋IDB9成功。入力済textareaのaccessible nameと更新文言の期待値を修正し、最終全回帰を再実行する。
-- read-only doctor/教材QA/台帳/B2B gate: 最終結果未記入。
-- PR・必須checks・preview URL/SHA・deployed受入: 未実施として保持。
-- main SHA・production run/URL・0046/0047・recovery bookmark・公開版受入: 未実施として保持。
+本ファイルはmerge前の記録。後続の公開状態、SHA、URLとbookmarkは[PR55](https://github.com/wadansyaku/medace-english-app/pull/55)と同PRの必須workflow結果で追跡する。公開結果を未確認のまま成功と記さない。
+
+- 統合実装b5861b8992408d826200ef24c7da9578ea6f8fd8: Node22で全local release gate成功。1254unit、型、API統合、build、48migration replay、audit、到達性・依存境界が成功。
+- Chrome全回帰: Cloud144成功/2preview限定skip、IDB9成功。入力済textareaのaccessible nameと更新文言の期待値を修正した実装で、報告→修正→再テスト失敗→再修正→成功を確認した。
+- 最終差分: スクロール中のheaderをdialog上端へ固定し、FAQ/reportのsummaryに44px以上のtouch領域を確保。独立cloneでbuildと対象Chrome9件成功。320/390/横向き844/768/1366px、Tab/Shift+Tab/Escape、実D1保存/再訪、triage→実JSON download→再テスト一周、応答消失/同内容再送、旧receiptで新版を保持、未認証/生徒拒否を確認。最終候補の全回帰はPR必須CI/preview workflowで再確認する。
+- read-only doctor/教材QA/台帳/B2B gate: b586のlocal release gateで全成功。
+- PR55のb586必須verify/preview: 成功。最終差分のchecksは再実行し、通過したHEADを指定してmergeする。
+- main SHA・production run/URL・0046/0047・recovery bookmark・公開版受入: merge後の正規production workflowとSHA付き受入で記録する。
 - 継続率・再テスト成績・遅延定着・優位性: 未測定/未実証。
