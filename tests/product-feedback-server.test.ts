@@ -49,6 +49,24 @@ describe('product feedback authenticated atomic loop', () => {
     for(const actual of ['email me at user@example.test','call 090-1234-5678']) await expect(f.run({...create(),input:{...input,actual}},'admin')).rejects.toMatchObject({status:400});
     await expect(f.run({...create(),privacyConfirmed:false},'admin')).rejects.toMatchObject({status:400});
   });
+  it('blocks every feedback operation after a teacher membership becomes STUDENT, while allowing GROUP_ADMIN and service ADMIN',async()=>{
+    const f=setup();await f.run(create());await f.run(advance(1,triage),'admin');
+    await f.run(advance(2,{type:'prepare-handoff'}),'admin');
+    await f.run(advance(3,{type:'record-fix',revision:'commit-1',note:'Repair button'}),'admin');
+    f.sqlite.exec("UPDATE organization_memberships SET role='STUDENT' WHERE user_id='teacher'");
+    expect(f.user().role).toBe('INSTRUCTOR');
+    for(const body of [create('blocked-report'),{action:'list'},{action:'get',id:'report-1'},advance(4,{type:'retest',passed:true,note:'Checked'})]) {
+      await expect(f.run(body)).rejects.toMatchObject({status:403});
+    }
+    expect(f.count('product_feedback_reports')).toBe(1);expect(f.count('product_feedback_events')).toBe(4);expect(f.count('product_feedback_receipts')).toBe(3);
+    expect(await f.run({action:'get',id:'report-1'},'admin')).toMatchObject({status:'FIXED',revision:4});
+    expect(await f.run({action:'list'},'admin')).toMatchObject({canManage:true});
+    f.sqlite.exec("UPDATE organization_memberships SET role='GROUP_ADMIN' WHERE user_id='teacher'");
+    expect(await f.run({action:'get',id:'report-1'})).toMatchObject({status:'FIXED',isOwnReport:true});
+    expect(await f.run(advance(4,{type:'retest',passed:true,note:'Checked'}))).toMatchObject({status:'RETEST_PASS',revision:5});
+    expect(await f.run(create('group-admin-report'))).toMatchObject({status:'NEW',isOwnReport:true});
+    expect(await f.run({action:'list'})).toMatchObject({canManage:false,reports:expect.arrayContaining([expect.objectContaining({id:'group-admin-report'})])});
+  });
   it('makes create retry idempotent and rejects altered payload or another owner',async () => {
     const f=setup(); const first=await f.run(create()); expect(await f.run(create())).toEqual(first);
     await expect(f.run({...create(),input:{...input,title:'Changed'}})).rejects.toMatchObject({status:409});

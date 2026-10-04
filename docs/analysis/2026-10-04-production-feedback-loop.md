@@ -16,6 +16,8 @@ FAQは実装根拠・版・未知を示す固定情報を返す。回答でき�
 
 講師はACTIVE組織への有効な所属が必要で、現在の組織に属する自分の報告だけを一覧・取得・作成し、対象版の再テストを記録できる。他人や別組織の報告を取得できない。ADMINは全報告を扱い、優先度・受入条件・手動引継ぎ・修正版を管理する。生徒や未認証利用者にこの報告APIを開かない。認可はサーバーが最終境界となる。
 
+ユーザーのINSTRUCTORロールに加え、所属ロールもINSTRUCTOR/GROUP_ADMINに限定する。所属だけSTUDENTへ変わった不整合時も全操作を拒否し、保存行を増やさない。GROUP_ADMINの組織管理画面にも同じ報告入口を配置し、通常講師と同じ本人範囲・入力保持・ログアウト分離を適用する。
+
 D1に報告、revision付き対応履歴、操作receiptを保存する。同じ作成ID/内容は重複報告を作らず、同じ操作ID/内容の再送は保存済み応答へ戻す。異なる内容でのID再使用は409。expectedRevisionによるCASで古い変更を409にし、現在の内容を再取得する。履歴は以前のeventを保持し、保存失敗・未取得・保存済みをUIで区別する。完全な履歴を取得してからexportし、一覧はpaginationで取得する。サーバー上の状態遷移を保存したことと、外部の担当者へ届いたことを混同しない。
 
 ## 学習と費用
@@ -49,5 +51,7 @@ rollbackは追加0046/0047 schemaを残したコード復旧を優先する。�
 - 最終差分: スクロール中のheaderをdialog上端へ固定し、FAQ/reportのsummaryに44px以上のtouch領域を確保。独立cloneでbuildと対象Chrome9件成功。320/390/横向き844/768/1366px、Tab/Shift+Tab/Escape、実D1保存/再訪、triage→実JSON download→再テスト一周、応答消失/同内容再送、旧receiptで新版を保持、未認証/生徒拒否を確認。最終候補の全回帰はPR必須CI/preview workflowで再確認する。
 - read-only doctor/教材QA/台帳/B2B gate: b586のlocal release gateで全成功。
 - PR55のb586必須verify/preview: 成功。最終差分のchecksは再実行し、通過したHEADを指定してmergeする。
+- e2e3e3bの必須verify/preview: 全成功。追加レビュー前のCloud144成功/2skip・IDB9・deployed4成功。runtimeのPR merge-ref SHAは1316ea3a48e1fdb3523c675bacf562303e5c350d、URLは https://e6024a8d.medace-english-app.pages.dev 。匿名session204でSHA一致、home200/noindexを独立確認した。
+- PRレビュー3件の対応: 所属ロールによる拒否、GROUP_ADMIN入口、fix/retestの下書き分離を修正。下書きはstatus/revision単位とし、中間工程を見逃して同じstatus/SHAへ戻っても古い入力を混ぜない。triageの入力は独立に保持する。独立cloneでverify:fast（1255unit、型・境界・migration）、build、API統合、Chrome対象12件が成功。実D1の同工程競合/再送、postcommit応答消失/同ID再送、工程入力の空欄、GROUP_ADMINの保存/再訪/logout分離も確認。追加修正を含むHEADのCI/previewはPR55で再確認する。
 - main SHA・production run/URL・0046/0047・recovery bookmark・公開版受入: merge後の正規production workflowとSHA付き受入で記録する。
 - 継続率・再テスト成績・遅延定着・優位性: 未測定/未実証。

@@ -1,6 +1,6 @@
 import type { ProductFeedbackReport, ProductFeedbackRequest } from '../../contracts/productFeedback';
 import { advanceFeedback, validateFeedbackInput } from '../../shared/productFeedback';
-import { UserRole } from '../../types';
+import { OrganizationRole, UserRole } from '../../types';
 import { requireRole } from './auth';
 import { HttpError } from './http';
 import { requireActiveOrganizationContext } from './organization-memberships';
@@ -54,7 +54,7 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_key, item)
 export const handleProductFeedback = async (env: AppEnv, user: DbUserRow, raw: unknown) => {
   requireRole(user, [UserRole.INSTRUCTOR, UserRole.ADMIN]);
   const admin = user.role === UserRole.ADMIN;
-  const orgId = admin ? null : (await requireActiveOrganizationContext(env, user)).organizationId;
+  const orgId = admin ? null : (await requireActiveOrganizationContext(env, user, [OrganizationRole.INSTRUCTOR, OrganizationRole.GROUP_ADMIN])).organizationId;
   if (!admin) {
     const organization = await env.DB.prepare('SELECT status FROM organizations WHERE id=?').bind(orgId).first<{ status: string }>();
     if (organization?.status !== 'ACTIVE') throw new HttpError(403, '有効な組織への所属が必要です。');
