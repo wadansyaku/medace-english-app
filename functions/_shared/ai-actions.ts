@@ -62,12 +62,10 @@ import {
 import { HttpError } from './http';
 import { requireRole } from './auth';
 import { AppEnv, DbUserRow } from './types';
+import { rejectLegacyLiveAi } from './ai-execution-policy';
 
 const getAiClient = (env: AppEnv): GoogleGenAI => {
-  if (!env.GEMINI_API_KEY) {
-    throw new HttpError(503, 'GEMINI_API_KEY が未設定です。');
-  }
-  return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  return rejectLegacyLiveAi();
 };
 
 const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-3-flash-preview';
@@ -546,6 +544,7 @@ const generateGrammarPracticeWithCloudflare = async (
   userLevel: EnglishLevel,
   grammarScopeId: GrammarCurriculumScopeId | null,
 ): Promise<GrammarPracticeGenerationBatch> => {
+  rejectLegacyLiveAi();
   if (!env.AI) throw new HttpError(503, 'Cloudflare Workers AI binding が未設定です。');
   const model = resolveCloudflareGrammarPracticeModel(env);
   const response = await env.AI.run(

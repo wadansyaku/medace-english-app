@@ -19,7 +19,14 @@ vi.mock('@google/genai', () => ({
 }));
 
 import { WritingExamCategory } from '../types';
-import { createWritingAiAdapter, resolveWritingAiMode } from '../functions/_shared/writing-ai-adapter';
+import { createWritingAiAdapter as createProductionWritingAiAdapter, resolveWritingAiMode } from '../functions/_shared/writing-ai-adapter';
+
+const createWritingAiAdapter = (...args: Parameters<typeof createProductionWritingAiAdapter>) => (
+  createProductionWritingAiAdapter(args[0], args[1], args[2], {
+    syntheticOnly: true,
+    client: { models: { generateContent: generateContentMock } } as any,
+  })
+);
 
 const createDbMock = () => {
   const usageEvents: Array<{

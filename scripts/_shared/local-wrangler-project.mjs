@@ -81,9 +81,10 @@ const copyFunctionsWithWritingProviderMock = async (tempDir) => {
     throw new Error('Could not isolate the writing facade for local tests.');
   }
   await writeFile(facadePath, facadeSource
+    .replace("import {", "import { GoogleGenAI } from './writing-live-provider-mock.js';\nimport {")
     .replace('  resolveWritingAiMode,\n', '')
     .replace('export { resolveWritingAiMode };', "// Synthetic provider responses exercise the real live adapter and persistence.\nexport const resolveWritingAiMode = (_env?: AppEnv) => 'live' as const;")
-    .replaceAll(adapterCall, "createWritingAiAdapter({ ...env, WRITING_AI_MODE: 'live', GEMINI_API_KEY: 'synthetic-writing-test-key' }, user, logContext)"));
+    .replaceAll(adapterCall, "createWritingAiAdapter({ ...env, WRITING_AI_MODE: 'live' }, user, logContext, { syntheticOnly: true, client: new GoogleGenAI({ apiKey: 'synthetic-writing-test-key' }) })"));
 };
 
 export const createLocalWranglerProject = async ({ writingProviderMock = false } = {}) => {
