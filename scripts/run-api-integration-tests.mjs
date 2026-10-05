@@ -646,7 +646,6 @@ const main = async () => {
     assert(refusedAdminPreparation.status === 410, 'admin example generation must be retired before provider or claims');
     for (const request of [
       { action: 'generateAIQuiz', payload: { targetWords: [{ id: starterWord.id, word: starterWord.word, definition: starterWord.definition }] } },
-      { action: 'extractVocabularyFromText', payload: { rawText: 'A synthetic API test sentence.' } },
       { action: 'evaluateJapaneseTranslationAnswer', payload: { sourceSentence: 'A term is reviewed.', expectedTranslation: '語が復習される。', userTranslation: '語を復習する。', examTarget: 'UNIVERSITY_ENTRANCE' } },
     ]) {
       const result = await admin.request('/api/ai', { method: 'POST', body: JSON.stringify(request) });
@@ -694,6 +693,10 @@ const main = async () => {
     );
 
     const orgStudentUser = await orgStudent.demoLogin('STUDENT', 'STUDENT');
+    const usageBeforeDisabledExtraction = (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM ai_usage_events'))[0].n;
+    const disabledPaidExtraction = await orgStudent.request('/api/ai', { method: 'POST', body: JSON.stringify({ action: 'extractVocabularyFromText', payload: { rawText: 'A synthetic API test sentence.' } }) });
+    assert(disabledPaidExtraction.status === 503, 'previously permitted business extraction must be disabled without altering subscription permissions');
+    assert((await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM ai_usage_events'))[0].n === usageBeforeDisabledExtraction, 'disabled extraction must not record AI cost or usage');
     const cohortStudentUser = await cohortStudent.demoLogin('STUDENT', 'STUDENT');
     const otherCohortStudentUser = await otherCohortStudent.demoLogin('STUDENT', 'STUDENT');
     const groupAdminUser = await groupAdmin.demoLogin('INSTRUCTOR', 'GROUP_ADMIN');
