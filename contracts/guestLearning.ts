@@ -2,6 +2,7 @@ import type { BookMetadata, WordData } from '../types';
 import type { GuestLearningAttempt } from '../shared/guestLearning';
 
 export interface GuestLearningCatalogResponse {
+  serverTimeMs: number;
   book: BookMetadata;
   words: WordData[];
 }

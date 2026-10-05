@@ -61,6 +61,7 @@ const GuestLearningScreen: React.FC<{
   const meaningHeading = useRef<HTMLHeadingElement | null>(null);
   const resultHeading = useRef<HTMLHeadingElement | null>(null);
   const request = useRef(0);
+  const catalogTimeOffsetMs = useRef<number>();
   const viewRef = useRef(view);
   viewRef.current = view;
   const [supports3D, setSupports3D] = useState(() => !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -75,9 +76,13 @@ const GuestLearningScreen: React.FC<{
     try {
       const response = await getGuestLearningCatalog();
       if (response.book.id !== NARU_BOOK_ID || !Array.isArray(response.words)
+        || !Number.isSafeInteger(response.serverTimeMs) || response.serverTimeMs <= 0
         || response.words.some(w => w.bookId !== NARU_BOOK_ID || !w.id || !w.word || !w.definition)
         || new Set(response.words.map(w => w.id)).size !== response.words.length) throw new Error('INVALID_CATALOG');
-      if (seq === request.current) setCatalog(response);
+      if (seq === request.current) {
+        catalogTimeOffsetMs.current = response.serverTimeMs - Date.now();
+        setCatalog(response);
+      }
     } catch { if (seq === request.current) setCatalogError('Naruシストを読み込めませんでした。通信を確認して、もう一度お試しください。'); }
     finally { if (seq === request.current) setLoading(false); }
   };
@@ -126,7 +131,7 @@ const GuestLearningScreen: React.FC<{
       const selected = explicit || allWords.filter(w => w.number >= from && (repeat || localBook || !practiced.has(w.id)));
       const words = selected.slice(0, count || selected.length);
       if (!words.length) { setMessage('この範囲の新しい語は練習済みです。「もう一度学ぶ」か、別の範囲を選べます。'); return; }
-      if (!localBook && !device.progress?.boundUserId) device.changed(await guestLearningProgressStore.start());
+      if (!localBook && !device.progress?.boundUserId) device.changed(await guestLearningProgressStore.start(catalogTimeOffsetMs.current));
       if (seq !== generation.current) return;
       setQueue(words); setIndex(0); setFlipped(false); setTranslation(false); setSelectedRating(null); setSaveError(false); pendingAnswer.current = null; setSessionRatings([]); begunAt.current = Date.now();
       lock.current = false; go('study');

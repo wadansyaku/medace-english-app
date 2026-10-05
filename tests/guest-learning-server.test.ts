@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as auth from '../functions/_shared/auth';
 import { commitGuestLearningImport, guestLearningRoutes, readGuestLearningCatalog, readGuestLearningSummary, validateGuestLearningImport } from '../functions/_shared/api-routes/guest-learning';
-import { GUEST_LEARNING_TTL_MS, GUEST_LEARNING_VERSION } from '../shared/guestLearning';
+import { GUEST_LEARNING_TTL_MS, GUEST_LEARNING_VERSION, guestLearningImportAttempts, type GuestLearningProgress } from '../shared/guestLearning';
 import { NARU_BOOK_ID } from '../shared/naruBook';
 import { UserRole } from '../types';
 import type { AppEnv, DbUserRow } from '../functions/_shared/types';
@@ -44,6 +44,8 @@ describe('fixed anonymous Naru catalogue', () => {
   it('returns only canonical Naru words with no private ledger paths and approved source examples', async () => {
     const f = setup(); const result = await readGuestLearningCatalog(f.env);
     expect(result.book).toMatchObject({ id: NARU_BOOK_ID, wordCount: 3 });
+    expect(result.serverTimeMs).toBeGreaterThan(0);
+    expect(Math.abs(result.serverTimeMs - Date.now())).toBeLessThan(1000);
     expect(result.book).not.toHaveProperty('qualityGate'); expect(result.book).not.toHaveProperty('sourceContext');
     expect(result.words.map(({ id }) => id)).toEqual(['naru-word-1', 'naru-word-2', 'naru-word-3']);
     expect(result.words[0].exampleSentence).toBe('Source example.');
@@ -172,6 +174,16 @@ describe('authenticated guest SRS import', () => {
 });
 
 describe('guest learning input boundaries', () => {
+  it.each([120_000, 2 * 86400_000, -2 * 86400_000])('keeps server TTL and future guards unchanged after correcting device clock: %s', skew => {
+    const now = Date.now(); const input = candidate();
+    const progress: GuestLearningProgress = { sessionId: input.sessionId, version: GUEST_LEARNING_VERSION,
+      startedAt: now + skew, serverTimeOffsetMs: -skew, attempts: [], importedAttemptIds: [] };
+    const project = (age: number) => guestLearningImportAttempts(progress, [{ ...input.attempts[0], answeredAt: now + skew - age }]);
+    expect(validateGuestLearningImport({ ...input, attempts: project(1000) }, now).attempts[0].answeredAt).toBe(now - 1000);
+    expect(validateGuestLearningImport({ ...input, attempts: project(GUEST_LEARNING_TTL_MS) }, now).attempts).toHaveLength(1);
+    expect(() => validateGuestLearningImport({ ...input, attempts: project(GUEST_LEARNING_TTL_MS + 1) }, now)).toThrow();
+    expect(() => validateGuestLearningImport({ ...input, attempts: project(-60_001) }, now)).toThrow();
+  });
   it.each([null, {}, { ...candidate(), email: 'user@test' }, { ...candidate(), version: 'other' }, { ...candidate(), attempts: [] },
     { ...candidate(), attempts: Array(101).fill(candidate().attempts[0]) }, { ...candidate(), sessionId: 'bad-id' }])('rejects malformed top-level input: %s', (input) => expect(() => validateGuestLearningImport(input)).toThrow());
   it.each([{ rating: -1 }, { rating: 4 }, { rating: 1.5 }, { responseTimeMs: 1.5 }, { responseTimeMs: 3600001 }, { attemptId: 'bad-id' }, { correct: true }, { wordId: 'bad id' },

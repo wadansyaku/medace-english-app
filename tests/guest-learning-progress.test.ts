@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createGuestLearningProgressStore } from '../services/guestLearningProgress';
 import {
   GUEST_LEARNING_MAX_ATTEMPTS, GUEST_LEARNING_TTL_MS, GUEST_LEARNING_VERSION,
-  parseGuestLearningProgress, type GuestLearningProgress,
+  guestLearningImportAttempts, parseGuestLearningProgress, type GuestLearningProgress,
 } from '../shared/guestLearning';
 
 const NOW = 1_790_000_000_000;
@@ -60,6 +60,43 @@ const deviceDb = (initial?: unknown) => {
 };
 
 describe('unregistered Naru device progress', () => {
+  it.each([120_000, 2 * 86400_000, -2 * 86400_000])('pins the server clock through reload, binding, retry and the seven-day boundary: %s', async skew => {
+    const fixture = deviceDb(); let elapsed = 0; let id = 0;
+    const options = { factory: () => fixture.factory, now: () => NOW + skew + elapsed, createId: () => uuid(++id) };
+    const first = createGuestLearningProgressStore(options);
+    const session = (await first.start(-skew)).progress!;
+    elapsed = 1000;
+    const saved = (await first.answer(session.sessionId, 'naru-word-1', 3, 1000)).progress!;
+    const original = structuredClone(saved.attempts);
+    const reloaded = createGuestLearningProgressStore(options);
+    expect((await reloaded.load()).progress).toEqual(saved);
+    expect((await reloaded.start(12345)).progress!.serverTimeOffsetMs).toBe(-skew);
+    const bound = (await reloaded.bind(session.sessionId, 'account-A')).progress!;
+    const request = guestLearningImportAttempts(bound, bound.attempts);
+    expect(request[0].answeredAt).toBe(NOW + elapsed);
+    expect(guestLearningImportAttempts((await reloaded.load()).progress!, original)).toEqual(request);
+    const acknowledged = (await reloaded.acknowledge(session.sessionId, 'account-A', [original[0].attemptId])).progress!;
+    expect(acknowledged.attempts).toEqual(original);
+    expect(acknowledged.serverTimeOffsetMs).toBe(-skew);
+    elapsed = GUEST_LEARNING_TTL_MS;
+    expect((await reloaded.load()).progress).not.toBeNull();
+    elapsed++;
+    expect((await reloaded.load()).progress).toBeNull();
+  });
+
+  it('rejects invalid clock offsets and projections without changing device answers', async () => {
+    const { store } = setup();
+    await expect(store.start(NaN)).rejects.toThrow('時刻');
+    await expect(store.start(-NOW)).rejects.toThrow('時刻');
+    const session = (await store.start()).progress!;
+    const answer = (await store.answer(session.sessionId, 'word-1', 2, 0)).progress!;
+    for (const offset of [NaN, Infinity, 0.5, Number.MAX_SAFE_INTEGER]) {
+      expect(parseGuestLearningProgress({ ...answer, serverTimeOffsetMs: offset }, NOW)).toBeNull();
+      expect(() => guestLearningImportAttempts({ ...answer, serverTimeOffsetMs: offset }, answer.attempts)).toThrow();
+    }
+    expect(guestLearningImportAttempts(answer, answer.attempts)).toEqual(answer.attempts);
+  });
+
   it('records repeated words beyond the legacy five and keeps explicit retries immutable', async () => {
     const { store, advance } = setup();
     const started = await store.start(); const sessionId = started.progress!.sessionId;

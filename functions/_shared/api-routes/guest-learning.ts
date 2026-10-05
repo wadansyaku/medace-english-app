@@ -77,7 +77,7 @@ export const readGuestLearningCatalog = async (env: AppEnv): Promise<GuestLearni
   const book = { id: metadata.id, title: metadata.title, wordCount: metadata.wordCount,
     isPriority: metadata.isPriority, description: metadata.description,
     catalogSource: metadata.catalogSource, accessScope: metadata.accessScope };
-  return { book, words: words.map((word) => ({ ...toWordData(word), exampleImageUrl: null })) };
+  return { serverTimeMs: Date.now(), book, words: words.map((word) => ({ ...toWordData(word), exampleImageUrl: null })) };
 };
 
 const clientId = (sessionId: string, attemptId: string) => `guest_naru_${sessionId}_${attemptId}`;

@@ -121,7 +121,16 @@ export const createGuestLearningProgressStore = (options: {
   };
   return {
     load: () => run(),
-    start: () => run(p => p || { sessionId: createId(), version: GUEST_LEARNING_VERSION, startedAt: now(), attempts: [], importedAttemptIds: [] }),
+    start: (serverTimeOffsetMs?: number) => run(p => {
+      if (p) return p;
+      const startedAt = now();
+      if (serverTimeOffsetMs !== undefined && (!Number.isSafeInteger(serverTimeOffsetMs)
+        || !Number.isSafeInteger(startedAt + serverTimeOffsetMs) || startedAt + serverTimeOffsetMs <= 0)) {
+        throw new GuestLearningStateError('教材の時刻を確認できませんでした。もう一度読み込んでください。');
+      }
+      return { sessionId: createId(), version: GUEST_LEARNING_VERSION, startedAt, attempts: [], importedAttemptIds: [],
+        ...(serverTimeOffsetMs !== undefined ? { serverTimeOffsetMs } : {}) };
+    }),
     answer: (sessionId: string, wordId: string, rating: number, responseTimeMs: number, attemptId = createId()) => {
       const answeredAt = now();
       return run(p => {

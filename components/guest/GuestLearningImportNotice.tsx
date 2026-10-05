@@ -6,6 +6,7 @@ import { importGuestLearning } from '../../services/guestLearning';
 import { sessionService } from '../../services/session';
 import { resolveStorageMode } from '../../shared/storageMode';
 import { isDemoEmail } from '../../utils/demo';
+import { guestLearningImportAttempts } from '../../shared/guestLearning';
 
 const cloud = resolveStorageMode(import.meta.env.VITE_STORAGE_MODE).mode === 'cloudflare';
 
@@ -30,7 +31,8 @@ const GuestLearningImportNotice: React.FC<{ user: UserProfile }> = ({ user }) =>
       for (let offset = 0; offset < batches.length; offset += 100) {
         if ((await sessionService.getSession())?.uid !== user.uid) throw new Error('ACCOUNT_CHANGED');
         const attempts = batches.slice(offset, offset + 100);
-        const response = await importGuestLearning({ expectedUserId: user.uid, sessionId: snapshot.sessionId, version: snapshot.version, attempts });
+        const response = await importGuestLearning({ expectedUserId: user.uid, sessionId: snapshot.sessionId, version: snapshot.version,
+          attempts: guestLearningImportAttempts(snapshot, attempts) });
         const submitted = new Set(attempts.map(a => a.attemptId));
         const successful = response.importedAttemptIds;
         const failed = response.failedAttempts;

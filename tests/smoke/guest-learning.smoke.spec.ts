@@ -99,9 +99,18 @@ test('guest catalog failure retries and authentication closes back to the lesson
   await page.goBack(); await expect(page.getByTestId('guest-selected-book')).toBeVisible();
 });
 
-test('guest signup explicitly imports immutable Naru answers after a lost response', async ({ page }) => {
+for (const clockSkewMs of [0, 120_000, 2 * 86400_000, -2 * 86400_000]) {
+test(`guest signup explicitly imports immutable Naru answers after a lost response with clock skew ${clockSkewMs}`, async ({ page }) => {
+  await page.addInitScript(skew => {
+    const actualNow = Date.now.bind(Date);
+    Date.now = () => actualNow() + skew;
+  }, clockSkewMs);
   await openNaru(page); await page.getByTestId('guest-study-start').click(); await page.getByTestId('guest-flip').click(); await page.getByTestId('guest-rate-3').click(); await expect(page.getByTestId('guest-flip')).toBeVisible();
   const original = await readDevice(page);
+  expect(Math.abs(original.serverTimeOffsetMs + clockSkewMs)).toBeLessThan(5000);
+  await page.reload();
+  await expect(page.getByTestId('guest-session-result')).toBeVisible();
+  expect(await readDevice(page)).toEqual(original);
   await page.getByTestId('guest-learning-login').click(); await page.getByRole('button', { name: '新規登録', exact: true }).last().click();
   await page.getByTestId('auth-display-name-input').fill('合成Naru生徒'); await page.getByTestId('auth-email-input').fill(`guest-naru-${Date.now()}@example.test`);
   await page.getByTestId('auth-password-input').fill('synthetic-naru-pass'); await page.getByTestId('auth-confirm-password-input').fill('synthetic-naru-pass'); await page.getByTestId('auth-submit').click();
@@ -114,6 +123,7 @@ test('guest signup explicitly imports immutable Naru answers after a lost respon
   expect((await readDevice(page)).importedAttemptIds).toEqual([]);
   await page.getByTestId('guest-learning-import-confirm').click(); await expect(page.getByTestId('guest-learning-import')).toContainText('1回答を保存しました');
   expect(payloads).toHaveLength(2); expect(payloads[1]).toEqual(payloads[0]); expect((await readDevice(page)).attempts).toEqual(original.attempts);
+  expect(payloads[0].attempts[0].answeredAt).toBe(original.attempts[0].answeredAt + original.serverTimeOffsetMs);
   expect((await readDevice(page)).importedAttemptIds).toEqual([original.attempts[0].attemptId]);
   await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
   await page.getByTestId('start-first-signup').click();
@@ -124,6 +134,7 @@ test('guest signup explicitly imports immutable Naru answers after a lost respon
   await expect(page.getByTestId('guest-learning-import')).not.toContainText('1回答を保存しました');
   await expect(page.getByTestId('guest-learning-import-confirm')).toHaveCount(0);
 });
+}
 
 test('long device-only books wrap at 320px and long words remain scrollable with result focus', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 740 }); await openNaru(page);

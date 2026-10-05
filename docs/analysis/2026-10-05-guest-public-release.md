@@ -4,7 +4,7 @@
 
 ## 統合と保持
 
-最新mainは `915f4f7de47620e8d3c2467b29a0953e07c45b17`。そのtreeは元候補の基点 `33a6b8d1b85060bfe735b3c99cb82373bcf7b5ad` と完全一致した。独立cloneへゲスト2 commitをrebaseし、保存候補13e1ee3との全tracked tree一致を確認した。追加変更は公開記録と、6演習を実入力してAI/提出の通信0を確認するbrowser gateのみ。
+最新mainは `915f4f7de47620e8d3c2467b29a0953e07c45b17`。そのtreeは元候補の基点 `33a6b8d1b85060bfe735b3c99cb82373bcf7b5ad` と完全一致した。独立cloneへゲスト2 commitをrebaseし、載せ直し時点で保存候補13e1ee3との全tracked tree一致を確認した。公開工程の追加は記録、6演習とプリントのbrowser gate、後述の公開レビューで確認した時刻補正。
 
 元repoの未コミット文書4件、検証済みゲスト候補とWriting候補、既存動画を保持。SSD `/Volumes/YodaiOffload` はAPFSでマウント済み。Library保存は公開と切り離す。以前のTLS/capacityでPR・remote migration・本番deployは未開始だった。
 
@@ -21,6 +21,10 @@
 この文書のcommit時点では公開前。実際のPR番号、最終SHA、workflow/preview/production URL、0048適用、recovery bookmark、公開後の匿名Naru1530取得と主要操作の結果は、作業成果フォルダーの公開引継ぎへ記録する。未完了を成功として扱わない。
 
 PR #56初回previewはunit1366とAPIが成功し、full browserはCloud157成功・2preview限定skip・1失敗、IDB9成功だった。失敗した組織管理者のプリント検証は、importの返却契約`importedBookIds`に対して古い`bookId`を任意参照し、作成した教材を選択していなかった。合成Naruが先頭に追加されて不備が表面化したため、返却IDを必須確認・明示選択し、選択値と作成教材のプレビュー見出し、問題生成可能を確認する。製品ソースやgrammar候補条件は変更せず、修正後の通常CI/preview全gateを再実行する。
+
+公開レビューで、端末時計が1分超進むと端末保存済みの回答がサーバーへ引き継げないP2を確認した。カタログの`serverTimeMs`から受信時の時計差を取り、学習開始時に端末記録へ固定する。端末の原回答を変えず、本人へのPOST時だけ時刻を投影する。再読込・bind・ack・同一回答の再送で時計差を変えない。サーバーの7日期限と未来60秒、本人・教材・原回答比較、0048は変更しない。旧offsetなし記録は0互換。常時時計がずれた端末を対象とし、学習途中にOS時計自体を変更する扱いは既存同等のまま。
+
+時刻補正は関連73unitと型/buildが成功。実ブラウザーで通常・+2分・+2日・-2日の4条件の学習→reload→新規登録→応答喪失→同じpayload再送→別本人拒否が成功し、原回答不変を確認した。unitで時計差の固定・再読込・本人紐付け・ack・7日±1ms・サーバー未来60秒+1の境界を検証し、独立読取レビューで追加blocking指摘なし。最終SHAの通常CI/preview全gateは修正後に再実行する。接続復旧後に修正を保全・commitし、旧17e5d12のCI/preview成功を新修正の合格に流用しない。
 
 ## ロールバック
 

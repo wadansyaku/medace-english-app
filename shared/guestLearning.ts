@@ -19,6 +19,9 @@ export interface GuestLearningProgress {
   sessionId: string;
   version: typeof GUEST_LEARNING_VERSION;
   startedAt: number;
+  // Freeze the catalog's clock difference for this session. Device timestamps
+  // stay immutable; account imports use the same corrected time on every retry.
+  serverTimeOffsetMs?: number;
   attempts: GuestLearningAttempt[];
   boundUserId?: string;
   importedAttemptIds: string[];
@@ -37,6 +40,8 @@ export const parseGuestLearningProgress = (value: unknown, now: number): GuestLe
   if (typeof v.sessionId !== 'string' || !GUEST_LEARNING_UUID_PATTERN.test(v.sessionId)
     || v.version !== GUEST_LEARNING_VERSION || !Number.isSafeInteger(v.startedAt)
     || v.startedAt <= 0 || v.startedAt > now + 60_000 || v.startedAt < now - GUEST_LEARNING_TTL_MS
+    || (v.serverTimeOffsetMs !== undefined && (!Number.isSafeInteger(v.serverTimeOffsetMs)
+      || !Number.isSafeInteger(v.startedAt + v.serverTimeOffsetMs) || v.startedAt + v.serverTimeOffsetMs <= 0))
     || !Array.isArray(v.attempts) || v.attempts.length > GUEST_LEARNING_MAX_ATTEMPTS
     || !Array.isArray(v.importedAttemptIds) || v.importedAttemptIds.length > v.attempts.length
     || (v.recordingLimitReached !== undefined && (typeof v.recordingLimitReached !== 'boolean'
@@ -49,7 +54,8 @@ export const parseGuestLearningProgress = (value: unknown, now: number): GuestLe
       || ids.has(a.attemptId) || !isGuestLearningWordId(a.wordId)
       || !Number.isInteger(a.rating) || a.rating < 0 || a.rating > 3
       || !Number.isSafeInteger(a.responseTimeMs) || a.responseTimeMs < 0 || a.responseTimeMs > GUEST_LEARNING_MAX_RESPONSE_TIME_MS
-      || !Number.isSafeInteger(a.answeredAt) || a.answeredAt < v.startedAt || a.answeredAt > now + 60_000) return null;
+      || !Number.isSafeInteger(a.answeredAt) || a.answeredAt < v.startedAt || a.answeredAt > now + 60_000
+      || !Number.isSafeInteger(a.answeredAt + (v.serverTimeOffsetMs || 0)) || a.answeredAt + (v.serverTimeOffsetMs || 0) <= 0) return null;
     ids.add(a.attemptId);
     attempts.push({ attemptId: a.attemptId, wordId: a.wordId, rating: a.rating, responseTimeMs: a.responseTimeMs, answeredAt: a.answeredAt });
   }
@@ -57,8 +63,22 @@ export const parseGuestLearningProgress = (value: unknown, now: number): GuestLe
     || new Set(v.importedAttemptIds).size !== v.importedAttemptIds.length
     || (v.importedAttemptIds.length > 0 && !v.boundUserId)) return null;
   return { sessionId: v.sessionId, version: GUEST_LEARNING_VERSION, startedAt: v.startedAt, attempts,
+    ...(v.serverTimeOffsetMs !== undefined ? { serverTimeOffsetMs: v.serverTimeOffsetMs } : {}),
     ...(v.boundUserId ? { boundUserId: v.boundUserId } : {}), importedAttemptIds: [...v.importedAttemptIds],
     ...(v.recordingLimitReached ? { recordingLimitReached: true } : {}) };
+};
+
+export const guestLearningImportAttempts = (
+  progress: GuestLearningProgress,
+  attempts: readonly GuestLearningAttempt[],
+): GuestLearningAttempt[] => {
+  const offset = progress.serverTimeOffsetMs ?? 0;
+  if (!Number.isSafeInteger(offset)) throw new Error('INVALID_GUEST_CLOCK');
+  return attempts.map(attempt => {
+    const answeredAt = attempt.answeredAt + offset;
+    if (!Number.isSafeInteger(answeredAt) || answeredAt <= 0) throw new Error('INVALID_GUEST_CLOCK');
+    return { ...attempt, answeredAt };
+  });
 };
 
 export const selectGuestLearningWords = (
