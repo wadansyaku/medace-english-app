@@ -436,6 +436,9 @@ describe('useStudentDashboardViewModel', () => {
     snapshot.accountOverview!.subscriptionPlan = SubscriptionPlan.TOC_PAID;
     const viewModel = useStudentDashboardViewModel({ user: baseUser, snapshot });
     expect(viewModel.heroTitle).toBe('教材を1冊作る');
+    expect(viewModel.heroCopy).toContain('校正した単語・語義を手入力');
+    expect(viewModel.canCreateFromText).toBe(true);
+    expect(viewModel.canCreateFromFile).toBe(true);
     expect(viewModel.primaryTask?.command).toEqual({ type: 'create_book' });
   });
 

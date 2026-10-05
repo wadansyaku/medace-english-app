@@ -244,6 +244,7 @@ export const useStudentDashboardViewModel = ({
   const currentPlan = accountOverview?.subscriptionPlan || user.subscriptionPlan || SubscriptionPlan.TOC_FREE;
   const currentPlanPolicy = getSubscriptionPolicy(currentPlan);
   const showAdSlots = isAdSupportedPlan(currentPlan);
+  // Preserve existing plan visibility; prepared imports do not authorize live AI.
   const canCreateFromText = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromText');
   const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
   const canCreateBook = canCreateFromText || canCreateFromFile;
@@ -300,7 +301,7 @@ export const useStudentDashboardViewModel = ({
         ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
         : '配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。'
       : canCreateBook
-        ? '教科書・PDF・本文から作成。1ページ分で始められます。'
+        ? '校正した単語・語義を手入力するか、CSVから作成できます。'
         : '利用できる単語帳はまだありません。文法のお試し問題から始められます。'
     : remainingWords > 0
       ? dueCount > 0

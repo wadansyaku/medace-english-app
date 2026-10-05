@@ -1,11 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { dashboardService } from '../services/dashboard';
-import {
-  extractVocabularyFromMedia,
-  extractVocabularyFromText,
-  isAiUnavailableError,
-} from '../services/gemini';
+import { buildPreparedPersonalCatalogImport, readPreparedCatalogCsvFile } from '../shared/preparedPersonalCatalog';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import {
   type DisplayDensity,
@@ -174,89 +170,44 @@ export const useStudentDashboardMutations = ({
     setPageNotice,
   ]);
 
+  const createPending = useRef(false);
   const handleCreatePhrasebook = useCallback(async () => {
+    if (createPending.current) return;
     const normalizedTitle = newBookTitle.trim();
-    const normalizedRawText = rawText.trim();
-
     if (!normalizedTitle) {
       setErrorMsg('タイトルを入力してください。');
       return;
     }
-    if (createMode === 'TEXT' && !normalizedRawText) {
-      setErrorMsg('教材にしたい英文を入力してください。');
+    if (createMode === 'TEXT' && !rawText.trim()) {
+      setErrorMsg('単語・語義をCSV形式で入力してください。');
       return;
     }
     if (createMode === 'FILE' && !uploadFile) {
-      setErrorMsg('教材にしたい PDF または画像を選択してください。');
+      setErrorMsg('内容を確認したCSVを選択してください。');
       return;
     }
 
+    createPending.current = true;
     setCreating(true);
     setErrorMsg(null);
-
     try {
-      let result:
-        | Awaited<ReturnType<typeof extractVocabularyFromText>>
-        | Awaited<ReturnType<typeof extractVocabularyFromMedia>>;
-
-      if (createMode === 'TEXT') {
-        result = await extractVocabularyFromText(normalizedRawText);
-      } else if (createMode === 'FILE' && uploadFile) {
-        const mimeType = uploadFile.type;
-        if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
-          throw new Error('対応していないファイル形式です。');
-        }
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(uploadFile);
-          reader.onload = () => {
-            const resultBase64 = reader.result as string;
-            resolve(resultBase64.split(',')[1]);
-          };
-          reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました。'));
-        });
-        result = await extractVocabularyFromMedia(base64, mimeType);
-      } else {
-        throw new Error('教材ソースを指定してください。');
-      }
-
-      if (!result || result.words.length === 0) {
-        throw new Error('単語を抽出できませんでした。');
-      }
-
-      const importResult = await dashboardService.batchImportWords({
-        defaultBookName: normalizedTitle,
-        source: {
-          kind: 'rows',
-          rows: result.words.map((item, index) => ({
-            bookName: normalizedTitle,
-            number: index + 1,
-            word: item.word,
-            definition: item.definition,
-          })),
-        },
-        createdByUid: user.uid,
-        contextSummary: result.contextSummary,
-      });
-
+      const csvText = createMode === 'TEXT' ? rawText : await readPreparedCatalogCsvFile(uploadFile!);
+      const request = buildPreparedPersonalCatalogImport(normalizedTitle, csvText, user.uid);
+      const importResult = await dashboardService.batchImportWords(request);
       setRawText('');
       setNewBookTitle('');
       setUploadFile(null);
       setShowCreateModal(false);
-      setPageNotice({
-        tone: 'success',
-        message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。`,
-      });
-      await refreshDashboard();
-    } catch (error: unknown) {
-      console.error(error);
-      const message = error instanceof Error ? error.message : '作成に失敗しました。';
-      if (isAiUnavailableError(error)) {
-        setErrorMsg('教材化はまだ利用できません。設定を確認してから、もう一度お試しください。');
-      } else {
-        setErrorMsg(message.includes('429') ? '作成回数が一時的に上限に達しました。少し時間をおいてください。' : message);
+      setPageNotice({ tone: 'success', message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。` });
+      try {
+        await refreshDashboard();
+      } catch {
+        setPageNotice({ tone: 'error', message: '単語帳は保存されましたが、一覧を更新できませんでした。ページを再読み込みして保存済みの教材を確認してください。' });
       }
+    } catch (error: unknown) {
+      setErrorMsg(error instanceof Error ? error.message : '作成に失敗しました。入力を保持しています。');
     } finally {
+      createPending.current = false;
       setCreating(false);
     }
   }, [

@@ -79,7 +79,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
       <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
         <div className="text-sm font-black text-slate-950">まず教材を1冊</div>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          写真・PDF・テキストからMy単語帳を作れます。
+          内容を確認した単語・語義を手入力するか、CSVからMy単語帳を作れます。
         </p>
         <div className={`rounded-lg border border-white/80 bg-white/80 px-4 py-2.5 text-[13px] leading-relaxed text-slate-600 ${isCompact ? 'mt-3' : 'mt-4'}`}>
           教材を作ると、ここに1日の量と使う教材が表示されます。

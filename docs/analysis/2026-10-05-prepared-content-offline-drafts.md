@@ -66,3 +66,11 @@ node scripts/build-reviewed-word-examples-sql.mjs \
 Rollbackはコード候補のrevertで行う。本番Naru/ゲスト0048とその保存記録を巻き戻さない。将来0049が適用されても追加表を残し、コードrevert時に原本や学習記録を削除しない。公開済みデータは変更していない。
 
 単独候補の実行結果: Node 22.19.0、関連7files / 106unit成功、`tsc --noEmit`・両scriptのsyntax check・`git diff --check` 成功。0049追加に伴いcomplete-schema契約のmigration数を50へ更新し、0049の存在も確認する。build/実browser/remote反映は未実施。
+
+## 個人My単語帳の追加候補
+
+root統合 `29f1ee0` を新しいbaseとし、個人のTEXT/FILEもAI抽出から準備済みCSVへ変更する。TEXTは Word,Meaning ヘッダー付きCSVを手入力/貼付、FILEは1MB以内のCSVを選ぶ。例文/和訳/原本注記/出典列を保持し、入力タイトルの1冊へ既存 `batchImportWords` で本人所有の保存を行う。部分的に不正な行を黙って落とさず、保存前にCSV全体の訂正を促す。1回500語まで。サーバーの認可・所有者確定・検証が最終境界で、クライアントのチェックでは代用しない。
+
+現行プランによる作成可否をそのまま維持し、無料枠・価格・冊数quotaは変更しない。標準planの作成/保存/選択教材を変更しない。PDF・画像を選択した場合はbytesを読まず、外部requestを出さず、title/text/fileを保持して画面内の停止理由とCSV案内を出す。保存失敗は入力保持＋明示retry。保存成功後の一覧取得失敗は「保存済み・一覧更新失敗」と別表示し、もう一度取込を促さない。
+
+関連6files / 76unitと型・diff checkが成功した。既存dashboard-recovery smokeに320/1366の2casesを追加し、実本人storage保存、失敗時入力保持、連打で追加保存0、和訳を含む再訪、AI0を統合担当が検証する。単独担当でbuild/browserは実行しない。
