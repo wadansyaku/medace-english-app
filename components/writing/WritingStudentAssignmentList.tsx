@@ -27,15 +27,15 @@ const getDecisionCopy = (assignment: WritingAssignment) => {
     case 'ISSUED':
       return {
         label: '提出待ち',
-        title: '紙答案を撮影して提出',
-        body: '提出コードと形式を確認してから、PDF 1枚または画像最大4枚で送信します。',
+        title: '答案を未評価の下書きとして保存',
+        body: '本文だけ、PDF 1件、または画像最大4件で下書きを保存できます。成績と提出は確定しません。',
         icon: <Send className="h-4 w-4" />,
       };
     case 'REVISION_REQUESTED':
       return {
         label: 'コメント確認後に再提出',
         title: 'まず返却コメントを見る',
-        body: '講師コメントを読んで直す点を決めてから、書き直した答案を提出します。',
+        body: '講師コメントを読んで直す点を決め、書き直した答案を未評価の下書きとして保存します。',
         icon: <MessageSquareText className="h-4 w-4" />,
       };
     case 'RETURNED':
@@ -77,7 +77,8 @@ const WritingStudentAssignmentCard: React.FC<{
   onOpenSubmit,
   onOpenFeedback,
 }) => {
-  const phase = getWritingAssignmentPhase(assignment.status);
+  const originalPhase = getWritingAssignmentPhase(assignment.status);
+  const phase = canSubmitWritingAssignment(assignment) ? { ...originalPhase, description: '本文・画像・PDFを未評価の下書きとして保存できます。成績と提出は確定しません。' } : originalPhase;
   const decision = getDecisionCopy(assignment);
   const canSubmit = canSubmitWritingAssignment(assignment);
   const canOpenFeedback = canOpenWritingFeedback(assignment);
@@ -94,7 +95,7 @@ const WritingStudentAssignmentCard: React.FC<{
       className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover"
     >
       <Send className="h-4 w-4" />
-      {assignment.status === 'REVISION_REQUESTED' ? '書き直して再提出する' : 'スマホで提出する'}
+      {assignment.status === 'REVISION_REQUESTED' ? '書き直しの下書きを開く' : '答案の下書きを開く'}
     </button>
   ) : null;
   const feedbackButton = canOpenFeedback ? (

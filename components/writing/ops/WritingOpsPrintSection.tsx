@@ -32,14 +32,14 @@ const getPrintActionCopy = (assignment: WritingAssignment) => {
     case 'ISSUED':
       return {
         title: '生徒の提出待ち',
-        body: '生徒がスマホで提出できます。校舎で回収した場合はスキャナー提出を登録します。',
+        body: '生徒の答案を未評価の下書きとして保存できます。既存の返却内容も保持します。',
         tone: 'border-sky-200 bg-sky-50 text-sky-800',
         icon: <Clock3 className="h-4 w-4" />,
       };
     case 'REVISION_REQUESTED':
       return {
         title: '再提出待ち',
-        body: '返却コメントを受けて書き直し待ちです。校舎回収の場合はここで再提出を登録します。',
+        body: '返却コメントを受けて書き直し待ちです。本文・画像・PDFを未評価の下書きとして保存できます。',
         tone: 'border-amber-200 bg-amber-50 text-amber-800',
         icon: <Clock3 className="h-4 w-4" />,
       };
@@ -195,7 +195,7 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700"
                 >
                   <ScanText className="h-4 w-4" />
-                  校舎スキャナー提出
+                  答案の下書き / GPT補助
                 </button>
               )}
               <WritingPrintLauncher assignment={selectedAssignment} />

@@ -33,12 +33,13 @@ vi.mock('react', async importOriginal => {
   return { ...original, ...replacements, default: { ...original.default, ...replacements } };
 });
 vi.mock('../hooks/useIsMobileViewport', () => ({ default: () => false }));
-const api = vi.hoisted(() => ({ assignments: vi.fn(), finalize: vi.fn(), hash: vi.fn(), createUpload: vi.fn(), upload: vi.fn() }));
+const api = vi.hoisted(() => ({ capabilities: vi.fn(), inputDraft: vi.fn(), saveDraft: vi.fn(), assignments: vi.fn(), finalize: vi.fn(), hash: vi.fn(), createUpload: vi.fn(), upload: vi.fn() }));
 vi.mock('../services/writing', () => ({
   listWritingAssignments: api.assignments, finalizeStudentWritingSubmission: api.finalize,
   calculateWritingAssetSha256Base64: api.hash, createWritingUploadUrl: api.createUpload,
   getWritingPrintableFeedback: vi.fn(), getStudentWritingSubmissionDetail: vi.fn(), uploadWritingAsset: api.upload,
 }));
+vi.mock('../services/writingAiDrafts', () => ({ getWritingAiCapabilities: api.capabilities, getWritingInputDraft: api.inputDraft, saveWritingInputDraft: api.saveDraft }));
 import WritingStudentSection from '../components/WritingStudentSection';
 import WritingStudentAssignmentList from '../components/writing/WritingStudentAssignmentList';
 import { useWritingStudentController } from '../hooks/useWritingStudentController';
@@ -76,6 +77,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   api.assignments.mockResolvedValue({ assignments: [] });
+  api.capabilities.mockResolvedValue({ gradingEnabled: true });
+  api.inputDraft.mockResolvedValue({ draft: null });
   api.hash.mockResolvedValue('synthetic-hash');
   api.createUpload.mockResolvedValue({ assetId: 'synthetic-asset' });
   api.upload.mockResolvedValue(undefined);
@@ -87,6 +90,7 @@ describe('writing assignment acquisition', () => {
     await settle();
     const file = new File(['%PDF-1.4 synthetic'], 'synthetic.pdf', { type: 'application/pdf' });
     controller().openSubmitDialog(assignment);
+    await settle();
     controller().setFiles([file]);
     controller().setManualTranscript('My unchanged draft.');
     const pending = deferred<any>();
@@ -115,6 +119,7 @@ describe('writing assignment acquisition', () => {
     await settle();
     const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.png', { type: 'image/png' })];
     controller().openSubmitDialog(assignment);
+    await settle();
     controller().setFiles(files);
     api.createUpload.mockResolvedValueOnce({ assetId: 'asset-a' }).mockResolvedValueOnce({ assetId: 'asset-b-failed' }).mockResolvedValueOnce({ assetId: 'asset-b' });
     api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Upload failed')).mockResolvedValueOnce(undefined);
@@ -124,6 +129,56 @@ describe('writing assignment acquisition', () => {
     await controller().handleSubmit();
     expect(api.createUpload.mock.calls.map(([input]) => input.fileName)).toEqual(['a.png', 'b.png', 'b.png']);
     expect(api.finalize).toHaveBeenCalledWith(expect.objectContaining({ assetIds: ['asset-a', 'asset-b'] }));
+  });
+
+  it('saves manual input as an unassessed draft with stable retry ID and restores it without an upload', async () => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    controller().setManualTranscript('My saved manual input.');
+    api.saveDraft.mockRejectedValueOnce(new Error('response lost')).mockImplementationOnce(async (request: any) => ({ draft: {
+      ...request, revision: 1, assets: [], assessmentStatus: 'UNASSESSED', updatedAt: 1,
+    } }));
+    const first = controller().handleSubmit();
+    await controller().handleSubmit();
+    await first;
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    expect(controller().manualTranscript).toBe('My saved manual input.');
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0]).toEqual(api.saveDraft.mock.calls[1][0]);
+    expect(api.finalize).not.toHaveBeenCalled(); expect(api.createUpload).not.toHaveBeenCalled();
+    expect(controller().draftSavedMessage).toContain('成績・提出は確定していません');
+    api.inputDraft.mockResolvedValue({ draft: controller().savedInputDraft });
+    controller().resetSubmitDialog(); controller().openSubmitDialog(assignment); await settle();
+    expect(controller().manualTranscript).toBe('My saved manual input.');
+    expect(controller().files).toEqual([]);
+    expect(controller().savedInputDraft?.revision).toBe(1);
+  });
+
+  it('keeps restored asset metadata without recreating File objects or uploading them again', async () => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    const saved = { assignmentId: assignment.id, attemptNo: 1, revision: 2, manualTranscript: '', assetIds: ['saved-image'],
+      assets: [{ id: 'saved-image', fileName: 'original.png', mimeType: 'image/png', byteSize: 20 }], updatedAt: 1, assessmentStatus: 'UNASSESSED' };
+    api.inputDraft.mockResolvedValue({ draft: saved });
+    api.saveDraft.mockResolvedValue({ draft: { ...saved, revision: 3 } });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    expect(controller().files).toEqual([]); expect(controller().savedInputDraft?.assets).toEqual(saved.assets);
+    await controller().handleSubmit();
+    expect(api.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 2, assetIds: ['saved-image'] }));
+    expect(api.createUpload).not.toHaveBeenCalled(); expect(api.finalize).not.toHaveBeenCalled();
+  });
+
+  it('fails closed after draft restoration fails and retains typed input during a read retry', async () => {
+    api.capabilities.mockRejectedValue(new Error('capabilities unavailable'));
+    api.inputDraft.mockRejectedValueOnce(new Error('draft read unavailable')).mockResolvedValue({ draft: null });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    controller().setManualTranscript('Keep this input.');
+    await controller().handleSubmit();
+    expect(api.finalize).not.toHaveBeenCalled(); expect(api.saveDraft).not.toHaveBeenCalled();
+    expect(controller().draftLoadError).toContain('復元を確認できません');
+    controller().retryDraftLoad(); await settle();
+    expect(controller().manualTranscript).toBe('Keep this input.');
+    expect(controller().draftLoaded).toBe(true);
+    expect(controller().capabilities).toBeNull();
   });
 
   it('keeps pending and failed acquisition unknown, deduplicates retry and only shows empty after a successful response', async () => {
@@ -162,7 +217,7 @@ describe('writing assignment acquisition', () => {
     await controller().refresh({ silent: true });
     const tree = await settle();
     expect(text(tree)).toContain('前回取得した課題と件数を表示しています');
-    expect(text(tree)).toContain('提出できます');
+    expect(text(tree)).toContain('下書きを保存できます');
     expect(list(tree)?.props.assignments).toEqual([assignment]);
     list(tree)!.props.onOpenSubmit(assignment);
     expect(controller().submitTarget?.id).toBe(assignment.id);
@@ -172,6 +227,7 @@ describe('writing assignment acquisition', () => {
   it('clears only the load error after recovery and preserves submission validation feedback and draft', async () => {
     await settle();
     controller().openSubmitDialog(assignment);
+    await settle();
     controller().setManualTranscript('合成の未送信答案');
     await controller().handleSubmit();
     const submissionNotice = controller().notice;
