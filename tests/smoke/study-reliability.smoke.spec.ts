@@ -29,6 +29,13 @@ const loadFixtureWords = (page: Page, bookId: string): Promise<WordData[]> => pa
 }, bookId);
 
 type TransitionSample = { flipped: boolean; backFacing: boolean };
+const waitForAnswerFace = (page: Page) => page.waitForFunction(() => {
+  const inner = document.querySelector('.study-card-inner');
+  return inner?.classList.contains('is-flipped')
+    && new DOMMatrixReadOnly(getComputedStyle(inner).transform).m11 < -0.999
+    && inner.getAnimations().every(animation => animation.playState === 'finished');
+});
+
 const watchCardTransition = (page: Page) => page.evaluate(() => {
   const samples: TransitionSample[] = [];
   const started = performance.now();
@@ -196,18 +203,28 @@ test.describe('study reliability', () => {
     });
     await page.getByTestId(`book-study-${bookId}`).click();
     await page.getByTestId('study-flip-button').click();
-    await page.waitForTimeout(450);
+    await waitForAnswerFace(page);
     const bar = page.getByTestId('study-rating-actions');
     const before = await bar.boundingBox();
     await watchCardTransition(page);
     await page.getByTestId('study-rate-3').click();
-    await expect(bar).toHaveAttribute('aria-busy', 'true');
-    await expect(bar.getByRole('status')).toContainText('回答を保存しています');
-    const saving = await bar.boundingBox();
-    expect(before).not.toBeNull(); expect(saving).not.toBeNull();
-    expect(Math.abs(saving!.height - before!.height)).toBeLessThan(1);
-    await expect(page.getByTestId('study-card-back')).toContainText(words[0].word);
-    release();
+    try {
+      await expect(bar).toHaveAttribute('aria-busy', 'true');
+      await expect(page.getByTestId('study-rate-3')).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByTestId('study-rate-3')).toBeDisabled();
+      await expect(page.getByTestId('study-rate-3')).toHaveCSS('outline-style', 'solid');
+      await expect(page.getByTestId('study-rate-3')).toHaveCSS('opacity', '1');
+      for (const rating of [0, 1, 2]) {
+        await expect(page.getByTestId(`study-rate-${rating}`)).toHaveAttribute('aria-pressed', 'false');
+      }
+      await expect(bar.getByRole('status')).toHaveText('「すぐ分かる」を保存中…');
+      const saving = await bar.boundingBox();
+      expect(before).not.toBeNull(); expect(saving).not.toBeNull();
+      expect(Math.abs(saving!.height - before!.height)).toBeLessThan(1);
+      await expect(page.getByTestId('study-card-back')).toContainText(words[0].word);
+    } finally {
+      release();
+    }
     await expect(page.getByTestId('study-card-front')).toContainText(words[1].word);
     await expectFrontOnlyAfterAdvance(page);
     if (reducedMotion === 'reduce') {
@@ -228,7 +245,7 @@ test.describe('study reliability', () => {
     });
     await page.getByTestId(`book-study-${bookId}`).click();
     await page.getByTestId('study-flip-button').click();
-    await page.waitForTimeout(450);
+    await waitForAnswerFace(page);
     await watchCardTransition(page);
     await page.getByTestId('study-rate-0').click();
     await expect(page.getByTestId('study-flip-button')).toBeVisible();

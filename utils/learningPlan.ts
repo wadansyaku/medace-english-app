@@ -8,6 +8,8 @@ import {
   UserGrade,
 } from '../types';
 import { getBookProgressionIndex, getTargetBookProgressionIndex } from '../shared/bookProgression';
+import { NARU_BOOK_ID } from '../shared/naruBook';
+import { isBookSelectableForToday } from '../shared/materialQuality';
 import { DAY_MS, formatDateKey, parseDateKey } from './date';
 
 interface BuildFallbackLearningPlanInput {
@@ -16,6 +18,7 @@ interface BuildFallbackLearningPlanInput {
   level: EnglishLevel;
   availableBooks: BookMetadata[];
   learningPreference?: LearningPreference | null;
+  useNaruDefault?: boolean;
   now?: Date;
 }
 
@@ -110,8 +113,11 @@ const selectBooks = (
   keywords: string[],
   dailyMinutes: number,
   intensity: LearningPreferenceIntensity,
+  useNaruDefault: boolean,
 ): BookMetadata[] => {
   if (availableBooks.length === 0) return [];
+  const defaultBook = availableBooks.find(book => book.id === NARU_BOOK_ID && isBookSelectableForToday(book));
+  if (useNaruDefault && defaultBook) return [defaultBook];
 
   const desiredCount = clamp(
     2
@@ -205,6 +211,7 @@ export const buildFallbackLearningPlan = ({
   level,
   availableBooks,
   learningPreference = null,
+  useNaruDefault = true,
   now = new Date(),
 }: BuildFallbackLearningPlanInput): LearningPlan => {
   const weeklyStudyDays = clamp(learningPreference?.weeklyStudyDays || 4, 1, 7);
@@ -214,7 +221,7 @@ export const buildFallbackLearningPlan = ({
   const daysUntilExam = getDaysUntil(examDate, now);
   const dailyWordGoal = getDailyGoal(level, dailyStudyMinutes, intensity, daysUntilExam);
   const keywords = tokenize(learningPreference?.targetExam, learningPreference?.weakSkillFocus);
-  const selectedBooks = selectBooks(availableBooks, grade, level, keywords, dailyStudyMinutes, intensity);
+  const selectedBooks = selectBooks(availableBooks, grade, level, keywords, dailyStudyMinutes, intensity, useNaruDefault);
   const estimatedTotalWords = selectedBooks.reduce((total, book) => total + Math.max(book.wordCount || 0, 120), 0) || Math.max(dailyWordGoal * 14, 160);
   const studyDaysNeeded = Math.ceil(estimatedTotalWords / Math.max(dailyWordGoal, 1));
   let targetDays = clamp(Math.ceil((studyDaysNeeded * 7) / weeklyStudyDays), 14, 210);
@@ -262,6 +269,7 @@ export const normalizeGeneratedLearningPlan = ({
     availableBooks,
     learningPreference,
     now,
+    useNaruDefault: !Array.isArray(plan?.selectedBookIds) || !plan.selectedBookIds.some(id => typeof id === 'string' && id.trim()),
   });
   const selectedBookIds = normalizeSelectedBookIds(plan?.selectedBookIds, availableBooks);
   const normalizedSelectedBookIds = selectedBookIds.length > 0

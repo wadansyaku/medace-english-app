@@ -20,13 +20,14 @@ import {
   type EnglishPracticeRouteLaneId,
 } from '../utils/englishPracticeProgress';
 
-export type AppRoute = 'login' | 'guestTrial' | 'resetPassword' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
+export type AppRoute = 'login' | 'guestLearning' | 'guestTrial' | 'resetPassword' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
 export type AuthPanelMode = 'LOGIN' | 'SIGNUP';
 export type NavigationHistoryMode = 'push' | 'replace' | 'none';
 export type EnglishPracticeRouteLane = EnglishPracticeRouteLaneId;
 
 export interface AppNavigationState {
+  guestView?: 'study' | 'practice' | 'books';
   authPanelMode?: AuthPanelMode;
   currentView: AppRoute;
   returnView: HomeAppRoute;
@@ -37,6 +38,7 @@ export interface AppNavigationState {
 }
 
 export type AppNavigationAction =
+  | { type: 'open-guest-learning'; historyMode?: NavigationHistoryMode }
   | { type: 'open-guest-trial'; historyMode?: NavigationHistoryMode }
   | { type: 'open-auth'; mode: AuthPanelMode; historyMode?: NavigationHistoryMode }
   | { type: 'close-auth'; historyMode?: NavigationHistoryMode }
@@ -94,7 +96,7 @@ export const getHomeAppRoute = (user: UserProfile): HomeAppRoute => {
 };
 
 export const canAccessAppView = (user: UserProfile | null, view: AppRoute): boolean => {
-  if (view === 'login' || view === 'guestTrial' || view === 'resetPassword' || view === 'publicInfo' || view === 'publicRole') {
+  if (view === 'login' || view === 'guestLearning' || view === 'guestTrial' || view === 'resetPassword' || view === 'publicInfo' || view === 'publicRole') {
     return true;
   }
   if (!user) {
@@ -168,6 +170,11 @@ const parseBaseNavigationPath = (pathname: string, search = ''): AppNavigationSt
 
   if (normalizedPath === '/dashboard') return buildHomeState('dashboard');
   if (normalizedPath === '/try') return { ...initialNavigationState, currentView: 'guestTrial' };
+  if (normalizedPath === '/start') {
+    const guestView = new URLSearchParams(search).get('guest');
+    return { ...initialNavigationState, currentView: 'guestLearning',
+      ...(guestView === 'study' || guestView === 'practice' || guestView === 'books' ? { guestView } : {}) };
+  }
   if (root === 'english-practice') {
     const lane = parseEnglishPracticeRouteLane(bookId);
     if (!lane) return initialNavigationState;
@@ -212,6 +219,8 @@ const parseBaseNavigationPath = (pathname: string, search = ''): AppNavigationSt
 
 const buildBaseNavigationPath = (state: AppNavigationState): string => {
   switch (state.currentView) {
+    case 'guestLearning':
+      return state.guestView ? `/start?guest=${state.guestView}` : '/start';
     case 'guestTrial':
       return '/try';
     case 'publicInfo':
@@ -286,6 +295,8 @@ export const navigationReducer = (
   action: AppNavigationAction,
 ): AppNavigationState => {
   switch (action.type) {
+    case 'open-guest-learning':
+      return { ...initialNavigationState, currentView: 'guestLearning' };
     case 'open-guest-trial':
       return { ...initialNavigationState, currentView: 'guestTrial' };
     case 'open-auth':

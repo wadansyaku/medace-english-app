@@ -1,5 +1,6 @@
 import { exposeStudentDemo } from './smoke-support';
 import { formatDateKey } from '../../utils/date';
+import { NARU_BOOK_ID } from '../../shared/naruBook';
 import type { Page } from '@playwright/test';
 
 import { attachSmokeDiagnostics, expect, test } from './diagnostics';
@@ -455,7 +456,7 @@ test.describe('student mobile ux', () => {
     await openDashboardReference(page, 'library');
     await expect(page.getByTestId('dashboard-plan-anchor')).toHaveCount(0);
     await page.getByRole('button', { name: /配布教材をもっと見る|すべての配布教材を見る/ }).click();
-    await expect(page.getByText('公式コースは教室契約の教材配信で利用できます。教室に所属している場合は、講師に教材の配布をご確認ください。')).toBeVisible();
+    await expect(page.getByTestId(`book-study-${NARU_BOOK_ID}`)).toBeVisible();
 
     const offenders = await findUnexpectedHorizontalOverflow(page);
     expect(offenders).toEqual([]);
@@ -568,6 +569,16 @@ test.describe('student mobile ux', () => {
   });
 
   test('free student without books can try grammar and return from the hero on mobile', async ({ page }) => {
+    // Exercise the genuine empty-catalog fallback, independently of the public Naru starter.
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action === 'getBooks') {
+        await route.fulfill({ contentType: 'application/json', body: '[]' });
+      } else if (route.request().postDataJSON()?.action === 'getDashboardSnapshot') {
+        const response = await route.fetch();
+        const snapshot = await response.json();
+        await route.fulfill({ response, json: { ...snapshot, officialBooks: [], myBooks: [], learningPlan: null } });
+      } else await route.continue();
+    });
     await page.goto('/');
     await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
@@ -609,12 +620,13 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('plan-editor-modal')).toBeVisible();
     const bookToggle = page.getByTestId(`plan-editor-book-${bookId}`);
     await expect(bookToggle).toBeVisible();
-    await expect(bookToggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId(`plan-editor-book-${NARU_BOOK_ID}`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(bookToggle).toHaveAttribute('aria-pressed', 'false');
     await bookToggle.focus();
     await bookToggle.press('Space');
-    await expect(bookToggle).toHaveAttribute('aria-pressed', 'false');
-    await bookToggle.press('Space');
     await expect(bookToggle).toHaveAttribute('aria-pressed', 'true');
+    await bookToggle.press('Space');
+    await expect(bookToggle).toHaveAttribute('aria-pressed', 'false');
     const saveButton = page.getByTestId('plan-editor-save-button');
     await expect(saveButton).toBeVisible();
     const saveBox = await saveButton.boundingBox();
@@ -761,17 +773,20 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('study-flip-button')).toBeVisible();
   });
 
-  test('cold-start smart session respects a higher diagnosed band before any study history exists', async ({ page }) => {
+  test('cold-start uses Naru by default and preserves an explicit higher-band selection before study history', async ({ page }) => {
     await page.goto('/');
     await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
     await maybeCompleteOnboarding(page);
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
-    await seedLeveledPhrasebooks(page, {
+    const importResult = await seedLeveledPhrasebooks(page, {
       levels: [1, 2, 3, 4],
       wordsPerLevel: 10,
     });
+
+    const fixtureBooks = importResult.importedBookIds;
+    expect(fixtureBooks).toHaveLength(4);
 
     await updateSessionProfile(page, {
       grade: 'JHS2',
@@ -781,7 +796,22 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     const books = await storageAction<Array<{ id: string; title: string }>>(page, 'getBooks');
+    const defaultWords = await storageAction<Array<{ id: string; bookId: string }>>(page, 'getDailySessionWords', { limit: 10 });
+    expect(defaultWords).toHaveLength(10);
+    expect(defaultWords.every(word => word.bookId === NARU_BOOK_ID)).toBe(true);
+    const higherBandBook = books.find(book => fixtureBooks!.includes(book.id) && getBookBandIndex(book.title) === 3);
+    expect(higherBandBook).toBeTruthy();
+    await storageAction(page, 'saveLearningPlan', {
+      plan: {
+        createdAt: Date.now(), targetDate: '2026-12-31', goalDescription: 'Explicit diagnosed-band fixture',
+        dailyWordGoal: 10, selectedBookIds: [higherBandBook!.id], status: 'ACTIVE',
+      },
+    });
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
     const words = await storageAction<Array<{ id: string; bookId: string }>>(page, 'getDailySessionWords', { limit: 10 });
+    expect(words).toHaveLength(10);
+    expect(words.every(word => word.bookId === higherBandBook!.id)).toBe(true);
     const bandByBookId = new Map(books.map((book) => [book.id, getBookBandIndex(book.title)]));
     const selectedBands = words
       .map((word) => bandByBookId.get(word.bookId) || null)

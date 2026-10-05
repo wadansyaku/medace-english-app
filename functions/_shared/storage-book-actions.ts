@@ -7,6 +7,7 @@ import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditSt
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
+import { NARU_BOOK_ID } from '../../shared/naruBook';
 import type { BookStudyOverview, StudyWordRange } from '../../types';
 import { assertNoDailyStudyWordRange, getBookTaskWordRange, normalizeStudyWordRange } from '../../shared/studyScope';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
@@ -713,7 +714,10 @@ export const handleGetDailySessionWords = async (
   const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
-  const preferredBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const requestedBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const preferredBookIds = requestedBookIds.length === 0 && allVisibleBookRows.some(row => row.id === NARU_BOOK_ID)
+    ? [NARU_BOOK_ID]
+    : requestedBookIds;
   const preferredVisibleBookRows = filterBookRowsByPreferredIds(allVisibleBookRows, preferredBookIds);
   const shouldFallbackToAllVisibleBooks = preferredBookIds.length > 0
     && preferredVisibleBookRows.length === 0

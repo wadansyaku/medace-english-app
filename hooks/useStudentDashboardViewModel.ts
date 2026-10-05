@@ -5,6 +5,7 @@ import { buildWeaknessEmptyStateLabel, WEAKNESS_MIN_SAMPLE } from '../shared/wea
 import { getEnglishPracticeLaneForWeakness } from '../shared/englishPractice';
 import { isBookSelectableForToday } from '../shared/materialQuality';
 import { DEFAULT_SMART_SESSION_LIMIT } from '../shared/studySession';
+import { NARU_BOOK_ID } from '../shared/naruBook';
 import {
   resolveStudentDashboardCommand,
   type StudentDashboardCommand,
@@ -255,10 +256,13 @@ export const useStudentDashboardViewModel = ({
         level: user.englishLevel || EnglishLevel.B1,
         availableBooks: selectablePlanningBooks,
         learningPreference,
+        useNaruDefault: !learningPlan?.selectedBookIds.length,
       })
     : null;
 
   const fallbackPlannedBooks = (() => {
+    const suggested = orderBooksByIds(selectablePlanningBooks, fallbackPlanSuggestion?.selectedBookIds ?? []);
+    if (!learningPlan?.selectedBookIds.length && suggested.length === 1 && suggested[0].id === NARU_BOOK_ID) return suggested;
     const prioritized = selectablePlanningBooks.filter((book) => book.isPriority);
     return (prioritized.length > 0 ? prioritized : selectablePlanningBooks).slice(0, 3);
   })();

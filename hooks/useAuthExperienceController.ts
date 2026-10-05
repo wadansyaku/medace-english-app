@@ -30,6 +30,7 @@ export const shouldPreserveCurrentRoute = (
     case 'englishPractice':
       return nextHomeView === 'dashboard';
     case 'guestTrial':
+    case 'guestLearning':
       return nextHomeView === 'dashboard' && !navigationState.authPanelMode;
     case 'resetPassword':
       return true;

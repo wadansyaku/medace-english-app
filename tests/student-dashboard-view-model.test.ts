@@ -7,6 +7,7 @@ import {
   useStudentDashboardViewModel,
 } from '../hooks/useStudentDashboardViewModel';
 import { getTodayDateKey } from '../utils/date';
+import { NARU_BOOK_ID } from '../shared/naruBook';
 import {
   BookCatalogSource,
   EnglishLevel,
@@ -112,6 +113,25 @@ const buildSnapshot = (overrides: Partial<DashboardSnapshot>): DashboardSnapshot
 });
 
 describe('daily goal and session size', () => {
+  it('uses Naru as the default without changing an existing chosen book', () => {
+    const books = [makeBook('chosen-book', 'Chosen'), makeBook(NARU_BOOK_ID, 'Naruシスト')];
+    const snapshot = buildSnapshot({ officialBooks: books });
+    const defaults = useStudentDashboardViewModel({ user: baseUser, snapshot });
+    expect(defaults.plannedBooks.map(book => book.id)).toEqual([NARU_BOOK_ID]);
+    expect(defaults.primaryTask?.command).toMatchObject({ type: 'start_learning', task: { preferredBookIds: [NARU_BOOK_ID] } });
+    const chosen = useStudentDashboardViewModel({ user: baseUser, snapshot: { ...snapshot,
+      learningPlan: { uid: baseUser.uid, createdAt: 1, targetDate: '2026-12-31', goalDescription: 'Chosen',
+        dailyWordGoal: 10, selectedBookIds: ['chosen-book'], status: 'ACTIVE' } } });
+    expect(chosen.plannedBooks.map(book => book.id)).toEqual(['chosen-book']);
+    expect(chosen.primaryTask?.command).toMatchObject({ type: 'start_learning', task: { preferredBookIds: ['chosen-book'] } });
+  });
+
+  it('does not use a blocked Naru book as the default', () => {
+    const view = useStudentDashboardViewModel({ user: baseUser, snapshot: buildSnapshot({
+      officialBooks: [makeBook('available', 'Available'), withQualityGate(makeBook(NARU_BOOK_ID, 'Naru'), false)] }) });
+    expect(view.plannedBooks.map(book => book.id)).toEqual(['available']);
+  });
+
   it.each([0, 40])('distinguishes a 40-word daily goal from a 20-word session with %i due words', dueCount => {
     const viewModel = useStudentDashboardViewModel({
       user: baseUser,

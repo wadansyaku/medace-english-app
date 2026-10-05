@@ -36,6 +36,7 @@ import { handleGetDailySessionWords } from '../functions/_shared/storage-book-ac
 import { getDailySessionWords as getLocalDailySessionWords } from '../services/storage/learning-history';
 import { STORES, type StoredLearningHistoryRecord } from '../services/storage/idb-support';
 import { createTodayFocusTaskIntent } from '../shared/learningTask';
+import { NARU_BOOK_ID } from '../shared/naruBook';
 import {
   BookAccessScope,
   BookCatalogSource,
@@ -156,6 +157,63 @@ const makeUser = (): UserProfile => ({
 });
 
 describe('daily session word selection', () => {
+  it('withholds an unapproved Naru default in cloud sessions', async () => {
+    readAllMock.mockReset(); readFirstMock.mockReset(); readVisibleBookRowsMock.mockReset();
+    readLearningPlanBookIdsMock.mockReset(); readWeaknessProfileMock.mockReset();
+    readVisibleBookRowsMock.mockResolvedValueOnce([
+      { ...makeBookRow(NARU_BOOK_ID), ledger_rights_status: 'pending', ledger_review_status: 'needs_review' },
+      makeBookRow('book-a'),
+    ]);
+    readLearningPlanBookIdsMock.mockResolvedValueOnce([]);
+    readFirstMock.mockResolvedValueOnce({ count: 0 });
+    readAllMock.mockResolvedValueOnce([makeWordRow('book-a', 1)]);
+    const result = await handleGetDailySessionWords({ DB: { prepare: vi.fn() } } as any,
+      { id: 'student-1', role: UserRole.STUDENT, grade: UserGrade.SHS1, english_level: EnglishLevel.B1 } as any, 1);
+    expect(readAllMock.mock.calls[0]).not.toContain(NARU_BOOK_ID);
+    expect(result.map(word => word.bookId)).toEqual(['book-a']);
+  });
+
+  it('withholds an unapproved Naru default in local sessions', async () => {
+    const naru = makeBook(NARU_BOOK_ID);
+    const result = await getLocalDailySessionWords({
+      getStore: async storeName => makeRequestStore(storeName === STORES.WORDS
+        ? [makeWord('book-a', 1), makeWord(NARU_BOOK_ID, 1)] : []),
+      getBooks: async () => [makeBook('book-a'), { ...naru,
+        qualityGate: { ...naru.qualityGate!, isSelectableForToday: false, isApprovedForLearner: false } }],
+      getWordsByBook: async () => [], getSession: async () => makeUser(), getLearningPlan: async () => null,
+    }, 'student-1', 2);
+    expect(result.map(word => word.bookId)).toEqual(['book-a']);
+  });
+
+  it.each([{ selectedBookIds: [] }, { selectedBookIds: ['book-a'] }, { selectedBookIds: ['stale-book'] }])('uses Naru only without explicit cloud selections: %j', async ({ selectedBookIds }) => {
+    readAllMock.mockReset(); readFirstMock.mockReset(); readVisibleBookRowsMock.mockReset();
+    readLearningPlanBookIdsMock.mockReset();
+    readVisibleBookRowsMock.mockResolvedValueOnce([makeBookRow('book-a'), makeBookRow(NARU_BOOK_ID)]);
+    readLearningPlanBookIdsMock.mockResolvedValueOnce(selectedBookIds);
+    readFirstMock.mockResolvedValueOnce({ count: 0 });
+    readAllMock.mockResolvedValueOnce(selectedBookIds.length === 0 ? [makeWordRow(NARU_BOOK_ID, 1)] : [makeWordRow('book-a', 1)]);
+    await handleGetDailySessionWords({ DB: { prepare: vi.fn() } } as any,
+      { id: 'student-1', role: UserRole.STUDENT, grade: UserGrade.SHS1, english_level: EnglishLevel.B1 } as any, 1);
+    if (selectedBookIds.length === 0) {
+      expect(readAllMock.mock.calls[0]).toContain(NARU_BOOK_ID);
+      expect(readAllMock.mock.calls[0]).not.toContain('book-a');
+    } else {
+      expect(readAllMock.mock.calls[0]).toContain('book-a');
+      if (selectedBookIds[0] === 'book-a') expect(readAllMock.mock.calls[0]).not.toContain(NARU_BOOK_ID);
+      else expect(readAllMock.mock.calls[0]).toContain(NARU_BOOK_ID);
+    }
+  });
+
+  it.each([{ selectedBookIds: [] }, { selectedBookIds: ['book-a'] }, { selectedBookIds: ['stale-book'] }])('uses Naru only without explicit local selections: %j', async ({ selectedBookIds }) => {
+    const result = await getLocalDailySessionWords({ getStore: async storeName => makeRequestStore(storeName === STORES.WORDS ? [makeWord('book-a', 1), makeWord(NARU_BOOK_ID, 1)] : []),
+      getBooks: async () => [makeBook('book-a'), makeBook(NARU_BOOK_ID)],
+      getWordsByBook: async bookId => [makeWord(bookId, 1)], getSession: async () => makeUser(),
+      getLearningPlan: async () => makeLearningPlan(selectedBookIds) }, 'student-1', 2);
+    if (selectedBookIds.length === 0) expect(result.map(word => word.bookId)).toEqual([NARU_BOOK_ID]);
+    else if (selectedBookIds[0] === 'book-a') expect(result.map(word => word.bookId)).toEqual(['book-a']);
+    else expect(result.map(word => word.bookId).sort()).toEqual(['book-a', NARU_BOOK_ID].sort());
+  });
+
   it('uses the Today Focus preferred books and keeps new cloud words in number order', async () => {
     readAllMock.mockReset();
     readFirstMock.mockReset();
