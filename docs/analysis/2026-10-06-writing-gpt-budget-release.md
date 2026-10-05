@@ -38,7 +38,8 @@
 - 通常source-disabled runtimeの実Chrome: 管理者の失敗→retryと未有効表示、320/390/横844/tablet768/PC1366で横overflowなし。生徒/講師の原本保存、lost response同一request再送、revision=2へ一回だけ更新、再訪復元、GPT/正式提出呼出し0、Escape/focus復帰を確認。
 - 初回unit2失敗はdiagnostic fixtureのcapability不足を補って解消。初回browserの通知未投入と不存在selectを検証側で修正し、成功実行を別記録で保持。必須checkと本番認可は維持した。
 - 独立レビューで保存済み本文の復元、upload応答喪失後の手入力変更・期限切れ・再取得、原本置換のquotaとCASを確認した。未確認PUTを再prepareより先に確認し、成功済み原本を保持する追加修正を受入。`8016b39`の読み取りレビューで残るblockingなし。対象7files/97unitと型成功。
-- 最終build/API/full browser/security/remote-readonly/preview/productionは完了後に個別追記する。ローカル検証を配備成功と記載しない。
+- 最終appソース `e1829d2` は53 migration、audit、到達性・依存境界、型、184 files / 1715 unit、API全回帰成功。full browserはCloud176件とIDB9件成功、旧Writing1件は復元中のdisabled file inputへテストが入力して失敗した。操作可能になる待機を2箇所追加し、Cloud正規buildで当該1件のみ成功。合計Cloud177＋IDB9＝186 unique成功、deployed-only2件はローカル対象外。成功済みappソースを変えて全suiteを無駄に再走していない。
+- 配備用buildと最新remote-readonly、通常ソースGPT無効の4実Chrome受入を個別に完了させてからPRへ進む。必須CI/previewのfull suiteとproduction gateは維持する。配備SHA・URL・bookmark・公開後readbackの正本はこのbranchからのPR概要とGitHub Actions summary、本人Macの最終HANDOFFとする。ローカル検証を配備成功と記載しない。
 
 ## 復旧と次の承認
 

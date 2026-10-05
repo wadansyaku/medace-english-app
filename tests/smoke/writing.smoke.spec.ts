@@ -77,6 +77,7 @@ test('group admin and business student can complete the writing workflow with on
   await waitForWritingAssignment(studentPage, 'mine', generatedAssignment.id, ['ISSUED']);
   await expect(studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`)).toBeVisible();
   await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
+  await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput)).toBeEnabled();
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles([
     {
       name: 'attempt-1.pdf',
@@ -112,6 +113,7 @@ test('group admin and business student can complete the writing workflow with on
   await studentPage.reload();
   await openDashboardWriting(studentPage);
   await studentPage.locator('[data-testid^="writing-open-submit-"]').first().click();
+  await expect(studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput)).toBeEnabled();
   await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
     name: 'attempt-2.png',
     mimeType: 'image/png',
