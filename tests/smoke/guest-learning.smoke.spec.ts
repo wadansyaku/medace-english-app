@@ -14,6 +14,49 @@ const readDevice = (page: Page) => page.evaluate(() => new Promise<any>((resolve
     const get = tx.objectStore('progress').get('current'); get.onsuccess = () => resolve(get.result); get.onerror = () => reject(get.error); tx.oncomplete = () => db.close(); };
 }));
 
+test('guest six basic exercises stay local without AI or submission requests', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  const mutations: string[] = []; const aiRequests: string[] = []; const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith('/api/') && !['GET', 'HEAD'].includes(request.method())) mutations.push(url.pathname);
+    if (/^\/api\/(ai|writing)(\/|$)/.test(url.pathname)
+      || /(^|\.)(generativelanguage|aiplatform)\.googleapis\.com$/.test(url.hostname)) aiRequests.push(request.url());
+  });
+  await openNaru(page);
+  await page.getByRole('button', { name: 'クイズ・英語練習', exact: true }).click();
+  const modes = page.getByRole('group', { name: '練習の種類' });
+  for (const mode of ['意味クイズ', 'スペル', '文法', '和訳', '読解', '英作文']) {
+    await modes.getByRole('button', { name: mode, exact: true }).click();
+    if (mode === '意味クイズ' || mode === '文法') {
+      await page.getByTestId('guest-practice-question').locator('button[type="button"]').first().click();
+      await page.getByRole('button', { name: '答えを確認する', exact: true }).click();
+      await expect(page.getByTestId('guest-practice-feedback')).toBeVisible();
+    } else if (mode === 'スペル') {
+      await page.getByRole('textbox', { name: /^英単語/ }).fill('synthetic answer');
+      await page.getByRole('button', { name: '答えを確認する', exact: true }).click();
+      await expect(page.getByTestId('guest-practice-feedback')).toBeVisible();
+    } else if (mode === '和訳') {
+      await page.getByLabel('自分の日本語訳').fill('合成データの和訳です。');
+      await page.getByRole('button', { name: '参考訳を確認する', exact: true }).click();
+      await expect(page.getByText('参考訳と自分の訳を比べてみましょう', { exact: true })).toBeVisible();
+    } else if (mode === '読解') {
+      await page.getByTestId('guest-reading-practice').locator('button[type="button"]').first().click();
+      await page.getByRole('button', { name: '答えを確認する', exact: true }).click();
+      await expect(page.getByText('根拠の英文', { exact: true })).toBeVisible();
+    } else {
+      await page.getByLabel('自分の英文').fill('I keep this draft on my own device.');
+      await page.getByRole('checkbox').first().check();
+      await expect(page.getByText('現在8語', { exact: false })).toBeVisible();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+    await page.screenshot({ path: info.outputPath(`guest-six-${mode}.png`), fullPage: true });
+  }
+  expect(errors).toEqual([]); expect(mutations).toEqual([]); expect(aiRequests).toEqual([]);
+  await info.attach('guest-six-network', { body: JSON.stringify({ mutations, aiRequests, errors, modes: 6 }), contentType: 'application/json' });
+});
+
 test('guest Naru learns beyond five words and shows a stable accepted rating at five widths', async ({ browser }, info) => {
   for (const viewport of [{ width: 320, height: 740 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
     const context = await browser.newContext({ viewport }); const page = await context.newPage(); const writes: string[] = [];
