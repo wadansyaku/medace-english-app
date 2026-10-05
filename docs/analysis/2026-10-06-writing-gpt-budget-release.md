@@ -12,7 +12,7 @@
 
 ## 保存と費用
 
-追加migration `0050_ai_provider_budget.sql`、`0051_writing_unassessed_drafts.sql`、`0052_writing_draft_attachment_retirement.sql`。旧migration・原本・学習履歴は保持。月はUTC、全利用者で一つのアプリ予算を共有する。
+追加migration `0050_ai_provider_budget.sql`、`0051_writing_unassessed_drafts.sql`、`0052_writing_draft_attachment_retirement.sql`、`0053_writing_draft_actor_retention.sql`、`0054_writing_ai_draft_recovery.sql`。旧migration・原本・学習履歴は保持。月はUTC、全利用者で一つのアプリ予算を共有する。
 
 添付の置換はrevision/CASによる保存準備のcommit後にuploadへ進む。古い未提出原本はrow/objectを保持したままdraftの有効添付・upload quotaから退役する。競合する古いrevisionやDB失敗では退役しない。正常保存、PUT成功応答の喪失、手入力の編集、再取得、期限切れURL、別ファイルの再選択を区別して回復する。期限内の完了済み同一body PUTはchecksum/byte size一致時だけwrite-free204を返し、原本・etag・timestampを再書込しない。
 
@@ -21,6 +21,16 @@
 応答のinput/cached/output/total tokenと固定単価から概算を記録し、response ID・model・pricing version・結果を監査に残す。本文・画像・氏名は費用台帳に入れない。timeout/処理失敗でusageが不明なら予約全額を保持し、無条件の自動再送はしない。不正usage・予約超過・数値精度超過は新規送信を停止する。
 
 これはOpenAI請求書との照合ではない。税・為替・他アプリ・手動APIを含むprovider側の請求上限は保証しない。月枠や残額を表示することと請求確定を混同しない。
+
+## PR57の公開前レビュー修正
+
+停止した画像/PDF教材化やAI予算を有料プランの利用可能機能として案内しない。[全4プランの表示修正](./2026-10-06-subscription-feature-copy.md)で手入力・CSV・保存済み教材・標準プランの導線と価格/権限の不変を確認する。
+
+GPT処理の回復は、送信証跡と予算予約を分ける。[0054の回復契約](./2026-10-06-writing-ai-draft-recovery.md)で、送信前と証明できる同じ要求だけをlease/CASに基づき明示再開し、送信後不明の要求は再送しない。GETは保存済み応答と利用額の精算のみ回復する。入力版・操作が同じ新IDはcanonical claimとaliasで一つの処理へ結び、応答喪失で二重課金を誘発しない。遅れて届いた既知usageも同tokenで保存・精算し、不明と表示した結果を勝手に評価へ戻さない。既存のPENDING/READY/重複rowは消さず、証跡がない旧処理は不明として終端する。
+
+画面は『結果を再確認』（GET）と『同じリクエストを再開』（送信前と確認済みの場合の同ID POST）を分ける。元caller IDとcanonical GET IDを保持し、入力版/課題/操作が違う応答を採用しない。PENDING中の連打で新しい処理を作らない。結果不明時も本文と添付を保持し、日本語で次の操作を示す。
+
+[遅延Writing処理](./2026-10-06-writing-side-effect-submission-binding.md)は元submissionIdと元activityAtへ固定し、その後の提出を使わない。証跡が足りないlegacy jobは履歴を消さず手動確認へ残す。[操作者削除](./2026-10-06-writing-draft-actor-retention.md)は追加0053で3 actor参照だけをSET NULLにし、答案・GPT下書き・承認証跡を保持する。削除されたADMINの承認は現行role JOINにより外部送信に使えない。
 
 ## 外部送信の境界
 
@@ -40,6 +50,7 @@
 - 独立レビューで保存済み本文の復元、upload応答喪失後の手入力変更・期限切れ・再取得、原本置換のquotaとCASを確認した。未確認PUTを再prepareより先に確認し、成功済み原本を保持する追加修正を受入。`8016b39`の読み取りレビューで残るblockingなし。対象7files/97unitと型成功。
 - 最終appソース `e1829d2` は53 migration、audit、到達性・依存境界、型、184 files / 1715 unit、API全回帰成功。full browserはCloud176件とIDB9件成功、旧Writing1件は復元中のdisabled file inputへテストが入力して失敗した。操作可能になる待機を2箇所追加し、Cloud正規buildで当該1件のみ成功。合計Cloud177＋IDB9＝186 unique成功、deployed-only2件はローカル対象外。成功済みappソースを変えて全suiteを無駄に再走していない。
 - 配備用buildと最新remote-readonly、通常ソースGPT無効の4実Chrome受入を個別に完了させてからPRへ進む。必須CI/previewのfull suiteとproduction gateは維持する。配備SHA・URL・bookmark・公開後readbackの正本はこのbranchからのPR概要とGitHub Actions summary、本人Macの最終HANDOFFとする。ローカル検証を配備成功と記載しない。
+- 中間候補7d379ebは[CI](https://github.com/wadansyaku/medace-english-app/actions/runs/37357925288)と[Preview](https://github.com/wadansyaku/medace-english-app/actions/runs/37357925403)が成功。185files/1722unit、全Cloud177+IDB9、remote0050–0052、配備後4browserを確認した。0050のCASE内END分割は等価WHERE/MAXで修復し、予算/CAS/監査の保証を維持した。公開前レビュー修正を含む最終候補は同じ必須gateで再確認し、結果を[PR57](https://github.com/wadansyaku/medace-english-app/pull/57)とMacのHANDOFFへ記録する。
 
 ## 復旧と次の承認
 

@@ -1,6 +1,94 @@
 import { expect, test } from './diagnostics';
 import { getCurrentSessionUser, loginAdminDemo, loginBusinessStudentDemo, loginGroupAdminDemo, maybeCompleteOnboarding, openDashboardWriting, resolveWritingStudentSelectValue, runtimeAdminPost, storageAction } from './smoke-support';
 
+test('teacher distinguishes safe same-request resume from result-only recheck and retains the original when no result is available', async ({ page }, testInfo) => {
+  // Only the browser responses are synthetic. No key, approval, provider
+  // binding or external request is enabled in the local D1/R2 server.
+  await page.route('**/api/writing/ai-capabilities?*', async route => {
+    const response = await route.fetch();
+    const capability = await response.json();
+    if (process.env.WRITING_SOURCE_DISABLED_REVIEW === '1') expect(capability.state).toBe('DISABLED');
+    await route.fulfill({ response, json: { ...capability, state: 'ENABLED', feedbackEnabled: true, ocrEnabled: false, gradingEnabled: false } });
+  });
+  let formalCalls = 0;
+  let externalCalls = 0;
+  page.on('request', request => {
+    if (/\/api\/writing\/submissions\/finalize/.test(request.url())) formalCalls += 1;
+    if (new URL(request.url()).hostname === 'api.openai.com') externalCalls += 1;
+  });
+  await loginGroupAdminDemo(page);
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(page, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(page, 'sendInstructorNotification', { studentUid: bootstrap.studentUid, message: 'Synthetic result recovery only.', triggerReason: 'smoke-ai-recovery-bootstrap', usedAi: false, interventionKind: 'REVIEW_RESTART' });
+  const templates = await page.evaluate(async () => (await fetch('/api/writing/templates')).json());
+  const assignment = await runtimeAdminPost<{ id: string; submissionCode: string }>(page, '/api/writing/assignments/generate', { studentUid: bootstrap.studentUid, templateId: templates.templates[0].id });
+  await runtimeAdminPost(page, '/api/writing/assignments/issue', { assignmentId: assignment.id });
+  await page.reload();
+  await page.getByTestId('workspace-tab-writing').click();
+  await page.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(assignment.submissionCode) }).click();
+  await page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
+  const manual = page.getByTestId('writing-teacher-draft-manual');
+  const original = 'Synthetic original retained during uncertain result recovery.';
+  await manual.fill(original);
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
+  const posts: any[] = [];
+  const gets: string[] = [];
+  const canonicalId = 'synthetic-canonical-result-001';
+  const resultFor = (request: any, status: string, recoveryAction: string, extra = {}) => ({
+    requestId: status === 'READY' ? 'synthetic-canonical-result-002' : canonicalId, assignmentId: assignment.id, attemptNo: request.attemptNo,
+    inputDraftRevision: request.inputDraftRevision, operation: 'WRITING_FEEDBACK', status,
+    recoveryAction, assessmentStatus: 'UNASSESSED', requiresHumanReview: true, updatedAt: Date.now(), ...extra,
+  });
+  await page.route('**/api/writing/ai-drafts', async route => {
+    const body = route.request().postDataJSON();
+    posts.push(body);
+    await route.fulfill({ json: posts.length === 1 ? resultFor(body, 'PENDING', 'RESEND_SAME_REQUEST')
+      : posts.length === 2 ? resultFor(body, 'PENDING', 'CHECK_RESULT')
+      : resultFor(body, 'READY', 'NONE', { result: { operation: 'WRITING_FEEDBACK', strengths: ['Synthetic strength.'], improvementPoints: ['Synthetic improvement.'], correctedDraft: 'Synthetic suggestion requiring teacher review.', sentenceCorrections: [] } }) });
+  });
+  await page.route('**/api/writing/ai-drafts/*', async route => {
+    gets.push(new URL(route.request().url()).pathname.split('/').pop()!);
+    if (gets.length === 1) return route.abort('failed');
+    await route.fulfill({ json: resultFor(posts[0], 'UNASSESSED', 'NONE', { reason: 'RESULT_UNAVAILABLE' }) });
+  });
+  await page.getByTestId('writing-gpt-feedback').click();
+  const resume = page.getByRole('button', { name: '同じリクエストを再開', exact: true });
+  await expect(resume).toBeVisible();
+  expect(posts[0].requestId).not.toBe(canonicalId);
+  await resume.click();
+  await expect(page.getByRole('button', { name: '結果を再確認', exact: true })).toBeVisible();
+  expect(posts).toHaveLength(2);
+  expect(posts[1]).toEqual(posts[0]);
+  for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
+    await page.setViewportSize(size);
+    await page.getByTestId('writing-gpt-recheck').scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`gpt-recovery-${size.width}.png`) });
+  }
+  await page.getByRole('button', { name: '結果を再確認', exact: true }).click();
+  await expect(page.getByTestId('writing-teacher-draft-error')).toBeFocused();
+  await expect(manual).toHaveValue(original);
+  expect(posts).toHaveLength(2);
+  await page.getByRole('button', { name: '結果を再確認', exact: true }).click();
+  await expect(page.getByTestId('writing-gpt-unassessed-result')).toContainText('未評価');
+  await expect(page.getByTestId('writing-gpt-unassessed-result')).not.toContainText('RESULT_UNAVAILABLE');
+  await expect(resume).toHaveCount(0);
+  expect(gets).toEqual([canonicalId, canonicalId]);
+  expect(posts).toHaveLength(2);
+  await expect(manual).toHaveValue(original);
+  await manual.fill(original + ' Explicitly revised by the teacher.');
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
+  await page.getByTestId('writing-gpt-feedback').click();
+  await expect(page.getByTestId('writing-gpt-unassessed-result')).toContainText('Synthetic suggestion requiring teacher review.');
+  expect(posts).toHaveLength(3);
+  expect(posts[2].inputDraftRevision).toBeGreaterThan(posts[0].inputDraftRevision);
+  expect(posts[2].requestId).not.toBe(posts[0].requestId);
+  await expect(manual).toHaveValue(original + ' Explicitly revised by the teacher.');
+  expect(formalCalls).toBe(0); expect(externalCalls).toBe(0);
+});
+
 test('unassessed originals survive a lost save response and browser revisit without GPT or a formal submission', async ({ browser }, testInfo) => {
   const teacherContext = await browser.newContext();
   const studentContext = await browser.newContext();
