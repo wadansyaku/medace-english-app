@@ -17,11 +17,17 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [aiDraft, setAiDraft] = useState<WritingAiDraftResponse | null>(null);
+  const manualDirty = useRef(false);
+  const assetsNeedRetirement = useRef(false);
+  const committedInput = useRef<WritingInputDraft | null>(null);
   const lock = useRef(false);
   const scope = useRef('');
   const version = useRef(0);
   const uploads = useRef<WritingUploadRetryCache | null>(null);
+  const pendingUploads = useRef<{ cache: WritingUploadRetryCache; requests: Array<Awaited<ReturnType<typeof createWritingUploadUrl>> | undefined> } | null>(null);
+  const preparedInput = useRef<{ cache: WritingUploadRetryCache; signature: string; revision: number } | null>(null);
   const saveRequest = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
+  const retirementRequest = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
   const aiRequest = useRef<GenerateWritingAiDraftRequest | null>(null);
   const currentScope = `${assignmentId}:${attemptNo}`;
   scope.current = currentScope;
@@ -34,48 +40,95 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
     if (scope.current !== currentScope || version.current !== requestVersion) return;
     setCapabilities(cap.status === 'fulfilled' ? cap.value : null);
     if (input.status === 'fulfilled' && (!input.value.draft || (input.value.draft.assignmentId === assignmentId && input.value.draft.attemptNo === attemptNo))) {
+      committedInput.current = input.value.draft;
+      assetsNeedRetirement.current = false;
       setSaved(input.value.draft); setAssetsChanged(false); setLoaded(true);
-      if (!preserveManual) setManual(input.value.draft?.manualTranscript || '');
-      setNotice(input.value.draft ? '保存済みの入力を復元しました（未評価）。' : null);
-      saveRequest.current = null;
+      const keepEditedManual = preserveManual && manualDirty.current;
+      if (!keepEditedManual) { setManual(input.value.draft?.manualTranscript || ''); manualDirty.current = false; }
+      setNotice(input.value.draft ? (keepEditedManual
+        ? '保存済みの添付を確認しました。編集中の本文は保持しています（未保存）。'
+        : '保存済みの入力を復元しました（未評価）。') : null);
+      saveRequest.current = null; retirementRequest.current = null; preparedInput.current = null;
     } else setError('下書きの復元を確認できません。入力を保持しています。再取得してから保存してください。');
     setLoading(false);
   };
   useEffect(() => {
     setCapabilities(null); setSaved(null); setManual(''); setFiles([]); setNotice(null); setAiDraft(null);
-    uploads.current = null; saveRequest.current = null; aiRequest.current = null;
+    uploads.current = null; pendingUploads.current = null; saveRequest.current = null; retirementRequest.current = null; preparedInput.current = null; aiRequest.current = null;
+    manualDirty.current = false; assetsNeedRetirement.current = false; committedInput.current = null;
     void reload(false);
     return () => { version.current += 1; scope.current = ''; };
   }, [assignmentId, attemptNo]);
 
   const save = async () => {
     if (lock.current || !loaded || loading) return;
-    if (!manual.trim() && files.length === 0 && !saved?.assets.length) { setError('本文または答案ファイルを入力してください。'); return; }
+    if (!manual.trim() && files.length === 0 && !saved?.assets.length && !committedInput.current?.revision) { setError('本文または答案ファイルを入力してください。'); return; }
     const validation = validateWritingSubmissionFiles(files);
     if (files.length > 0 && !validation.valid) { setError(validation.message); return; }
     lock.current = true; setBusy(true); setError(null); setNotice(null);
     try {
-      const assets = saved?.assets || [];
+      const previousCache = uploads.current;
+      const cache = resolveWritingUploadRetryCache(previousCache, currentScope, files);
+      if (cache !== previousCache) {
+        retirementRequest.current = null; saveRequest.current = null; preparedInput.current = null;
+        pendingUploads.current = { cache, requests: [] };
+      }
+      uploads.current = cache;
+      // Completed uploads still represented by local Files are not original attachments.
+      const transientIds = new Set(previousCache?.assetIds.filter(Boolean));
+      const assets = (saved?.assets || []).filter(asset => !transientIds.has(asset.id));
       const mimes = [...assets.map(asset => asset.mimeType), ...files.map(resolveWritingUploadMimeType)];
       if (mimes.length > 4 || (mimes.includes('application/pdf') && mimes.length > 1)) throw new Error('PDF 1件、または画像最大4件で保存してください。');
-      const cache = resolveWritingUploadRetryCache(uploads.current, currentScope, files); uploads.current = cache;
+      let expectedRevision = committedInput.current?.revision || saved?.revision || 0;
+      const persistInput = async (assetIds: string[], revision: number, retiring = false): Promise<WritingInputDraft> => {
+        const pendingRequest = retiring ? retirementRequest : saveRequest;
+        const payload = { assignmentId, attemptNo, expectedRevision: revision, assetIds, manualTranscript: manual,
+          ...(retiring && files.length > 0 ? { prepareUpload: true as const } : {}) };
+        const signature = JSON.stringify(payload);
+        if (pendingRequest.current?.signature !== signature) pendingRequest.current = { signature, request: { ...payload, requestId: crypto.randomUUID() } };
+        const response = await saveWritingInputDraft(pendingRequest.current.request);
+        if (!response.draft || response.draft.assignmentId !== assignmentId || response.draft.attemptNo !== attemptNo) throw new Error('保存した下書きを確認できません。');
+        if (scope.current !== currentScope) throw new Error('編集対象が変更されました。');
+        committedInput.current = response.draft;
+        setSaved(response.draft); manualDirty.current = false;
+        pendingRequest.current = null;
+        return response.draft;
+      };
+      // Preparation releases removed/orphaned originals before any new upload.
+      // Retrying unchanged Files reuses its confirmed revision and successful uploads.
+      const preparationSignature = JSON.stringify({ assetIds: assets.map(asset => asset.id), manual });
+      if (files.length > 0 || assetsNeedRetirement.current) {
+        const prepared = preparedInput.current;
+        if (files.length > 0 && !assetsNeedRetirement.current && prepared?.cache === cache
+          && prepared.signature === preparationSignature && prepared.revision === expectedRevision) {
+          expectedRevision = prepared.revision;
+        } else {
+          const retainedIds = [...new Set([...assets.map(asset => asset.id), ...cache.assetIds.filter((id): id is string => Boolean(id))])];
+          const retained = await persistInput(retainedIds, expectedRevision, true);
+          expectedRevision = retained.revision;
+          preparedInput.current = { cache, signature: preparationSignature, revision: expectedRevision };
+          assetsNeedRetirement.current = false; setAssetsChanged(false); setAiDraft(null);
+        }
+        if (files.length === 0) {
+          setNotice('下書きを保存しました。未評価で、成績・提出は確定していません。');
+          return;
+        }
+        setNotice('添付と本文の保存準備は確認済みです。新しいファイルはまだ保存されていません。');
+      }
       const assetIds = assets.map(asset => asset.id);
       for (const [index, file] of files.entries()) {
         if (!cache.assetIds[index]) {
-          const upload = await createWritingUploadUrl({ assignmentId, attemptNo, assetOrder: assets.length + index + 1,
+          const requests = pendingUploads.current!;
+          const upload = requests.requests[index] || await createWritingUploadUrl({ assignmentId, attemptNo, assetOrder: assets.length + index + 1,
             fileName: file.name, mimeType: resolveWritingUploadMimeType(file), byteSize: file.size,
             sha256Base64: await calculateWritingAssetSha256Base64(file) });
+          requests.requests[index] = upload;
           await uploadWritingAsset(upload, file); cache.assetIds[index] = upload.assetId;
         }
         assetIds.push(cache.assetIds[index]!);
       }
-      const payload = { assignmentId, attemptNo, expectedRevision: saved?.revision || 0, assetIds, manualTranscript: manual };
-      const signature = JSON.stringify(payload);
-      if (saveRequest.current?.signature !== signature) saveRequest.current = { signature, request: { ...payload, requestId: crypto.randomUUID() } };
-      const response = await saveWritingInputDraft(saveRequest.current.request);
-      if (!response.draft || response.draft.assignmentId !== assignmentId || response.draft.attemptNo !== attemptNo) throw new Error('保存した下書きを確認できません。');
-      if (scope.current !== currentScope) return;
-      setSaved(response.draft); setAssetsChanged(false); setFiles([]); setAiDraft(null); uploads.current = null; saveRequest.current = null;
+      await persistInput(assetIds, expectedRevision);
+      setAssetsChanged(false); setFiles([]); setAiDraft(null); uploads.current = null; pendingUploads.current = null; preparedInput.current = null;
       setNotice('下書きを保存しました。未評価で、成績・提出は確定していません。');
     } catch (failure) {
       if (scope.current === currentScope) setError(`${failure instanceof Error ? failure.message : '保存を確認できません。'} 入力は保持しています。競合時は再取得して確認してください。`);
@@ -101,9 +154,9 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
   };
   return { capabilities, saved, manual, files, loading, loaded, busy, error, notice, aiDraft, canOcr, canFeedback,
     reload: () => void reload(true), save, generate,
-    setManual: (text: string) => { if (!lock.current && !loading) { setManual(text); setNotice(null); } },
+    setManual: (text: string) => { if (!lock.current && !loading) { manualDirty.current = true; setManual(text); setNotice(null); } },
     setFiles: (value: File[]) => { if (!lock.current && !loading) { setFiles(value); setNotice(null); } },
-    removeAsset: (id: string) => { if (!lock.current && !loading) { setSaved(draft => draft ? { ...draft, assets: draft.assets.filter(asset => asset.id !== id), assetIds: draft.assetIds.filter(assetId => assetId !== id) } : null); setAssetsChanged(true); setNotice(null); } },
+    removeAsset: (id: string) => { if (!lock.current && !loading) { setSaved(draft => draft ? { ...draft, assets: draft.assets.filter(asset => asset.id !== id), assetIds: draft.assetIds.filter(assetId => assetId !== id) } : null); assetsNeedRetirement.current = true; setAssetsChanged(true); setNotice(null); } },
     hasPendingRequest: Boolean(aiRequest.current), pendingOperation: aiRequest.current?.operation,
   };
 };

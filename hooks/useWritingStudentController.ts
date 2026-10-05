@@ -56,8 +56,14 @@ export const useWritingStudentController = (user: UserProfile) => {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftSavedMessage, setDraftSavedMessage] = useState<string | null>(null);
   const draftScopeVersionRef = useRef(0);
+  const manualDirtyRef = useRef(false);
+  const assetsNeedRetirementRef = useRef(false);
+  const committedInputRef = useRef<WritingInputDraft | null>(null);
   const pendingDraftSaveRef = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
+  const pendingRetirementSaveRef = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
   const uploadedFilesRef = useRef<WritingUploadRetryCache | null>(null);
+  const pendingUploadsRef = useRef<{ cache: WritingUploadRetryCache; requests: Array<Awaited<ReturnType<typeof createWritingUploadUrl>> | undefined> } | null>(null);
+  const preparedInputRef = useRef<{ cache: WritingUploadRetryCache; signature: string; revision: number } | null>(null);
   const submitLockRef = useRef(false);
   const [openingFeedbackId, setOpeningFeedbackId] = useState<string | null>(null);
   const [feedbackCommentExpanded, setFeedbackCommentExpanded] = useState(false);
@@ -148,12 +154,13 @@ export const useWritingStudentController = (user: UserProfile) => {
     draftScopeVersionRef.current += 1;
     setCapabilities(null); setSavedInputDraft(null); setDraftLoaded(false);
     setDraftLoading(false); setDraftLoadError(null); setDraftSavedMessage(null);
-    pendingDraftSaveRef.current = null;
+    pendingDraftSaveRef.current = null; pendingRetirementSaveRef.current = null; preparedInputRef.current = null;
+    manualDirtyRef.current = false; assetsNeedRetirementRef.current = false; committedInputRef.current = null;
     setSubmitTarget(null);
     setFiles([]);
     setManualTranscript('');
     setSubmissionError(null);
-    uploadedFilesRef.current = null;
+    uploadedFilesRef.current = null; pendingUploadsRef.current = null;
     setOpeningFeedbackId(null);
     setFeedbackCommentExpanded(false);
     setMobileSubmitStep(0);
@@ -190,13 +197,14 @@ export const useWritingStudentController = (user: UserProfile) => {
     draftScopeVersionRef.current += 1;
     setCapabilities(null); setSavedInputDraft(null); setDraftLoaded(false);
     setDraftLoading(false); setDraftLoadError(null); setDraftSavedMessage(null);
-    pendingDraftSaveRef.current = null;
+    pendingDraftSaveRef.current = null; pendingRetirementSaveRef.current = null; preparedInputRef.current = null;
+    manualDirtyRef.current = false; assetsNeedRetirementRef.current = false; committedInputRef.current = null;
     setSubmitTarget(null);
     setFiles([]);
     setManualTranscript('');
     setMobileSubmitStep(0);
     setSubmissionError(null);
-    uploadedFilesRef.current = null;
+    uploadedFilesRef.current = null; pendingUploadsRef.current = null;
   };
 
   const restoreDraft = async (assignment: WritingAssignment, preserveInput = false) => {
@@ -215,10 +223,14 @@ export const useWritingStudentController = (user: UserProfile) => {
       if (draft && (draft.assignmentId !== assignment.id || draft.attemptNo !== attemptNo)) {
         setDraftLoadError('課題に対応する下書きを確認できません。入力を保持しています。');
       } else {
+        committedInputRef.current = draft; assetsNeedRetirementRef.current = false;
         setSavedInputDraft(draft); setDraftLoaded(true);
-        if (!preserveInput) setManualTranscript(draft?.manualTranscript || '');
-        setDraftSavedMessage(draft ? '保存済みの下書きを復元しました。未評価です。' : null);
-        pendingDraftSaveRef.current = null;
+        const keepEditedManual = preserveInput && manualDirtyRef.current;
+        if (!keepEditedManual) { setManualTranscript(draft?.manualTranscript || ''); manualDirtyRef.current = false; }
+        setDraftSavedMessage(draft ? (keepEditedManual
+          ? '保存済みの添付を確認しました。編集中の本文は保持しています（未保存）。'
+          : '保存済みの下書きを復元しました。未評価です。') : null);
+        pendingDraftSaveRef.current = null; pendingRetirementSaveRef.current = null; preparedInputRef.current = null;
       }
     } else {
       setDraftLoadError('保存済み下書きの復元を確認できませんでした。入力は保持しています。再取得してから保存してください。');
@@ -230,8 +242,9 @@ export const useWritingStudentController = (user: UserProfile) => {
     if (submitLockRef.current) return;
     setSubmitTarget(assignment); setFiles([]); setManualTranscript('');
     setCapabilities(null); setSavedInputDraft(null); setDraftSavedMessage(null);
-    setMobileSubmitStep(0); setSubmissionError(null); uploadedFilesRef.current = null;
-    pendingDraftSaveRef.current = null;
+    setMobileSubmitStep(0); setSubmissionError(null); uploadedFilesRef.current = null; pendingUploadsRef.current = null;
+    pendingDraftSaveRef.current = null; pendingRetirementSaveRef.current = null; preparedInputRef.current = null;
+    manualDirtyRef.current = false; assetsNeedRetirementRef.current = false; committedInputRef.current = null;
     void restoreDraft(assignment);
   };
 
@@ -242,8 +255,10 @@ export const useWritingStudentController = (user: UserProfile) => {
     }
     const gradingEnabled = capabilities?.gradingEnabled === true;
     const validation = validateWritingSubmissionFiles(files);
-    const existingAssets = savedInputDraft?.assets || [];
-    const manualOnly = !gradingEnabled && files.length === 0 && (manualTranscript.trim().length > 0 || existingAssets.length > 0);
+    const previousCache = uploadedFilesRef.current;
+    const transientIds = new Set(previousCache?.assetIds.filter(Boolean));
+    const existingAssets = (savedInputDraft?.assets || []).filter(asset => !transientIds.has(asset.id));
+    const manualOnly = !gradingEnabled && files.length === 0 && (manualTranscript.trim().length > 0 || existingAssets.length > 0 || Boolean(committedInputRef.current?.revision));
     if (!validation.valid && !manualOnly) {
       setNotice({
         tone: 'error',
@@ -257,7 +272,11 @@ export const useWritingStudentController = (user: UserProfile) => {
     setSubmissionError(null);
     const target = submitTarget;
     const attemptNo = target.attemptCount + 1;
-    const cache = resolveWritingUploadRetryCache(uploadedFilesRef.current, `${user.uid}:${target.id}:${attemptNo}`, files);
+    const cache = resolveWritingUploadRetryCache(previousCache, `${user.uid}:${target.id}:${attemptNo}`, files);
+    if (cache !== previousCache) {
+      pendingRetirementSaveRef.current = null; pendingDraftSaveRef.current = null; preparedInputRef.current = null;
+      pendingUploadsRef.current = { cache, requests: [] };
+    }
     uploadedFilesRef.current = cache;
     try {
       const uploadResults: string[] = gradingEnabled ? [] : existingAssets.map(asset => asset.id);
@@ -265,13 +284,51 @@ export const useWritingStudentController = (user: UserProfile) => {
       if (!gradingEnabled && (combinedMimeTypes.length > 4 || (combinedMimeTypes.includes('application/pdf') && combinedMimeTypes.length > 1))) {
         throw new Error('下書きはPDF 1件、または画像最大4件で保存してください。');
       }
+      let expectedRevision = committedInputRef.current?.revision || savedInputDraft?.revision || 0;
+      const persistInput = async (assetIds: string[], revision: number, retiring = false): Promise<WritingInputDraft> => {
+        const pendingRequest = retiring ? pendingRetirementSaveRef : pendingDraftSaveRef;
+        const payload = { assignmentId: target.id, attemptNo, expectedRevision: revision, assetIds, manualTranscript,
+          ...(retiring && files.length > 0 ? { prepareUpload: true as const } : {}) };
+        const signature = JSON.stringify(payload);
+        const pending = pendingRequest.current?.signature === signature
+          ? pendingRequest.current
+          : { signature, request: { ...payload, requestId: crypto.randomUUID() } };
+        pendingRequest.current = pending;
+        const response = await saveWritingInputDraft(pending.request);
+        if (!response.draft || response.draft.assignmentId !== target.id || response.draft.attemptNo !== attemptNo) throw new Error('保存した下書きを確認できませんでした。');
+        if (activeUserUidRef.current !== user.uid) throw new Error('アカウントが変更されました。');
+        committedInputRef.current = response.draft;
+        setSavedInputDraft(response.draft); manualDirtyRef.current = false;
+        pendingRequest.current = null;
+        return response.draft;
+      };
+      if (!gradingEnabled && (files.length > 0 || assetsNeedRetirementRef.current)) {
+        const preparationSignature = JSON.stringify({ assetIds: existingAssets.map(asset => asset.id), manualTranscript });
+        const prepared = preparedInputRef.current;
+        if (files.length > 0 && !assetsNeedRetirementRef.current && prepared?.cache === cache
+          && prepared.signature === preparationSignature && prepared.revision === expectedRevision) {
+          expectedRevision = prepared.revision;
+        } else {
+          const retainedIds = [...new Set([...existingAssets.map(asset => asset.id), ...cache.assetIds.filter((id): id is string => Boolean(id))])];
+          const retained = await persistInput(retainedIds, expectedRevision, true);
+          expectedRevision = retained.revision;
+          preparedInputRef.current = { cache, signature: preparationSignature, revision: expectedRevision };
+          assetsNeedRetirementRef.current = false;
+        }
+        if (files.length === 0) {
+          setDraftSavedMessage('下書きを保存しました。未評価で、成績・提出は確定していません。');
+          setNotice({ tone: 'success', message: '答案の下書きを保存しました（未評価）。' });
+          return;
+        }
+        setDraftSavedMessage('添付と本文の保存準備は確認済みです。新しいファイルはまだ保存されていません。');
+      }
       for (const [index, file] of files.entries()) {
         const existingAssetId = cache.assetIds[index];
         if (existingAssetId) {
           uploadResults.push(existingAssetId);
           continue;
         }
-        const upload = await createWritingUploadUrl({
+        const upload = (!gradingEnabled && pendingUploadsRef.current?.requests[index]) || await createWritingUploadUrl({
           assignmentId: target.id,
           fileName: file.name,
           mimeType: resolveWritingUploadMimeType(file),
@@ -280,28 +337,15 @@ export const useWritingStudentController = (user: UserProfile) => {
           assetOrder: (gradingEnabled ? 0 : existingAssets.length) + index + 1,
           attemptNo,
         });
+        if (!gradingEnabled) pendingUploadsRef.current!.requests[index] = upload;
         await uploadWritingAsset(upload, file);
         cache.assetIds[index] = upload.assetId;
         uploadResults.push(upload.assetId);
       }
 
       if (!gradingEnabled) {
-        const payload = {
-          assignmentId: target.id, attemptNo, expectedRevision: savedInputDraft?.revision || 0,
-          assetIds: uploadResults, manualTranscript,
-        };
-        const signature = JSON.stringify(payload);
-        const pending = pendingDraftSaveRef.current?.signature === signature
-          ? pendingDraftSaveRef.current
-          : { signature, request: { ...payload, requestId: crypto.randomUUID() } };
-        pendingDraftSaveRef.current = pending;
-        const response = await saveWritingInputDraft(pending.request);
-        if (!response.draft || response.draft.assignmentId !== target.id || response.draft.attemptNo !== attemptNo) {
-          throw new Error('保存した下書きを確認できませんでした。');
-        }
-        if (activeUserUidRef.current !== user.uid) return;
-        setSavedInputDraft(response.draft); setFiles([]); uploadedFilesRef.current = null;
-        pendingDraftSaveRef.current = null;
+        await persistInput(uploadResults, expectedRevision);
+        setFiles([]); uploadedFilesRef.current = null; pendingUploadsRef.current = null; preparedInputRef.current = null;
         setDraftSavedMessage('下書きを保存しました。未評価で、成績・提出は確定していません。');
         setNotice({ tone: 'success', message: '答案の下書きを保存しました（未評価）。' });
         return;
@@ -399,6 +443,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     removeSavedAsset: (id: string) => {
       if (submitLockRef.current || draftLoading) return;
       setSavedInputDraft(current => current ? { ...current, assetIds: current.assetIds.filter(assetId => assetId !== id), assets: current.assets.filter(asset => asset.id !== id) } : null);
+      assetsNeedRetirementRef.current = true;
       setDraftSavedMessage(null);
     },
     openingFeedbackId,
@@ -413,7 +458,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     openSubmitDialog,
     resetSubmitDialog,
     setFiles: (value: File[]) => { if (!submitLockRef.current && !draftLoading) { setFiles(value); setDraftSavedMessage(null); } },
-    setManualTranscript: (value: string) => { if (!submitLockRef.current && !draftLoading) { setManualTranscript(value); setDraftSavedMessage(null); } },
+    setManualTranscript: (value: string) => { if (!submitLockRef.current && !draftLoading) { manualDirtyRef.current = true; setManualTranscript(value); setDraftSavedMessage(null); } },
     handleSubmit,
     openFeedback,
     closeFeedback,

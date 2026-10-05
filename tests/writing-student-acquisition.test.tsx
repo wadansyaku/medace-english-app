@@ -243,4 +243,160 @@ describe('writing assignment acquisition', () => {
     expect(controller().submitTarget?.id).toBe(assignment.id);
     expect(api.finalize).not.toHaveBeenCalled();
   });
+  it.each([false, true])('restores the saved student manual text after first GET failure unless edited=%s', async edited => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    const saved = { assignmentId: assignment.id, attemptNo: 1, revision: 1, manualTranscript: 'My persisted text.', assetIds: [], assets: [], assessmentStatus: 'UNASSESSED', updatedAt: 1 };
+    api.inputDraft.mockRejectedValueOnce(new Error('503')).mockResolvedValue({ draft: saved });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    if (edited) controller().setManualTranscript('My edited local text.');
+    controller().retryDraftLoad(); await settle();
+    expect(controller().manualTranscript).toBe(edited ? 'My edited local text.' : saved.manualTranscript);
+    api.saveDraft.mockResolvedValue({ draft: { ...saved, revision: 2 } }); await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0].manualTranscript).toBe(edited ? 'My edited local text.' : saved.manualTranscript);
+  });
+  const pdfReplacement = new File(['%PDF-1.4 replacement'], 'replacement.pdf', { type: 'application/pdf' });
+  const prepareReplacement = async () => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    const saved = { assignmentId: assignment.id, attemptNo: 1, revision: 1, manualTranscript: '', assetIds: ['old-pdf'],
+      assets: [{ id: 'old-pdf', fileName: 'old.pdf', mimeType: 'application/pdf', byteSize: 20 }], assessmentStatus: 'UNASSESSED', updatedAt: 1 };
+    api.inputDraft.mockResolvedValue({ draft: saved });
+    api.createUpload.mockResolvedValue({ assetId: 'replacement' });
+    api.saveDraft.mockImplementation(async (request: any) => ({ draft: { ...saved,
+      revision: request.expectedRevision + 1, assetIds: request.assetIds, manualTranscript: request.manualTranscript,
+      assets: request.assetIds.map((id: string) => ({ id, fileName: pdfReplacement.name, mimeType: pdfReplacement.type, byteSize: pdfReplacement.size })) } }));
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    controller().removeSavedAsset('old-pdf'); controller().setFiles([pdfReplacement]);
+  };
+  it('retires a removed PDF before uploading its replacement and finalizes the next CAS revision', async () => {
+    await prepareReplacement(); await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0]).toMatchObject({ expectedRevision: 1, assetIds: [], manualTranscript: '' });
+    expect(api.saveDraft.mock.invocationCallOrder[0]).toBeLessThan(api.createUpload.mock.invocationCallOrder[0]);
+    expect(api.saveDraft.mock.calls[1][0]).toMatchObject({ expectedRevision: 2, assetIds: ['replacement'] });
+    expect(controller().savedInputDraft?.revision).toBe(3); expect(controller().files).toEqual([]); expect(api.finalize).not.toHaveBeenCalled();
+  });
+  it('uses the same removal request after an uncertain response and holds the upload until confirmation', async () => {
+    await prepareReplacement(); api.saveDraft.mockRejectedValueOnce(new Error('removal response lost'));
+    await controller().handleSubmit(); expect(api.createUpload).not.toHaveBeenCalled(); expect(controller().files).toEqual([pdfReplacement]);
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0]).toEqual(api.saveDraft.mock.calls[1][0]);
+    expect(api.saveDraft.mock.calls[2][0].expectedRevision).toBe(2);
+  });
+  it('keeps the confirmed removal revision and reuses the final payload and upload after response loss', async () => {
+    await prepareReplacement(); const save = api.saveDraft.getMockImplementation()!;
+    api.saveDraft.mockImplementationOnce(save).mockRejectedValueOnce(new Error('final response lost'));
+    await controller().handleSubmit(); expect(controller().savedInputDraft?.revision).toBe(2); expect(controller().files).toEqual([pdfReplacement]);
+    await controller().handleSubmit();
+    expect(api.createUpload).toHaveBeenCalledTimes(1); expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(api.saveDraft.mock.calls[1][0]).toEqual(api.saveDraft.mock.calls[2][0]); expect(controller().savedInputDraft?.revision).toBe(3);
+  });
+  it('keeps replacement files and manual input when upload fails after the removal is saved', async () => {
+    await prepareReplacement(); controller().setManualTranscript('Replacement manual input.'); api.upload.mockRejectedValueOnce(new Error('upload failed'));
+    await controller().handleSubmit();
+    expect(controller().savedInputDraft?.revision).toBe(2); expect(controller().savedInputDraft?.assetIds).toEqual([]);
+    expect(controller().manualTranscript).toBe('Replacement manual input.'); expect(controller().files).toEqual([pdfReplacement]);
+    expect(controller().draftSavedMessage).toContain('新しいファイルはまだ保存されていません'); expect(api.saveDraft).toHaveBeenCalledTimes(1);
+  });
+  it('does not upload after a retirement CAS conflict and keeps the new PDF with a reload instruction', async () => {
+    await prepareReplacement(); api.saveDraft.mockRejectedValueOnce(new Error('revision conflict'));
+    await controller().handleSubmit();
+    expect(api.createUpload).not.toHaveBeenCalled(); expect(controller().files).toEqual([pdfReplacement]);
+    expect(controller().submissionError).toContain('再取得');
+  });
+  it('confirms one removal from four saved images before requesting the replacement upload slot', async () => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    const originalAssets = Array.from({ length: 4 }, (_, index) => ({ id: `image-${index}`, fileName: `${index}.png`, mimeType: 'image/png', byteSize: 20 }));
+    const activeIds = new Set(originalAssets.map(asset => asset.id));
+    const saved = { assignmentId: assignment.id, attemptNo: 1, revision: 1, manualTranscript: 'My original input.', assetIds: [...activeIds], assets: originalAssets, assessmentStatus: 'UNASSESSED', updatedAt: 1 };
+    api.inputDraft.mockResolvedValue({ draft: saved });
+    api.createUpload.mockImplementation(async () => { if (activeIds.size >= 4) throw new Error('active quota full'); activeIds.add('new-image'); return { assetId: 'new-image' }; });
+    api.saveDraft.mockImplementation(async (request: any) => {
+      for (const id of activeIds) if (!request.assetIds.includes(id)) activeIds.delete(id);
+      return { draft: { ...saved, revision: request.expectedRevision + 1, assetIds: request.assetIds,
+        assets: request.assetIds.map((id: string) => originalAssets.find(asset => asset.id === id) || { id, fileName: 'new.png', mimeType: 'image/png', byteSize: 1 }) } };
+    });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    controller().removeSavedAsset('image-0'); controller().setFiles([new File(['a'], 'new.png', { type: 'image/png' })]);
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0].assetIds).toEqual(['image-1', 'image-2', 'image-3']);
+    expect(controller().savedInputDraft?.assetIds).toEqual(['image-1', 'image-2', 'image-3', 'new-image']);
+    expect(activeIds.size).toBe(4); expect(controller().submissionError).toBeNull(); expect(api.finalize).not.toHaveBeenCalled();
+  });
+  const prepareFreshDraft = async (kind: 'pdf' | 'images' = 'pdf') => {
+    api.capabilities.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false });
+    api.inputDraft.mockResolvedValue({ draft: null });
+    api.hash.mockResolvedValue('synthetic-hash'); api.upload.mockResolvedValue(undefined);
+    const selected = kind === 'pdf'
+      ? [new File(['%PDF-1.4 A'], 'a.pdf', { type: 'application/pdf' })]
+      : [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.png', { type: 'image/png' })];
+    const active = new Set<string>();
+    const metadata = new Map<string, { id: string; fileName: string; mimeType: string; byteSize: number }>();
+    api.createUpload.mockImplementation(async (request: any) => {
+      if (request.mimeType === 'application/pdf' && active.size > 0) throw new Error('active PDF quota full');
+      const id = `uploaded-${request.fileName}`;
+      active.add(id); metadata.set(id, { id, fileName: request.fileName, mimeType: request.mimeType, byteSize: request.byteSize });
+      return { assetId: id, uploadUrl: `https://example.invalid/${id}` };
+    });
+    api.saveDraft.mockImplementation(async (request: any) => {
+      if (request.prepareUpload) for (const id of active) if (!request.assetIds.includes(id)) active.delete(id);
+      return { draft: { assignmentId: assignment.id, attemptNo: 1, revision: request.expectedRevision + 1,
+        manualTranscript: request.manualTranscript, assetIds: request.assetIds,
+        assets: request.assetIds.map((id: string) => metadata.get(id)), assessmentStatus: 'UNASSESSED', updatedAt: 1 } };
+    });
+    await settle(); controller().openSubmitDialog(assignment); await settle();
+    controller().setFiles(selected);
+    return { selected, active };
+  };
+  it('prepares an initially empty draft before upload and replays the exact uncertain preparation', async () => {
+    const { selected } = await prepareFreshDraft();
+    const persist = api.saveDraft.getMockImplementation()!;
+    let confirmed: any;
+    api.saveDraft.mockImplementationOnce(async (request: any) => { confirmed = await persist(request); throw new Error('preparation response lost'); })
+      .mockImplementationOnce(async (request: any) => { expect(request).toEqual(api.saveDraft.mock.calls[0][0]); return confirmed; });
+    await controller().handleSubmit(); expect(api.createUpload).not.toHaveBeenCalled(); expect(controller().files).toEqual(selected);
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[0][0]).toMatchObject({ expectedRevision: 0, assetIds: [], prepareUpload: true });
+    expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'] });
+    expect(controller().savedInputDraft?.revision).toBe(2); expect(controller().submissionError).toBeNull();
+  });
+  it('retains preparation and completed uploads while replaying an uncertain first-file final save', async () => {
+    await prepareFreshDraft(); const persist = api.saveDraft.getMockImplementation()!;
+    api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final response lost'));
+    await controller().handleSubmit(); await controller().handleSubmit();
+    expect(api.saveDraft).toHaveBeenCalledTimes(3); expect(api.saveDraft.mock.calls[1][0]).toEqual(api.saveDraft.mock.calls[2][0]);
+    expect(api.createUpload).toHaveBeenCalledTimes(1); expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(controller().savedInputDraft?.revision).toBe(2);
+  });
+  it('retires an orphan PDF after failed final save when the selected File is replaced', async () => {
+    const { active } = await prepareFreshDraft(); const persist = api.saveDraft.getMockImplementation()!;
+    api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
+    await controller().handleSubmit(); expect(active).toEqual(new Set(['uploaded-a.pdf']));
+    const next = new File(['%PDF-1.4 B'], 'b.pdf', { type: 'application/pdf' }); controller().setFiles([next]);
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: [], prepareUpload: true });
+    expect(api.saveDraft.mock.calls[2][0].requestId).not.toBe(api.saveDraft.mock.calls[0][0].requestId);
+    expect(active).toEqual(new Set(['uploaded-b.pdf']));
+    expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-b.pdf']); expect(controller().submissionError).toBeNull();
+  });
+  it('reuses issued upload URLs and completed assets after a partial PUT response is lost', async () => {
+    const { selected } = await prepareFreshDraft('images');
+    api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('PUT response lost')).mockResolvedValueOnce(undefined);
+    await controller().handleSubmit(); expect(controller().files).toEqual(selected); expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    await controller().handleSubmit();
+    expect(api.createUpload).toHaveBeenCalledTimes(2); expect(api.upload).toHaveBeenCalledTimes(3);
+    expect(api.upload.mock.calls[1]).toEqual(api.upload.mock.calls[2]);
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-a.png', 'uploaded-b.png']); expect(controller().savedInputDraft?.revision).toBe(2);
+  });
+  it('retains cached uploads in a new preparation after editing the manual text without duplicate asset IDs', async () => {
+    const { active } = await prepareFreshDraft(); const persist = api.saveDraft.getMockImplementation()!;
+    api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
+    await controller().handleSubmit(); controller().setManualTranscript('My updated text.');
+    api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('second final response lost'));
+    await controller().handleSubmit(); await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.', prepareUpload: true });
+    expect(api.saveDraft.mock.calls[3][0]).toEqual(api.saveDraft.mock.calls[4][0]);
+    expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-a.pdf']); expect(controller().savedInputDraft?.manualTranscript).toBe('My updated text.');
+    expect(active.size).toBe(1); expect(api.createUpload).toHaveBeenCalledTimes(1); expect(controller().submissionError).toBeNull();
+  });
+
 });
