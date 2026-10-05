@@ -46,6 +46,10 @@ export interface D1AiBudgetSnapshot {
   dispatchLimitMicroUsd: number;
   accountedMicroUsd: number | null;
   accountedMicroUsdExact: string;
+  measuredUsageMicroUsd: number | null;
+  measuredUsageMicroUsdExact: string;
+  reservedHoldMicroUsd: number | null;
+  reservedHoldMicroUsdExact: string;
   remainingDispatchMicroUsd: number;
   unresolvedReservations: number;
   settledRequests: number;
@@ -202,17 +206,23 @@ export const createD1AiBudgetStore = (
       if (!validMonth(monthKey)) throw new Error('Invalid budget month.');
       const result = await DB.prepare(`SELECT CAST(COALESCE(m.accounted_micro_usd, 0) AS TEXT) AS exact_amount, COALESCE(m.blocked, 0) AS blocked,
         (SELECT COUNT(*) FROM ai_provider_budget_reservations WHERE month_key = ? AND state = 'RESERVED') AS reserved_count,
-        (SELECT COUNT(*) FROM ai_provider_budget_reservations WHERE month_key = ? AND state = 'SETTLED') AS settled_count
-        FROM (SELECT 1) LEFT JOIN ai_provider_budget_months m ON m.month_key = ?`).bind(monthKey, monthKey, monthKey)
-        .first<{ exact_amount: string; blocked: number; reserved_count: number; settled_count: number }>();
-      if (!result || !/^\d+$/.test(result.exact_amount)) throw new Error('Budget snapshot unavailable.');
+        (SELECT COUNT(*) FROM ai_provider_budget_reservations WHERE month_key = ? AND state = 'SETTLED') AS settled_count,
+        (SELECT CAST(COALESCE(SUM(charged_micro_usd), 0) AS TEXT) FROM ai_provider_budget_reservations WHERE month_key = ? AND state = 'SETTLED') AS measured_amount,
+        (SELECT CAST(COALESCE(SUM(upper_bound_micro_usd), 0) AS TEXT) FROM ai_provider_budget_reservations WHERE month_key = ? AND state = 'RESERVED') AS held_amount
+        FROM (SELECT 1) LEFT JOIN ai_provider_budget_months m ON m.month_key = ?`).bind(monthKey, monthKey, monthKey, monthKey, monthKey)
+        .first<{ exact_amount: string; measured_amount: string; held_amount: string; blocked: number; reserved_count: number; settled_count: number }>();
+      if (!result || ![result.exact_amount, result.measured_amount, result.held_amount].every(value => /^\d+$/.test(value))) throw new Error('Budget snapshot unavailable.');
       const exact = BigInt(result.exact_amount);
+      const measured = BigInt(result.measured_amount); const held = BigInt(result.held_amount);
+      if (exact !== measured + held) throw new Error('Budget snapshot accounting mismatch.');
       const precisionExceeded = exact > BigInt(Number.MAX_SAFE_INTEGER);
       return {
         monthKey, scope: 'GLOBAL', currency: 'USD', amountMeaning: 'APPLICATION_METERING_NOT_PROVIDER_INVOICE',
         planLimitMicroUsd: AI_MONTHLY_PLAN_LIMIT_MICRO_USD, safetyMarginMicroUsd: AI_MONTHLY_SAFETY_MARGIN_MICRO_USD,
         dispatchLimitMicroUsd: AI_MONTHLY_DISPATCH_LIMIT_MICRO_USD,
         accountedMicroUsd: precisionExceeded ? null : Number(exact), accountedMicroUsdExact: result.exact_amount,
+        measuredUsageMicroUsd: measured > BigInt(Number.MAX_SAFE_INTEGER) ? null : Number(measured), measuredUsageMicroUsdExact: result.measured_amount,
+        reservedHoldMicroUsd: held > BigInt(Number.MAX_SAFE_INTEGER) ? null : Number(held), reservedHoldMicroUsdExact: result.held_amount,
         remainingDispatchMicroUsd: exact >= BigInt(AI_MONTHLY_DISPATCH_LIMIT_MICRO_USD) ? 0 : AI_MONTHLY_DISPATCH_LIMIT_MICRO_USD - Number(exact),
         unresolvedReservations: result.reserved_count, settledRequests: result.settled_count, blocked: Boolean(result.blocked), precisionExceeded,
       };

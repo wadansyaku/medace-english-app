@@ -110,7 +110,27 @@ describe('D1 global provider budget', () => {
     await store.reserve(reservation()); await store.reserve(reservation({ requestId: 'second' }));
     await store.settle({ requestId: 'request_1', fingerprint: 'a'.repeat(64), chargedMicroUsd: Number.MAX_SAFE_INTEGER });
     await store.settle({ requestId: 'second', fingerprint: 'a'.repeat(64), chargedMicroUsd: Number.MAX_SAFE_INTEGER });
-    expect(await store.snapshot('2026-10')).toMatchObject({ accountedMicroUsd: null, accountedMicroUsdExact: '18014398509481982', precisionExceeded: true, blocked: true, remainingDispatchMicroUsd: 0 });
+    expect(await store.snapshot('2026-10')).toMatchObject({ accountedMicroUsd: null, accountedMicroUsdExact: '18014398509481982', measuredUsageMicroUsd: null, measuredUsageMicroUsdExact: '18014398509481982', reservedHoldMicroUsd: 0, reservedHoldMicroUsdExact: '0', precisionExceeded: true, blocked: true, remainingDispatchMicroUsd: 0 });
+  });
+  it('separates settled estimated usage from unresolved reservation holds in one snapshot', async () => {
+    const fixture = setup(); const store = fixture.store();
+    expect(await store.snapshot('2026-10')).toMatchObject({ accountedMicroUsd: 0, measuredUsageMicroUsd: 0, measuredUsageMicroUsdExact: '0', reservedHoldMicroUsd: 0, reservedHoldMicroUsdExact: '0' });
+    await store.reserveWithMetadata({ ...reservation(), ...metadata });
+    await store.reserve(reservation({ requestId: 'unknown_second', upperBoundMicroUsd: 50_000 }));
+    await store.recordUnknownOutcome({ requestId: 'unknown_second', fingerprint: 'a'.repeat(64), eventId: 'timeout_second', reason: 'TIMEOUT' });
+    await store.settleUsage(usage());
+    expect(await store.snapshot('2026-10')).toMatchObject({ accountedMicroUsd: 60_000, accountedMicroUsdExact: '60000', measuredUsageMicroUsd: 10_000, measuredUsageMicroUsdExact: '10000', reservedHoldMicroUsd: 50_000, reservedHoldMicroUsdExact: '50000', precisionExceeded: false });
+  });
+  it('retains exact component values when only the combined total exceeds safe precision', async () => {
+    const fixture = setup(); const store = fixture.store();
+    await store.reserve(reservation()); await store.reserve(reservation({ requestId: 'held_one', upperBoundMicroUsd: 1 }));
+    await store.settle({ requestId: 'request_1', fingerprint: 'a'.repeat(64), chargedMicroUsd: Number.MAX_SAFE_INTEGER });
+    expect(await store.snapshot('2026-10')).toMatchObject({ accountedMicroUsd: null, accountedMicroUsdExact: '9007199254740992', measuredUsageMicroUsd: Number.MAX_SAFE_INTEGER, measuredUsageMicroUsdExact: '9007199254740991', reservedHoldMicroUsd: 1, reservedHoldMicroUsdExact: '1', precisionExceeded: true });
+  });
+  it('rejects a corrupted counter instead of presenting inconsistent monthly amounts', async () => {
+    const fixture = setup(); await fixture.store().reserve(reservation());
+    fixture.sqlite.exec('UPDATE ai_provider_budget_months SET accounted_micro_usd = 1');
+    await expect(fixture.store().snapshot('2026-10')).rejects.toThrow('accounting mismatch');
   });
   it('fails closed on anomalous usage, retains the reservation, and logs a blocked month', async () => {
     const fixture = setup(); await fixture.store().reserveWithMetadata({ ...reservation(), ...metadata });
