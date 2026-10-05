@@ -29,6 +29,8 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
   const saveRequest = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
   const retirementRequest = useRef<{ signature: string; request: SaveWritingInputDraftRequest } | null>(null);
   const aiRequest = useRef<GenerateWritingAiDraftRequest | null>(null);
+  const aiResultId = useRef<string | null>(null);
+  const aiRecovery = useRef<WritingAiDraftResponse['recoveryAction']>(undefined);
   const currentScope = `${assignmentId}:${attemptNo}`;
   scope.current = currentScope;
 
@@ -40,6 +42,9 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
     if (scope.current !== currentScope || version.current !== requestVersion) return;
     setCapabilities(cap.status === 'fulfilled' ? cap.value : null);
     if (input.status === 'fulfilled' && (!input.value.draft || (input.value.draft.assignmentId === assignmentId && input.value.draft.attemptNo === attemptNo))) {
+      if (!input.value.draft || aiRequest.current?.inputDraftRevision !== input.value.draft.revision) {
+        aiRequest.current = null; aiResultId.current = null; aiRecovery.current = undefined; setAiDraft(null);
+      }
       committedInput.current = input.value.draft;
       assetsNeedRetirement.current = false;
       setSaved(input.value.draft); setAssetsChanged(false); setLoaded(true);
@@ -54,7 +59,7 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
   };
   useEffect(() => {
     setCapabilities(null); setSaved(null); setManual(''); setFiles([]); setNotice(null); setAiDraft(null);
-    uploads.current = null; pendingUploads.current = null; saveRequest.current = null; retirementRequest.current = null; preparedInput.current = null; aiRequest.current = null;
+    uploads.current = null; pendingUploads.current = null; saveRequest.current = null; retirementRequest.current = null; preparedInput.current = null; aiRequest.current = null; aiResultId.current = null; aiRecovery.current = undefined;
     manualDirty.current = false; assetsNeedRetirement.current = false; committedInput.current = null;
     void reload(false);
     return () => { version.current += 1; scope.current = ''; };
@@ -161,18 +166,51 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
   const canOcr = capabilities?.state === 'ENABLED' && capabilities.ocrEnabled && inputIsSaved
     && Boolean(saved?.assets.length && saved.assets.length <= 4 && saved.assets.every(asset => asset.mimeType.startsWith('image/')));
   const canFeedback = capabilities?.state === 'ENABLED' && capabilities.feedbackEnabled && inputIsSaved && Boolean(saved?.manualTranscript.trim());
+  const pendingMatchesInput = Boolean(saved && aiRequest.current && aiRequest.current.assignmentId === assignmentId
+    && aiRequest.current.attemptNo === attemptNo && aiRequest.current.inputDraftRevision === saved.revision);
+  const hasPendingRequest = pendingMatchesInput && aiRecovery.current !== 'NONE';
+  const canResumePendingRequest = hasPendingRequest && aiRecovery.current === 'RESEND_SAME_REQUEST'
+    && Boolean(aiRequest.current?.operation === 'OCR' ? canOcr : canFeedback);
   const generate = async (operation: WritingDraftOperation, recheck = false) => {
-    if (lock.current || loading || !saved || !(operation === 'OCR' ? canOcr : canFeedback)) return;
+    if (lock.current || loading || !saved) return;
+    const matchesRequest = pendingMatchesInput && aiRequest.current?.operation === operation;
+    const canGenerate = operation === 'OCR' ? canOcr : canFeedback;
+    if (hasPendingRequest && !matchesRequest) {
+      setError('先に処理中のGPT下書きの結果を再確認してください。保存した答案は保持しています。'); return;
+    }
+    if (!matchesRequest && (recheck || !canGenerate)) return;
+    // A second click checks the existing request. Only explicit, verified resume dispatches.
+    const shouldPost = !matchesRequest || (recheck && aiRecovery.current === 'RESEND_SAME_REQUEST');
+    if (shouldPost && !canGenerate) { setError('GPT下書きの再開は現在利用できません。保存した答案は保持しています。'); return; }
     lock.current = true; setBusy(true); setError(null);
     try {
-      if (!aiRequest.current || aiRequest.current.inputDraftRevision !== saved.revision || aiRequest.current.operation !== operation) {
+      if (!matchesRequest) {
         aiRequest.current = { requestId: crypto.randomUUID(), assignmentId, attemptNo, operation, inputDraftRevision: saved.revision };
+        aiResultId.current = null; aiRecovery.current = undefined; setAiDraft(null);
       }
-      const response = recheck ? await getWritingAiDraft(aiRequest.current.requestId) : await generateWritingAiDraft(aiRequest.current);
-      if (response.requestId !== aiRequest.current.requestId || response.assignmentId !== assignmentId || response.attemptNo !== attemptNo) throw new Error('対象のGPT下書きを確認できません。');
-      if (scope.current === currentScope) setAiDraft(response);
+      const request = aiRequest.current!;
+      // Keep the original POST identity: canonical IDs belong only to result lookup.
+      if (shouldPost) aiRecovery.current = 'CHECK_RESULT';
+      const response = shouldPost ? await generateWritingAiDraft(request)
+        : await getWritingAiDraft(aiResultId.current || request.requestId);
+      if (response.assignmentId !== request.assignmentId || response.attemptNo !== request.attemptNo
+        || response.operation !== request.operation
+        || (response.inputDraftRevision !== undefined && response.inputDraftRevision !== request.inputDraftRevision)
+        || (response.requestId !== request.requestId && response.inputDraftRevision !== request.inputDraftRevision)) {
+        throw new Error('保存した答案と一致するGPT下書きを確認できません。');
+      }
+      if (scope.current !== currentScope) return;
+      if (committedInput.current?.revision !== request.inputDraftRevision) throw new Error('保存した答案が更新されました。GPT下書きは採用していません。');
+      aiResultId.current = response.requestId;
+      aiRecovery.current = response.status === 'PENDING'
+        ? response.recoveryAction === 'RESEND_SAME_REQUEST' && response.inputDraftRevision === request.inputDraftRevision ? 'RESEND_SAME_REQUEST' : 'CHECK_RESULT'
+        : 'NONE';
+      setAiDraft(response);
     } catch (failure) {
-      if (scope.current === currentScope) setError(`${failure instanceof Error ? failure.message : 'GPT下書きを確認できません。'} 入力・成績は変更していません。`);
+      if (scope.current === currentScope) {
+        aiRecovery.current = 'CHECK_RESULT';
+        setError(`${failure instanceof Error ? failure.message : 'GPT下書きを確認できません。'} 保存した答案と成績は変更していません。送信し直さず、結果を再確認できます。`);
+      }
     } finally { lock.current = false; if (scope.current === currentScope) setBusy(false); }
   };
   return { capabilities, saved, manual, files, loading, loaded, busy, error, notice, aiDraft, canOcr, canFeedback,
@@ -180,6 +218,6 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
     setManual: (text: string) => { if (!lock.current && !loading) { manualDirty.current = true; setManual(text); setNotice(null); } },
     setFiles: (value: File[]) => { if (!lock.current && !loading) { setFiles(value); setNotice(null); } },
     removeAsset: (id: string) => { if (!lock.current && !loading) { setSaved(draft => draft ? { ...draft, assets: draft.assets.filter(asset => asset.id !== id), assetIds: draft.assetIds.filter(assetId => assetId !== id) } : null); assetsNeedRetirement.current = true; setAssetsChanged(true); setNotice(null); } },
-    hasPendingRequest: Boolean(aiRequest.current), pendingOperation: aiRequest.current?.operation,
+    hasPendingRequest, canResumePendingRequest, pendingRecoveryAction: aiRecovery.current, pendingOperation: aiRequest.current?.operation,
   };
 };

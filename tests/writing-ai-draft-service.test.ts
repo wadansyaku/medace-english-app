@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getWritingAiCapabilities, getWritingAiDraft, getWritingInputDraft, saveWritingInputDraft } from '../services/writingAiDrafts';
+import { generateWritingAiDraft, getWritingAiCapabilities, getWritingAiDraft, getWritingInputDraft, saveWritingInputDraft } from '../services/writingAiDrafts';
 const respond = (body: unknown) => vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })));
 afterEach(() => vi.unstubAllGlobals());
 describe('unassessed Writing draft service', () => {
@@ -30,4 +30,30 @@ describe('unassessed Writing draft service', () => {
     respond({ ...base, result });
     expect(await getWritingAiDraft('r')).toEqual({ ...base, result });
   });
+  const pending = { requestId: 'canonical', assignmentId: 'a', attemptNo: 1, inputDraftRevision: 2,
+    operation: 'WRITING_FEEDBACK', status: 'PENDING', assessmentStatus: 'UNASSESSED', requiresHumanReview: true, updatedAt: 1 };
+  it.each(['RESEND_SAME_REQUEST', 'CHECK_RESULT', 'NONE'])('preserves the verified recovery action %s and input revision', async recoveryAction => {
+    respond({ ...pending, recoveryAction }); expect(await getWritingAiDraft('alias')).toEqual({ ...pending, recoveryAction });
+    expect(fetch).toHaveBeenCalledWith('/api/writing/ai-drafts/alias', expect.objectContaining({ credentials: 'include' }));
+    expect((fetch as any).mock.calls[0][1].method).not.toBe('POST');
+  });
+  it.each([0, -1, 1.5, '2', null, Number.MAX_SAFE_INTEGER + 1])('rejects invalid inputDraftRevision=%s', async inputDraftRevision => {
+    respond({ ...pending, inputDraftRevision }); await expect(getWritingAiDraft('alias')).rejects.toThrow('応答を確認できません');
+  });
+  it.each(['AUTO_RETRY', 'POST_NEW_REQUEST', null, {}])('rejects unknown recoveryAction=%s', async recoveryAction => {
+    respond({ ...pending, recoveryAction }); await expect(getWritingAiDraft('alias')).rejects.toThrow('応答を確認できません');
+  });
+  it('sends an explicit same-request recovery POST without changing its original identity', async () => {
+    const request = { requestId: 'original-caller-id', assignmentId: 'a', attemptNo: 1, inputDraftRevision: 2, operation: 'WRITING_FEEDBACK' as const };
+    respond({ ...pending, recoveryAction: 'CHECK_RESULT' }); await generateWritingAiDraft(request);
+    expect(fetch).toHaveBeenCalledWith('/api/writing/ai-drafts', expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }));
+  });
+  it('rejects non-text reason metadata before it can be rendered', async () => {
+    respond({ ...pending, reason: { nonce: 'private' } }); await expect(getWritingAiDraft('alias')).rejects.toThrow('応答を確認できません');
+  });
+
+  it.each(['', '   '])('rejects a blank canonical request ID (%j)', async requestId => {
+    respond({ ...pending, requestId }); await expect(getWritingAiDraft('alias')).rejects.toThrow('応答を確認できません');
+  });
+
 });

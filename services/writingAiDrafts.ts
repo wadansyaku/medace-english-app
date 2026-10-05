@@ -25,8 +25,11 @@ const inputResponse = (value: unknown): WritingInputDraftResponse => {
 const aiResponse = (value: unknown): WritingAiDraftResponse => {
   if (!record(value) || value.assessmentStatus !== 'UNASSESSED' || value.requiresHumanReview !== true
     || !['PENDING', 'READY', 'UNASSESSED'].includes(String(value.status))
-    || !['OCR', 'WRITING_FEEDBACK'].includes(String(value.operation)) || typeof value.requestId !== 'string'
-    || typeof value.assignmentId !== 'string' || !Number.isInteger(value.attemptNo) || typeof value.updatedAt !== 'number') return invalid();
+    || !['OCR', 'WRITING_FEEDBACK'].includes(String(value.operation)) || typeof value.requestId !== 'string' || !value.requestId.trim()
+    || typeof value.assignmentId !== 'string' || !value.assignmentId.trim() || !Number.isInteger(value.attemptNo) || typeof value.updatedAt !== 'number') return invalid();
+  if (value.inputDraftRevision !== undefined && (!Number.isSafeInteger(value.inputDraftRevision) || Number(value.inputDraftRevision) < 1)) return invalid();
+  if (value.recoveryAction !== undefined && !['RESEND_SAME_REQUEST', 'CHECK_RESULT', 'NONE'].includes(String(value.recoveryAction))) return invalid();
+  if (value.reason !== undefined && typeof value.reason !== 'string') return invalid();
   if (value.result !== undefined) {
     const result = value.result;
     if (!record(result) || result.operation !== value.operation) return invalid();

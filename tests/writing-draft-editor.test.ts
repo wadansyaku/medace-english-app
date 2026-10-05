@@ -292,4 +292,107 @@ describe('teacher input and GPT draft editor', () => {
     expect(render().saved?.assetIds).toEqual(['uploaded-a.pdf']); expect(render().saved?.revision).toBe(6); expect(render().error).toBeNull();
   });
 
+  const pendingResponse = (request: any, overrides: Record<string, unknown> = {}) => ({ ...request,
+    status: 'PENDING', assessmentStatus: 'UNASSESSED', requiresHumanReview: true, recoveryAction: 'CHECK_RESULT', updatedAt: 1, ...overrides });
+  const readyResponse = (request: any, overrides: Record<string, unknown> = {}) => pendingResponse(request, {
+    status: 'READY', recoveryAction: 'NONE', result: { operation: 'WRITING_FEEDBACK', strengths: ['Clear structure.'],
+      improvementPoints: [], correctedDraft: 'A proposed draft.', sentenceCorrections: [] }, ...overrides });
+  it('adopts a verified canonical ID only for GET while preserving the original POST identity for explicit resume', async () => {
+    await settle();
+    api.generate.mockImplementation(async request => pendingResponse(request, { requestId: 'canonical', recoveryAction: 'CHECK_RESULT' }));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    api.result.mockResolvedValue(pendingResponse(original, { requestId: 'canonical', recoveryAction: 'RESEND_SAME_REQUEST' }));
+    await render().generate('WRITING_FEEDBACK', true);
+    expect(api.result).toHaveBeenCalledWith('canonical'); expect(render().pendingRecoveryAction).toBe('RESEND_SAME_REQUEST');
+    api.generate.mockResolvedValueOnce(readyResponse(original, { requestId: 'canonical' }));
+    await render().generate('WRITING_FEEDBACK', true);
+    expect(api.generate.mock.calls[1][0]).toEqual(original); expect(original.requestId).not.toBe('canonical');
+    expect(render().hasPendingRequest).toBe(false); expect(render().aiDraft?.requestId).toBe('canonical');
+    expect(render().manual).toBe(input.manualTranscript); expect(render().saved).toEqual(input); expect(api.save).not.toHaveBeenCalled();
+  });
+  it('checks an alias after a lost POST response and resumes only on a later explicit click', async () => {
+    await settle(); api.generate.mockRejectedValueOnce(new Error('POST response lost'));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    api.result.mockResolvedValue(pendingResponse(original, { requestId: 'canonical', recoveryAction: 'RESEND_SAME_REQUEST' }));
+    await render().generate('WRITING_FEEDBACK', true);
+    expect(api.result).toHaveBeenCalledWith(original.requestId); expect(api.generate).toHaveBeenCalledTimes(1);
+    api.generate.mockResolvedValueOnce(readyResponse(original, { requestId: 'canonical' })); await render().generate('WRITING_FEEDBACK', true);
+    expect(api.generate.mock.calls[1][0]).toEqual(original); expect(render().aiDraft?.status).toBe('READY');
+  });
+  it('consumes explicit resume permission before POST so another lost response is followed only by GET', async () => {
+    await settle(); api.generate.mockImplementationOnce(async request => pendingResponse(request, { requestId: 'canonical', recoveryAction: 'RESEND_SAME_REQUEST' }))
+      .mockRejectedValueOnce(new Error('resume response lost'));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    await render().generate('WRITING_FEEDBACK', true); expect(render().pendingRecoveryAction).toBe('CHECK_RESULT');
+    api.result.mockResolvedValue(readyResponse(original, { requestId: 'canonical' })); await render().generate('WRITING_FEEDBACK', true);
+    expect(api.generate).toHaveBeenCalledTimes(2); expect(api.generate.mock.calls[1][0]).toEqual(original);
+    expect(api.result).toHaveBeenCalledWith('canonical'); expect(render().aiDraft?.status).toBe('READY');
+  });
+  it.each([
+    { assignmentId: 'other-assignment' }, { attemptNo: 2 }, { operation: 'OCR' },
+    { inputDraftRevision: 2 }, { inputDraftRevision: undefined },
+  ])('rejects a mismatched canonical response without adopting its lookup ID: %j', async mismatch => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request, { requestId: 'wrong-canonical', ...mismatch }));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    expect(render().aiDraft).toBeNull(); expect(render().error).toContain('一致するGPT下書き');
+    api.result.mockResolvedValue(pendingResponse(original)); await render().generate('WRITING_FEEDBACK', true);
+    expect(api.result).toHaveBeenCalledWith(original.requestId); expect(render().manual).toBe(input.manualTranscript);
+  });
+  it('rejects the wrong input revision even when the response uses the original request ID', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request, { inputDraftRevision: 2 }));
+    await render().generate('WRITING_FEEDBACK'); expect(render().aiDraft).toBeNull(); expect(render().error).toContain('一致するGPT下書き');
+  });
+  it('keeps legacy same-ID replies compatible without allowing a canonical ID missing revision', async () => {
+    await settle(); api.generate.mockImplementation(async request => {
+      const { inputDraftRevision, ...legacy } = readyResponse(request); return legacy;
+    });
+    await render().generate('WRITING_FEEDBACK'); expect(render().aiDraft?.status).toBe('READY'); expect(render().error).toBeNull();
+  });
+  it('keeps a same-operation new-generation click read-only while a request is pending', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request, { recoveryAction: 'RESEND_SAME_REQUEST' }));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    api.result.mockResolvedValue(pendingResponse(original, { recoveryAction: 'RESEND_SAME_REQUEST' }));
+    await render().generate('WRITING_FEEDBACK'); await render().generate('WRITING_FEEDBACK');
+    expect(api.generate).toHaveBeenCalledTimes(1); expect(api.result).toHaveBeenCalledTimes(2);
+    expect(api.result.mock.calls).toEqual([[original.requestId], [original.requestId]]);
+  });
+  it('does not create duplicate requests from a double click while the first response is pending', async () => {
+    await settle(); let resolve!: (value: any) => void;
+    api.generate.mockImplementation(request => new Promise(done => { resolve = done; }));
+    const editor = render(); const first = editor.generate('WRITING_FEEDBACK'); await editor.generate('WRITING_FEEDBACK');
+    expect(api.generate).toHaveBeenCalledTimes(1); resolve(pendingResponse(api.generate.mock.calls[0][0])); await first;
+    expect(render().hasPendingRequest).toBe(true);
+  });
+  it('drops an old pending response when saved input reloads to a new revision', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request, { requestId: `canonical-${request.inputDraftRevision}` }));
+    await render().generate('WRITING_FEEDBACK'); const old = api.generate.mock.calls[0][0];
+    api.read.mockResolvedValue({ draft: { ...input, revision: 2, manualTranscript: 'My newer saved text.' } });
+    render().reload(); await settle();
+    expect(render().aiDraft).toBeNull(); expect(render().hasPendingRequest).toBe(false);
+    await render().generate('WRITING_FEEDBACK', true); expect(api.result).not.toHaveBeenCalled();
+    await render().generate('WRITING_FEEDBACK');
+    expect(api.generate.mock.calls[1][0]).toMatchObject({ inputDraftRevision: 2 });
+    expect(api.generate.mock.calls[1][0].requestId).not.toBe(old.requestId); expect(render().aiDraft?.inputDraftRevision).toBe(2);
+  });
+  it('allows result-only GET after capability becomes disabled without sending edited local text', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request)); await render().generate('WRITING_FEEDBACK');
+    const original = api.generate.mock.calls[0][0]; render().setManual('My unsaved local text.');
+    api.cap.mockResolvedValue({ state: 'DISABLED', gradingEnabled: false, ocrEnabled: false, feedbackEnabled: false }); render().reload(); await settle();
+    api.result.mockResolvedValue(readyResponse(original)); await render().generate('WRITING_FEEDBACK', true);
+    expect(api.generate).toHaveBeenCalledTimes(1); expect(api.result).toHaveBeenCalledWith(original.requestId);
+    expect(render().manual).toBe('My unsaved local text.'); expect(render().saved?.manualTranscript).toBe(input.manualTranscript);
+  });
+
+  it('does not authorize a same-ID resume reply missing the input revision', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request, { recoveryAction: 'RESEND_SAME_REQUEST', inputDraftRevision: undefined }));
+    await render().generate('WRITING_FEEDBACK'); const original = api.generate.mock.calls[0][0];
+    expect(render().pendingRecoveryAction).toBe('CHECK_RESULT'); api.result.mockResolvedValue(pendingResponse(original));
+    await render().generate('WRITING_FEEDBACK', true); expect(api.generate).toHaveBeenCalledTimes(1); expect(api.result).toHaveBeenCalledWith(original.requestId);
+  });
+  it('keeps the current pending request when another operation is invoked before completion', async () => {
+    await settle(); api.generate.mockImplementation(async request => pendingResponse(request)); await render().generate('WRITING_FEEDBACK');
+    await render().generate('OCR'); expect(api.generate).toHaveBeenCalledTimes(1); expect(api.result).not.toHaveBeenCalled();
+    expect(render().pendingOperation).toBe('WRITING_FEEDBACK'); expect(render().error).toContain('先に処理中');
+  });
+
 });
