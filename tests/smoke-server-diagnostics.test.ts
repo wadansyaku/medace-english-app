@@ -52,6 +52,14 @@ describe('private smoke server diagnostics', () => {
       await copyFile(new URL(`../scripts/${script}`, import.meta.url), path.join(directory, 'scripts', script));
     }
     await writeFile(path.join(directory, 'wrangler.jsonc'), '{}');
+    // The real wrapper now isolates its synthetic Writing provider in a private
+    // Functions copy. Supply that contract while the child remains a log-only stub.
+    await mkdir(path.join(directory, 'functions/_shared'), { recursive: true });
+    await mkdir(path.join(directory, 'tests/fixtures'), { recursive: true });
+    for (const file of ['writing-ai.ts', 'writing-ai-adapter.ts']) {
+      await copyFile(new URL(`../functions/_shared/${file}`, import.meta.url), path.join(directory, 'functions/_shared', file));
+    }
+    await copyFile(new URL('./fixtures/writingLiveProviderMock.js', import.meta.url), path.join(directory, 'tests/fixtures/writingLiveProviderMock.js'));
     // Execute the real wrapper and cleanup, with a fixture child instead of any
     // build, Cloudflare connection, or application server.
     await writeFile(path.join(directory, 'node_modules/wrangler/bin/wrangler.js'), `

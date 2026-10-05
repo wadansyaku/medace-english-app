@@ -4,6 +4,8 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
+- [Gemini停止・AIなし運用のローカル候補](./analysis/2026-10-05-ai-exit-local-candidate.md): b7e0c0c基準の非公開候補。Writing安全、標準プラン/通知、事前準備下書き、disabled provider、合成mock予算と未接続条件。
+
 - [登録不要Naru版の公開候補](./analysis/2026-10-05-guest-public-release.md): 本人承認に基づくゲスト版の通常PR/CI・0048・配備と、AI送信なしの公開gate。
 
 - [英作文サンプル評価の安全な分離](./analysis/2026-10-05-writing-ai-safety.md): 非公開候補。実評価とサンプル/不明の区別、確定と学習記録の境界、画面内draft保持・upload再利用、AIプラン502の標準切替。

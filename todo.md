@@ -1,5 +1,7 @@
 # 実装・運用バックログ
 
+2026-10-05追加: [Gemini停止・AIなし運用の統合候補](./docs/analysis/2026-10-05-ai-exit-local-candidate.md)。公開済みb7e0c0cを保持した独立branchでWriting安全候補、全4プランの標準プラン/通知、校正済み素材のCSV/下書き、コード固定disabled provider、合成mockの$5計画枠を統合する。現在ローカル全回帰と実UI確認を実施中。本番/preview配備・キー/課金・実AI生成・実生徒送信は行わない。live OCR/個別評価、D1永続予算、同意/保持/外部送信条件、過去sample集計修復、claim/leaseは未接続として残す。
+
 2026-10-05本人承認: [登録不要Naru版の公開工程](./docs/analysis/2026-10-05-guest-public-release.md)を開始。保存候補13e1ee3だけを最新mainへ統合し、通常PR/CI、正規preview、0048、productionと公開動線を確認する。Writing e615746とAPI移行は分離。下記の候補検証は作成時の証拠として保持する。
 
 2026-10-05追加: [英作文サンプル評価の安全な分離](./docs/analysis/2026-10-05-writing-ai-safety.md)。sample/処理元不明の成績確定・返却・印刷・学習副作用をサーバーでも防ぎ、原本と講師コメント、画面内draftと成功済みuploadを保持。AIプラン502は標準ロジックへの切替を明示。14files/140unit、型/build/境界、限定22browserを合成データで確認した非公開候補。実Gemini・Pages runtime・過去集計訂正・全release gateは未確認、配備と設定変更なし。
