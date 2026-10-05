@@ -90,7 +90,11 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
         if (!response.draft || response.draft.assignmentId !== assignmentId || response.draft.attemptNo !== attemptNo) throw new Error('保存した下書きを確認できません。');
         if (scope.current !== currentScope) throw new Error('編集対象が変更されました。');
         committedInput.current = response.draft;
-        setSaved(response.draft); manualDirty.current = false;
+        // Pending uploads remain represented by Files until the final CAS succeeds.
+        const transientAssetIds = retiring && files.length > 0 ? new Set(cache.assetIds.filter(Boolean)) : new Set<string>();
+        setSaved({ ...response.draft, assetIds: response.draft.assetIds.filter(id => !transientAssetIds.has(id)),
+          assets: response.draft.assets.filter(asset => !transientAssetIds.has(asset.id)) });
+        manualDirty.current = false;
         pendingRequest.current = null;
         return response.draft;
       };

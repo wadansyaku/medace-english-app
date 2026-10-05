@@ -192,7 +192,9 @@ describe('teacher input and GPT draft editor', () => {
     api.save.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
     await render().save(); render().setManual('My updated text.');
     api.save.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('second final response lost'));
-    await render().save(); await render().save();
+    await render().save();
+    expect(render().saved?.assetIds).toEqual([]); expect(render().saved?.assets).toEqual([]);
+    await render().save();
     expect(api.save.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.', prepareUpload: true });
     expect(api.save.mock.calls[3][0]).toEqual(api.save.mock.calls[4][0]);
     expect(render().saved?.assetIds).toEqual(['uploaded-a.pdf']); expect(render().saved?.manualTranscript).toBe('My updated text.');

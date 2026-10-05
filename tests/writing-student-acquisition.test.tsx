@@ -392,7 +392,9 @@ describe('writing assignment acquisition', () => {
     api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
     await controller().handleSubmit(); controller().setManualTranscript('My updated text.');
     api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('second final response lost'));
-    await controller().handleSubmit(); await controller().handleSubmit();
+    await controller().handleSubmit();
+    expect(controller().savedInputDraft?.assetIds).toEqual([]); expect(controller().savedInputDraft?.assets).toEqual([]);
+    await controller().handleSubmit();
     expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.', prepareUpload: true });
     expect(api.saveDraft.mock.calls[3][0]).toEqual(api.saveDraft.mock.calls[4][0]);
     expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-a.pdf']); expect(controller().savedInputDraft?.manualTranscript).toBe('My updated text.');

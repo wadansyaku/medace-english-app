@@ -298,7 +298,11 @@ export const useWritingStudentController = (user: UserProfile) => {
         if (!response.draft || response.draft.assignmentId !== target.id || response.draft.attemptNo !== attemptNo) throw new Error('保存した下書きを確認できませんでした。');
         if (activeUserUidRef.current !== user.uid) throw new Error('アカウントが変更されました。');
         committedInputRef.current = response.draft;
-        setSavedInputDraft(response.draft); manualDirtyRef.current = false;
+        // Pending uploads remain represented by Files until the final CAS succeeds.
+        const transientAssetIds = retiring && files.length > 0 ? new Set(cache.assetIds.filter(Boolean)) : new Set<string>();
+        setSavedInputDraft({ ...response.draft, assetIds: response.draft.assetIds.filter(id => !transientAssetIds.has(id)),
+          assets: response.draft.assets.filter(asset => !transientAssetIds.has(asset.id)) });
+        manualDirtyRef.current = false;
         pendingRequest.current = null;
         return response.draft;
       };
