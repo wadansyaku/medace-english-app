@@ -57,7 +57,7 @@ test('dashboard recovery keeps failed data unknown and retries without creating 
 
 for (const width of [320, 1366]) {
   test(`personal prepared CSV keeps failed input and saves examples without AI at ${width}px`, async ({ page }, info) => {
-    await page.setViewportSize({ width, height: width === 320 ? 740 : 900 });
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
     let saveCalls = 0;
     const aiRequests: string[] = [];
     const pageErrors: string[] = [];
@@ -98,7 +98,13 @@ for (const width of [320, 1366]) {
     await expect(modal.getByLabel('タイトル', { exact: true })).toHaveValue(title);
     expect(saveCalls).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
-    await page.screenshot({ path: info.outputPath(`prepared-import-held-${width}.png`), fullPage: true });
+    const geometry = await modal.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom, height: innerHeight };
+    });
+    expect(geometry.top).toBeGreaterThanOrEqual(-1);
+    expect(geometry.bottom).toBeLessThanOrEqual(geometry.height + 1);
+    await page.screenshot({ path: info.outputPath(`prepared-import-held-${width}.png`) });
     const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/storage')
       && response.request().postDataJSON()?.action === 'batchImportWords' && response.ok());
     await modal.getByTestId('phrasebook-create-submit').evaluate((button: HTMLButtonElement) => { button.click(); button.click(); });
@@ -115,5 +121,53 @@ for (const width of [320, 1366]) {
     expect(revisited).toEqual(words);
     expect(pageErrors).toEqual([]); expect(aiRequests).toEqual([]);
     await info.attach('prepared-import-acceptance', { body: JSON.stringify({ width, saveCalls, savedBookCount: 1, savedWordCount: 1, repeatedClickAdditionalSaves: 0, aiRequests, pageErrors, revisited: true }), contentType: 'application/json' });
+  });
+}
+
+for (const width of [320, 1366]) {
+  test(`standard plan saves after a failed response and revisits without AI at ${width}px`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+    let saves = 0;
+    const aiRequests: string[] = [];
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.pathname === '/api/ai' || /(?:generativelanguage\.googleapis\.com|api\.openai\.com)$/.test(url.hostname)) aiRequests.push(url.pathname);
+    });
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action === 'saveLearningPlan') {
+        saves += 1;
+        if (saves === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic plan save unavailable' }) });
+      }
+      await route.continue();
+    });
+    await loginBusinessStudentDemo(page);
+    await maybeCompleteOnboarding(page);
+    expect(await storageAction(page, 'getLearningPlan')).toBeNull();
+    await openDashboardReference(page, 'plan');
+    const section = page.getByTestId('dashboard-plan-anchor');
+    const create = section.getByRole('button', { name: 'プランを作る', exact: true });
+    await create.click();
+    await expect(page.getByText('学習プランの保存を確認できませんでした。プランを再取得してから再度操作してください。')).toBeVisible();
+    await expect(section.getByText('プラン未作成', { exact: true })).toBeVisible();
+    expect(await storageAction(page, 'getLearningPlan')).toBeNull();
+    const savedResponse = page.waitForResponse(response => response.url().endsWith('/api/storage')
+      && response.request().postDataJSON()?.action === 'saveLearningPlan' && response.ok());
+    await create.evaluate((button: HTMLButtonElement) => { button.click(); button.click(); });
+    await savedResponse;
+    await expect(section.getByText('今日の学習プラン', { exact: true })).toBeVisible();
+    expect(saves).toBe(2);
+    const saved = await storageAction<any>(page, 'getLearningPlan');
+    expect(saved.selectedBookIds.length).toBeGreaterThan(0);
+    expect(saved.dailyWordGoal).toBeGreaterThan(0);
+    await page.reload();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await openDashboardReference(page, 'plan');
+    await expect(section.getByText('今日の学習プラン', { exact: true })).toBeVisible();
+    expect(await storageAction(page, 'getLearningPlan')).toEqual(saved);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await section.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath(`standard-plan-saved-${width}.png`) });
+    expect(aiRequests).toEqual([]);
+    await info.attach('standard-plan-acceptance', { body: JSON.stringify({ width, saves, duplicateSaves: 0, selectedBookCount: saved.selectedBookIds.length, aiRequests, revisited: true }), contentType: 'application/json' });
   });
 }

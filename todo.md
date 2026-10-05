@@ -1,6 +1,6 @@
 # 実装・運用バックログ
 
-2026-10-05追加: [Gemini停止・AIなし運用の統合候補](./docs/analysis/2026-10-05-ai-exit-local-candidate.md)。公開済みb7e0c0cを保持した独立branchでWriting安全候補、全4プランの標準プラン/通知、校正済み素材のCSV/下書き、コード固定disabled provider、合成mockの$5計画枠を統合する。現在ローカル全回帰と実UI確認を実施中。本番/preview配備・キー/課金・実AI生成・実生徒送信は行わない。live OCR/個別評価、D1永続予算、同意/保持/外部送信条件、過去sample集計修復、claim/leaseは未接続として残す。
+2026-10-05追加: [Gemini停止・AIなし運用の統合候補](./docs/analysis/2026-10-05-ai-exit-local-candidate.md)。公開済みb7e0c0cを保持した独立branchでWriting安全候補、全4プランの標準プラン/通知、校正済み素材のCSV/下書き、コード固定disabled provider、合成mockの$5計画枠を統合する。1527unit・型/境界/migration/build/API/audit、全local browser180件＋source-disabled追加受入4件を完了（182unique、配備専用2件はlocal対象外）。本番/preview配備・キー/課金・実AI生成・実生徒送信は行わない。live OCR/個別評価、D1永続予算、同意/保持/外部送信条件、過去sample集計修復、claim/leaseは未接続として残す。
 
 2026-10-05本人承認: [登録不要Naru版の公開工程](./docs/analysis/2026-10-05-guest-public-release.md)を開始。保存候補13e1ee3だけを最新mainへ統合し、通常PR/CI、正規preview、0048、productionと公開動線を確認する。Writing e615746とAPI移行は分離。下記の候補検証は作成時の証拠として保持する。
 

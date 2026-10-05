@@ -28,7 +28,17 @@
 
 ## ローカル検証
 
-最終統合sourceの型・unit・migration replay・到達性/依存境界・build・API・ブラウザー・audit結果を、完了後ここへ記録する。実ブラウザー証拠は合成アカウント/データのみ。Browser plugin not availableのため既存Playwright runner/Chromeを使用する。320/390/横向き/tablet/desktopのrender、keyboard/閉じる、失敗/retry、保存/再訪を対象とする。
+Node 22.19.0。production codeは `7ff17c117a3d9dc80906d01f41e48a065518e73b` から固定し、後続は検証fixture/実UI受入/文書だけを更新した。
+
+- `verify:fast`: migration名・50 migrationの新規local replay・到達性・依存境界/循環・型・177files/1527unit、全成功。
+- Cloudflare mode buildと合成D1の全API回帰が成功。旧管理者準備410、許可済み事業生徒の抽出503・費用記録0、無料生徒標準plan200、講師actionの生徒403も実HTTPで確認。
+- 既存全smoke: Cloudflare形式171成功/配備専用2skip、IDB9成功。合成アカウント/データだけを使用。通常runnerのWritingはnetwork-free synthetic provider注入なので、実AI可用性の証拠としない。
+- 注入なしのsource-disabled runtime（専用42425、新規合成D1）で追加4成功。個人CSVと標準planの320×568/1366×900、失敗保持・再取得・retry・連打1保存・実保存/再訪・AI通信0を確認。元の個人2ケースを小さい画面とviewport画像で再確認し、新しいplan2ケースを加えた。合計184成功実行/182 unique。アプリsourceは同じである。
+- 管理者例文5幅、通知/plan 320/390/PC、Writing sample/不明の確定拒否、keyboard/閉じる、保存境界の実renderと画像を保全。Browser plugin not availableのため既存Playwright/Chromeを使用。
+- `security:audit` 成功。既存のxlsx高severity例外1件は継続（npmの修正版がなく、ローカル教材QAに限定）。依存/lock変更なし。
+- 独立読み取りレビュー2回でblocking指摘なし。個人importの一覧更新失敗catchは実refreshの例外吸収契約では到達しない、という非blocking指摘を記録。実画面は既存の一覧更新失敗表示と保存成功通知を区別する。
+
+初回unitはlocalhost sandbox制約6件と診断fixture不足2件で失敗。localhost権限の安全な許可と私有Writing fixtureの整合修正後、全1527成功。追加API停止検証の最初の抽出fixtureは既存の利用権限を持たなかったため、権限がある合成事業生徒へ変更した。権限/価格を緩めていない。これらを必須checkのskipやgate変更で通していない。
 
 ## 未接続の条件とrollback
 
