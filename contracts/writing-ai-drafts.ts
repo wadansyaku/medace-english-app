@@ -67,4 +67,8 @@ export interface WritingAiDraftResponse {
   result?: WritingAiDraftResult;
   reason?: string;
   updatedAt: number;
+  /** Present on recovery-aware servers; verify before adopting a canonical ID. */
+  inputDraftRevision?: number;
+  /** GET never dispatches. Resume only with an explicit POST of the same request. */
+  recoveryAction?: 'RESEND_SAME_REQUEST' | 'CHECK_RESULT' | 'NONE';
 }
