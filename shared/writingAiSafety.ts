@@ -15,9 +15,11 @@ export const classifyWritingTranscript = (meta?: WritingAiExecutionProvenance): 
 };
 
 export const classifyWritingEvaluation = (
-  evaluation: Pick<WritingEvaluation, 'provenance'>,
+  evaluation: Pick<WritingEvaluation, 'provenance'> & { assessmentStatus?: string; status?: string; evaluationStatus?: string },
   ocrMeta?: WritingAiExecutionProvenance,
 ): WritingAssessmentStatus => {
+  if (evaluation.assessmentStatus === 'UNASSESSED' || evaluation.evaluationStatus === 'UNASSESSED'
+    || evaluation.status === 'DRAFT' || evaluation.status === 'READY' || evaluation.status === 'UNASSESSED') return 'unverified';
   const transcript = classifyWritingTranscript(ocrMeta);
   if (transcript === 'sample' || isSampleWritingProvenance(evaluation.provenance)) return 'sample';
   if (transcript !== 'real' || evaluation.provenance?.mode !== 'live') return 'unverified';

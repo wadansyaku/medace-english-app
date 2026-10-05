@@ -64,6 +64,13 @@ export const finalizeStaffWritingSubmission = (input) => {
   return Promise.resolve(detail('A'));
 };
 export const finalizeStudentWritingSubmission = finalizeStaffWritingSubmission;
+// This synthetic recovery suite exercises the legacy graded-submission UI.
+// The ordinary source exposes gradingEnabled=false and is covered separately.
+export const getWritingAiCapabilities = () => Promise.resolve({ gradingEnabled: true, state: 'DISABLED', ocrEnabled: false, feedbackEnabled: false });
+export const getWritingInputDraft = () => Promise.resolve({ draft: null });
+export const saveWritingInputDraft = () => { throw new Error('Legacy recovery fixture must not save a draft'); };
+export const generateWritingAiDraft = () => { throw new Error('GPT dispatch forbidden'); };
+export const getWritingAiDraft = generateWritingAiDraft;
 `;
 
 let bundle: string;
@@ -81,7 +88,7 @@ test.beforeAll(async () => {
     },
     bundle: true, write: false, format: 'iife', define: { 'import.meta.env': '{}', 'process.env.NODE_ENV': '"development"' },
     plugins: [{ name: 'synthetic-writing-services', setup(builder) {
-      builder.onResolve({ filter: /services\/(writing|workspace)$/ }, () => ({ path: 'writing-services', namespace: 'synthetic' }));
+      builder.onResolve({ filter: /services\/(writing|workspace|writingAiDrafts)$/ }, () => ({ path: 'writing-services', namespace: 'synthetic' }));
       builder.onLoad({ filter: /.*/, namespace: 'synthetic' }, () => ({ contents: serviceFixture, loader: 'js' }));
       builder.onResolve({ filter: /WritingPrintLauncher$/ }, () => ({ path: 'print', namespace: 'synthetic-print' }));
       builder.onLoad({ filter: /.*/, namespace: 'synthetic-print' }, () => ({ contents: 'export default () => null;', loader: 'js' }));
@@ -143,7 +150,7 @@ test('scanner preserves pending input and reports a failed save inside the dialo
   await mount(page, { delayScan: true });
   await expect(page.getByTestId('writing-student-select')).toBeVisible();
   await page.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
-  await page.getByRole('button', { name: '校舎スキャナー提出', exact: true }).click();
+  await page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type="file"]').setInputFiles({ name: 'synthetic-A.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic') });
   await dialog.getByPlaceholder('OCR 補助のために本文を入力できます。').fill('合成の補助文A');
@@ -328,7 +335,7 @@ for (const viewport of [
     await expect(printTab).toBeFocused();
     await page.keyboard.press('Space');
     await expect(printTab).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: '校舎スキャナー提出', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true })).toBeVisible();
     await page.keyboard.press('Shift+Tab');
     await expect(createTab).toBeFocused();
     await page.keyboard.press('Enter');

@@ -649,11 +649,7 @@ export const handleFinalizeWritingSubmission = async (
   const aiMode = resolveWritingAiMode(env);
   const ocrAssets = aiMode === 'fixture' || Boolean(request.manualTranscript?.trim())
     ? []
-    : await readAiAssetsForOcr(env, assetRows).catch((error) => {
-        if (aiMode === 'live') throw error;
-        console.warn('Falling back to fixture OCR because asset loading failed.', error);
-        return [];
-      });
+    : await readAiAssetsForOcr(env, assetRows);
   const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript, logContext);
   if (classifyWritingTranscript(ocrResult.provenance) !== 'real') {
     throw new HttpError(503, '答案の読み取りを確認できませんでした。サンプル本文を実際の答案として保存しません。提出は未確定です。再試行するか、原本の手動確認を講師に依頼してください。');

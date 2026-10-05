@@ -85,6 +85,11 @@ const copyFunctionsWithWritingProviderMock = async (tempDir) => {
     .replace('  resolveWritingAiMode,\n', '')
     .replace('export { resolveWritingAiMode };', "// Synthetic provider responses exercise the real live adapter and persistence.\nexport const resolveWritingAiMode = (_env?: AppEnv) => 'live' as const;")
     .replaceAll(adapterCall, "createWritingAiAdapter({ ...env, WRITING_AI_MODE: 'live' }, user, logContext, { syntheticOnly: true, client: new GoogleGenAI({ apiKey: 'synthetic-writing-test-key' }) })"));
+  const capabilityPath = path.join(functionsDir, '_shared/writing-ai-capabilities.ts');
+  const capabilitySource = await readFile(capabilityPath, 'utf8');
+  const capabilitySwitch = 'const SYNTHETIC_WRITING_REGRESSION_CAPABILITIES = false;';
+  if (capabilitySource.split(capabilitySwitch).length !== 2) throw new Error('Could not isolate synthetic regression capabilities.');
+  await writeFile(capabilityPath, capabilitySource.replace(capabilitySwitch, 'const SYNTHETIC_WRITING_REGRESSION_CAPABILITIES = true;'));
 };
 
 export const createLocalWranglerProject = async ({ writingProviderMock = false } = {}) => {

@@ -11,12 +11,8 @@ import ModalOverlay from './ModalOverlay';
 import AdminCommercialOpsView from './admin/AdminCommercialOpsView';
 import AdminContentImportView from './admin/AdminContentImportView';
 import AdminDashboardView from './admin/AdminDashboardView';
+import AdminAiUsageView from './admin/AdminAiUsageView';
 import ProductFeedbackPanel from './ProductFeedbackPanel';
-
-const formatCost = (milliYen: number): string => {
-  const yen = milliYen / 1000;
-  return `${yen.toFixed(yen >= 10 ? 0 : 1)}円`;
-};
 
 const appendImportSummary = (
   setLog: React.Dispatch<React.SetStateAction<string[]>>,
@@ -33,7 +29,7 @@ const appendImportSummary = (
 
 const AdminPanel: React.FC = () => {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial'>('dashboard');
+  const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial' | 'ai'>('dashboard');
   const {
     snapshot,
     loading: dashboardLoading,
@@ -211,7 +207,7 @@ const AdminPanel: React.FC = () => {
       : '学習の流れは安定しています'
     : '運営状況を読み込み中';
   const subcopy = overview
-    ? `登録生徒 ${overview.totalStudents} 名、教材 ${overview.officialBookCount + overview.customBookCount} 冊、今月のAI利用は ${formatCost(overview.aiCostThisMonthMilliYen)} です。`
+    ? `登録生徒 ${overview.totalStudents} 名、教材 ${overview.officialBookCount + overview.customBookCount} 冊です。GPT利用額は専用画面で確認できます。`
     : `${BRAND.officialName} の運営状況を集計しています。`;
 
   const contentOps = (
@@ -309,7 +305,7 @@ const AdminPanel: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" onClick={() => setFeedbackOpen(true)} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
-          <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
+          <div className="inline-flex max-w-full flex-wrap rounded-2xl border border-medace-100 bg-medace-50 p-1">
             <button
               onClick={() => { if (!importPending.current) setPanelView('dashboard'); }}
               disabled={uploading}
@@ -331,9 +327,17 @@ const AdminPanel: React.FC = () => {
             >
               受付・お知らせ
             </button>
+            <button
+              type="button"
+              onClick={() => { if (!importPending.current) setPanelView('ai'); }}
+              disabled={uploading}
+              className={`min-h-11 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${panelView === 'ai' ? 'bg-white text-medace-900 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
+            >
+              GPT利用額
+            </button>
           </div>
 
-          <button
+          {panelView !== 'ai' && <button
             type="button"
             onClick={() => {
               if (panelView === 'commercial') {
@@ -351,7 +355,7 @@ const AdminPanel: React.FC = () => {
           >
             {dashboardLoading || commercialLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             最新化
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -368,6 +372,8 @@ const AdminPanel: React.FC = () => {
           passwordResetLinkByRequestId={passwordResetLinkByRequestId}
           onIssuePasswordResetLink={issuePasswordResetLink}
         />
+      ) : panelView === 'ai' ? (
+        <AdminAiUsageView />
       ) : panelView === 'commercial' ? (
         <AdminCommercialOpsView
           requests={requests}

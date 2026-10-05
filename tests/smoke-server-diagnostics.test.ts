@@ -56,7 +56,7 @@ describe('private smoke server diagnostics', () => {
     // Functions copy. Supply that contract while the child remains a log-only stub.
     await mkdir(path.join(directory, 'functions/_shared'), { recursive: true });
     await mkdir(path.join(directory, 'tests/fixtures'), { recursive: true });
-    for (const file of ['writing-ai.ts', 'writing-ai-adapter.ts']) {
+    for (const file of ['writing-ai.ts', 'writing-ai-adapter.ts', 'writing-ai-capabilities.ts']) {
       await copyFile(new URL(`../functions/_shared/${file}`, import.meta.url), path.join(directory, 'functions/_shared', file));
     }
     await copyFile(new URL('./fixtures/writingLiveProviderMock.js', import.meta.url), path.join(directory, 'tests/fixtures/writingLiveProviderMock.js'));

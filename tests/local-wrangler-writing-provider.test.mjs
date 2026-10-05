@@ -39,13 +39,13 @@ describe('local writing provider mock isolation', () => {
 
   // Comparing the entire temporary Functions tree can exceed the ordinary 5s
   // unit limit when TypeScript/build or other suites also use the filesystem.
-  it('copies Functions and alters only two temporary files without adding a global AI key or secret files', async () => {
+  it('copies Functions and alters only three temporary files without adding a global AI key or secret files', async () => {
     vi.stubEnv('MEDACE_LOCAL_AI_BINDING', '1');
     const before = await sourceSnapshot();
     const project = await createProject({ writingProviderMock: true });
     expect(project.cwd).not.toBe(process.cwd());
     expect((await lstat(path.join(project.cwd, 'functions'))).isSymbolicLink()).toBe(false);
-    const modified = new Set(['_shared/writing-ai.ts', '_shared/writing-ai-adapter.ts']);
+    const modified = new Set(['_shared/writing-ai.ts', '_shared/writing-ai-adapter.ts', '_shared/writing-ai-capabilities.ts']);
     for (const [entry, source] of before) {
       const temporarySource = await readFile(path.join(project.cwd, 'functions', entry));
       expect(temporarySource.equals(source), entry).toBe(!modified.has(entry));

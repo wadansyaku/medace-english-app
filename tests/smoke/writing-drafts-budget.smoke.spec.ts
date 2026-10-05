@@ -1,0 +1,114 @@
+import { expect, test } from './diagnostics';
+import { getCurrentSessionUser, loginAdminDemo, loginBusinessStudentDemo, loginGroupAdminDemo, maybeCompleteOnboarding, openDashboardWriting, resolveWritingStudentSelectValue, runtimeAdminPost, storageAction } from './smoke-support';
+
+test('unassessed originals survive a lost save response and browser revisit without GPT or a formal submission', async ({ browser }, testInfo) => {
+  const teacherContext = await browser.newContext();
+  const studentContext = await browser.newContext();
+  const teacher = await teacherContext.newPage();
+  const student = await studentContext.newPage();
+  let formalCalls = 0;
+  for (const page of [teacher, student]) {
+    page.on('request', request => { if (/\/api\/writing\/(ai-drafts|submissions\/finalize)/.test(request.url())) formalCalls += 1; });
+    // The full regression runner privately enables the legacy submission UI.
+    // This test selects the ordinary disabled capability while using real D1/R2.
+    await page.route('**/api/writing/ai-capabilities?*', async route => {
+      const response = await route.fetch();
+      const capability = await response.json();
+      if (process.env.WRITING_SOURCE_DISABLED_REVIEW === '1') expect(capability.gradingEnabled).toBe(false);
+      await route.fulfill({ response, json: { ...capability, gradingEnabled: false } });
+    });
+  }
+  await loginGroupAdminDemo(teacher);
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(teacher, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(teacher, 'sendInstructorNotification', { studentUid: bootstrap.studentUid, message: 'Synthetic draft acceptance only.', triggerReason: 'smoke-draft-bootstrap', usedAi: false, interventionKind: 'REVIEW_RESTART' });
+  await loginBusinessStudentDemo(student);
+  await maybeCompleteOnboarding(student);
+  await teacher.reload();
+  await teacher.getByTestId('workspace-tab-writing').click();
+  const uid = await resolveWritingStudentSelectValue(teacher, await getCurrentSessionUser(student));
+  const templateId = await teacher.getByTestId('writing-template-select').locator('option').nth(1).getAttribute('value');
+  const assignment = await runtimeAdminPost<{ id: string; submissionCode: string }>(teacher, '/api/writing/assignments/generate', { studentUid: uid, templateId, topicHint: 'Synthetic draft reliability check' });
+  await runtimeAdminPost(teacher, '/api/writing/assignments/issue', { assignmentId: assignment.id });
+  await teacher.reload();
+  await teacher.getByTestId('workspace-tab-writing').click();
+  await teacher.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
+  await teacher.getByRole('button', { name: new RegExp(assignment.submissionCode) }).click();
+  await teacher.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
+  const teacherDialog = teacher.getByRole('dialog');
+  await teacher.getByTestId('writing-teacher-draft-manual').fill('Synthetic original saved by teacher.');
+  await teacher.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-original.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') });
+  await teacher.getByTestId('writing-teacher-draft-save').click();
+  await expect(teacherDialog.getByRole('status')).toContainText('保存');
+  await expect(teacher.getByTestId('writing-gpt-ocr')).toBeDisabled();
+  await expect(teacher.getByTestId('writing-gpt-feedback')).toBeDisabled();
+  for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
+    await teacher.setViewportSize(size);
+    await expect(teacher.getByTestId('writing-teacher-draft-save')).toBeVisible();
+    expect(await teacher.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await teacher.screenshot({ path: testInfo.outputPath(`unassessed-teacher-${size.width}.png`) });
+  }
+  await teacher.keyboard.press('Escape');
+  await expect(teacherDialog).toHaveCount(0);
+  await expect(teacher.getByRole('button', { name: '答案の下書き / GPT補助', exact: true })).toBeFocused();
+
+  await student.reload();
+  await openDashboardWriting(student);
+  await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
+  const studentDialog = student.getByRole('dialog');
+  const manual = student.getByLabel('答案本文（任意）');
+  await expect(manual).toHaveValue('Synthetic original saved by teacher.');
+  await expect(studentDialog).toContainText('synthetic-original.png');
+  await manual.fill('Synthetic learner revision retained after a lost response.');
+  let loseResponse = true;
+  await student.route('**/api/writing/input-draft', async route => {
+    if (route.request().method() !== 'POST' || !loseResponse) return route.continue();
+    loseResponse = false;
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.abort('failed');
+  });
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(studentDialog.getByRole('alert')).toBeFocused();
+  await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(saved.draft.revision).toBe(2);
+  expect(saved.draft.assets).toHaveLength(1);
+  await student.reload();
+  await openDashboardWriting(student);
+  await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
+  await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await student.setViewportSize({ width: 320, height: 568 });
+  await student.getByRole('button', { name: 'ファイル選択へ進む', exact: true }).click();
+  await student.getByRole('button', { name: '本文・保存へ進む', exact: true }).click();
+  await expect(manual).toBeVisible();
+  expect(await student.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await student.screenshot({ path: testInfo.outputPath('unassessed-student-320.png') });
+  expect(formalCalls).toBe(0);
+  await teacherContext.close();
+  await studentContext.close();
+});
+
+test('administrator sees durable monthly usage separately from invoice totals and can retry failed reads', async ({ page }, testInfo) => {
+  await loginAdminDemo(page);
+  let failRead = true;
+  await page.route('**/api/writing/ai-budget?*', route => failRead
+    ? route.fulfill({ status: 503, json: { error: 'Synthetic budget read failure' } }) : route.continue());
+  await page.getByRole('button', { name: 'GPT利用額', exact: true }).click();
+  await expect(page.getByTestId('admin-ai-usage-error')).toBeVisible();
+  await expect(page.getByTestId('admin-ai-usage-ready')).toHaveCount(0);
+  failRead = false;
+  await page.getByRole('button', { name: 'もう一度読み込む', exact: true }).click();
+  await expect(page.getByTestId('admin-ai-usage-ready')).toBeVisible();
+  await expect(page.getByTestId('admin-ai-usage-configured')).toContainText('未有効');
+  await expect(page.getByTestId('admin-ai-usage-no-measurement')).toBeVisible();
+  for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
+    await page.setViewportSize(size);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`admin-budget-${size.width}.png`), fullPage: true });
+  }
+  await page.getByTestId('admin-ai-usage-month').fill('2026-09');
+  await expect(page.getByTestId('admin-ai-usage-ready')).toBeVisible();
+  await expect(page.getByTestId('admin-ai-audit-empty')).toBeVisible();
+});

@@ -559,6 +559,16 @@ export const createWritingAiAdapter = (
   ): Promise<WritingPromptResult> => {
     assertAiActionAllowed(user, 'generateWritingPrompt');
 
+    // Normal operation uses the stored, teacher-selected template. It does not
+    // impersonate an AI response when providers are disabled.
+    if (!synthetic) return {
+      promptTitle: `${WRITING_EXAM_CATEGORY_LABELS[template.examCategory]} ${template.title}`,
+      promptText: [template.promptBase, topicHint?.trim() || template.sampleTopic || '', notes?.trim() || ''].filter(Boolean).join('\n'),
+      guidance: template.guidance,
+      provider: 'GEMINI',
+      provenance: buildProvenance('fixture', 'GEMINI', { model: 'stored-writing-template', notes: 'stored-template-no-ai' }),
+    };
+
     const fallback = async (fallbackReason?: string) => {
       const result = createFixturePrompt(
         template,
@@ -593,6 +603,7 @@ export const createWritingAiAdapter = (
     manualTranscript?: string,
   ): Promise<WritingOcrResult> => {
     assertAiActionAllowed(user, 'ocrWritingSubmission');
+    if (!synthetic) rejectLegacyLiveAi();
 
     if (manualTranscript?.trim()) {
       const result = mode === 'fixture'
@@ -675,6 +686,7 @@ export const createWritingAiAdapter = (
     runOcr: withOcrFallback,
     runEvaluations: async (assignment, transcript) => {
       assertAiActionAllowed(user, 'evaluateWritingSubmission');
+      if (!synthetic) rejectLegacyLiveAi();
 
       const providers = mode === 'live'
         ? LIVE_EVALUATION_PROVIDERS
