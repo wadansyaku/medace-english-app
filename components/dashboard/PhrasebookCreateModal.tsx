@@ -42,15 +42,20 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
   onCreate,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const errorRef = React.useRef<HTMLDivElement | null>(null);
   const submittingRef = React.useRef(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [submissionError, setSubmissionError] = React.useState<string | null>(null);
+  const visibleError = errorMsg || submissionError;
   const pending = creating || submitting;
   const isPending = () => creating || submittingRef.current;
 
   React.useEffect(() => {
     if (!open) setSubmissionError(null);
   }, [open]);
+  React.useEffect(() => {
+    if (open && visibleError) errorRef.current?.focus();
+  }, [open, visibleError]);
 
   if (!open) return null;
 
@@ -90,7 +95,6 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
       setSubmitting(false);
     }
   };
-  const visibleError = errorMsg || submissionError;
 
 	  return (
     <MobileSheetDialog
@@ -116,7 +120,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
 
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         {visibleError && (
-          <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
+          <div ref={errorRef} tabIndex={-1} role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
             <span className="mt-0.5">⚠️</span>
             <span>{visibleError}</span>
           </div>

@@ -94,6 +94,8 @@ for (const width of [320, 1366]) {
     await expect(input).toHaveValue(csv);
     await modal.getByTestId('phrasebook-create-submit').click();
     await expect(modal.getByRole('alert')).toContainText('Synthetic prepared-book save unavailable');
+    await expect(modal.getByRole('alert')).toBeFocused();
+    await expect(modal.getByRole('alert')).toBeInViewport();
     await expect(input).toHaveValue(csv);
     await expect(modal.getByLabel('タイトル', { exact: true })).toHaveValue(title);
     expect(saveCalls).toBe(1);
