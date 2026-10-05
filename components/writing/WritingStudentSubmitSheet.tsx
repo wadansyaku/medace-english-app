@@ -66,7 +66,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
     ? { valid: true, message: '本文だけでも下書き保存できます。画像・PDFの追加は任意です。' }
     : fileValidation;
   const currentStep = steps[mobileSubmitStep] || steps[0];
-  const hasDraftInput = manualTranscript.trim().length > 0 || Boolean(savedInputDraft?.assets.length);
+  const hasDraftInput = manualTranscript.trim().length > 0 || Boolean(savedInputDraft?.assets.length) || Boolean(savedInputDraft?.revision);
   const canSave = draftLoaded && !draftLoading && !submitting && (fileValidation.valid || (!gradingEnabled && files.length === 0 && hasDraftInput));
   const actionLabel = gradingEnabled ? (submissionError ? '処理を再試行する' : '答案を提出する') : (submissionError ? '下書き保存を再試行' : '下書きを保存（未評価）');
   const validationTone = displayValidation.valid

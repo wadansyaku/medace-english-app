@@ -45,11 +45,12 @@ beforeEach(() => {
     INSERT INTO users VALUES('student','STUDENT','Synthetic learner'),('teacher','INSTRUCTOR','Synthetic teacher'),('admin','ADMIN','Synthetic admin'),('other','STUDENT','Synthetic other');
     CREATE TABLE writing_assignments(id TEXT PRIMARY KEY,organization_id TEXT,instructor_user_id TEXT,student_user_id TEXT,status TEXT,attempt_count INTEGER,max_attempts INTEGER,prompt_text TEXT,guidance TEXT);
     INSERT INTO writing_assignments VALUES('assignment','org','teacher','student','ISSUED',0,2,'Give two reasons.','Use an example.');
-    CREATE TABLE writing_submission_assets(id TEXT PRIMARY KEY,assignment_id TEXT,attempt_no INTEGER,uploaded_at INTEGER,file_name TEXT,mime_type TEXT,byte_size INTEGER,r2_key TEXT);
-    INSERT INTO writing_submission_assets VALUES('asset','assignment',1,1,'synthetic.png','image/png',3,'synthetic-r2-key');
+    CREATE TABLE writing_submission_assets(id TEXT PRIMARY KEY,assignment_id TEXT,attempt_no INTEGER,uploaded_at INTEGER,file_name TEXT,mime_type TEXT,byte_size INTEGER,r2_key TEXT,submission_id TEXT);
+    INSERT INTO writing_submission_assets VALUES('asset','assignment',1,1,'synthetic.png','image/png',3,'synthetic-r2-key',NULL);
   `);
   fixture.sqlite.exec(readFileSync('migrations/0050_ai_provider_budget.sql', 'utf8'));
   fixture.sqlite.exec(readFileSync('migrations/0051_writing_unassessed_drafts.sql', 'utf8'));
+  fixture.sqlite.exec(readFileSync('migrations/0052_writing_draft_attachment_retirement.sql', 'utf8'));
   env = { DB: fixture.DB };
   mocks.organization.mockImplementation(async (_env, uid) => uid === 'teacher' ? { organizationId: 'org' } : null);
   mocks.visible.mockImplementation(async (_env, user) => new Set([user.role === 'STUDENT' ? user.id : 'student']));
@@ -82,6 +83,22 @@ describe('unassessed Writing originals and provider integration', () => {
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect((await getWritingInputDraft(env, student, 'assignment', 1)).draft?.revision).toBe(2);
   });
+  it('retires detached originals in the same CAS batch without deleting rows, and a stale request cannot retire current attachments', async () => {
+    await saveWritingInputDraft(env, student, parseInputDraft(input({ manualTranscript: '', assetIds: ['asset'] })));
+    await saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'detach', expectedRevision: 1, manualTranscript: '', assetIds: [] })));
+    expect(fixture.sqlite.prepare("SELECT draft_retired_at FROM writing_submission_assets WHERE id='asset'").get()?.draft_retired_at).toBeGreaterThan(0);
+    expect((await getWritingInputDraft(env, student, 'assignment', 1)).draft).toMatchObject({ revision: 2, manualTranscript: '', assets: [] });
+    expect(fixture.sqlite.prepare("SELECT COUNT(*) AS n FROM writing_submission_assets").get()?.n).toBe(1);
+    await expect(saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'revive', expectedRevision: 2, assetIds: ['asset'] })))).rejects.toMatchObject({ status: 409 });
+    expect(() => parseInputDraft(input({ manualTranscript: '', assetIds: [] }))).toThrow();
+  });
+  it('does not retire attachments when a stale CAS loses, including after another editor saves', async () => {
+    await saveWritingInputDraft(env, student, parseInputDraft(input({ assetIds: ['asset'] })));
+    await saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'winner', expectedRevision: 1, assetIds: ['asset'], manualTranscript: 'Winning content' })));
+    await expect(saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'loser', expectedRevision: 1, assetIds: [], manualTranscript: '' })))).rejects.toMatchObject({ status: 409 });
+    expect(fixture.sqlite.prepare("SELECT draft_retired_at FROM writing_submission_assets WHERE id='asset'").get()?.draft_retired_at).toBeNull();
+    expect((await getWritingInputDraft(env, student, 'assignment', 1)).draft?.assets).toHaveLength(1);
+  });
   it('validates asset ownership, uploaded status and attempt, retaining saved asset metadata', async () => {
     const saved = await saveWritingInputDraft(env, student, parseInputDraft(input({ manualTranscript: '', assetIds: ['asset'] })));
     expect(saved.draft?.assets).toEqual([{ id: 'asset', fileName: 'synthetic.png', mimeType: 'image/png', byteSize: 3 }]);
@@ -89,7 +106,7 @@ describe('unassessed Writing originals and provider integration', () => {
     await expect(saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'bad-asset', assetIds: ['asset'] })))).rejects.toMatchObject({ status: 400 });
   });
   it('enforces the combined upload policy at draft saving, including separately uploaded PDF and image files', async () => {
-    fixture.sqlite.prepare("INSERT INTO writing_submission_assets VALUES('pdf','assignment',1,1,'synthetic.pdf','application/pdf',3,'pdf-key')").run();
+    fixture.sqlite.prepare("INSERT INTO writing_submission_assets(id,assignment_id,attempt_no,uploaded_at,file_name,mime_type,byte_size,r2_key) VALUES('pdf','assignment',1,1,'synthetic.pdf','application/pdf',3,'pdf-key')").run();
     await expect(saveWritingInputDraft(env, student, parseInputDraft(input({ assetIds: ['asset', 'pdf'] })))).rejects.toMatchObject({ status: 400 });
     fixture.sqlite.prepare("UPDATE writing_submission_assets SET byte_size=? WHERE id='asset'").run(21 * 1024 * 1024);
     await expect(saveWritingInputDraft(env, student, parseInputDraft(input({ assetIds: ['asset'] })))).rejects.toMatchObject({ status: 400 });

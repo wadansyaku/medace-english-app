@@ -406,7 +406,7 @@ export const handleCreateWritingUploadUrl = async (
 
   const now = Date.now();
   const existingAssets = await readSubmissionAssetRowsForAttempt(env, request.assignmentId, attemptNo);
-  const activeAssets = existingAssets.filter((row) => isUploadReservationActive(row, now));
+  const activeAssets = existingAssets.filter((row) => row.draft_retired_at == null && isUploadReservationActive(row, now));
   const mimeType = resolveWritingUploadMimeType({
     name: request.fileName,
     type: String(request.mimeType || ''),
@@ -446,6 +446,7 @@ export const handleCreateWritingUploadUrl = async (
       FROM writing_submission_assets
       WHERE assignment_id = ?
         AND attempt_no = ?
+        AND draft_retired_at IS NULL
         AND (uploaded_at IS NOT NULL OR COALESCE(upload_expires_at, 0) > ?)
     ) AS active
     WHERE active.active_bytes + ? <= ?

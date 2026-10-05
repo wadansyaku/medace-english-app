@@ -12,8 +12,8 @@ const WritingTeacherDraftModal: React.FC<Props> = ({ assignment, onClose, legacy
   const result = draft.aiDraft?.result;
   return <ModalOverlay ariaLabel={`未評価の答案下書き: ${assignment.promptTitle}`} onClose={() => { if (!draft.busy) onClose(); }} closeOnOverlayClick={!draft.busy}
     panelClassName="max-w-3xl max-h-[95dvh] overflow-y-auto rounded-2xl bg-white p-5 sm:p-6">
-    <div className="flex items-start justify-between gap-3"><div><p className="text-xs text-slate-500">{assignment.studentName}</p><h3 className="mt-1 text-xl font-black text-slate-950">答案の下書き（未評価）</h3></div>
-      <button type="button" disabled={draft.busy} onClick={onClose} className="min-h-11 px-3 font-bold text-slate-600">閉じる</button></div>
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-slate-500">{assignment.studentName}</p><h3 className="mt-1 text-xl font-black text-slate-950">答案の下書き<span className="whitespace-nowrap">（未評価）</span></h3></div>
+      <button type="button" disabled={draft.busy} onClick={onClose} className="min-h-11 shrink-0 whitespace-nowrap px-3 font-bold text-slate-600">閉じる</button></div>
     <p className="mt-3 text-sm leading-6 text-slate-600">{draft.capabilities?.state === 'ENABLED' ? 'GPTの結果は講師確認用の下書きです。' : 'AIは未有効、または利用可否が未確認です。'} 保存・GPT下書き作成では成績と提出は確定しません。PDFは保存できますが、GPTによるPDF読取は未有効です。</p>
     {draft.error && <div ref={errorRef} tabIndex={-1} role="alert" data-testid="writing-teacher-draft-error" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">{draft.error}</div>}
     {draft.notice && <p role="status" aria-live="polite" className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{draft.notice}</p>}

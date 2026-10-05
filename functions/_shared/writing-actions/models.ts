@@ -103,6 +103,7 @@ export interface DbWritingAssetRow {
   upload_expires_at: number | null;
   upload_consumed_at: number | null;
   uploaded_at: number | null;
+  draft_retired_at?: number | null;
   uploaded_etag: string | null;
   uploaded_sha256_base64: string | null;
 }
