@@ -38,7 +38,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await teacher.getByTestId('writing-teacher-draft-manual').fill('Synthetic original saved by teacher.');
   await teacher.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-original.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') });
   await teacher.getByTestId('writing-teacher-draft-save').click();
-  await expect(teacherDialog.getByRole('status')).toContainText('保存');
+  await expect(teacherDialog.getByRole('status')).toContainText('下書きを保存しました');
   await expect(teacher.getByTestId('writing-gpt-ocr')).toBeDisabled();
   await expect(teacher.getByTestId('writing-gpt-feedback')).toBeDisabled();
   for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
@@ -81,6 +81,19 @@ test('unassessed originals survive a lost save response and browser revisit with
   const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
   expect(saved.draft.revision).toBe(3);
   expect(saved.draft.assets).toHaveLength(1);
+  const concurrent = await teacher.evaluate(async ({ id, assetIds }) => {
+    const response = await fetch('/api/writing/input-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: crypto.randomUUID(), assignmentId: id, attemptNo: 1, expectedRevision: 3, assetIds, manualTranscript: 'Synthetic concurrent teacher edit.' }) });
+    return response.status;
+  }, { id: assignment.id, assetIds: saved.draft.assetIds });
+  expect(concurrent).toBe(200);
+  await manual.fill('Synthetic learner revision retained after a lost response.');
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(studentDialog.getByRole('alert')).toBeVisible();
+  await studentDialog.getByRole('button', { name: '下書きを再取得する', exact: true }).click();
+  await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await expect(student.getByTestId('writing-submit-upload')).toBeEnabled();
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
   await student.reload();
   await openDashboardWriting(student);
   await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
@@ -100,7 +113,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await student.getByTestId('writing-submit-upload').click();
   await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
   const replaced = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
-  expect(replaced.draft.revision).toBe(5);
+  expect(replaced.draft.revision).toBe(7);
   expect(replaced.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-replacement.pdf']);
 
   await teacher.reload();
@@ -119,13 +132,13 @@ test('unassessed originals survive a lost save response and browser revisit with
   const images = [1, 2, 3, 4].map(index => ({ name: `synthetic-page-${index}.png`, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') }));
   await teacher.getByTestId('writing-teacher-draft-files').setInputFiles(images);
   await teacher.getByTestId('writing-teacher-draft-save').click();
-  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('保存');
+  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   await teacher.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).first().click();
   await teacher.getByTestId('writing-teacher-draft-files').setInputFiles({ ...images[0], name: 'synthetic-final-page.png' });
   await teacher.getByTestId('writing-teacher-draft-save').click();
-  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('保存');
+  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   const finalDraft = await teacher.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
-  expect(finalDraft.draft.revision).toBe(9);
+  expect(finalDraft.draft.revision).toBe(11);
   expect(finalDraft.draft.assets).toHaveLength(4);
   expect(finalDraft.draft.assets.some((asset: any) => asset.fileName === 'synthetic-final-page.png')).toBe(true);
   expect(formalCalls).toBe(0);
@@ -184,8 +197,9 @@ test('lost original PUT and failed final draft saves remain recoverable after se
   await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-first.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic first') });
   await page.getByTestId('writing-teacher-draft-save').click();
   await expect(page.getByTestId('writing-teacher-draft-error')).toBeFocused();
+  await page.getByTestId('writing-teacher-draft-manual').fill('Synthetic edited text after a lost successful PUT.');
   await page.getByTestId('writing-teacher-draft-save').click();
-  await expect(page.getByRole('dialog').getByRole('status')).toContainText('保存');
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   expect(putStatuses).toEqual([204, 204]);
   await page.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).click();
   let failFinal = true;
@@ -200,9 +214,9 @@ test('lost original PUT and failed final draft saves remain recoverable after se
   await expect(page.getByTestId('writing-teacher-draft-error')).toBeVisible();
   await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-reselected-b.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic replacement B') });
   await page.getByTestId('writing-teacher-draft-save').click();
-  await expect(page.getByRole('dialog').getByRole('status')).toContainText('保存');
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   const draft = await page.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
   expect(draft.draft.revision).toBe(5);
   expect(draft.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-reselected-b.pdf']);
-  expect(draft.draft.manualTranscript).toBe('Synthetic text retained across upload failures.');
+  expect(draft.draft.manualTranscript).toBe('Synthetic edited text after a lost successful PUT.');
 });

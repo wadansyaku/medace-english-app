@@ -182,7 +182,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
               : capabilities ? 'AIは未有効です。下書きはAIなしで保存でき、成績は確定しません。'
                 : 'AIの利用可否は未確認です。下書きとして保存し、成績は確定しません。'}
             <p className="mt-1 text-xs">PDFは保存できますが、GPTによるPDF読取は未有効です。</p>
-            {draftLoadError && <button type="button" onClick={onRetryDraftLoad} disabled={draftLoading || submitting} className="mt-2 min-h-11 rounded-xl border border-medace-200 bg-white px-3 py-2 font-bold">下書きを再取得する</button>}
+            {(draftLoadError || (!gradingEnabled && submissionError)) && <button type="button" onClick={onRetryDraftLoad} disabled={draftLoading || submitting} className="mt-2 min-h-11 rounded-xl border border-medace-200 bg-white px-3 py-2 font-bold">下書きを再取得する</button>}
           </div>
           {draftSavedMessage && <div role="status" aria-live="polite" data-testid="writing-draft-saved" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{draftSavedMessage}</div>}
           {Boolean(savedInputDraft?.assets.length) && <div className="rounded-2xl border border-slate-200 p-4">
