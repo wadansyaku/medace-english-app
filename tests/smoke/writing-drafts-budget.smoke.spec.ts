@@ -197,10 +197,14 @@ test('lost original PUT and failed final draft saves remain recoverable after se
   await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-first.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic first') });
   await page.getByTestId('writing-teacher-draft-save').click();
   await expect(page.getByTestId('writing-teacher-draft-error')).toBeFocused();
+  await page.getByRole('button', { name: '下書きを再取得', exact: true }).click();
+  await expect(page.getByTestId('writing-teacher-draft-manual')).toHaveValue('Synthetic text retained across upload failures.');
   await page.getByTestId('writing-teacher-draft-manual').fill('Synthetic edited text after a lost successful PUT.');
   await page.getByTestId('writing-teacher-draft-save').click();
   await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   expect(putStatuses).toEqual([204, 204]);
+  const confirmedOriginal = await page.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(confirmedOriginal.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-first.pdf']);
   await page.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).click();
   let failFinal = true;
   await page.route('**/api/writing/input-draft', async route => {
@@ -216,7 +220,61 @@ test('lost original PUT and failed final draft saves remain recoverable after se
   await page.getByTestId('writing-teacher-draft-save').click();
   await expect(page.getByRole('dialog').getByRole('status')).toContainText('下書きを保存しました');
   const draft = await page.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
-  expect(draft.draft.revision).toBe(5);
+  expect(draft.draft.revision).toBe(confirmedOriginal.draft.revision + 3);
   expect(draft.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-reselected-b.pdf']);
   expect(draft.draft.manualTranscript).toBe('Synthetic edited text after a lost successful PUT.');
+});
+
+test('student can reacquire a concurrent draft after losing a successful original PUT and save the same file', async ({ page: teacher, browser }, testInfo) => {
+  await loginGroupAdminDemo(teacher);
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(teacher, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(teacher, 'sendInstructorNotification', { studentUid: bootstrap.studentUid, message: 'Synthetic student upload recovery only.', triggerReason: 'smoke-student-upload-bootstrap', usedAi: false, interventionKind: 'REVIEW_RESTART' });
+  const templates = await teacher.evaluate(async () => (await fetch('/api/writing/templates')).json());
+  const assignment = await runtimeAdminPost<{ id: string }>(teacher, '/api/writing/assignments/generate', { studentUid: bootstrap.studentUid, templateId: templates.templates[0].id });
+  await runtimeAdminPost(teacher, '/api/writing/assignments/issue', { assignmentId: assignment.id });
+  const studentContext = await browser.newContext();
+  const student = await studentContext.newPage();
+  let formalCalls = 0;
+  student.on('request', request => { if (/\/api\/writing\/(ai-drafts|submissions\/finalize)/.test(request.url())) formalCalls += 1; });
+  await student.route('**/api/writing/ai-capabilities?*', async route => {
+    const response = await route.fetch();
+    const capability = await response.json();
+    if (process.env.WRITING_SOURCE_DISABLED_REVIEW === '1') expect(capability.gradingEnabled).toBe(false);
+    await route.fulfill({ response, json: { ...capability, gradingEnabled: false } });
+  });
+  await loginBusinessStudentDemo(student);
+  await maybeCompleteOnboarding(student);
+  await openDashboardWriting(student);
+  await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
+  const dialog = student.getByRole('dialog');
+  const manual = student.getByLabel('答案本文（任意）');
+  await manual.fill('Synthetic student original before lost upload.');
+  let losePut = true;
+  const putStatuses: number[] = [];
+  await student.route('**/api/writing/upload/*', async route => {
+    const response = await route.fetch();
+    putStatuses.push(response.status());
+    if (losePut) { losePut = false; return route.abort('failed'); }
+    await route.fulfill({ response });
+  });
+  await student.getByTestId('writing-student-file-input').setInputFiles({ name: 'synthetic-student-retry.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic student retry') });
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(dialog.getByRole('alert')).toBeFocused();
+  const prepared = await teacher.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  await runtimeAdminPost(teacher, '/api/writing/input-draft', { requestId: crypto.randomUUID(), assignmentId: assignment.id, attemptNo: 1, expectedRevision: prepared.draft.revision, assetIds: [], manualTranscript: 'Synthetic concurrent teacher note.' });
+  await manual.fill('Synthetic student edit retained after reacquiring a concurrent draft.');
+  await dialog.getByRole('button', { name: '下書きを再取得する', exact: true }).click();
+  await expect(manual).toHaveValue('Synthetic student edit retained after reacquiring a concurrent draft.');
+  await expect(student.getByTestId('writing-submit-upload')).toBeEnabled();
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  expect(putStatuses).toEqual([204, 204]);
+  const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(saved.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-student-retry.pdf']);
+  expect(saved.draft.manualTranscript).toBe('Synthetic student edit retained after reacquiring a concurrent draft.');
+  expect(saved.draft.assessmentStatus).toBe('UNASSESSED');
+  expect(formalCalls).toBe(0);
+  await student.setViewportSize({ width: 390, height: 844 });
+  await student.screenshot({ path: testInfo.outputPath('student-upload-reacquire-390.png') });
+  await studentContext.close();
 });

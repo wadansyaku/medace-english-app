@@ -1635,10 +1635,14 @@ const main = async () => {
     assert(firstUpload.expiresAt > Date.now(), 'writing upload url should expose expiry metadata');
     const firstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, firstUploadBody, 'image/png');
     assert(firstUploadResponse.status === 204, 'first writing upload should succeed');
+    const firstUploadReceiptSql = `SELECT * FROM writing_submission_assets WHERE id='${firstUpload.assetId}'`;
+    const firstUploadReceipt = await queryLocalSql(persistDir, firstUploadReceiptSql);
     const replayedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, replayedFirstUploadBody, 'image/png');
     assert(replayedFirstUploadResponse.status === 400, 'changed-body upload replay must reject the original replacement');
     const confirmedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, firstUploadBody, 'image/png');
     assert(confirmedFirstUploadResponse.status === 204, 'identical completed upload replay must confirm a lost response');
+    assert(JSON.stringify(await queryLocalSql(persistDir, firstUploadReceiptSql)) === JSON.stringify(firstUploadReceipt),
+      'changed or identical upload replay must preserve the original receipt, checksum, etag, and timestamps');
 
     const boundedUploadBody = Buffer.from('size');
     const boundedUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
@@ -1671,10 +1675,21 @@ const main = async () => {
       uploadWritingAsset(baseUrl, concurrentUpload, concurrentUploadBody, 'image/png'),
     ]);
     assert(
-      concurrentUploadResponses.filter((response) => response.status === 204).length === 1
-        && concurrentUploadResponses.filter((response) => response.status === 409).length === 1,
-      'concurrent upload token use must produce exactly one success and one conflict',
+      concurrentUploadResponses.some((response) => response.status === 204)
+        && concurrentUploadResponses.every((response) => response.status === 204 || response.status === 409),
+      'concurrent identical uploads must complete once, with the second request either confirming completion or conflicting while the first is in flight',
     );
+    const concurrentUploadReceiptSql = `SELECT * FROM writing_submission_assets WHERE id='${concurrentUpload.assetId}'`;
+    const concurrentUploadReceipt = await queryLocalSql(persistDir, concurrentUploadReceiptSql);
+    assert(concurrentUploadReceipt.length === 1
+      && concurrentUploadReceipt[0].uploaded_at > 0
+      && concurrentUploadReceipt[0].byte_size === concurrentUploadBody.byteLength
+      && concurrentUploadReceipt[0].uploaded_sha256_base64 === toSha256Base64(concurrentUploadBody),
+    'concurrent identical uploads must retain one completed original with the expected size and checksum');
+    const confirmedConcurrentUpload = await uploadWritingAsset(baseUrl, concurrentUpload, concurrentUploadBody, 'image/png');
+    assert(confirmedConcurrentUpload.status === 204, 'completed concurrent upload must be safely confirmable');
+    assert(JSON.stringify(await queryLocalSql(persistDir, concurrentUploadReceiptSql)) === JSON.stringify(concurrentUploadReceipt),
+      'confirmation of a concurrent upload must not rewrite its original receipt');
 
     const firstFinalize = await orgStudent.post('/api/writing/submissions/finalize', {
       assignmentId: issuedAssignment.id,
