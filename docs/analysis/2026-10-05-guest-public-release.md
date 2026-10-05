@@ -20,6 +20,8 @@
 
 この文書のcommit時点では公開前。実際のPR番号、最終SHA、workflow/preview/production URL、0048適用、recovery bookmark、公開後の匿名Naru1530取得と主要操作の結果は、作業成果フォルダーの公開引継ぎへ記録する。未完了を成功として扱わない。
 
+PR #56初回previewはunit1366とAPIが成功し、full browserはCloud157成功・2preview限定skip・1失敗、IDB9成功だった。失敗した組織管理者のプリント検証は、importの返却契約`importedBookIds`に対して古い`bookId`を任意参照し、作成した教材を選択していなかった。合成Naruが先頭に追加されて不備が表面化したため、返却IDを必須確認・明示選択し、選択値と作成教材のプレビュー見出し、問題生成可能を確認する。製品ソースやgrammar候補条件は変更せず、修正後の通常CI/preview全gateを再実行する。
+
 ## ロールバック
 
 0048は新しいclaim/attempt表と索引だけを追加し、旧テーブルを書き換えない。通常は0048を残して直前の安定コード915f4f7へ戻す。取り込み済みSRSは表削除で取り消せず、claim/再送記録を失うため、追加表を削除しない。DB復元はbookmark以後の正当な書込みも巻き戻すので、通常のcode rollbackと分けて判断する。production workflowの配備前bookmarkを保全する。
