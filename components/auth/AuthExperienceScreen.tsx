@@ -10,7 +10,7 @@ import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../..
 import { PUBLIC_BUSINESS_ROLE_CONFIGS, type PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 export interface AuthExperienceScreenProps {
-  currentView: 'login' | 'guestTrial' | 'publicInfo' | 'publicRole';
+  currentView: 'login' | 'guestLearning' | 'guestTrial' | 'publicInfo' | 'publicRole';
   publicRole: PublicBusinessRoleKey | null;
   authPanelMode?: 'LOGIN' | 'SIGNUP';
   authMode: 'LOGIN' | 'SIGNUP';
@@ -184,7 +184,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
     onClosePublicRole, onDemoLogin, onOpenAuth, onCloseAuth } = props;
   const busy = authSubmitting || passwordRecoveryLoading;
 
-  const content = currentView === 'guestTrial' ? props.guestTrialContent : currentView === 'publicRole' && publicRole ? (
+  const content = currentView === 'guestTrial' || currentView === 'guestLearning' ? props.guestTrialContent : currentView === 'publicRole' && publicRole ? (
     <PublicRolePage roleKey={publicRole} onDemoLogin={onDemoLogin} onBack={onClosePublicRole}
       onLogin={() => onOpenAuth('LOGIN')} busy={authSubmitting} authError={authPanelMode ? null : authError} />
   ) : currentView === 'publicInfo' ? (
@@ -196,7 +196,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 text-xl font-black text-medace-700">{BRAND.mark}</div>
         <p className="mt-5 text-sm font-bold text-medace-700">英単語学習スペース</p>
         <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の学習を、ここから</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">まずは登録なしで5語を学べます。進捗を残して続けたいときに、アカウントを作れます。</p>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">Naruシストの単語・小テスト・文法を、登録なしで学べます。記録の保存や振り返りはログイン後に使えます。</p>
         {props.onStartGuestTrial && <button type="button" onClick={props.onStartGuestTrial} data-testid="start-first-guest" disabled={busy}
           className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50 sm:max-w-xl"><BookOpen className="h-4 w-4" aria-hidden="true" /> 今すぐ学ぶ（登録不要） <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}
         <div className="mt-6 grid gap-3 sm:max-w-xl sm:grid-cols-2">
@@ -230,8 +230,8 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
         <details data-testid="auth-product-explanation" className="mt-4 border-t border-slate-100 pt-3">
           <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">学習の流れを見る</summary>
           <ol className="mt-2 list-inside list-decimal space-y-2 text-sm leading-relaxed text-slate-600">
-            <li>登録なしのお試しで、まず1語から学ぶ</li>
-            <li>続けたいときに登録し、体験の回答を自分のアカウントへ保存する</li>
+            <li>登録なしでNaruシストを学ぶ。小テスト・文法・自作単語帳も使える</li>
+            <li>記録を残したいときに登録し、Naruの単語回答を自分のアカウントへ保存する</li>
             <li>教材ホームで学習や復習を選ぶ。レベル診断は後からでも受けられる</li>
           </ol>
         </details>

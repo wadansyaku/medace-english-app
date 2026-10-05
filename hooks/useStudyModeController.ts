@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { learningService } from '../services/learning';
 import { getSmartSessionConfig, normalizeStudySessionLimit } from '../shared/studySession';
+import { getRemainingStudyRatingFeedbackMs } from '../shared/studyPresentation';
 import { calculateStudySessionXp } from '../shared/xp';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
@@ -71,6 +72,7 @@ export const useStudyModeController = ({
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
   const [isAdvancingCard, setIsAdvancingCard] = useState(false);
+  const [selectedRating, setSelectedRating] = useState<number | null>(null);
   const cardOperationsRef = useRef(createStudyCardOperations());
   const sessionGenerationRef = useRef(0);
   const ratingLockedRef = useRef(false);
@@ -115,6 +117,7 @@ export const useStudyModeController = ({
 
   const resetCard = () => {
     cancelCardOperations();
+    setSelectedRating(null);
     setIsFlipped(false);
     setShowTranslation(false);
     setShowHints(false);
@@ -160,7 +163,7 @@ export const useStudyModeController = ({
       window.removeEventListener('resize', calculate);
       window.removeEventListener('orientationchange', calculate);
     };
-  }, [isEditing, isFlipped, isMobileViewport, showHints]);
+  }, [isAdvancingCard, isEditing, isFlipped, isMobileViewport, saveError, showHints]);
 
   useEffect(() => {
     const loadVoices = () => {
@@ -354,6 +357,7 @@ export const useStudyModeController = ({
     const generation = sessionGenerationRef.current;
     const isCurrentSession = () => generation === sessionGenerationRef.current;
     ratingLockedRef.current = true;
+    const acceptedAt = Date.now();
     cancelCardOperations();
     setIsAdvancingCard(true);
     setSaveError(null);
@@ -363,6 +367,7 @@ export const useStudyModeController = ({
       responseTimeMs: Math.min(3_600_000, Math.max(0, Date.now() - cardStartedAtRef.current)),
     };
     pendingAnswerRef.current = answer;
+    setSelectedRating(answer.rating);
     let advancing = false;
     try {
       await learningService.saveSRSHistory(
@@ -374,6 +379,13 @@ export const useStudyModeController = ({
         taskIntent?.intentType,
         answer.attemptId,
       );
+      if (!isCurrentSession()) return;
+      const feedbackRemainingMs = getRemainingStudyRatingFeedbackMs(acceptedAt);
+      if (feedbackRemainingMs > 0) {
+        await new Promise<void>((resolve) => {
+          advanceTimerRef.current = setTimeout(resolve, feedbackRemainingMs);
+        });
+      }
       if (!isCurrentSession()) return;
       settledCardRef.current = currentIndex;
       if (answer.rating <= 1) {
@@ -396,7 +408,7 @@ export const useStudyModeController = ({
           ratingLockedRef.current = false;
           setIsAdvancingCard(false);
           resetStudyScrollPosition();
-        }, supports3D ? 180 : 0);
+        }, 0);
       } else {
         try {
           const { baseXP, bonusXP, totalXP } = calculateStudySessionXp(sessionWordCount, user.stats?.currentStreak ?? 0);
@@ -474,6 +486,7 @@ export const useStudyModeController = ({
     loadError,
     retryLoad: () => setLoadAttempt((previous) => previous + 1),
     saveError,
+    selectedRating,
     retrySave: () => handleRating(pendingAnswerRef.current?.rating ?? 0),
     rewardNotice,
     mobileShellHeight,

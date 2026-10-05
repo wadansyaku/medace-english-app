@@ -132,6 +132,14 @@ try {
     CI: '1',
   }, ['ignore', 'ignore', 'ignore']);
 
+  // Only the ephemeral local database receives this wholly synthetic original
+  // catalog. External/deployed smoke targets are never seeded by this runner.
+  const guestFixture = createNodeToolCommand('wrangler', [
+    'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir,
+    '--file', path.join(cwd, 'tests/fixtures/guest-naru-smoke.sql'),
+  ]);
+  await runCommand(guestFixture.command, guestFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
   localWranglerProject = await createLocalWranglerProject();
   const wranglerPagesDev = createNodeToolCommand('wrangler', [

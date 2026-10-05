@@ -102,10 +102,10 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
 
     {scope !== 'mine' && <div>
       <div className="mb-4 flex items-center justify-between md:mb-6">
-        <h3 className="border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">{isFiltering ? '教材の検索結果' : 'おすすめ教材'}</h3>
+        <h3 className="border-l-4 border-medace-500 pl-3 text-lg font-bold text-slate-800 md:text-xl">{isFiltering ? '教材の検索結果' : showLibrary ? '配布教材' : 'おすすめ教材'}</h3>
       </div>
       <div className="mb-4 grid grid-cols-1 gap-4 md:mb-6">
-        {primaryRecommendedBook ? (
+        {primaryRecommendedBook && !showLibrary ? (
           <BookCard
             key={primaryRecommendedBook.id}
             book={primaryRecommendedBook}
@@ -126,7 +126,7 @@ const DashboardLibrarySection: React.FC<DashboardLibrarySectionProps> = ({
         )}
       </div>
 
-      {secondaryRecommendedBooks.length > 0 && (
+      {secondaryRecommendedBooks.length > 0 && !showLibrary && (
         <details className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 md:mb-8">
           <summary className="cursor-pointer list-none text-sm font-bold text-slate-700">
             他の候補をみる ({secondaryRecommendedBooks.length}冊)

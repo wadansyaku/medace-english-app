@@ -31,6 +31,7 @@ import {
 import { buildSrsHistory, studyAttemptFingerprint, validateStudyAttempt } from '../../shared/srs';
 import { quizAttemptFingerprint, validateQuizAttempt, type QuizAttemptReceipt } from '../../shared/quizAttempt';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
+import { NARU_BOOK_ID } from '../../shared/naruBook';
 import { assertNoDailyStudyWordRange, getBookTaskWordRange, isWordInStudyRange, normalizeStudyWordRange } from '../../shared/studyScope';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
@@ -257,16 +258,19 @@ export const getDailySessionWords = async (
   const historyStore = await context.getStore(STORES.HISTORY);
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);
-  const preferredBookIds = await resolvePreferredBookIds(context, uid, taskIntent);
+  const requestedBookIds = await resolvePreferredBookIds(context, uid, taskIntent);
   const books = (await context.getBooks()).filter(isBookSelectableForToday);
+  const preferredBookIds = requestedBookIds.length === 0 && books.some(book => book.id === NARU_BOOK_ID)
+    ? [NARU_BOOK_ID]
+    : requestedBookIds;
   const preferredBooks = filterBooksByPreferredIds(books, preferredBookIds);
   const effectivePreferredBookIds = preferredBookIds.length > 0 && preferredBooks.length === 0
     ? []
     : preferredBookIds;
   const effectiveBooks = effectivePreferredBookIds.length === 0 ? books : preferredBooks;
-  const preferredBookIdSet = new Set(effectivePreferredBookIds);
+  const effectiveBookIdSet = new Set(effectiveBooks.map(book => book.id));
   const isInPreferredBookScope = (bookId: string): boolean => (
-    effectivePreferredBookIds.length === 0 || preferredBookIdSet.has(bookId)
+    effectiveBookIdSet.has(bookId)
   );
   const masteryHistories = userHistories.filter((history) => isMasteryHistoryRecord(history));
   const scopedMasteryHistories = masteryHistories.filter((history) => isInPreferredBookScope(history.bookId));
@@ -283,7 +287,7 @@ export const getDailySessionWords = async (
     const allWords = (await readAllStoreRecords<WordData>(wordsStore))
       .map((word) => projectWordHintAssetsForLearner(word));
     const scopedWords = sortWordsByPreferredBookOrder(
-      filterWordsByPreferredIds(allWords, effectivePreferredBookIds),
+      filterWordsByPreferredIds(allWords, effectivePreferredBookIds).filter(word => isInPreferredBookScope(word.bookId)),
       effectivePreferredBookIds,
     );
     if (effectivePreferredBookIds.length > 0) {
@@ -337,7 +341,7 @@ export const getDailySessionWords = async (
       getWeaknessProfile(context, uid),
     ]);
     const scopedWords = sortWordsByPreferredBookOrder(
-      filterWordsByPreferredIds(allWords, effectivePreferredBookIds),
+      filterWordsByPreferredIds(allWords, effectivePreferredBookIds).filter(word => isInPreferredBookScope(word.bookId)),
       effectivePreferredBookIds,
     );
     const bookBandsById = Object.fromEntries(

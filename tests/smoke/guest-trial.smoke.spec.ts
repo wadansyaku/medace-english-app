@@ -3,8 +3,7 @@ import { expect, test } from './diagnostics';
 import { GUEST_TRIAL_QUESTIONS } from '../../shared/guestTrial';
 
 const openTrial = async (page: Page) => {
-  await page.goto('/');
-  await page.getByTestId('start-first-guest').click();
+  await page.goto('/try');
   await expect(page).toHaveURL(/\/try$/);
   await expect(page.getByTestId('guest-trial-question')).toBeVisible();
 };

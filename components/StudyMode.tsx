@@ -377,7 +377,10 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         style={controller.mobileShellHeight ? { height: controller.mobileShellHeight, minHeight: controller.mobileShellHeight } : undefined}
       >
         <div className="study-card-3d">
-          <div className={`study-card-inner ${controller.isFlipped ? 'is-flipped' : ''} ${controller.supports3D ? '' : 'instant-swap'}`}>
+          {/* A new card starts facing forward; never reverse the previous card's
+              CSS rotation with the next word's answer already inside it.
+              The index also distinguishes an immediate requeue of the same word. */}
+          <div key={`${controller.currentIndex}:${controller.currentWord.id}`} className={`study-card-inner ${controller.isFlipped ? 'is-flipped' : ''} ${controller.supports3D ? '' : 'instant-swap'}`}>
             {controller.supports3D ? (
               <>
                 {frontFace}
@@ -410,18 +413,19 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
                 key={option.id}
                 type="button"
                 data-testid={`study-rate-${option.id}`}
+                aria-pressed={controller.selectedRating === option.id}
                 onClick={(event) => {
                   event.stopPropagation();
                   void controller.handleRating(option.id);
                 }}
                 disabled={controller.isAdvancingCard}
-                className={`flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 disabled:opacity-60 ${option.className}`}
+                className={`study-rating-button flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 ${option.className}`}
               >
                 <span>{option.label}</span>
                 {option.icon}
               </button>
             ))}
-            {controller.isAdvancingCard && <p role="status" className="col-span-2 text-center text-xs text-slate-600 sm:col-span-4">回答を保存しています…</p>}
+            <p role="status" className="col-span-2 min-h-4 text-center text-xs text-slate-600 sm:col-span-4">{controller.isAdvancingCard ? `「${RATING_OPTIONS.find(option => option.id === controller.selectedRating)?.label || '回答'}」を保存中…` : ''}</p>
           </div>
         ) : (
           <div ref={controller.actionBarRef} className="flex justify-center">

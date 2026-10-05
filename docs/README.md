@@ -4,6 +4,10 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
+- [登録不要Naru版の公開候補](./analysis/2026-10-05-guest-public-release.md): 本人承認に基づくゲスト版の通常PR/CI・0048・配備と、AI送信なしの公開gate。
+
+- [登録なしNaru基本学習とカード表示改善](./analysis/2026-10-05-guest-naru-basic-learning.md): 非公開候補。匿名学習・端末記録・本人への保存境界、0048、回転と評価表示。
+
 - [本番FAQ・製品改善と有料単語生成廃止](./analysis/2026-10-04-production-feedback-loop.md): 実装済み・最終gate/公開待ち。権限・D1保存・費用・移行と検証欄。
 
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。

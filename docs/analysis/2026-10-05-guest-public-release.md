@@ -1,0 +1,35 @@
+# 登録不要Naru版の公開候補
+
+2026-10-05、本人がNaru1530全項目・6種類の基本演習を登録なしで利用できる版の本番反映を明示承認した。公開対象は保存候補 `13e1ee34cfc84bfdc4c55e4f4804a74073bf436c` のゲスト/カード/教材既定改善と0048。Writing安全候補 `e615746` と未完成のAPI移行・新課金は含めない。
+
+## 統合と保持
+
+最新mainは `915f4f7de47620e8d3c2467b29a0953e07c45b17`。そのtreeは元候補の基点 `33a6b8d1b85060bfe735b3c99cb82373bcf7b5ad` と完全一致した。独立cloneへゲスト2 commitをrebaseし、載せ直し時点で保存候補13e1ee3との全tracked tree一致を確認した。公開工程の追加は記録、6演習とプリントのbrowser gate、後述の公開レビューで確認した時刻補正。
+
+元repoの未コミット文書4件、検証済みゲスト候補とWriting候補、既存動画を保持。SSD `/Volumes/YodaiOffload` はAPFSでマウント済み。Library保存は公開と切り離す。以前のTLS/capacityでPR・remote migration・本番deployは未開始だった。
+
+## 保存とAPI境界
+
+匿名公開は固定Naruのみで、権利・レビュー・QA・全語の原本readyリンクを検査する。未承認教材/例文や認証付き画像を公開しない。7日端末記録、5000回答上限、登録後の本人による明示取り込み、100件batch、expectedUserId、別本人拒否、receipt再送、部分成功ack、XPなしを維持する。既存の明示教材選択をNaru既定で上書きしない。
+
+ゲスト6演習は端末の判定と固定教材のみ。GeminiやWriting提出を呼ばない。公開gateで意味・スペル・文法・和訳・読解・作文の実入力、API mutation/AI呼出0、pageerror0、320px横溢れ0を記録する。ログイン後の既存AI経路やAPI接続/課金は変更しない。
+
+## 検証・配備
+
+保存候補13e1ee3は1366unit、型/build/API/migration/境界/audit、Cloud157＋IDB9の166unique browserを受入済み。同じコードの成功を再利用し、新しいbrowser gateと型/buildをローカルで確認する。最終SHAの通常PR CI、正規previewとremote-readonly gates、preview限定検証、main統合後のproduction workflowは必須のまま通す。
+
+この文書のcommit時点では公開前。実際のPR番号、最終SHA、workflow/preview/production URL、0048適用、recovery bookmark、公開後の匿名Naru1530取得と主要操作の結果は、作業成果フォルダーの公開引継ぎへ記録する。未完了を成功として扱わない。
+
+PR #56初回previewはunit1366とAPIが成功し、full browserはCloud157成功・2preview限定skip・1失敗、IDB9成功だった。失敗した組織管理者のプリント検証は、importの返却契約`importedBookIds`に対して古い`bookId`を任意参照し、作成した教材を選択していなかった。合成Naruが先頭に追加されて不備が表面化したため、返却IDを必須確認・明示選択し、選択値と作成教材のプレビュー見出し、問題生成可能を確認する。製品ソースやgrammar候補条件は変更せず、修正後の通常CI/preview全gateを再実行する。
+
+公開レビューで、端末時計が1分超進むと端末保存済みの回答がサーバーへ引き継げないP2を確認した。カタログの`serverTimeMs`から受信時の時計差を取り、学習開始時に端末記録へ固定する。端末の原回答を変えず、本人へのPOST時だけ時刻を投影する。再読込・bind・ack・同一回答の再送で時計差を変えない。サーバーの7日期限と未来60秒、本人・教材・原回答比較、0048は変更しない。旧offsetなし記録は0互換。常時時計がずれた端末を対象とし、学習途中にOS時計自体を変更する扱いは既存同等のまま。
+
+時刻補正は関連73unitと型/buildが成功。実ブラウザーで通常・+2分・+2日・-2日の4条件の学習→reload→新規登録→応答喪失→同じpayload再送→別本人拒否が成功し、原回答不変を確認した。unitで時計差の固定・再読込・本人紐付け・ack・7日±1ms・サーバー未来60秒+1の境界を検証し、独立読取レビューで追加blocking指摘なし。最終SHAの通常CI/preview全gateは修正後に再実行する。接続復旧後に修正を保全・commitし、旧17e5d12のCI/preview成功を新修正の合格に流用しない。
+
+## ロールバック
+
+af1853fの正式CI（1373unit）とpreview全gate（Cloud161＋IDB9、配備後4件）は成功。追加の配備済みNaru受入ではpreview一冊に旧scope PUBLICが残り503となった。本番は既承認ALL_PLANSで、previewも1530語・権利/レビュー・readyリンクは正常だった。復旧bookmarkと前状態を保存し、承認済み一冊だけを条件付きで本番と同じALL_PLANSへ修復した。教材・出典・承認・履歴・本番は変更していない。
+
+修復後の追加受入でlogoutのDELETE完了前にsignupを開くと遅いresetがフォームを閉じる競合を再現した。時刻ずれ全条件の取り込み自体は成功していた。logoutを同一in-flight guardと待機表示で囲み、削除成功後に本人・navigation・入力を一緒にresetする。失敗時は既存本人と現在地を保持し、可視alertと再試行を表示する。認証待機中は引継ぎ通知とannouncement操作も止める。遅延DELETE中の認証導線非表示と完了後の空欄signup、二重logout、失敗/再試行の回帰を追加する。サーバー認証・権限・保存境界は変更しない。新SHAの正式CI/previewを通してからmergeする。
+
+0048は新しいclaim/attempt表と索引だけを追加し、旧テーブルを書き換えない。通常は0048を残して直前の安定コード915f4f7へ戻す。取り込み済みSRSは表削除で取り消せず、claim/再送記録を失うため、追加表を削除しない。DB復元はbookmark以後の正当な書込みも巻き戻すので、通常のcode rollbackと分けて判断する。production workflowの配備前bookmarkを保全する。

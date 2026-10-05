@@ -14,6 +14,7 @@ import {
   canAccessAppView,
   isHomeAppRoute,
   useAppNavigation,
+  parseNavigationPath,
 } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
@@ -32,6 +33,8 @@ const BusinessAdminDashboard = lazy(() => import('./components/BusinessAdminDash
 const Onboarding = lazy(() => import('./components/Onboarding'));
 const GuestTrialScreen = lazy(() => import('./components/guest/GuestTrialScreen'));
 const GuestTrialImportNotice = lazy(() => import('./components/guest/GuestTrialImportNotice'));
+const GuestLearningScreen = lazy(() => import('./components/guest/GuestLearningScreen'));
+const GuestLearningImportNotice = lazy(() => import('./components/guest/GuestLearningImportNotice'));
 
 const App: React.FC = () => {
   const { navigationState, dispatchNavigation } = useAppNavigation();
@@ -42,6 +45,7 @@ const App: React.FC = () => {
     user,
     setCurrentUser,
     authLoading,
+    logoutError,
     authExperienceProps,
     isDemoUser,
     handleLogout,
@@ -71,6 +75,10 @@ const App: React.FC = () => {
       type: 'open-task',
       task: createTaskIntentFromBookSelection(bookId, mode),
     });
+  };
+  const openGuestAuth = (mode: 'LOGIN' | 'SIGNUP') => {
+    dispatchNavigation({ type: 'sync-from-location', state: parseNavigationPath(window.location.pathname, window.location.search), historyMode: 'none' });
+    dispatchNavigation({ type: 'open-auth', mode });
   };
 
   const handleDashboardBookSelect = (bookId: string, mode: 'study' | 'quiz') => {
@@ -154,6 +162,13 @@ const App: React.FC = () => {
           onBack={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
           onOpenAuth={() => handleChangeView('dashboard')}
           onReturnToAccount={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
+        />;
+      case 'guestLearning':
+        return <GuestLearningScreen
+          onBack={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
+          onOpenAuth={() => handleChangeView('dashboard')}
+          onReturnToAccount={() => handleChangeView(user.role === UserRole.STUDENT ? 'dashboard' : user.role === UserRole.INSTRUCTOR ? 'instructor' : 'admin')}
+          onOpenLegacy={() => dispatchNavigation({ type: 'open-guest-trial' })}
         />;
       case 'dashboard':
         return (
@@ -261,16 +276,20 @@ const App: React.FC = () => {
     if (!user) {
       return (
         <AuthExperienceScreen
-          currentView={currentView === 'guestTrial' ? 'guestTrial' : currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
+          currentView={currentView === 'guestLearning' ? 'guestLearning' : currentView === 'guestTrial' ? 'guestTrial' : currentView === 'publicRole' ? 'publicRole' : currentView === 'publicInfo' ? 'publicInfo' : 'login'}
           publicRole={publicRole}
           {...authExperienceProps}
           onClosePublicInfo={() => dispatchNavigation({ type: 'close-public-info' })}
           onOpenPublicRole={(roleKey) => dispatchNavigation({ type: 'open-public-role', role: roleKey })}
           onClosePublicRole={() => dispatchNavigation({ type: 'close-public-role' })}
-          onStartGuestTrial={() => dispatchNavigation({ type: 'open-guest-trial' })}
+          onStartGuestTrial={() => dispatchNavigation({ type: 'open-guest-learning' })}
           guestTrialContent={currentView === 'guestTrial' ? <GuestTrialScreen
             onBack={() => dispatchNavigation({ type: 'reset' })}
             onOpenAuth={(mode) => dispatchNavigation({ type: 'open-auth', mode })}
+          /> : currentView === 'guestLearning' ? <GuestLearningScreen
+            onBack={() => dispatchNavigation({ type: 'reset' })}
+            onOpenAuth={openGuestAuth}
+            onOpenLegacy={() => dispatchNavigation({ type: 'open-guest-trial' })}
           /> : undefined}
         />
       );
@@ -300,12 +319,19 @@ const App: React.FC = () => {
             </div>
           }
         >
-          {user && currentView !== 'guestTrial' && <GuestTrialImportNotice key={user.uid} user={user} onContinueTrial={() => dispatchNavigation({ type: 'open-guest-trial' })} />}
+          {user && !authLoading && logoutError && <div role="alert" data-testid="logout-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+            <p>{logoutError}</p>
+            <button type="button" onClick={handleLogout} className="mt-2 min-h-11 rounded-lg border border-red-300 px-3 font-bold">ログアウトを再試行</button>
+          </div>}
+          {user && !authLoading && currentView !== 'guestTrial' && currentView !== 'guestLearning' && <>
+            <GuestLearningImportNotice key={`naru:${user.uid}`} user={user} />
+            <GuestTrialImportNotice key={user.uid} user={user} onContinueTrial={() => dispatchNavigation({ type: 'open-guest-trial' })} />
+          </>}
           {renderContent()}
         </Suspense>
       </Layout>
 
-      {user && (
+      {user && !authLoading && (
         <AnnouncementOverlay
           feed={announcementFeed.feed}
           suppressModal={suppressAnnouncementModal}

@@ -49,15 +49,16 @@ test('group admin can create a grammar worksheet from a book range without selec
 
   await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
   const importResult = await seedPhrasebook(page, 'Worksheet Range Smoke');
+  const importedBookId = importResult.importedBookIds[0] as string;
+  expect(importedBookId).toBeTruthy();
   await page.getByTestId('workspace-tab-worksheets').click();
   await expect(page.getByText('配布用PDF問題を独立して作る')).toBeVisible();
 
   await page.getByRole('button', { name: '単語帳範囲からPDF問題を作る' }).click();
   await expect(page.getByText('単語帳の範囲から A4 配布プリントを作る')).toBeVisible();
   await expect(page.getByTestId('worksheet-catalog-book-select')).toBeVisible();
-  if (importResult.bookId) {
-    await page.getByTestId('worksheet-catalog-book-select').selectOption(importResult.bookId);
-  }
+  await page.getByTestId('worksheet-catalog-book-select').selectOption(importedBookId);
+  await expect(page.getByTestId('worksheet-catalog-book-select')).toHaveValue(importedBookId);
   await expect(page.getByText('対象生徒')).toHaveCount(0);
   await page.getByRole('button', { name: /英語語順並び替え/ }).click();
   await expect(page.getByText('文法化できる語数')).toBeVisible();
@@ -65,6 +66,8 @@ test('group admin can create a grammar worksheet from a book range without selec
   await expect(page.getByText('今回出す問題')).toBeVisible();
   await page.getByTestId('worksheet-reshuffle').click();
 
+  await expect(page.getByRole('heading', { name: 'Worksheet Range Smoke の配布プリント' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '問題を開く', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '問題を開く' }).click();
   await expect(page.getByText('印刷プレビュー')).toBeVisible();
   await expect(page.locator('iframe[title="Worksheet print preview"]')).toBeVisible();

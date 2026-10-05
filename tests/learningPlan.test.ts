@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BookAccessScope, BookCatalogSource, EnglishLevel, LearningPreferenceIntensity, type BookMetadata, type LearningPreference, UserGrade } from '../types';
 import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../utils/learningPlan';
+import { NARU_BOOK_ID } from '../shared/naruBook';
 
 const availableBooks: BookMetadata[] = [
   {
@@ -59,6 +60,32 @@ const buildPreference = (overrides: Partial<LearningPreference> = {}): LearningP
 });
 
 describe('buildFallbackLearningPlan', () => {
+  const naru: BookMetadata = { id: NARU_BOOK_ID, title: 'Naruシスト', wordCount: 1530,
+    isPriority: false, catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL,
+    qualityGate: { status: 'approved', label: '承認済み', summary: '', isApprovedForLearner: true,
+      isSelectableForToday: true, blockingReasons: [], warnings: [] } };
+  const defaultInput = { uid: 'new-student', grade: UserGrade.JHS1, level: EnglishLevel.A1,
+    availableBooks: [...availableBooks, naru] };
+
+  it('defaults to the single approved Naru book without an explicit selection', () => {
+    expect(buildFallbackLearningPlan(defaultInput).selectedBookIds).toEqual([NARU_BOOK_ID]);
+    expect(normalizeGeneratedLearningPlan({ ...defaultInput, plan: null }).selectedBookIds).toEqual([NARU_BOOK_ID]);
+  });
+
+  it('preserves an explicit selection and the existing fallback for an unavailable selection', () => {
+    expect(normalizeGeneratedLearningPlan({ ...defaultInput, plan: { selectedBookIds: ['b1-reading', 'jhs1-core'] } })
+      .selectedBookIds).toEqual(['b1-reading', 'jhs1-core']);
+    expect(normalizeGeneratedLearningPlan({ ...defaultInput, plan: { selectedBookIds: ['missing-book'] } })
+      .selectedBookIds).toEqual(buildFallbackLearningPlan({ ...defaultInput, useNaruDefault: false }).selectedBookIds);
+  });
+
+  it('does not introduce Naru when it is unavailable or unapproved', () => {
+    expect(buildFallbackLearningPlan({ ...defaultInput, availableBooks }).selectedBookIds).not.toContain(NARU_BOOK_ID);
+    const blocked = { ...naru, qualityGate: { ...naru.qualityGate!, isSelectableForToday: false } };
+    expect(buildFallbackLearningPlan({ ...defaultInput, availableBooks: [...availableBooks, blocked] }).selectedBookIds)
+      .not.toEqual([NARU_BOOK_ID]);
+  });
+
   it('raises the goal for intensive short-horizon exam prep and caps the target date by the exam date', () => {
     const plan = buildFallbackLearningPlan({
       uid: 'student-1',
