@@ -28,6 +28,32 @@ const loadFixtureWords = (page: Page, bookId: string): Promise<WordData[]> => pa
   return response.json();
 }, bookId);
 
+type TransitionSample = { flipped: boolean; backFacing: boolean };
+const watchCardTransition = (page: Page) => page.evaluate(() => {
+  const samples: TransitionSample[] = [];
+  const started = performance.now();
+  const monitor = window as typeof window & { studyTransitionSamples: TransitionSample[]; studyTransitionDone: boolean };
+  monitor.studyTransitionSamples = samples;
+  monitor.studyTransitionDone = false;
+  const sample = () => {
+    const inner = document.querySelector('.study-card-inner');
+    if (inner) samples.push({ flipped: inner.classList.contains('is-flipped'),
+      backFacing: new DOMMatrixReadOnly(getComputedStyle(inner).transform).m11 < -0.02 });
+    if (performance.now() - started < 1600) requestAnimationFrame(sample);
+    else monitor.studyTransitionDone = true;
+  };
+  requestAnimationFrame(sample);
+});
+
+const expectFrontOnlyAfterAdvance = async (page: Page) => {
+  await page.waitForFunction(() => (window as typeof window & { studyTransitionDone: boolean }).studyTransitionDone);
+  const samples = await page.evaluate(() => (window as typeof window & { studyTransitionSamples: TransitionSample[] }).studyTransitionSamples);
+  expect(samples.some(sample => sample.flipped)).toBe(true);
+  expect(samples.some(sample => !sample.flipped)).toBe(true);
+  // aria-hidden alone cannot hide a face while CSS is still rotating it toward the reader.
+  expect(samples.filter(sample => !sample.flipped && sample.backFacing)).toEqual([]);
+};
+
 test.describe('study reliability', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -153,6 +179,62 @@ test.describe('study reliability', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     expect(answers).toHaveLength(3);
     expect(awards).toEqual([expectedXp]);
+  });
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`next card hides its answer through delayed save at ${viewport.width}x${viewport.height}, motion ${reducedMotion}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion });
+    const bookId = await prepareStudy(page);
+    const words = await loadFixtureWords(page, bookId);
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action === 'saveSRSHistory') await pending;
+      await route.continue();
+    });
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await page.getByTestId('study-flip-button').click();
+    await page.waitForTimeout(450);
+    const bar = page.getByTestId('study-rating-actions');
+    const before = await bar.boundingBox();
+    await watchCardTransition(page);
+    await page.getByTestId('study-rate-3').click();
+    await expect(bar).toHaveAttribute('aria-busy', 'true');
+    await expect(bar.getByRole('status')).toContainText('回答を保存しています');
+    const saving = await bar.boundingBox();
+    expect(before).not.toBeNull(); expect(saving).not.toBeNull();
+    expect(Math.abs(saving!.height - before!.height)).toBeLessThan(1);
+    await expect(page.getByTestId('study-card-back')).toContainText(words[0].word);
+    release();
+    await expect(page.getByTestId('study-card-front')).toContainText(words[1].word);
+    await expectFrontOnlyAfterAdvance(page);
+    if (reducedMotion === 'reduce') {
+      await expect(page.getByTestId('study-card-back')).toHaveCount(0);
+    } else {
+      await expect(page.getByTestId('study-card-back')).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+  }}
+
+  test('a single requeued word also restarts at the front without exposing its answer', async ({ page }) => {
+    const bookId = await prepareStudy(page);
+    const words = await loadFixtureWords(page, bookId);
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action === 'getBookSession') {
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify([words[0]]) });
+      } else await route.continue();
+    });
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await page.getByTestId('study-flip-button').click();
+    await page.waitForTimeout(450);
+    await watchCardTransition(page);
+    await page.getByTestId('study-rate-0').click();
+    await expect(page.getByTestId('study-flip-button')).toBeVisible();
+    await expectFrontOnlyAfterAdvance(page);
+    await expect(page.getByTestId('study-card-front')).toContainText(words[0].word);
+    await expect(page.getByTestId('study-card-back')).toHaveAttribute('aria-hidden', 'true');
   });
 
   test('missing examples have no generation controls or paid requests', async ({ page }, testInfo) => {

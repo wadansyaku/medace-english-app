@@ -160,7 +160,7 @@ export const useStudyModeController = ({
       window.removeEventListener('resize', calculate);
       window.removeEventListener('orientationchange', calculate);
     };
-  }, [isEditing, isFlipped, isMobileViewport, showHints]);
+  }, [isAdvancingCard, isEditing, isFlipped, isMobileViewport, saveError, showHints]);
 
   useEffect(() => {
     const loadVoices = () => {
