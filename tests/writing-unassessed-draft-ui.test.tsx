@@ -26,4 +26,11 @@ describe('student unassessed input form', () => {
     expect(html).toContain('保存済みの添付（再選択不要）'); expect(html).toContain('original.png'); expect(action(html)).not.toContain('disabled=""');
     expect(html).toContain('PDFは保存できますが、GPTによるPDF読取は未有効');
   });
+  it('offers an input-preserving reacquisition action after a save conflict and disables it while busy', () => {
+    const html = renderToStaticMarkup(<WritingStudentSubmitSheet {...props} submissionError="保存が競合しました。再取得してください。" isMobileViewport={false} />);
+    expect(html).toMatch(/<button[^>]*>下書きを再取得する<\/button>/);
+    expect(html).toContain('My manual input.');
+    const busy = renderToStaticMarkup(<WritingStudentSubmitSheet {...props} submissionError="保存が競合しました。" submitting isMobileViewport={false} />);
+    expect(busy).toMatch(/<button[^>]*disabled=""[^>]*>下書きを再取得する<\/button>/);
+  });
 });
