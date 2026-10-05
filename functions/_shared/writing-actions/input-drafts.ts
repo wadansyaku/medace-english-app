@@ -25,15 +25,17 @@ export const sha256Draft = async (value: unknown): Promise<string> => {
 };
 
 export const parseInputDraft = (value: unknown): SaveWritingInputDraftRequest => {
-  const record = exactDraftObject(value, ['requestId', 'assignmentId', 'attemptNo', 'expectedRevision', 'assetIds', 'manualTranscript']);
+  const preparing = Boolean(value && typeof value === 'object' && Object.hasOwn(value, 'prepareUpload'));
+  const record = exactDraftObject(value, ['requestId', 'assignmentId', 'attemptNo', 'expectedRevision', 'assetIds', 'manualTranscript', ...(preparing ? ['prepareUpload'] : [])]);
+  if (preparing && record.prepareUpload !== true) throw new HttpError(400, 'アップロード準備の指定が不正です。');
   if (typeof record.manualTranscript !== 'string' || record.manualTranscript.length > 20_000
     || !Array.isArray(record.assetIds) || record.assetIds.length > 4) throw new HttpError(400, '本文は20000文字以内、ファイルは4件以内にしてください。');
   const assetIds = record.assetIds.map(draftIdentifier);
-  if (new Set(assetIds).size !== assetIds.length || (!assetIds.length && !record.manualTranscript.trim() && record.expectedRevision === 0)) throw new HttpError(400, '本文または原本ファイルを指定してください。');
+  if (new Set(assetIds).size !== assetIds.length || (!assetIds.length && !record.manualTranscript.trim() && record.expectedRevision === 0 && !preparing)) throw new HttpError(400, '本文または原本ファイルを指定してください。');
   return {
     requestId: draftIdentifier(record.requestId), assignmentId: draftIdentifier(record.assignmentId),
     attemptNo: draftInteger(record.attemptNo, 1, 20), expectedRevision: draftInteger(record.expectedRevision, 0, 1_000_000),
-    assetIds, manualTranscript: record.manualTranscript,
+    assetIds, manualTranscript: record.manualTranscript, ...(preparing ? { prepareUpload: true as const } : {}),
   };
 };
 
@@ -86,7 +88,7 @@ export const saveWritingInputDraft = async (env: AppEnv, user: DbUserRow, reques
     if (!validation.valid) throw new HttpError(400, validation.message);
   }
   const payloadHash = await sha256Draft({ assignmentId: request.assignmentId, attemptNo: request.attemptNo,
-    expectedRevision: request.expectedRevision, assetIds: request.assetIds, manualTranscript: request.manualTranscript });
+    expectedRevision: request.expectedRevision, assetIds: request.assetIds, manualTranscript: request.manualTranscript, prepareUpload: request.prepareUpload === true });
   const existing = await readInputDraftRow(env, assignment.id, request.attemptNo);
   if (existing?.last_request_id === request.requestId) {
     if (existing.payload_sha256 !== payloadHash) throw new HttpError(409, '同じ保存識別子の内容が変わっています。');
@@ -106,12 +108,12 @@ export const saveWritingInputDraft = async (env: AppEnv, user: DbUserRow, reques
       WHERE assignment_id=? AND attempt_no=? AND revision=?`)
       .bind(request.manualTranscript, JSON.stringify(request.assetIds), request.requestId, payloadHash, user.id, now,
         assignment.id, request.attemptNo, request.expectedRevision));
-    if (existing) statements.push(env.DB.prepare(`UPDATE writing_submission_assets SET draft_retired_at=?
+    if (existing || request.prepareUpload) statements.push(env.DB.prepare(`UPDATE writing_submission_assets SET draft_retired_at=?
       WHERE assignment_id=? AND attempt_no=? AND submission_id IS NULL AND uploaded_at IS NOT NULL
-      AND id IN (SELECT value FROM json_each(?)) AND id NOT IN (SELECT value FROM json_each(?))
+      AND uploaded_at<=? AND (?=1 OR id IN (SELECT value FROM json_each(?))) AND id NOT IN (SELECT value FROM json_each(?))
       AND EXISTS (SELECT 1 FROM writing_input_drafts WHERE assignment_id=? AND attempt_no=?
         AND last_request_id=? AND payload_sha256=?)`)
-      .bind(now, assignment.id, request.attemptNo, existing.asset_ids_json, JSON.stringify(request.assetIds),
+      .bind(now, assignment.id, request.attemptNo, now, request.prepareUpload ? 1 : 0, existing?.asset_ids_json || '[]', JSON.stringify(request.assetIds),
         assignment.id, request.attemptNo, request.requestId, payloadHash));
     await env.DB.batch(statements);
   } catch { throw new HttpError(503, '保存結果を確認できません。入力を保持したまま同じ内容で再試行してください。'); }

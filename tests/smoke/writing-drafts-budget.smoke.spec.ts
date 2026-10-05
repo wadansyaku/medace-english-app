@@ -53,9 +53,15 @@ test('unassessed originals survive a lost save response and browser revisit with
 
   await student.reload();
   await openDashboardWriting(student);
+  let failRestore = true;
+  await student.route('**/api/writing/input-draft?*', route => failRestore
+    ? route.fulfill({ status: 503, json: { error: 'Synthetic initial draft read failure' } }) : route.continue());
   await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
   const studentDialog = student.getByRole('dialog');
   const manual = student.getByLabel('答案本文（任意）');
+  await expect(studentDialog.getByRole('alert')).toBeVisible();
+  failRestore = false;
+  await studentDialog.getByRole('button', { name: '下書きを再取得する', exact: true }).click();
   await expect(manual).toHaveValue('Synthetic original saved by teacher.');
   await expect(studentDialog).toContainText('synthetic-original.png');
   await manual.fill('Synthetic learner revision retained after a lost response.');
@@ -73,7 +79,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await student.getByTestId('writing-submit-upload').click();
   await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
   const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
-  expect(saved.draft.revision).toBe(2);
+  expect(saved.draft.revision).toBe(3);
   expect(saved.draft.assets).toHaveLength(1);
   await student.reload();
   await openDashboardWriting(student);
@@ -85,6 +91,43 @@ test('unassessed originals survive a lost save response and browser revisit with
   await expect(manual).toBeVisible();
   expect(await student.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await student.screenshot({ path: testInfo.outputPath('unassessed-student-320.png') });
+
+  // Replace an existing original in one save; archived originals retain their
+  // rows/objects while the active draft and upload quota accept the replacement.
+  await student.setViewportSize({ width: 1366, height: 900 });
+  await studentDialog.getByRole('button', { name: '外す', exact: true }).click();
+  await studentDialog.locator('input[type=file]').setInputFiles({ name: 'synthetic-replacement.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic replacement') });
+  await student.getByTestId('writing-submit-upload').click();
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  const replaced = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(replaced.draft.revision).toBe(5);
+  expect(replaced.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-replacement.pdf']);
+
+  await teacher.reload();
+  await teacher.getByTestId('workspace-tab-writing').click();
+  await teacher.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
+  await teacher.getByRole('button', { name: new RegExp(assignment.submissionCode) }).click();
+  let failTeacherRestore = true;
+  await teacher.route('**/api/writing/input-draft?*', route => failTeacherRestore
+    ? route.fulfill({ status: 503, json: { error: 'Synthetic teacher initial read failure' } }) : route.continue());
+  await teacher.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
+  await expect(teacher.getByTestId('writing-teacher-draft-error')).toBeVisible();
+  failTeacherRestore = false;
+  await teacher.getByRole('button', { name: '下書きを再取得', exact: true }).click();
+  await expect(teacher.getByTestId('writing-teacher-draft-manual')).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await teacher.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).click();
+  const images = [1, 2, 3, 4].map(index => ({ name: `synthetic-page-${index}.png`, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') }));
+  await teacher.getByTestId('writing-teacher-draft-files').setInputFiles(images);
+  await teacher.getByTestId('writing-teacher-draft-save').click();
+  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('保存');
+  await teacher.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).first().click();
+  await teacher.getByTestId('writing-teacher-draft-files').setInputFiles({ ...images[0], name: 'synthetic-final-page.png' });
+  await teacher.getByTestId('writing-teacher-draft-save').click();
+  await expect(teacher.getByRole('dialog').getByRole('status')).toContainText('保存');
+  const finalDraft = await teacher.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(finalDraft.draft.revision).toBe(9);
+  expect(finalDraft.draft.assets).toHaveLength(4);
+  expect(finalDraft.draft.assets.some((asset: any) => asset.fileName === 'synthetic-final-page.png')).toBe(true);
   expect(formalCalls).toBe(0);
   await teacherContext.close();
   await studentContext.close();

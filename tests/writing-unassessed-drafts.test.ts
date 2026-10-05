@@ -99,6 +99,15 @@ describe('unassessed Writing originals and provider integration', () => {
     expect(fixture.sqlite.prepare("SELECT draft_retired_at FROM writing_submission_assets WHERE id='asset'").get()?.draft_retired_at).toBeNull();
     expect((await getWritingInputDraft(env, student, 'assignment', 1)).draft?.assets).toHaveLength(1);
   });
+  it('recovers uploaded originals that never reached draft saving while preserving pending upload reservations', async () => {
+    fixture.sqlite.prepare("INSERT INTO writing_submission_assets(id,assignment_id,attempt_no,uploaded_at,file_name,mime_type,byte_size,r2_key) VALUES('pending','assignment',1,NULL,'pending.png','image/png',0,'pending-key')").run();
+    const staged = await saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'prepare-new-file', prepareUpload: true, manualTranscript: '', assetIds: [] })));
+    expect(staged.draft).toMatchObject({ revision: 1, manualTranscript: '', assets: [] });
+    expect(fixture.sqlite.prepare("SELECT draft_retired_at FROM writing_submission_assets WHERE id='asset'").get()?.draft_retired_at).toBeGreaterThan(0);
+    expect(fixture.sqlite.prepare("SELECT draft_retired_at FROM writing_submission_assets WHERE id='pending'").get()?.draft_retired_at).toBeNull();
+    expect(fixture.sqlite.prepare('SELECT COUNT(*) AS n FROM writing_submission_assets').get()?.n).toBe(2);
+    expect(await saveWritingInputDraft(env, student, parseInputDraft(input({ requestId: 'prepare-new-file', prepareUpload: true, manualTranscript: '', assetIds: [] })))).toEqual(staged);
+  });
   it('validates asset ownership, uploaded status and attempt, retaining saved asset metadata', async () => {
     const saved = await saveWritingInputDraft(env, student, parseInputDraft(input({ manualTranscript: '', assetIds: ['asset'] })));
     expect(saved.draft?.assets).toEqual([{ id: 'asset', fileName: 'synthetic.png', mimeType: 'image/png', byteSize: 3 }]);

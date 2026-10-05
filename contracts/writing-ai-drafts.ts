@@ -26,6 +26,8 @@ export interface WritingInputDraft {
 }
 
 export interface SaveWritingInputDraftRequest {
+  /** Reserve a new draft revision before uploads; unattached uploaded originals remain archived. */
+  prepareUpload?: true;
   requestId: string;
   assignmentId: string;
   attemptNo: number;
