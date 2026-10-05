@@ -215,7 +215,7 @@ describe('writing teacher review post-commit recovery', () => {
       .toMatchObject({ user_id: 'instructor-1', created_at: 1000 });
     const job = fixture.sqlite.prepare('SELECT status, payload_json FROM side_effect_jobs').get()!;
     expect(job.status).toBe('COMPLETED');
-    expect(JSON.parse(String(job.payload_json)).activityAt).toBe(1000);
+    expect(JSON.parse(String(job.payload_json))).toMatchObject({ activityAt: 1000, writingSubmissionId: params.submissionId });
     expect(postCommitMocks.syncWritingActivity).toHaveBeenCalledTimes(1);
   });
 

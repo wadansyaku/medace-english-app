@@ -75,6 +75,7 @@ import {
   enqueueWritingActivitySideEffect,
   runSideEffectJobById,
   type SideEffectJobRunResult,
+  type WritingActivitySideEffectPayload,
 } from '../side-effect-jobs';
 import { recordProductEventForUser } from '../product-events';
 
@@ -141,12 +142,7 @@ const readWritingUploadBody = async (request: Request, maxBytes: number): Promis
 
 const flushWritingActivitySideEffect = async (
   env: AppEnv,
-  payload: {
-    studentUid: string;
-    writingAssignmentId: string;
-    organizationId?: string | null;
-    activityAt: number;
-  },
+  payload: WritingActivitySideEffectPayload,
 ): Promise<WritingSideEffectJobResult | undefined> => {
   const job = await enqueueWritingActivitySideEffect(env, payload);
   const result = await runSideEffectJobById(env, job.id);
@@ -713,6 +709,7 @@ export const handleFinalizeWritingSubmission = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
+    writingSubmissionId: submissionId,
     organizationId: assignmentRow.organization_id,
     activityAt: now,
   });
@@ -764,6 +761,7 @@ const reconcileTeacherReviewSideEffects = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: detail.assignment.studentUid,
     writingAssignmentId: detail.assignment.id,
+    writingSubmissionId: detail.submission.id,
     organizationId: detail.assignment.organizationId,
     activityAt: review.releasedAt ?? review.updatedAt,
   });
@@ -864,11 +862,13 @@ export const handleCompleteWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  let completedSubmissionId: string | null = null;
   if (row.status === AssignmentStatus.RETURNED || row.status === AssignmentStatus.COMPLETED) {
     const latestSubmission = await readLatestSubmissionRowForAssignment(env, assignmentId);
     if (!latestSubmission) {
       throw new HttpError(409, '返却済みの答案を確認できませんでした。講師の手動確認をお待ちください。');
     }
+    completedSubmissionId = latestSubmission.id;
     const detail = (await readSubmissionContext(env, latestSubmission.id)).detail;
     const selectedId = detail.submission.teacherReview?.selectedEvaluationId || detail.submission.selectedEvaluationId;
     const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === selectedId);
@@ -879,7 +879,7 @@ export const handleCompleteWritingAssignment = async (
   if (row.status === AssignmentStatus.COMPLETED) {
     return readAssignmentResponse(env, assignmentId);
   }
-  if (row.status !== AssignmentStatus.RETURNED) {
+  if (row.status !== AssignmentStatus.RETURNED || !completedSubmissionId) {
     throw new HttpError(409, '現在の状態では課題を完了できません。');
   }
   const now = Date.now();
@@ -888,6 +888,7 @@ export const handleCompleteWritingAssignment = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: row.student_user_id,
     writingAssignmentId: assignmentId,
+    writingSubmissionId: completedSubmissionId,
     organizationId: row.organization_id,
     activityAt: now,
   });

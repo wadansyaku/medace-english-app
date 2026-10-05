@@ -22,6 +22,7 @@ interface DbSideEffectJobRow {
 export interface WritingActivitySideEffectPayload {
   studentUid: string;
   writingAssignmentId: string;
+  writingSubmissionId: string;
   organizationId?: string | null;
   activityAt: number;
 }
@@ -59,7 +60,7 @@ const executeSideEffectJob = async (env: AppEnv, row: DbSideEffectJobRow): Promi
 
 export const buildWritingActivityJobDedupeKey = (
   payload: WritingActivitySideEffectPayload,
-): string => `writing-activity:${payload.writingAssignmentId}:${payload.studentUid}:${payload.activityAt}`;
+): string => `writing-activity:${payload.writingAssignmentId}:${payload.writingSubmissionId}:${payload.studentUid}:${payload.activityAt}`;
 
 export const enqueueWritingActivitySideEffect = async (
   env: AppEnv,

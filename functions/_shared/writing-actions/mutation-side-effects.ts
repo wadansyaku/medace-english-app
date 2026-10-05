@@ -6,7 +6,8 @@ import { HttpError } from '../http';
 import { classifyWritingEvaluation } from '../../../shared/writingAiSafety';
 import { parseAiProvenance } from './models';
 import {
-  readLatestSubmissionRowForAssignment,
+  readAssignmentRow,
+  readSubmissionRow,
   readSubmissionEvaluationRowsBySubmissionIds,
   readTeacherReviewRowsBySubmissionIds,
 } from './repository';
@@ -14,6 +15,8 @@ import {
 interface SyncWritingActivityParams {
   studentUid: string;
   writingAssignmentId: string;
+  // Persisted jobs predating this field must fail closed rather than infer a target.
+  writingSubmissionId?: string;
   organizationId?: string | null;
   activityAt: number;
 }
@@ -22,10 +25,18 @@ export const syncWritingActivitySideEffects = async (
   env: AppEnv,
   params: SyncWritingActivityParams,
 ): Promise<void> => {
-  // Old durable jobs can be retried independently of the review endpoint.
-  // Check the persisted selected result before publishing learning activity.
-  const submission = await readLatestSubmissionRowForAssignment(env, params.writingAssignmentId);
-  if (!submission) {
+  if (typeof params.writingSubmissionId !== 'string' || !params.writingSubmissionId.trim()) {
+    throw new HttpError(409, '旧形式の学習記録jobには元の提出識別子がありません。最新の答案から推測せず、講師の手動確認が必要です。');
+  }
+  // A later attempt cannot authorize or suppress activity from this submission.
+  const [submission, assignment] = await Promise.all([
+    readSubmissionRow(env, params.writingSubmissionId),
+    readAssignmentRow(env, params.writingAssignmentId),
+  ]);
+  if (!submission || !assignment || submission.assignment_id !== params.writingAssignmentId
+    || assignment.student_user_id !== params.studentUid
+    || (assignment.organization_id || null) !== (params.organizationId || null)
+    || !Number.isSafeInteger(params.activityAt) || params.activityAt <= 0) {
     throw new HttpError(409, '答案の実処理を確認できないため学習記録へ反映しません。講師の手動確認が必要です。');
   }
   const [evaluationsBySubmission, reviewsBySubmission] = await Promise.all([

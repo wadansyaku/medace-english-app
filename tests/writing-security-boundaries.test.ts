@@ -923,6 +923,7 @@ describe('writing teacher review state machine', () => {
     expect(mocks.enqueueWritingActivitySideEffect).toHaveBeenCalledWith(env, {
       studentUid: STUDENT_ID,
       writingAssignmentId: ASSIGNMENT_ID,
+      writingSubmissionId: SUBMISSION_ID,
       organizationId: 'org-a',
       activityAt: 140,
     });
