@@ -44,6 +44,32 @@ beforeEach(() => {
 });
 
 describe('authentication keeps one focused task through pending and recovery states', () => {
+  it('finishes delayed session deletion before exposing account switching and clearing identity drafts', async () => {
+    const f = fixture('/dashboard', ''); await ready(f);
+    f.render().setCurrentUser(user); enterLogin(f);
+    f.render().authExperienceProps.onDisplayNameChange('前の生徒');
+    const request = deferred<void>(); api.clearSession.mockReturnValueOnce(request.promise);
+    const first = f.render().handleLogout(); const second = f.render().handleLogout();
+    f.render().authExperienceProps.onOpenAuth('SIGNUP');
+    expect(api.clearSession).toHaveBeenCalledTimes(1);
+    expect(f.render().authLoading).toBe(true); expect(f.render().user).toEqual(user);
+    expect(f.dispatch).not.toHaveBeenCalled();
+    request.resolve(); await Promise.all([first, second]);
+    expect(f.render().authLoading).toBe(false); expect(f.render().user).toBeNull();
+    expect(f.render().authExperienceProps.email).toBe(''); expect(f.render().authExperienceProps.displayName).toBe('');
+    f.render().authExperienceProps.onOpenAuth('SIGNUP');
+    expect(f.state.authPanelMode).toBe('SIGNUP');
+    expect(f.dispatch).toHaveBeenCalledTimes(2);
+  });
+  it('keeps the existing account and releases pending state if session deletion fails, allowing a retry', async () => {
+    const f = fixture('/dashboard', ''); await ready(f); f.render().setCurrentUser(user);
+    api.clearSession.mockRejectedValueOnce(new Error('合成の通信失敗'));
+    await expect(f.render().handleLogout()).resolves.toBeUndefined();
+    expect(f.render().user).toEqual(user); expect(f.render().authLoading).toBe(false); expect(f.dispatch).not.toHaveBeenCalled();
+    expect(f.render().logoutError).toContain('ログアウトを確認できませんでした');
+    api.clearSession.mockResolvedValueOnce(undefined);
+    await f.render().handleLogout(); expect(f.render().user).toBeNull(); expect(f.render().logoutError).toBeNull();
+  });
   it('does not replace/unmount the auth form while submitting, blocks same-tick duplicates, then exposes a retryable error', async () => {
     const f = fixture(); await ready(f); enterLogin(f);
     const request = deferred<UserProfile>(); api.authenticate.mockReturnValueOnce(request.promise);

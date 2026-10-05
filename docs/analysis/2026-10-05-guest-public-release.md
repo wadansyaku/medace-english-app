@@ -28,4 +28,8 @@ PR #56初回previewはunit1366とAPIが成功し、full browserはCloud157成功
 
 ## ロールバック
 
+af1853fの正式CI（1373unit）とpreview全gate（Cloud161＋IDB9、配備後4件）は成功。追加の配備済みNaru受入ではpreview一冊に旧scope PUBLICが残り503となった。本番は既承認ALL_PLANSで、previewも1530語・権利/レビュー・readyリンクは正常だった。復旧bookmarkと前状態を保存し、承認済み一冊だけを条件付きで本番と同じALL_PLANSへ修復した。教材・出典・承認・履歴・本番は変更していない。
+
+修復後の追加受入でlogoutのDELETE完了前にsignupを開くと遅いresetがフォームを閉じる競合を再現した。時刻ずれ全条件の取り込み自体は成功していた。logoutを同一in-flight guardと待機表示で囲み、削除成功後に本人・navigation・入力を一緒にresetする。失敗時は既存本人と現在地を保持し、可視alertと再試行を表示する。認証待機中は引継ぎ通知とannouncement操作も止める。遅延DELETE中の認証導線非表示と完了後の空欄signup、二重logout、失敗/再試行の回帰を追加する。サーバー認証・権限・保存境界は変更しない。新SHAの正式CI/previewを通してからmergeする。
+
 0048は新しいclaim/attempt表と索引だけを追加し、旧テーブルを書き換えない。通常は0048を残して直前の安定コード915f4f7へ戻す。取り込み済みSRSは表削除で取り消せず、claim/再送記録を失うため、追加表を削除しない。DB復元はbookmark以後の正当な書込みも巻き戻すので、通常のcode rollbackと分けて判断する。production workflowの配備前bookmarkを保全する。

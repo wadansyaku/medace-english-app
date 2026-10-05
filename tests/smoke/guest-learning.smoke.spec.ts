@@ -125,8 +125,28 @@ test(`guest signup explicitly imports immutable Naru answers after a lost respon
   expect(payloads).toHaveLength(2); expect(payloads[1]).toEqual(payloads[0]); expect((await readDevice(page)).attempts).toEqual(original.attempts);
   expect(payloads[0].attempts[0].answeredAt).toBe(original.attempts[0].answeredAt + original.serverTimeOffsetMs);
   expect((await readDevice(page)).importedAttemptIds).toEqual([original.attempts[0].attemptId]);
+  let releaseLogout!: () => void;
+  let logoutRequests = 0;
+  const pendingLogout = new Promise<void>(resolve => { releaseLogout = resolve; });
+  await page.route('**/api/session', async route => {
+    if (route.request().method() !== 'DELETE') { await route.continue(); return; }
+    logoutRequests++;
+    if (clockSkewMs === 0 && logoutRequests === 1) { await route.fulfill({ status: 503, json: { error: '合成のログアウト失敗' } }); return; }
+    const response = await route.fetch();
+    await pendingLogout; await route.fulfill({ response });
+  });
   await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+  if (clockSkewMs === 0) {
+    await expect(page.getByTestId('logout-error')).toContainText('ログアウトを確認できませんでした');
+    await page.getByRole('button', { name: 'ログアウトを再試行', exact: true }).click();
+  }
+  try {
+    await expect.poll(() => logoutRequests).toBe(clockSkewMs === 0 ? 2 : 1);
+    await expect(page.getByTestId('logout-error')).toHaveCount(0);
+    await expect(page.getByTestId('start-first-signup')).toHaveCount(0);
+  } finally { releaseLogout(); }
   await page.getByTestId('start-first-signup').click();
+  await expect(page.getByTestId('auth-display-name-input')).toHaveValue('');
   await page.getByTestId('auth-display-name-input').fill('別の合成生徒');
   await page.getByTestId('auth-email-input').fill(`guest-naru-other-${Date.now()}@example.test`);
   await page.getByTestId('auth-password-input').fill('synthetic-naru-pass'); await page.getByTestId('auth-confirm-password-input').fill('synthetic-naru-pass'); await page.getByTestId('auth-submit').click();

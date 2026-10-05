@@ -54,6 +54,7 @@ export const useAuthExperienceController = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [authMode, setAuthMode] = useState<AuthMode>(navigationState.authPanelMode || 'LOGIN');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [passwordRecoveryLoading, setPasswordRecoveryLoading] = useState(false);
   const [passwordRecoveryMessage, setPasswordRecoveryMessage] = useState<string | null>(null);
@@ -300,20 +301,33 @@ export const useAuthExperienceController = ({
   };
 
   const handleLogout = async () => {
-    setUser(null);
-    await sessionService.clearSession();
-    dispatchNavigation({ type: 'reset' });
-    setDisplayName('');
-    setEmail('');
-    setPassword('');
-    setConfirmPassword('');
-    setAuthError(null);
-    setShowPasswordRecovery(false);
-    setPasswordRecoveryMessage(null);
-    setPasswordRecoveryLoading(false);
-    setShowAlternateAccess(false);
-    dismissAdminDemoPrompt();
-    onLogoutReset?.();
+    if (authRequestInFlightRef.current) return;
+    authRequestInFlightRef.current = true;
+    setAuthLoading(true);
+    setLogoutError(null);
+    try {
+      // Keep account switching behind the server session deletion. Otherwise
+      // its late completion can close a new form or clear a newer session.
+      await sessionService.clearSession();
+      setUser(null);
+      dispatchNavigation({ type: 'reset' });
+      setDisplayName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setAuthError(null);
+      setShowPasswordRecovery(false);
+      setPasswordRecoveryMessage(null);
+      setPasswordRecoveryLoading(false);
+      setShowAlternateAccess(false);
+      dismissAdminDemoPrompt();
+      onLogoutReset?.();
+    } catch {
+      setLogoutError('ログアウトを確認できませんでした。通信を確認して、もう一度お試しください。');
+    } finally {
+      authRequestInFlightRef.current = false;
+      setAuthLoading(false);
+    }
   };
 
   const authExperienceProps = {
@@ -351,6 +365,7 @@ export const useAuthExperienceController = ({
     user,
     setCurrentUser: setUser,
     authLoading,
+    logoutError,
     authExperienceProps,
     isDemoUser: isDemoEmail(user?.email),
     handleLogout,

@@ -45,6 +45,7 @@ const App: React.FC = () => {
     user,
     setCurrentUser,
     authLoading,
+    logoutError,
     authExperienceProps,
     isDemoUser,
     handleLogout,
@@ -318,7 +319,11 @@ const App: React.FC = () => {
             </div>
           }
         >
-          {user && currentView !== 'guestTrial' && currentView !== 'guestLearning' && <>
+          {user && !authLoading && logoutError && <div role="alert" data-testid="logout-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+            <p>{logoutError}</p>
+            <button type="button" onClick={handleLogout} className="mt-2 min-h-11 rounded-lg border border-red-300 px-3 font-bold">ログアウトを再試行</button>
+          </div>}
+          {user && !authLoading && currentView !== 'guestTrial' && currentView !== 'guestLearning' && <>
             <GuestLearningImportNotice key={`naru:${user.uid}`} user={user} />
             <GuestTrialImportNotice key={user.uid} user={user} onContinueTrial={() => dispatchNavigation({ type: 'open-guest-trial' })} />
           </>}
@@ -326,7 +331,7 @@ const App: React.FC = () => {
         </Suspense>
       </Layout>
 
-      {user && (
+      {user && !authLoading && (
         <AnnouncementOverlay
           feed={announcementFeed.feed}
           suppressModal={suppressAnnouncementModal}
