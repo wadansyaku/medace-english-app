@@ -110,7 +110,7 @@ beforeEach(() => {
 describe('writing upload security boundaries', () => {
   it('confirms an identical completed PUT after a lost response without writing the original again', async () => {
     const body = new Uint8Array([1, 2, 3, 4]);
-    const checksum = Buffer.from(await crypto.subtle.digest('SHA-256', body)).toString('base64');
+    const checksum = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256', body))));
     mocks.readSubmissionAssetRowByUploadToken.mockResolvedValue({ ...assetRow, byte_size: 4, uploaded_at: 1, upload_consumed_at: 1, uploaded_sha256_base64: checksum });
     const db = createDb(); const put = vi.fn();
     expect((await handleWritingAssetUpload(createEnv(db.db, put), 'token-1', createRequest(body))).status).toBe(204);

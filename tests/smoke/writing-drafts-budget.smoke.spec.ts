@@ -155,3 +155,54 @@ test('administrator sees durable monthly usage separately from invoice totals an
   await expect(page.getByTestId('admin-ai-usage-ready')).toBeVisible();
   await expect(page.getByTestId('admin-ai-audit-empty')).toBeVisible();
 });
+
+test('lost original PUT and failed final draft saves remain recoverable after selecting a different PDF', async ({ page }) => {
+  await page.route('**/api/writing/ai-capabilities?*', async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...await response.json(), gradingEnabled: false } });
+  });
+  await loginGroupAdminDemo(page);
+  const bootstrap = await runtimeAdminPost<{ studentUid: string }>(page, 'runtime-admin/bootstrap-demo-organization');
+  await storageAction(page, 'sendInstructorNotification', { studentUid: bootstrap.studentUid, message: 'Synthetic upload recovery only.', triggerReason: 'smoke-upload-bootstrap', usedAi: false, interventionKind: 'REVIEW_RESTART' });
+  const templates = await page.evaluate(async () => (await fetch('/api/writing/templates')).json());
+  const assignment = await runtimeAdminPost<{ id: string; submissionCode: string }>(page, '/api/writing/assignments/generate', { studentUid: bootstrap.studentUid, templateId: templates.templates[0].id });
+  await runtimeAdminPost(page, '/api/writing/assignments/issue', { assignmentId: assignment.id });
+  await page.reload();
+  await page.getByTestId('workspace-tab-writing').click();
+  await page.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
+  await page.getByRole('button', { name: new RegExp(assignment.submissionCode) }).click();
+  await page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
+  await page.getByTestId('writing-teacher-draft-manual').fill('Synthetic text retained across upload failures.');
+  let losePut = true;
+  const putStatuses: number[] = [];
+  await page.route('**/api/writing/upload/*', async route => {
+    const response = await route.fetch();
+    putStatuses.push(response.status());
+    if (losePut) { losePut = false; return route.abort('failed'); }
+    await route.fulfill({ response });
+  });
+  await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-first.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic first') });
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByTestId('writing-teacher-draft-error')).toBeFocused();
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('保存');
+  expect(putStatuses).toEqual([204, 204]);
+  await page.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).click();
+  let failFinal = true;
+  await page.route('**/api/writing/input-draft', async route => {
+    const body = route.request().postDataJSON();
+    if (body.prepareUpload || !failFinal) return route.continue();
+    failFinal = false;
+    await route.fulfill({ status: 503, json: { error: 'Synthetic final save failed before commit' } });
+  });
+  await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-orphan-a.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic orphan A') });
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByTestId('writing-teacher-draft-error')).toBeVisible();
+  await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-reselected-b.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic replacement B') });
+  await page.getByTestId('writing-teacher-draft-save').click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('保存');
+  const draft = await page.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
+  expect(draft.draft.revision).toBe(5);
+  expect(draft.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-reselected-b.pdf']);
+  expect(draft.draft.manualTranscript).toBe('Synthetic text retained across upload failures.');
+});

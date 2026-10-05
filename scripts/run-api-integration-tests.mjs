@@ -1636,7 +1636,9 @@ const main = async () => {
     const firstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, firstUploadBody, 'image/png');
     assert(firstUploadResponse.status === 204, 'first writing upload should succeed');
     const replayedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, replayedFirstUploadBody, 'image/png');
-    assert(replayedFirstUploadResponse.status === 409, 'replayed upload token should return 409');
+    assert(replayedFirstUploadResponse.status === 400, 'changed-body upload replay must reject the original replacement');
+    const confirmedFirstUploadResponse = await uploadWritingAsset(baseUrl, firstUpload, firstUploadBody, 'image/png');
+    assert(confirmedFirstUploadResponse.status === 204, 'identical completed upload replay must confirm a lost response');
 
     const boundedUploadBody = Buffer.from('size');
     const boundedUpload = await requestWritingUpload(orgStudent, '/api/writing/upload-url', {
