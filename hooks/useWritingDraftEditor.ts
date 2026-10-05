@@ -75,7 +75,8 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
       }
       uploads.current = cache;
       // Completed uploads still represented by local Files are not original attachments.
-      const transientIds = new Set(previousCache?.assetIds.filter(Boolean));
+      const transientIds = new Set([...(previousCache?.assetIds.filter(Boolean) || []),
+        ...(pendingUploads.current?.cache === previousCache ? pendingUploads.current.requests.filter(upload => Boolean(upload)).map(upload => upload!.assetId) : [])]);
       const assets = (saved?.assets || []).filter(asset => !transientIds.has(asset.id));
       const mimes = [...assets.map(asset => asset.mimeType), ...files.map(resolveWritingUploadMimeType)];
       if (mimes.length > 4 || (mimes.includes('application/pdf') && mimes.length > 1)) throw new Error('PDF 1件、または画像最大4件で保存してください。');
@@ -116,6 +117,15 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
           && prepared.signature === preparationSignature && prepared.revision === expectedRevision) {
           expectedRevision = prepared.revision;
         } else {
+          // Restore/revision changes invalidate preparation, not the pending PUT.
+          // Confirm its same File/body before preparation can retire unknown uploads.
+          for (const [index, issued] of pendingUploads.current!.requests.entries()) {
+            if (issued && !cache.assetIds[index] && files[index]) {
+              await uploadWritingAsset(issued, files[index]);
+              if (scope.current !== currentScope) throw new Error('編集対象が変更されました。');
+              cache.assetIds[index] = issued.assetId;
+            }
+          }
           const retainedIds = [...new Set([...assets.map(asset => asset.id), ...cache.assetIds.filter((id): id is string => Boolean(id))])];
           const retained = await persistInput(retainedIds, expectedRevision, true);
           expectedRevision = retained.revision;

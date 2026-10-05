@@ -256,7 +256,8 @@ export const useWritingStudentController = (user: UserProfile) => {
     const gradingEnabled = capabilities?.gradingEnabled === true;
     const validation = validateWritingSubmissionFiles(files);
     const previousCache = uploadedFilesRef.current;
-    const transientIds = new Set(previousCache?.assetIds.filter(Boolean));
+    const transientIds = new Set([...(previousCache?.assetIds.filter(Boolean) || []),
+      ...(pendingUploadsRef.current?.cache === previousCache ? pendingUploadsRef.current.requests.filter(upload => Boolean(upload)).map(upload => upload!.assetId) : [])]);
     const existingAssets = (savedInputDraft?.assets || []).filter(asset => !transientIds.has(asset.id));
     const manualOnly = !gradingEnabled && files.length === 0 && (manualTranscript.trim().length > 0 || existingAssets.length > 0 || Boolean(committedInputRef.current?.revision));
     if (!validation.valid && !manualOnly) {
@@ -322,6 +323,15 @@ export const useWritingStudentController = (user: UserProfile) => {
           && prepared.signature === preparationSignature && prepared.revision === expectedRevision) {
           expectedRevision = prepared.revision;
         } else {
+          // Confirm uncertain PUTs before a restored/new revision requires preparation.
+          // Only a positive same-File/body receipt makes the original a retained ID.
+          for (const [index, issued] of pendingUploadsRef.current!.requests.entries()) {
+            if (issued && !cache.assetIds[index] && files[index]) {
+              await uploadWritingAsset(issued, files[index]);
+              if (activeUserUidRef.current !== user.uid) throw new Error('アカウントが変更されました。');
+              cache.assetIds[index] = issued.assetId;
+            }
+          }
           const retainedIds = [...new Set([...existingAssets.map(asset => asset.id), ...cache.assetIds.filter((id): id is string => Boolean(id))])];
           const retained = await persistInput(retainedIds, expectedRevision, true);
           expectedRevision = retained.revision;

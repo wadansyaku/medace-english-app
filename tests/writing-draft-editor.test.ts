@@ -246,4 +246,50 @@ describe('teacher input and GPT draft editor', () => {
     expect(render().saved?.assetIds).toEqual([first.assetId, replacement.assetId]); expect(render().error).toBeNull();
   });
 
+  it.each([1, 4])('confirms a lost successful PUT before preparing after restoring draft revision %s', async revision => {
+    const { selected, active } = await prepareFreshDraft();
+    render().setManual('My text before the upload.');
+    api.upload.mockRejectedValueOnce(new Error('successful PUT response lost')).mockImplementationOnce(async (issued: any, file: File) => {
+      expect(file).toBe(selected[0]);
+      if (!active.has(issued.assetId)) throw new Error('retired before receipt confirmation');
+    });
+    await render().save(); render().setManual('My local edit after the lost response.');
+    api.read.mockResolvedValue({ draft: { assignmentId: 'assignment', attemptNo: 1, revision,
+      manualTranscript: 'Saved elsewhere.', assetIds: [], assets: [], assessmentStatus: 'UNASSESSED', updatedAt: 2 } });
+    render().reload(); await settle();
+    expect(render().manual).toBe('My local edit after the lost response.'); expect(render().files).toEqual(selected);
+    await render().save();
+    expect(api.upload.mock.invocationCallOrder[1]).toBeLessThan(api.save.mock.invocationCallOrder[1]);
+    expect(api.upload.mock.calls[0]).toEqual(api.upload.mock.calls[1]); expect(api.url).toHaveBeenCalledTimes(1);
+    expect(api.save.mock.calls[1][0]).toMatchObject({ expectedRevision: revision, prepareUpload: true, assetIds: ['uploaded-a.pdf'] });
+    expect(render().saved?.revision).toBe(revision + 2); expect(render().saved?.assetIds).toEqual(['uploaded-a.pdf']);
+    expect(render().saved?.manualTranscript).toBe('My local edit after the lost response.'); expect(render().error).toBeNull();
+    expect(active).toEqual(new Set(['uploaded-a.pdf']));
+  });
+  it('does not retire or save after restored pending PUT confirmation fails and recovers with the same File', async () => {
+    const { selected, active } = await prepareFreshDraft();
+    api.upload.mockRejectedValueOnce(new Error('successful PUT response lost')).mockRejectedValueOnce(new Error('confirmation unavailable')).mockResolvedValueOnce(undefined);
+    await render().save();
+    api.read.mockResolvedValue({ draft: render().saved }); render().reload(); await settle();
+    await render().save(); expect(api.save).toHaveBeenCalledTimes(1); expect(render().files).toEqual(selected);
+    expect(active).toEqual(new Set(['uploaded-a.pdf'])); expect(render().error).toContain('confirmation unavailable');
+    await render().save();
+    expect(api.url).toHaveBeenCalledTimes(1); expect(api.upload.mock.calls[0]).toEqual(api.upload.mock.calls[2]);
+    expect(api.save.mock.calls[1][0].assetIds).toEqual(['uploaded-a.pdf']); expect(render().saved?.revision).toBe(3); expect(render().error).toBeNull();
+  });
+  it('treats a restored asset matching the pending File as one original and confirms it before preparation', async () => {
+    const { selected, active, metadata } = await prepareFreshDraft();
+    api.upload.mockRejectedValueOnce(new Error('successful PUT response lost')).mockImplementationOnce(async (issued: any) => {
+      if (!active.has(issued.assetId)) throw new Error('retired before receipt confirmation');
+    });
+    await render().save();
+    api.read.mockResolvedValue({ draft: { assignmentId: 'assignment', attemptNo: 1, revision: 4,
+      manualTranscript: '', assetIds: ['uploaded-a.pdf'], assets: [metadata.get('uploaded-a.pdf')], assessmentStatus: 'UNASSESSED', updatedAt: 2 } });
+    render().reload(); await settle(); expect(render().files).toEqual(selected);
+    await render().save();
+    expect(api.url).toHaveBeenCalledTimes(1); expect(api.upload).toHaveBeenCalledTimes(2);
+    expect(api.save.mock.calls[1][0]).toMatchObject({ expectedRevision: 4, prepareUpload: true, assetIds: ['uploaded-a.pdf'] });
+    expect(render().saved?.assetIds).toEqual(['uploaded-a.pdf']); expect(render().saved?.revision).toBe(6); expect(render().error).toBeNull();
+  });
+
 });
