@@ -512,7 +512,7 @@ export const handleWritingAssetUpload = async (
   if (Number(assetRow.upload_expires_at || 0) <= now) {
     throw new HttpError(410, 'アップロードURLの有効期限が切れています。再度アップロードURLを取得してください。');
   }
-  if (assetRow.upload_consumed_at || assetRow.uploaded_at) {
+  if (assetRow.upload_consumed_at && !assetRow.uploaded_at) {
     throw new HttpError(409, 'このアップロードURLはすでに使用済みです。');
   }
   if (!env.WRITING_ASSETS) {
@@ -527,6 +527,16 @@ export const handleWritingAssetUpload = async (
   const contentLength = parseWritingUploadContentLength(request);
   if (contentLength !== null && expectedByteSize > 0 && contentLength !== expectedByteSize) {
     throw new HttpError(400, '予約時と異なるファイルサイズではアップロードできません。');
+  }
+
+  // A lost successful PUT response can be confirmed with the same URL/body.
+  // This path never writes R2 or D1 and cannot replace an existing original.
+  if (assetRow.uploaded_at) {
+    if (!assetRow.uploaded_sha256_base64) throw new HttpError(409, 'このアップロードURLはすでに使用済みです。');
+    const body = await readWritingUploadBody(request, expectedByteSize > 0 ? Math.min(expectedByteSize, WRITING_UPLOAD_MAX_BYTES) : WRITING_UPLOAD_MAX_BYTES);
+    const checksum = encodeBase64(await crypto.subtle.digest('SHA-256', body));
+    if (body.byteLength !== assetRow.byte_size || checksum !== assetRow.uploaded_sha256_base64) throw new HttpError(400, '保存済み原本と異なる内容では再送できません。');
+    return noContent();
   }
 
   const reservationResult = await env.DB.prepare(`
