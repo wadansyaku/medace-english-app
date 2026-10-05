@@ -29,7 +29,8 @@ export type {
   InstructorFollowUpDraft,
 } from '../contracts/ai';
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
-import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../utils/learningPlan';
+import { buildFallbackLearningPlan } from '../utils/learningPlan';
+import { buildInstructorFollowUpTemplate } from '../shared/instructorFollowUp';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 import { ApiError, apiPost } from './apiClient';
 
@@ -42,15 +43,10 @@ const callAi = async <TAction extends AiAction>(
 
 const isRateLimitError = (error: unknown): boolean => error instanceof ApiError && error.status === 429;
 const isAccessDeniedError = (error: unknown): boolean => error instanceof ApiError && error.status === 403;
-const shouldUseFallbackLearningPlan = (error: unknown): boolean => {
-  if (isAiUnavailableError(error) || isRateLimitError(error)) return true;
-  return isAccessDeniedError(error);
-};
-
 export const isAiUnavailableError = (error: unknown): boolean => {
   if (error instanceof ApiError && error.status === 503) return true;
   if (error instanceof Error) {
-    return error.message.includes('GEMINI_API_KEY') || error.message.includes('AI教材化はまだ利用できません');
+    return error.message.includes('GEMINI_API_KEY') || error.message.includes('AI教材化はまだ利用できません') || error.message.includes('AIによる教材抽出は利用できません');
   }
   return false;
 };
@@ -206,7 +202,7 @@ export const extractVocabularyFromText = async (rawText: string): Promise<Extrac
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
     }
     if (isAiUnavailableError(error)) {
-      throw new Error('AI教材化はまだ利用できません。Gemini 設定後に再試行してください。');
+      throw new Error('AIによる教材抽出は利用できません。事前に校正した単語・例文をCSVから取り込んでください。');
     }
     throw new Error(error instanceof Error ? error.message : 'AIによる抽出に失敗しました。');
   }
@@ -220,48 +216,22 @@ export const extractVocabularyFromMedia = async (base64Data: string, mimeType: s
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
     }
     if (isAiUnavailableError(error)) {
-      throw new Error('AI教材化はまだ利用できません。Gemini 設定後に再試行してください。');
+      throw new Error('AIによる教材抽出は利用できません。事前に校正した単語・例文をCSVから取り込んでください。');
     }
     throw new Error(error instanceof Error ? error.message : 'AIによる画像解析に失敗しました。');
   }
 };
 
+/** Compatibility export: standard plans never call /api/ai. */
 export const generateLearningPlan = async (
   grade: UserGrade,
   level: EnglishLevel,
   availableBooks: BookMetadata[],
   learningPreference?: LearningPreference | null,
+  _onFallback?: () => void,
 ): Promise<LearningPlan | null> => {
   if (availableBooks.length === 0) return null;
-
-  try {
-    const plan = await callAi('generateLearningPlan', {
-      grade,
-      level,
-      availableBooks,
-      learningPreference,
-    });
-    return normalizeGeneratedLearningPlan({
-      plan,
-      uid: '',
-      grade,
-      level,
-      availableBooks,
-      learningPreference,
-    });
-  } catch (error) {
-    if (shouldUseFallbackLearningPlan(error)) {
-      return buildFallbackLearningPlan({
-        uid: '',
-        grade,
-        level,
-        availableBooks,
-        learningPreference,
-      });
-    }
-    console.error('Plan generation failed:', error);
-    return null;
-  }
+  return buildFallbackLearningPlan({ uid: '', grade, level, availableBooks, learningPreference });
 };
 
 export const generateInstructorFollowUp = async (input: {
@@ -273,14 +243,7 @@ export const generateInstructorFollowUp = async (input: {
   currentLevel?: EnglishLevel;
   customInstruction?: string;
 }): Promise<InstructorFollowUpDraft | null> => {
-  try {
-    return await callAi('generateInstructorFollowUp', input);
-  } catch (error) {
-    if (!isRateLimitError(error)) {
-      console.error('Instructor follow-up generation failed:', error);
-    }
-    return null;
-  }
+  return { message: buildInstructorFollowUpTemplate(input) };
 };
 
 export const generateDiagnosticTest = async (grade: UserGrade): Promise<DiagnosticQuestion[]> => {

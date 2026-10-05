@@ -21,6 +21,11 @@ import {
   statusTone,
 } from './presentation';
 import { type WritingOpsTab } from '../../../utils/writingOps';
+import {
+  classifyWritingEvaluation,
+  classifyWritingTranscript,
+  writingAssessmentNotice,
+} from '../../../shared/writingAiSafety';
 
 interface WritingOpsReviewSectionProps {
   tab: WritingOpsTab;
@@ -64,7 +69,20 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
   onApprove,
   onRequestRevision,
   onComplete,
-}) => (
+}) => {
+  const transcriptStatus = classifyWritingTranscript(detail?.submission.ocrMeta);
+  const selectedStatus = selectedEvaluation && detail?.submission.evaluations.some(
+    (evaluation) => evaluation.id === selectedEvaluation.id && evaluation.id === selectedEvaluationId,
+  ) ? classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta) : transcriptStatus === 'sample' ? 'sample' : 'unverified';
+  const canUseSelectedAssessment = transcriptStatus === 'real' && selectedStatus === 'real';
+  const selectedNotice = writingAssessmentNotice(selectedStatus);
+  const releasedEvaluation = detail?.submission.evaluations.find(
+    (evaluation) => evaluation.id === detail.submission.teacherReview?.selectedEvaluationId,
+  );
+  const canComplete = canUseSelectedAssessment && Boolean(releasedEvaluation
+    && classifyWritingEvaluation(releasedEvaluation, detail?.submission.ocrMeta) === 'real');
+
+  return (
   <div className="grid gap-6 xl:grid-cols-[0.82fr_1.18fr]">
     <div className="space-y-3" data-testid="writing-review-queue">
       {reviewList.length === 0 && (
@@ -105,11 +123,19 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
           <div className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
             <div>提出: {formatDateTime(item.submittedAt)}</div>
             <div>{item.attemptNo}回目</div>
-            <div>OCR {Math.round(item.transcriptConfidence * 100)}%</div>
-            <div>{item.recommendedProvider ? WRITING_AI_PROVIDER_LABELS[item.recommendedProvider] : '未選択'}</div>
+            {item.assessmentStatus ? (
+              <div className="font-bold text-amber-900 sm:col-span-2">
+                {item.assessmentStatus === 'sample' ? 'サンプル（未評価）' : '処理方法未確認／原本の確認待ち'}
+              </div>
+            ) : (
+              <>
+                <div>OCR {Math.round(item.transcriptConfidence * 100)}%</div>
+                <div>{item.recommendedProvider ? WRITING_AI_PROVIDER_LABELS[item.recommendedProvider] : '未選択'}</div>
+              </>
+            )}
           </div>
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
-            {tab === 'QUEUE' ? '次: 採用候補を選び、講師コメントを書いて返却判断' : '次: 返却内容を確認し、必要なら完了へ'}
+            {item.assessmentStatus ? '次: 原本を確認。成績確定は保留' : tab === 'QUEUE' ? '次: 採用候補を選び、講師コメントを書いて返却判断' : '次: 返却内容を確認し、必要なら完了へ'}
           </div>
         </button>
       ))}
@@ -136,6 +162,12 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
         </div>
       ) : (
         <div className="space-y-5">
+          {!canUseSelectedAssessment && (
+            <div role="status" data-testid="writing-review-assessment-warning" className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm leading-relaxed text-amber-950">
+              <p className="font-bold">{selectedNotice}</p>
+              <p className="mt-2">原本と講師コメントを確認できます。実際の答案に基づく評価を確認できるまで、返却・再提出依頼・完了は保留します。</p>
+            </div>
+          )}
           <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="space-y-5">
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
@@ -159,7 +191,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                     <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">OCR信頼度</div>
                     <div className="mt-2 text-sm font-black text-slate-950">
-                      {Math.round(detail.submission.transcriptConfidence * 100)}%
+                      {transcriptStatus === 'real' ? `${Math.round(detail.submission.transcriptConfidence * 100)}%` : '原本の確認待ち'}
                     </div>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -189,8 +221,11 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
                   <ClipboardList className="h-4 w-4" />
-                  OCR
+                  {transcriptStatus === 'sample' ? '参考テキスト（サンプル）' : transcriptStatus === 'unverified' ? '処理方法未確認のテキスト' : detail.submission.ocrMeta?.notes === 'manual-transcript' ? '入力された答案文' : 'OCR'}
                 </div>
+                {transcriptStatus !== 'real' && (
+                  <p className="mt-3 text-sm font-bold leading-relaxed text-amber-900">原本と照合が必要な参考テキストです。</p>
+                )}
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{detail.submission.transcript}</p>
               </section>
 
@@ -200,7 +235,9 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                   AI比較
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  {detail.submission.evaluations.map((evaluation) => (
+                  {detail.submission.evaluations.map((evaluation) => {
+                    const assessmentStatus = classifyWritingEvaluation(evaluation, detail.submission.ocrMeta);
+                    return (
                     <button
                       key={evaluation.id}
                       type="button"
@@ -214,18 +251,35 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-bold text-slate-900">{WRITING_AI_PROVIDER_LABELS[evaluation.provider]}</div>
-                        <div className="text-xs font-bold text-slate-400">{evaluation.latencyMs} ms</div>
+                        <div className="text-sm font-bold text-slate-900">{assessmentStatus === 'real' ? WRITING_AI_PROVIDER_LABELS[evaluation.provider] : assessmentStatus === 'sample' ? 'サンプル' : '処理方法未確認'}</div>
+                        {assessmentStatus === 'real' && <div className="text-xs font-bold text-slate-400">{evaluation.latencyMs} ms</div>}
                       </div>
-                      <div className="mt-3 text-2xl font-black text-slate-950">{evaluation.overallScore} / 20</div>
-                      <div className="mt-2 text-xs leading-relaxed text-slate-500">
-                        structure {Math.round(evaluation.structureScore * 100)} / alignment {Math.round(evaluation.transcriptAlignment * 100)} / confidence {Math.round(evaluation.confidence * 100)}
-                      </div>
+                      {assessmentStatus === 'real' ? (
+                        <>
+                          <div className="mt-3 text-2xl font-black text-slate-950">{evaluation.overallScore} / 20</div>
+                          <div className="mt-2 text-xs leading-relaxed text-slate-500">
+                            structure {Math.round(evaluation.structureScore * 100)} / alignment {Math.round(evaluation.transcriptAlignment * 100)} / confidence {Math.round(evaluation.confidence * 100)}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-3 text-xs font-bold leading-relaxed text-amber-900">{assessmentStatus === 'sample' ? 'サンプル／実際の答案を評価していません' : '処理方法を確認してください。'}</p>
+                      )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                {selectedEvaluation && (
+                {selectedEvaluation && selectedStatus === 'sample' && (
+                  <details className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <summary className="cursor-pointer text-sm font-bold text-amber-950">参考用サンプルを見る（答案の評価ではありません）</summary>
+                    <p className="mt-3 text-sm leading-relaxed text-amber-900">{selectedNotice}</p>
+                    <div className="mt-4 text-xs font-bold text-amber-950">サンプル文</div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">{selectedEvaluation.correctedDraft}</p>
+                    <div className="mt-4 text-xs font-bold text-amber-950">参考例</div>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">{selectedEvaluation.modelAnswer}</p>
+                  </details>
+                )}
+                {selectedEvaluation && canUseSelectedAssessment && (
                   <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
                     <div className="space-y-4">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -278,7 +332,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
             <aside className="space-y-5 2xl:sticky 2xl:top-6 2xl:self-start">
               <section className="rounded-3xl border border-slate-200 bg-white p-5">
                 <div className="text-xs font-bold text-slate-400">採用候補</div>
-                {selectedEvaluation ? (
+                {selectedEvaluation && canUseSelectedAssessment ? (
                   <>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <div className="text-sm font-bold text-slate-950">
@@ -301,7 +355,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                     </div>
                   </>
                 ) : (
-                  <div className="mt-3 text-sm text-slate-500">比較結果がありません。</div>
+                  <div className="mt-3 text-sm font-bold leading-relaxed text-amber-900">実評価の確認待ちです。成績の確定は保留しています。</div>
                 )}
               </section>
 
@@ -309,7 +363,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                 <section className="rounded-3xl border border-slate-200 bg-white p-5">
                   <div className="text-xs font-bold text-slate-400">返却判断</div>
                   <div className="mt-3 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm leading-relaxed text-medace-900/80">
-                    1. 採用候補を選ぶ  2. 生徒に見せるコメントを書く  3. 返却または再提出依頼を確定
+                    {canUseSelectedAssessment ? '1. 採用候補を選ぶ  2. 生徒に見せるコメントを書く  3. 返却または再提出依頼を確定' : '原本を確認し、講師コメントの草稿を入力できます。実評価の確認待ちです。'}
                   </div>
                   <label htmlFor="writing-review-public-comment" className="mt-4 block text-xs font-bold text-slate-500">生徒に見せるコメント</label>
                   <textarea
@@ -339,7 +393,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                     <button
                       type="button"
                       data-testid="writing-approve-return"
-                      disabled={reviewing || !selectedEvaluationId || !reviewPublicComment.trim()}
+                      disabled={reviewing || !canUseSelectedAssessment || !selectedEvaluationId || !reviewPublicComment.trim()}
                       onClick={onApprove}
                       className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                     >
@@ -349,8 +403,9 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                     {detail.submission.attemptNo < detail.assignment.maxAttempts && (
                       <button
                         type="button"
+                        data-testid="writing-request-revision"
                         onClick={onRequestRevision}
-                        disabled={reviewing || !selectedEvaluationId || !reviewPublicComment.trim()}
+                        disabled={reviewing || !canUseSelectedAssessment || !selectedEvaluationId || !reviewPublicComment.trim()}
                         className="inline-flex items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
                       >
                         再提出を依頼
@@ -381,8 +436,9 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
                   {detail.assignment.status === 'RETURNED' && (
                     <button
                       type="button"
+                      data-testid="writing-complete-assignment"
                       onClick={onComplete}
-                      disabled={reviewing}
+                      disabled={reviewing || !canComplete}
                       className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 hover:border-medace-200 hover:text-medace-700 disabled:opacity-50"
                     >
                       完了にする
@@ -396,6 +452,7 @@ const WritingOpsReviewSection: React.FC<WritingOpsReviewSectionProps> = ({
       )}
     </div>
   </div>
-);
+  );
+};
 
 export default WritingOpsReviewSection;

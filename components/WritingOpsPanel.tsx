@@ -7,6 +7,7 @@ import WorkspaceStageStrip from './workspace/WorkspaceStageStrip';
 import WritingOpsCreateSection from './writing/ops/WritingOpsCreateSection';
 import WritingOpsPrintSection from './writing/ops/WritingOpsPrintSection';
 import WritingOpsReviewSection from './writing/ops/WritingOpsReviewSection';
+import WritingTeacherDraftModal from './writing/ops/WritingTeacherDraftModal';
 import WritingOpsScannerModal from './writing/ops/WritingOpsScannerModal';
 import { TAB_COPY } from './writing/ops/presentation';
 import { getWritingOpsCounts, getWritingOpsTriage } from '../utils/writingOps';
@@ -246,6 +247,7 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
       </details>
 
       {controller.scannerTarget && (
+        <WritingTeacherDraftModal assignment={controller.scannerTarget} onClose={controller.resetScanner} legacyScanner={
         <WritingOpsScannerModal
           scannerTarget={controller.scannerTarget}
           scannerFiles={controller.scannerFiles}
@@ -259,7 +261,7 @@ const WritingOpsPanel: React.FC<WritingOpsPanelProps> = ({ user }) => {
           onFilesChange={controller.setScannerFiles}
           onManualTranscriptChange={controller.setScannerManualTranscript}
           onSubmit={controller.handleScannerSubmit}
-        />
+        />} />
       )}
     </section>
   );

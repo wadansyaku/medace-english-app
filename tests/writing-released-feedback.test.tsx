@@ -12,6 +12,7 @@ import {
 import {
   handleGetWritingSubmissionDetail,
   handleListWritingAssignments,
+  handleListWritingReviewQueue,
 } from '../functions/_shared/writing-actions/reads';
 import type { AppEnv, DbUserRow } from '../functions/_shared/types';
 import { WritingAssignmentStatus } from '../types';
@@ -58,14 +59,14 @@ const setup = () => {
       fixture.sqlite.prepare(`
         INSERT INTO writing_submissions (
           id, assignment_id, attempt_no, submission_source, submitted_by_user_id, transcript,
-          processing_state, selected_evaluation_id, created_at, submitted_at, updated_at
-        ) VALUES (?, ?, ?, 'ONLINE', ?, 'Fixture response', 'EVALUATED', ?, ?, ?, ?)
+          processing_state, selected_evaluation_id, created_at, submitted_at, updated_at, ocr_meta
+        ) VALUES (?, ?, ?, 'ONLINE', ?, 'Fixture response', 'EVALUATED', ?, ?, ?, ?, '{"provenance":{"mode":"live","provider":"GEMINI","model":"gemini-2.5-flash"}}')
       `).run(submissionId, id, attempt, student, evaluationId, attempt, attempt, attempt);
       fixture.sqlite.prepare(`
         INSERT INTO writing_ai_evaluations (
           id, submission_id, provider, overall_score, rubric_json, strengths_json, improvement_points_json,
-          sentence_corrections_json, corrected_draft, model_answer, prompt_snapshot, is_default, created_at
-        ) VALUES (?, ?, 'fixture', 80, '{}', '[]', '[]', '[]', ?, 'Example', '{}', 1, ?)
+          sentence_corrections_json, corrected_draft, model_answer, prompt_snapshot, is_default, created_at, raw_payload
+        ) VALUES (?, ?, 'GEMINI', 14, '{}', '[]', '[]', '[]', ?, 'Example', '{}', 1, ?, '{"provenance":{"mode":"live","provider":"GEMINI","model":"gemini-2.5-flash"}}')
       `).run(evaluationId, submissionId, attempt === 1 ? 'Released feedback' : 'Unreleased draft', attempt);
       if (attempt === 1) {
         fixture.sqlite.prepare(`
@@ -85,6 +86,23 @@ const setup = () => {
 };
 
 describe('released writing feedback navigation', () => {
+  it('labels a saved sample in the instructor queue using the selected evaluation and OCR metadata', async () => {
+    const fixture = setup();
+    fixture.sqlite.prepare('UPDATE writing_ai_evaluations SET raw_payload = ? WHERE id = ?').run(
+      JSON.stringify({ provenance: { mode: 'live', provider: 'GEMINI', model: 'fixture-writing-evaluation' } }),
+      'assignment-1-attempt-2-evaluation',
+    );
+    const { items } = await handleListWritingReviewQueue(fixture.env, fixture.user('instructor-1'), 'QUEUE');
+    expect(items.find((item) => item.assignmentId === 'assignment-1')).toMatchObject({ assessmentStatus: 'sample' });
+  });
+
+  it('requires manual verification in the queue when the OCR origin is missing despite a live evaluation', async () => {
+    const fixture = setup();
+    fixture.sqlite.exec("UPDATE writing_submissions SET ocr_meta = NULL WHERE id = 'assignment-1-attempt-2'");
+    const { items } = await handleListWritingReviewQueue(fixture.env, fixture.user('instructor-1'), 'QUEUE');
+    expect(items.find((item) => item.assignmentId === 'assignment-1')).toMatchObject({ assessmentStatus: 'unverified' });
+  });
+
   it.each([WritingAssignmentStatus.SUBMITTED, WritingAssignmentStatus.REVIEW_READY])(
     'lists only the learner’s released attempt while the new attempt is %s', async (status) => {
       const fixture = setup();

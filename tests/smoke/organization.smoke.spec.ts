@@ -380,7 +380,7 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
   await studentBContext.close();
 });
 
-test('instructor can keep and send a fallback follow-up draft after an AI attempt', async ({ browser }) => {
+test('instructor can edit and save a local template without requesting AI', async ({ browser }, testInfo) => {
   const adminContext = await browser.newContext();
   const instructorContext = await browser.newContext();
   const studentContext = await browser.newContext();
@@ -419,10 +419,23 @@ test('instructor can keep and send a fallback follow-up draft after an AI attemp
   const draftField = instructorPage.getByTestId('notification-message-draft');
   await expect(draftField).not.toHaveValue('');
 
-  const aiDraftButton = instructorPage.getByRole('button', { name: '下書きを作る' });
-  await aiDraftButton.click();
-  await expect(aiDraftButton).toBeEnabled();
+  const aiRequests: string[] = [];
+  instructorPage.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/ai') aiRequests.push(request.url());
+  });
+  const templateButton = instructorPage.getByRole('button', { name: 'テンプレートを入れ直す' });
+  await instructorPage.getByPlaceholder('例: 次の模試までに復習を再開してみましょう。').fill('一緒に復習しましょう。');
+  await templateButton.click();
+  await expect(templateButton).toBeEnabled();
   await expect(draftField).not.toHaveValue('');
+  await expect(draftField).toHaveValue(/\n一緒に復習しましょう。$/);
+  expect(aiRequests).toEqual([]);
+  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+    await instructorPage.setViewportSize(viewport);
+    await templateButton.scrollIntoViewIfNeeded();
+    expect(await instructorPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await instructorPage.screenshot({ path: testInfo.outputPath(`ai-free-notification-${viewport.width}.png`) });
+  }
 
   await instructorPage.getByTestId('notification-send-submit').click();
   await expect(instructorPage.getByText(/アプリ内通知を保存しました。/)).toBeVisible();

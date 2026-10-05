@@ -15,6 +15,7 @@ import {
   UserRole,
   WritingAssignmentStatus as AssignmentStatus,
 } from '../../../types';
+import { classifyWritingEvaluation, classifyWritingTranscript } from '../../../shared/writingAiSafety';
 import { HttpError } from '../http';
 import {
   type ActiveOrganizationContext,
@@ -212,11 +213,18 @@ export const projectWritingDetailForViewer = (
     throw new HttpError(403, '講師確認後に返却された答案のみ閲覧できます。');
   }
 
+  const assessmentStatus = classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta);
   const releasedDetail: WritingStudentSubmissionDetailResponse = {
     assignment: studentSafeAssignment,
     submission: {
       ...studentSafeSubmission,
-      evaluations: [projectStudentEvaluation(selectedEvaluation)],
+      ...(assessmentStatus === 'real'
+        ? { evaluations: [projectStudentEvaluation(selectedEvaluation)] as [WritingStudentEvaluation] }
+        : {
+            evaluations: [] as [],
+            assessmentStatus,
+            ...(classifyWritingTranscript(detail.submission.ocrMeta) !== 'real' ? { transcript: '' } : {}),
+          }),
       teacherReview: projectStudentTeacherReview(review),
     },
     ...(studentSideEffectWarning ? { sideEffectJob: studentSideEffectWarning } : {}),

@@ -2,7 +2,9 @@ import type {
   WritingExamCategory,
 } from '../../../types';
 import type { AiUsageLogContext } from '../ai-metering';
-import { HttpError, json } from '../http';
+import { HttpError, json, readJson } from '../http';
+import { getWritingAiCapabilities, getWritingAiDraft, generateWritingAiDraft, getWritingAiBudget, parseWritingAiDraftRequest } from './ai-drafts';
+import { getWritingInputDraft, saveWritingInputDraft, parseInputDraft, draftInteger } from './input-drafts';
 import type { AppEnv, DbUserRow } from '../types';
 import {
   handleGetWritingPrintableFeedback,
@@ -46,6 +48,33 @@ interface WritingRouteDefinition {
 }
 
 const routes: WritingRouteDefinition[] = [
+  {
+    method: 'GET', match: segments => segments.length === 1 && segments[0] === 'ai-capabilities',
+    handle: async ({ env, user, request }) => json(await getWritingAiCapabilities(env, user, new URL(request.url).searchParams.get('assignmentId') || undefined)),
+  },
+  {
+    method: 'GET', match: segments => segments.length === 1 && segments[0] === 'input-draft',
+    handle: async ({ env, user, request }) => {
+      const params = new URL(request.url).searchParams;
+      return json(await getWritingInputDraft(env, user, params.get('assignmentId') || '', draftInteger(Number(params.get('attemptNo')), 1, 20)));
+    },
+  },
+  {
+    method: 'POST', match: segments => segments.length === 1 && segments[0] === 'input-draft',
+    handle: async ({ env, user, request }) => json(await saveWritingInputDraft(env, user, parseInputDraft(await readJson(request, { maxBytes: 100_000 })))),
+  },
+  {
+    method: 'POST', match: segments => segments.length === 1 && segments[0] === 'ai-drafts',
+    handle: async ({ env, user, request }) => json(await generateWritingAiDraft(env, user, parseWritingAiDraftRequest(await readJson(request, { maxBytes: 2_000 })))),
+  },
+  {
+    method: 'GET', match: segments => segments.length === 2 && segments[0] === 'ai-drafts',
+    handle: async ({ env, user, segments }) => json(await getWritingAiDraft(env, user, segments[1])),
+  },
+  {
+    method: 'GET', match: segments => segments.length === 1 && segments[0] === 'ai-budget',
+    handle: async ({ env, user, request }) => json(await getWritingAiBudget(env, user, new URL(request.url).searchParams.get('month') || new Date().toISOString().slice(0, 7))),
+  },
   {
     method: 'GET',
     match: (segments) => segments[0] === 'templates',

@@ -12,10 +12,12 @@ const historyStatus = () => f.completed ? 'COMPLETED' : f.historyRevision ? 'REV
 const assignment = (id) => ({
   id: 'assignment-' + id, studentUid: 'student-' + id, studentName: '合成生徒' + id,
   promptTitle: '課題' + id, promptText: 'Synthetic prompt.', guidance: '',
-  status: id === 'A' && (f.historyReturned || f.historyRevision) ? historyStatus() : 'ISSUED', attemptCount: 0, maxAttempts: 2, wordCountMin: 80, wordCountMax: 120,
+  status: f.studentSample ? 'RETURNED' : id === 'A' && (f.historyReturned || f.historyRevision) ? historyStatus() : 'ISSUED', attemptCount: 0, maxAttempts: 2, wordCountMin: 80, wordCountMax: 120,
+  latestReleasedSubmissionId: f.studentSample ? id : undefined,
   submissionCode: 'SYNTHETIC-' + id, createdAt: 1, updatedAt: 2,
 });
 const evaluation = (id) => ({
+  provenance: { mode: f.sample ? 'hybrid-fallback' : 'live', provider: 'GEMINI', model: f.sample || f.legacySample ? 'fixture-writing-evaluation' : 'gemini-2.5-flash' },
   id: 'evaluation-' + id, provider: 'GEMINI', isDefault: true, overallScore: 12,
   structureScore: 1, transcriptAlignment: 1, confidence: 1, latencyMs: 1, costMilliYen: 0,
   rubric: [], strengths: [], improvementPoints: [], correctedDraft: 'Synthetic draft.', modelAnswer: 'Synthetic answer.',
@@ -23,10 +25,13 @@ const evaluation = (id) => ({
 const detail = (id) => ({ assignment: { ...assignment(id), status: id === 'A' && (f.historyReturned || f.historyRevision) ? historyStatus() : 'REVIEW_READY' }, submission: {
   id, assignmentId: 'assignment-' + id, attemptNo: 1, assets: [], evaluations: [evaluation(id)],
   transcript: '答案' + id, transcriptConfidence: 1, submittedAt: 2, submissionSource: 'STAFF_SCANNER',
+  ocrMeta: { mode: 'live', provider: 'GEMINI', model: 'gemini-2.5-flash' },
+  teacherReview: f.historyReturned ? { selectedEvaluationId: 'evaluation-' + id, publicComment: '合成の講師コメント', releasedAt: 3 } : undefined,
 }});
 const queue = (id) => ({ assignmentId: 'assignment-' + id, submissionId: id,
   studentUid: 'student-' + id, studentName: '合成生徒' + id, promptTitle: '課題' + id,
   attemptNo: 1, status: id === 'A' && (f.historyReturned || f.historyRevision) ? historyStatus() : 'REVIEW_READY', submittedAt: 2, transcriptConfidence: 1,
+  assessmentStatus: f.sample || f.legacySample ? 'sample' : undefined,
 });
 const acquire = (value) => f.failCollections ? Promise.reject(new Error('合成取得エラー')) : Promise.resolve(value);
 export const workspaceService = { getAllStudentsProgress: () => acquire(['A', 'B'].map(id => ({
@@ -34,6 +39,11 @@ export const workspaceService = { getAllStudentsProgress: () => acquire(['A', 'B
 }))) };
 export const listWritingTemplates = () => acquire({ templates: [{ id: 'template', title: '合成テンプレート', defaultWordCountMin: 80, defaultWordCountMax: 120 }] });
 export const listWritingAssignments = () => acquire({ assignments: ['A', 'B'].map(assignment) });
+export const getStudentWritingSubmissionDetail = (id) => Promise.resolve({ assignment: assignment(id), submission: {
+  ...detail(id).submission, transcript: '', evaluations: [], assessmentStatus: 'sample',
+  teacherReview: { publicComment: '原本を一緒に確認しましょう。', releasedAt: 3 },
+}});
+export const getWritingPrintableFeedback = () => { throw new Error('Sample print must not be called'); };
 export const listWritingReviewQueue = (tab) => acquire({ items: f.historyReturned || f.historyRevision ? (tab === 'HISTORY' ? [queue('A')] : []) : (tab === 'QUEUE' ? ['A', 'B'].map(queue) : []) });
 export const getStaffWritingSubmissionDetail = (id) => {
   f.detailCalls.push(id);
@@ -53,6 +63,14 @@ export const finalizeStaffWritingSubmission = (input) => {
   if (f.delayScan) return new Promise((resolve, reject) => { f.pendingScan = { resolve: () => resolve(detail('A')), reject }; });
   return Promise.resolve(detail('A'));
 };
+export const finalizeStudentWritingSubmission = finalizeStaffWritingSubmission;
+// This synthetic recovery suite exercises the legacy graded-submission UI.
+// The ordinary source exposes gradingEnabled=false and is covered separately.
+export const getWritingAiCapabilities = () => Promise.resolve({ gradingEnabled: true, state: 'DISABLED', ocrEnabled: false, feedbackEnabled: false });
+export const getWritingInputDraft = () => Promise.resolve({ draft: null });
+export const saveWritingInputDraft = () => { throw new Error('Legacy recovery fixture must not save a draft'); };
+export const generateWritingAiDraft = () => { throw new Error('GPT dispatch forbidden'); };
+export const getWritingAiDraft = generateWritingAiDraft;
 `;
 
 let bundle: string;
@@ -62,12 +80,15 @@ test.beforeAll(async () => {
     stdin: {
       contents: `import React from 'react'; import { createRoot } from 'react-dom/client';
         import WritingOpsPanel from './components/WritingOpsPanel';
-        createRoot(document.getElementById('root')).render(<WritingOpsPanel user={{ uid: 'synthetic-instructor', displayName: '合成講師', role: 'INSTRUCTOR' }} />);`,
+        import WritingStudentSection from './components/WritingStudentSection';
+        createRoot(document.getElementById('root')).render(globalThis.__writingFixture.student
+          ? <WritingStudentSection user={{ uid: 'synthetic-student', displayName: '合成生徒', role: 'STUDENT' }} />
+          : <WritingOpsPanel user={{ uid: 'synthetic-instructor', displayName: '合成講師', role: 'INSTRUCTOR' }} />);`,
       loader: 'tsx', resolveDir: process.cwd(),
     },
     bundle: true, write: false, format: 'iife', define: { 'import.meta.env': '{}', 'process.env.NODE_ENV': '"development"' },
     plugins: [{ name: 'synthetic-writing-services', setup(builder) {
-      builder.onResolve({ filter: /services\/(writing|workspace)$/ }, () => ({ path: 'writing-services', namespace: 'synthetic' }));
+      builder.onResolve({ filter: /services\/(writing|workspace|writingAiDrafts)$/ }, () => ({ path: 'writing-services', namespace: 'synthetic' }));
       builder.onLoad({ filter: /.*/, namespace: 'synthetic' }, () => ({ contents: serviceFixture, loader: 'js' }));
       builder.onResolve({ filter: /WritingPrintLauncher$/ }, () => ({ path: 'print', namespace: 'synthetic-print' }));
       builder.onLoad({ filter: /.*/, namespace: 'synthetic-print' }, () => ({ contents: 'export default () => null;', loader: 'js' }));
@@ -80,13 +101,17 @@ test.beforeAll(async () => {
 });
 
 const mount = async (page: Page, settings: Record<string, boolean> = {}) => {
-  await page.route('**/*', (route) => route.abort());
-  await page.setContent(`<html lang="ja"><style>${stylesheet}</style><div id="root"></div></html>`);
+  await page.route('**/*', (route) => route.request().url() === 'http://127.0.0.1:42345/qa/writing-safety'
+    ? route.fulfill({ contentType: 'text/html', body: `<html lang="ja"><head><title>Steady Study Writing Safety QA</title><style>${stylesheet}</style></head><body><div id="root"></div></body></html>` })
+    : route.abort());
+  await page.goto('http://127.0.0.1:42345/qa/writing-safety');
   await page.evaluate((initial) => {
     (globalThis as any).__writingFixture = { ...initial, detailCalls: [], reviewCalls: [], uploadCalls: [], scanCalls: [] };
   }, settings);
   await page.addScriptTag({ content: bundle });
-  await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+  await expect(page).toHaveTitle('Steady Study Writing Safety QA');
+  expect(page.url()).toBe('http://127.0.0.1:42345/qa/writing-safety');
+  await expect(page.getByTestId(settings.student ? 'writing-student-section' : 'writing-ops-panel')).toBeVisible();
 };
 
 test('writing operations keep failed acquisition unknown and provide retry', async ({ page }) => {
@@ -125,7 +150,7 @@ test('scanner preserves pending input and reports a failed save inside the dialo
   await mount(page, { delayScan: true });
   await expect(page.getByTestId('writing-student-select')).toBeVisible();
   await page.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
-  await page.getByRole('button', { name: '校舎スキャナー提出', exact: true }).click();
+  await page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.locator('input[type="file"]').setInputFiles({ name: 'synthetic-A.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic') });
   await dialog.getByPlaceholder('OCR 補助のために本文を入力できます。').fill('合成の補助文A');
@@ -144,6 +169,7 @@ test('scanner preserves pending input and reports a failed save inside the dialo
   await expect.poll(() => page.evaluate(() => (globalThis as any).__writingFixture.scanCalls.length)).toBe(2);
   await page.evaluate(() => { (globalThis as any).__writingFixture.pendingScan.resolve(); });
   await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => (globalThis as any).__writingFixture.uploadCalls.length)).toBe(1);
   expect(await page.evaluate(() => (globalThis as any).__writingFixture.scanCalls.map((call: any) => call.manualTranscript))).toEqual(['合成の補助文A', '合成の補助文A']);
 });
 
@@ -182,6 +208,84 @@ test('revision-requested history waits for resubmission without offering complet
   await expect(detail.getByRole('button', { name: '完了にする', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => (globalThis as any).__writingFixture.reviewCalls)).toEqual([]);
 });
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  for (const legacySample of [false, true]) {
+    test(`sample writing cannot become a grade at ${viewport.width} legacy=${legacySample}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await mount(page, { sample: !legacySample, legacySample });
+      await page.getByRole('navigation', { name: '英作文の作業' }).getByRole('button', { name: '添削キュー', exact: true }).click();
+      const detail = page.getByTestId('writing-review-detail');
+      await expect(detail.getByTestId('writing-review-assessment-warning')).toContainText('実際の答案を評価していません');
+      await expect(detail.getByTestId('writing-approve-return')).toBeDisabled();
+      await expect(detail.getByTestId('writing-request-revision')).toBeDisabled();
+      await expect(detail).not.toContainText('12 / 20');
+      expect(await page.evaluate(() => (globalThis as any).__writingFixture.reviewCalls)).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(errors).toEqual([]);
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath('teacher-sample-warning.png'), fullPage: true });
+    });
+  }
+
+  test(`student sample feedback retains original and hides grades at ${viewport.width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await mount(page, { student: true, studentSample: true });
+    await page.getByTestId('writing-open-feedback-assignment-A').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByTestId('writing-feedback-assessment-warning')).toContainText('実際の答案を評価していません');
+    await expect(dialog.getByTestId('writing-feedback-assets')).toBeVisible();
+    await expect(dialog.getByTestId('writing-feedback-comment')).toContainText('原本を一緒に確認しましょう');
+    await expect(dialog.getByTestId('writing-feedback-approved-evaluation')).toHaveCount(0);
+    await expect(dialog.getByTestId('writing-print-feedback')).toHaveCount(0);
+    await expect(dialog).not.toContainText('確定スコア');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath('student-sample-warning.png'), fullPage: false });
+    await dialog.getByRole('button', { name: '添削フィードバックを閉じる', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test(`student AI failure keeps draft and retries one upload at ${viewport.width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const errors: string[] = [];
+    const consoleErrors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
+    await mount(page, { student: true, delayScan: true });
+    await page.getByTestId('writing-open-submit-assignment-A').click();
+    const dialog = page.getByRole('dialog');
+    if (viewport.width < 640) await dialog.getByRole('button', { name: 'ファイル選択へ進む', exact: true }).click();
+    await dialog.locator('input[type="file"]').setInputFiles({ name: 'synthetic-student.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic') });
+    if (viewport.width < 640) await dialog.getByRole('button', { name: '最終送信へ進む', exact: true }).click();
+    await dialog.getByLabel('答案本文（任意）').fill('I keep my original draft.');
+    await dialog.getByTestId('writing-submit-upload').click();
+    await expect.poll(() => page.evaluate(() => Boolean((globalThis as any).__writingFixture.pendingScan))).toBe(true);
+    await expect(dialog.getByLabel('答案本文（任意）')).toHaveAttribute('readonly');
+    await page.evaluate(() => { (globalThis as any).__writingFixture.pendingScan.reject(new Error('合成AI利用不可。提出は未確定です。')); });
+    await expect(dialog.getByTestId('writing-submit-error')).toContainText('手動確認');
+    await expect(dialog.getByTestId('writing-submit-error')).toBeFocused();
+    await expect(dialog.getByLabel('答案本文（任意）')).toHaveValue('I keep my original draft.');
+    await expect(dialog.getByTestId('writing-submit-upload')).toHaveText('処理を再試行する');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath('student-ai-failure.png'), fullPage: false });
+    await dialog.getByTestId('writing-submit-upload').click();
+    await expect.poll(() => page.evaluate(() => (globalThis as any).__writingFixture.scanCalls.length)).toBe(2);
+    expect(await page.evaluate(() => (globalThis as any).__writingFixture.uploadCalls.length)).toBe(1);
+    expect(await page.evaluate(() => (globalThis as any).__writingFixture.scanCalls[0])).toEqual(await page.evaluate(() => (globalThis as any).__writingFixture.scanCalls[1]));
+    await page.evaluate(() => { (globalThis as any).__writingFixture.pendingScan.resolve(); });
+    await expect(dialog).toHaveCount(0);
+    expect(errors).toEqual([]);
+    expect(consoleErrors).toHaveLength(1);
+    expect(consoleErrors[0]).toContain('合成AI利用不可');
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await writeFile(testInfo.outputPath('safety-health.json'), JSON.stringify({ pageErrors: errors, expectedInjectedErrors: consoleErrors, uploads: 1, finalizationAttempts: 2, viewport }, null, 2));
+  });
+}
 
 for (const viewport of [
   { width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 },
@@ -231,7 +335,7 @@ for (const viewport of [
     await expect(printTab).toBeFocused();
     await page.keyboard.press('Space');
     await expect(printTab).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: '校舎スキャナー提出', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true })).toBeVisible();
     await page.keyboard.press('Shift+Tab');
     await expect(createTab).toBeFocused();
     await page.keyboard.press('Enter');

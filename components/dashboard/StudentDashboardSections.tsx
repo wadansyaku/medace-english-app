@@ -140,7 +140,6 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
         learningPreference={viewModel.learningPreference}
         preferenceSummary={viewModel.preferenceSummary}
         plannedBooks={viewModel.plannedBooks}
-        canGenerateAiPlan={viewModel.canGenerateAiPlan}
         generatingPlan={controller.generatingPlan}
         hasStudyBooks={viewModel.hasStudyBooks}
         isCompact={isStudentMobileShell}

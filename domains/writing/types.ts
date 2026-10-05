@@ -78,6 +78,7 @@ export interface WritingPromptTemplate {
 }
 
 export interface WritingPromptSnapshot {
+  generationProvenance?: WritingAiExecutionProvenance;
   templateId?: string;
   examCategory: WritingExamCategory;
   templateType: string;
@@ -167,6 +168,7 @@ export interface WritingSubmission {
 }
 
 export interface WritingAssignment {
+  promptProvenance?: WritingAiExecutionProvenance;
   id: string;
   organizationId: string;
   organizationName: string;
@@ -198,6 +200,7 @@ export interface WritingAssignment {
 }
 
 export interface WritingQueueItem {
+  assessmentStatus?: 'sample' | 'unverified';
   assignmentId: string;
   submissionId: string;
   studentUid: string;

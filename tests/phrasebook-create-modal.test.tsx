@@ -48,7 +48,7 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 const fixture = (overrides: Partial<Props> = {}) => {
-  const state = { open: true, newBookTitle: '教材A', rawText: 'A synthetic source.', createMode: 'TEXT' as Props['createMode'], creating: false };
+  const state = { open: true, newBookTitle: '教材A', rawText: 'Word,Meaning\nsource,出典', createMode: 'TEXT' as Props['createMode'], creating: false };
   const handlers = {
     onClose: vi.fn(() => { state.open = false; }),
     onChangeTitle: vi.fn((value: string) => { state.newBookTitle = value; }),
@@ -111,7 +111,7 @@ describe('My phrasebook creation keeps one pending input intact', () => {
     byId(pending, 'phrasebook-create-source-text').props.onChange({ target: { value: 'B source.' } });
     pending.props.onClose();
     expect(f.state.newBookTitle).toBe('教材A');
-    expect(f.state.rawText).toBe('A synthetic source.');
+    expect(f.state.rawText).toBe('Word,Meaning\nsource,出典');
     expect(f.state.open).toBe(true);
     save.resolve();
     await first;
@@ -130,7 +130,7 @@ describe('My phrasebook creation keeps one pending input intact', () => {
     const failed = f.render();
     expect(f.state.open).toBe(true);
     expect(f.state.newBookTitle).toBe('教材A');
-    expect(f.state.rawText).toBe('A synthetic source.');
+    expect(f.state.rawText).toBe('Word,Meaning\nsource,出典');
     expect(byId(failed, 'phrasebook-create-source-text').props.readOnly).toBe(false);
     expect(find(failed, (node) => node.props.role === 'alert').props.children).toContainEqual(expect.objectContaining({ props: expect.objectContaining({ children: '保存を確認できませんでした' }) }));
     byId(failed, 'phrasebook-create-book-title').props.onChange({ target: { value: '教材B' } });
@@ -161,7 +161,7 @@ describe('My phrasebook creation keeps one pending input intact', () => {
 
   it('provides a focusable native button for file selection and locks late file events', async () => {
     const save = deferred();
-    const f = fixture({ createMode: 'FILE', uploadFile: new File(['synthetic'], 'sample.pdf', { type: 'application/pdf' }) });
+    const f = fixture({ createMode: 'FILE', uploadFile: new File(['synthetic'], 'sample.csv', { type: 'text/csv' }) });
     f.handlers.onCreate.mockReturnValue(save.promise);
     const tree = f.render();
     const input = byId(tree, 'phrasebook-create-file-upload');
@@ -175,7 +175,7 @@ describe('My phrasebook creation keeps one pending input intact', () => {
     expect(click).toHaveBeenCalledTimes(1);
     const first = submit(tree).props.onClick();
     picker.props.onClick();
-    input.props.onChange({ target: { files: [new File(['B'], 'new.pdf')] } });
+    input.props.onChange({ target: { files: [new File(['B'], 'new.csv')] } });
     expect(click).toHaveBeenCalledTimes(1);
     expect(f.handlers.onFileChange).not.toHaveBeenCalled();
     const pending = f.render();
@@ -188,6 +188,20 @@ describe('My phrasebook creation keeps one pending input intact', () => {
     const f = fixture({ newBookTitle: ' ' });
     await submit(f.render()).props.onClick();
     expect(f.handlers.onCreate).not.toHaveBeenCalled();
+  });
+
+  it('accepts CSV only and explains stopped OCR without calling creation or clearing the selected input', async () => {
+    const uploadFile = new File(['synthetic'], 'source.pdf', { type: 'application/pdf' });
+    const f = fixture({ createMode: 'FILE', uploadFile });
+    const tree = f.render();
+    expect(byId(tree, 'phrasebook-create-file-upload').props.accept).toBe('.csv,text/csv');
+    expect(submit(tree).props.disabled).toBe(true);
+    await submit(tree).props.onClick();
+    expect(f.handlers.onCreate).not.toHaveBeenCalled();
+    expect(f.handlers.onChangeTitle).not.toHaveBeenCalled();
+    expect(f.handlers.onChangeRawText).not.toHaveBeenCalled();
+    expect(find(tree, node => node.props['data-testid'] === 'phrasebook-create-validation-message').props.children).toContain('自動抽出は現在利用できません');
+    expect(find(tree, node => node.type === 'span' && node.props.children === uploadFile.name)).toBeTruthy();
   });
 
   it('guards the parent modal close callback while its controller is creating', () => {

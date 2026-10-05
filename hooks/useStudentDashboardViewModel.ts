@@ -244,7 +244,7 @@ export const useStudentDashboardViewModel = ({
   const currentPlan = accountOverview?.subscriptionPlan || user.subscriptionPlan || SubscriptionPlan.TOC_FREE;
   const currentPlanPolicy = getSubscriptionPolicy(currentPlan);
   const showAdSlots = isAdSupportedPlan(currentPlan);
-  const canGenerateAiPlan = currentPlanPolicy.allowedAiActions.includes('generateLearningPlan');
+  // Preserve existing plan visibility; prepared imports do not authorize live AI.
   const canCreateFromText = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromText');
   const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
   const canCreateBook = canCreateFromText || canCreateFromFile;
@@ -301,7 +301,7 @@ export const useStudentDashboardViewModel = ({
         ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
         : '配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。'
       : canCreateBook
-        ? '教科書・PDF・本文から作成。1ページ分で始められます。'
+        ? '校正した単語・語義を手入力するか、CSVから作成できます。'
         : '利用できる単語帳はまだありません。文法のお試し問題から始められます。'
     : remainingWords > 0
       ? dueCount > 0
@@ -321,12 +321,10 @@ export const useStudentDashboardViewModel = ({
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
     : 0;
 
-  const aiUsageLabel = aiBudgetPercent >= 85 ? '控えめに利用中' : aiBudgetPercent >= 55 ? '通常利用中' : 'ゆとりあり';
-  const aiUsageCopy = aiBudgetPercent >= 85
-    ? '今月は教材作成と添削を軽めにします。'
-    : aiBudgetPercent >= 55
-      ? '教材作成と添削は通常どおり使えます。'
-      : '教材作成や添削にまだ余裕があります。';
+  const aiUsageLabel = accountOverview ? '従来AIの参考記録' : '利用記録は未取得';
+  const aiUsageCopy = accountOverview
+    ? '過去の円建て利用記録です。現在の機能の利用可否やGPT利用額を示すものではありません。'
+    : '利用記録を取得できていません。標準学習プランと手入力・CSVのMy単語帳はAIを使いません。';
 
   const preferenceSummaryParts = [
     learningPreference?.targetExam ? `目標: ${learningPreference.targetExam}` : null,
@@ -811,7 +809,6 @@ export const useStudentDashboardViewModel = ({
     todayProgressPercent,
     currentPlanPolicy,
     showAdSlots,
-    canGenerateAiPlan,
     canCreateFromText,
     canCreateFromFile,
     plannedBooks,

@@ -7,7 +7,6 @@ interface DashboardPlanSectionProps {
   learningPreference: LearningPreference | null;
   preferenceSummary: string;
   plannedBooks: BookMetadata[];
-  canGenerateAiPlan: boolean;
   generatingPlan: boolean;
   hasStudyBooks: boolean;
   isCompact?: boolean;
@@ -20,7 +19,6 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
   learningPreference,
   preferenceSummary,
   plannedBooks,
-  canGenerateAiPlan,
   generatingPlan,
   hasStudyBooks,
   isCompact = false,
@@ -81,7 +79,7 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
       <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
         <div className="text-sm font-black text-slate-950">まず教材を1冊</div>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          写真・PDF・テキストからMy単語帳を作れます。
+          内容を確認した単語・語義を手入力するか、CSVからMy単語帳を作れます。
         </p>
         <div className={`rounded-lg border border-white/80 bg-white/80 px-4 py-2.5 text-[13px] leading-relaxed text-slate-600 ${isCompact ? 'mt-3' : 'mt-4'}`}>
           教材を作ると、ここに1日の量と使う教材が表示されます。
@@ -92,11 +90,9 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <p className="text-sm leading-relaxed">
           目標日と学習時間から、今日やる量を決めます。
         </p>
-        {!canGenerateAiPlan && (
-          <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            教材と学習時間から標準プランを作ります。
-          </p>
-        )}
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          教材と学習時間から、AIを使わない標準プランを作ります。
+        </p>
         <button
           onClick={onGeneratePlan}
           disabled={generatingPlan || !hasStudyBooks}

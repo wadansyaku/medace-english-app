@@ -68,6 +68,8 @@ export interface AppEnv {
   CLOUDFLARE_AI_GATEWAY_ID?: string;
   AI_TRANSLATION_FEEDBACK_MODEL?: string;
   OPENAI_API_KEY?: string;
+  OPENAI_WRITING_ENABLED?: string;
+  OPENAI_WRITING_DATA_POLICY?: string;
   OPENAI_OCR_MODEL?: string;
   OPENAI_EVAL_MODEL?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { StudentRiskLevel, UserRole, type StudentSummary, type UserProfile } from '../types';
+import { InterventionKind, StudentRiskLevel, UserRole, type StudentSummary, type UserProfile } from '../types';
 
 const harness = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0 }));
 vi.mock('react', () => ({
@@ -105,66 +105,45 @@ describe('instructor workspace operations', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('ignores an AI draft returned after another student was opened', async () => {
-    const pending = deferred<{ message: string }>();
-    service.draft.mockReturnValue(pending.promise);
+  it('builds and resets a template locally without requesting AI or saving a notification', async () => {
     render().openComposer(students[0]);
-    const controller = render();
-    const draftRequest = controller.handleGenerateDraft();
-    controller.closeComposer();
-    render().openComposer(students[1]);
-    const currentDraft = render().messageDraft;
-    pending.resolve({ message: '旧生徒の遅延下書き' });
-    await draftRequest;
-    expect(render().selectedStudent?.uid).toBe('demo-other');
-    expect(render().messageDraft).toBe(currentDraft);
+    expect(render().messageDraft).toContain('プランを作り');
+    render().setInterventionKind(InterventionKind.REVIEW_RESTART);
+    render().setCustomInstruction('次の模試までに復習を再開してみましょう。');
+    await render().handleGenerateDraft();
+    expect(render().messageDraft).toContain('10語だけ復習');
+    expect(render().messageDraft).toContain('\n次の模試までに復習を再開してみましょう。');
     expect(render().usedAi).toBe(false);
+    expect(render().drafting).toBe(false);
+    expect(service.draft).not.toHaveBeenCalled();
+    expect(service.send).not.toHaveBeenCalled();
   });
 
-  it('preserves manual edits made while AI is pending and can save them immediately', async () => {
-    const pending = deferred<{ message: string }>();
-    service.draft.mockReturnValue(pending.promise);
+  it('retains manual edits and only uses the new intervention template after an explicit reset', async () => {
     render().openComposer(students[0]);
-    const draftRequest = render().handleGenerateDraft();
-    expect(render().drafting).toBe(true);
-
     const edited = '講師が手入力した通知文を、このまま保存します。';
     render().setMessageDraft(edited);
+    render().setInterventionKind(InterventionKind.PRAISE);
     expect(render().messageDraft).toBe(edited);
-    expect(render().drafting).toBe(false);
-
-    pending.resolve({ message: '遅れて到着したAIの通知文' });
-    await draftRequest;
-    expect(render().messageDraft).toBe(edited);
-    expect(render().usedAi).toBe(false);
-
     await render().handleSendNotification();
     expect(service.send).toHaveBeenCalledWith(
-      students[0].uid,
-      edited,
-      expect.any(String),
-      false,
-      expect.any(String),
-      expect.any(String),
+      students[0].uid, edited, expect.any(String), false,
+      InterventionKind.PRAISE, expect.any(String),
     );
+    expect(service.draft).not.toHaveBeenCalled();
   });
 
-  it('does not let an invalidated AI result clear a newer generation state', async () => {
-    const old = deferred<{ message: string }>();
-    const current = deferred<{ message: string }>();
-    service.draft.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+  it('uses the currently selected student and includes the supplemental sentence literally', async () => {
     render().openComposer(students[0]);
-    const oldRequest = render().handleGenerateDraft();
-    render().setMessageDraft('手編集');
-    const currentRequest = render().handleGenerateDraft();
-    old.resolve({ message: '古いAI結果' });
-    await oldRequest;
-    expect(render().messageDraft).toBe('手編集');
-    expect(render().drafting).toBe(true);
-    current.resolve({ message: '明示的に再生成した新しいAI結果' });
-    await currentRequest;
-    expect(render().messageDraft).toBe('明示的に再生成した新しいAI結果');
-    expect(render().drafting).toBe(false);
+    render().closeComposer();
+    render().openComposer(students[1]);
+    render().setCustomInstruction('この文はそのまま追加してください。');
+    await render().handleGenerateDraft();
+    expect(render().messageDraft).toContain(students[1].name);
+    expect(render().messageDraft).not.toContain(students[0].name);
+    expect(render().messageDraft.endsWith('\nこの文はそのまま追加してください。')).toBe(true);
+    expect(service.draft).not.toHaveBeenCalled();
+    expect(service.send).not.toHaveBeenCalled();
   });
 
   it('preserves an unsaved draft and reports failure with an error tone', async () => {

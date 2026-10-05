@@ -149,14 +149,14 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
               </select>
             </div>
             <div>
-              <label className="mb-2 block text-xs font-bold uppercase text-slate-500">下書きへの補足</label>
+              <label className="mb-2 block text-xs font-bold uppercase text-slate-500">通知文に追加する一文</label>
               <input
                 type="text"
                 value={controller.customInstruction}
                 disabled={controller.sending}
                 onChange={(event) => controller.setCustomInstruction(event.target.value)}
                 className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
-                placeholder="例: 次の模試までに復習を再開してほしい"
+                placeholder="例: 次の模試までに復習を再開してみましょう。"
               />
             </div>
           </div>
@@ -167,8 +167,11 @@ const InstructorDashboardModals: React.FC<InstructorDashboardModalsProps> = ({
             className="inline-flex items-center justify-center gap-2 rounded-2xl border border-medace-200 bg-white px-4 py-3 text-sm font-bold text-medace-700 transition-colors hover:bg-medace-50 disabled:opacity-60"
           >
             {controller.drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            下書きを作る
+            テンプレートを入れ直す
           </button>
+          <p className="text-xs leading-relaxed text-slate-500">
+            テンプレートはAIを使いません。追加する一文はそのまま通知文に入り、入れ直すと編集中の文を置き換えます。内容を確認・編集してから保存してください。
+          </p>
         </div>
 
         <div className="mt-5">

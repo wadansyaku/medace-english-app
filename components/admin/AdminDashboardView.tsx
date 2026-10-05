@@ -304,7 +304,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               icon={<Database className="h-5 w-5" />}
             />
             <MetricCard
-              label="今月のAI利用"
+              label="従来AIの参考額"
               value={formatCost(overview?.aiCostThisMonthMilliYen || 0)}
               detail={`${overview?.aiRequestsThisMonth || 0} リクエスト / 通知 ${overview?.notifications7d || 0} 件`}
               icon={<Bot className="h-5 w-5" />}
@@ -894,8 +894,9 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               <div className="flex items-center gap-3">
                 <Bot className="h-5 w-5 text-medace-600" />
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">AI利用</p>
-                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">今月のAI利用内訳</h3>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">従来AIの参考額</p>
+                  <h3 className="mt-1 text-xl font-black tracking-tight text-slate-950">従来AIの利用記録</h3>
+                  <p className="mt-2 text-sm text-slate-600">GPTのresponse usageに基づくUSD概算と未確認の費用予約は「GPT利用額」で確認できます。請求書の確定額ではありません。</p>
                 </div>
               </div>
               <div className="mt-5 space-y-3">

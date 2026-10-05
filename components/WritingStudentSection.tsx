@@ -30,8 +30,8 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
     : controller.submitReadyCount > 0
     ? {
       icon: <Send className="h-4 w-4" />,
-      label: '提出できます',
-      body: `${controller.submitReadyCount}件の課題を提出できます。紙答案を撮影して進めます。`,
+      label: '下書きを保存できます',
+      body: `${controller.submitReadyCount}件の課題で本文・画像・PDFを未評価の下書きとして保存できます。`,
       className: 'border-medace-200 bg-medace-50 text-medace-800',
     }
     : controller.feedbackReadyCount > 0
@@ -62,7 +62,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
           <p className="text-xs font-bold text-slate-400">英作文課題</p>
           <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">自由英作文</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500">
-            紙で書いた答案をスマホで提出し、講師確認後の添削結果をアプリ内で確認できます。
+            答案は未評価の下書きとして保存できます。既存の返却内容は引き続き確認できます。
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -100,7 +100,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">提出</div>
           <div className="mt-2 text-lg font-black text-slate-950">{hasAssignmentsData ? controller.submitReadyCount : unknownCount}</div>
-          <div className="mt-1 text-xs text-slate-500">今すぐ送信可能</div>
+          <div className="mt-1 text-xs text-slate-500">下書き入力に進めます</div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">返却</div>
@@ -166,6 +166,15 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
           manualTranscript={controller.manualTranscript}
           mobileSubmitStep={controller.mobileSubmitStep}
           submitting={controller.submitting}
+          submissionError={controller.submissionError}
+          capabilities={controller.capabilities}
+          savedInputDraft={controller.savedInputDraft}
+          draftLoading={controller.draftLoading}
+          draftLoaded={controller.draftLoaded}
+          draftLoadError={controller.draftLoadError}
+          draftSavedMessage={controller.draftSavedMessage}
+          onRetryDraftLoad={controller.retryDraftLoad}
+          onRemoveSavedAsset={controller.removeSavedAsset}
           onClose={controller.resetSubmitDialog}
           onChangeFiles={controller.setFiles}
           onChangeManualTranscript={controller.setManualTranscript}

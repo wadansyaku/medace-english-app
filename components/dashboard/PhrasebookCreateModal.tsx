@@ -1,5 +1,7 @@
 import React from 'react';
-import { BookOpen, FileText, Image as ImageIcon, Loader2, Sparkles, UploadCloud, X } from 'lucide-react';
+import { BookOpen, FileText, Loader2, UploadCloud, X } from 'lucide-react';
+
+import { isPreparedCatalogCsvFile, PERSONAL_CATALOG_OCR_UNAVAILABLE } from '../../shared/preparedPersonalCatalog';
 
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
@@ -40,15 +42,20 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
   onCreate,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const errorRef = React.useRef<HTMLDivElement | null>(null);
   const submittingRef = React.useRef(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [submissionError, setSubmissionError] = React.useState<string | null>(null);
+  const visibleError = errorMsg || submissionError;
   const pending = creating || submitting;
   const isPending = () => creating || submittingRef.current;
 
   React.useEffect(() => {
     if (!open) setSubmissionError(null);
   }, [open]);
+  React.useEffect(() => {
+    if (open && visibleError) errorRef.current?.focus();
+  }, [open, visibleError]);
 
   if (!open) return null;
 
@@ -58,8 +65,10 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
     ? 'タイトルを入力してください。'
     : !hasSource
       ? createMode === 'TEXT'
-        ? '教材にしたい英文を入力してください。'
-        : '教材にしたい PDF または画像を選択してください。'
+        ? '単語・語義をCSV形式で入力してください。'
+        : '内容を確認したCSVを選択してください。'
+      : createMode === 'FILE' && uploadFile && !isPreparedCatalogCsvFile(uploadFile)
+        ? PERSONAL_CATALOG_OCR_UNAVAILABLE
       : !canUseSelectedCreateMode
         ? `${currentPlanLabel} ではこの作成方法を使えません。`
         : null;
@@ -86,7 +95,6 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
       setSubmitting(false);
     }
   };
-  const visibleError = errorMsg || submissionError;
 
 	  return (
     <MobileSheetDialog
@@ -103,16 +111,16 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
         </button>
         <div className="pr-12 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-medace-100 text-medace-600">
-            <Sparkles className="w-6 h-6" />
+            <BookOpen className="w-6 h-6" />
           </div>
           <h3 id="phrasebook-create-title" className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
-          <p className="text-sm text-slate-500">英文や資料から、練習に使える単語帳を作成します。</p>
+          <p className="text-sm text-slate-500">内容を確認した単語・語義・例文から作成します。</p>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         {visibleError && (
-          <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
+          <div ref={errorRef} tabIndex={-1} role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
             <span className="mt-0.5">⚠️</span>
             <span>{visibleError}</span>
           </div>
@@ -125,7 +133,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
 	            id={titleInputId}
 	            type="text"
 	            className="w-full rounded-lg border border-slate-300 px-3 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
-            placeholder="例: 好きな洋楽の歌詞"
+            placeholder="例: 今週覚えたい単語"
             value={newBookTitle}
             readOnly={pending}
             onChange={(event) => { if (!isPending()) onChangeTitle(event.target.value); }}
@@ -140,7 +148,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
             className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'TEXT' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <div className="flex items-center justify-center gap-2">
-              <FileText className="w-4 h-4" /> テキスト入力
+              <FileText className="w-4 h-4" /> 手入力
             </div>
           </button>
           <button
@@ -150,18 +158,18 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
             className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'FILE' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
             <div className="flex items-center justify-center gap-2">
-              <ImageIcon className="w-4 h-4" /> 画像/PDF
+              <FileText className="w-4 h-4" /> CSV取込
             </div>
           </button>
         </div>
 
 	        {createMode === 'TEXT' ? (
 	          <div>
-	            <label htmlFor={sourceTextInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">ソーステキスト</label>
+	            <label htmlFor={sourceTextInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">単語・語義（CSV形式）</label>
 	            <textarea
 	              id={sourceTextInputId}
 	              className="h-40 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
-              placeholder="ここに英文を貼り付けてください..."
+              placeholder={'Word,Meaning,ExampleSentence,ExampleMeaning\nsource,出典,Please check the source.,出典を確認してください。'}
               value={rawText}
               readOnly={pending}
               onChange={(event) => { if (!isPending()) onChangeRawText(event.target.value); }}
@@ -171,26 +179,27 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
 	          <div>
 	            <label htmlFor={fileInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">ファイルをアップロード</label>
 	            <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition-colors hover:border-medace-500">
-	              <input ref={fileInputRef} type="file" id={fileInputId} accept=".pdf,image/*" className="hidden" disabled={pending} onChange={(event) => { if (!isPending()) onFileChange(event); }} />
+	              <input ref={fileInputRef} type="file" id={fileInputId} accept=".csv,text/csv" className="hidden" disabled={pending} onChange={(event) => { if (!isPending()) onFileChange(event); }} />
 	              <button type="button" data-testid="phrasebook-create-file-picker" disabled={pending} onClick={() => { if (!isPending()) fileInputRef.current?.click(); }} className="flex min-h-11 w-full cursor-pointer flex-col items-center gap-2 rounded-lg disabled:cursor-not-allowed disabled:opacity-60">
                 <UploadCloud className="w-8 h-8 text-slate-400" />
                 <span className="text-sm font-bold text-slate-600">
-                  {uploadFile ? uploadFile.name : 'PDFまたは写真を選択'}
+                  {uploadFile ? uploadFile.name : '校正したCSVを選択'}
                 </span>
               </button>
             </div>
           </div>
         )}
 
+        <p className="text-xs leading-relaxed text-slate-600">先頭行は Word,Meaning。例文と和訳は ExampleSentence,ExampleMeaning 列を追加できます。1回500語まで。外部AIへ送信せず、入力した内容をそのまま保存します。</p>
+        <p className="text-xs leading-relaxed text-slate-600">画像・PDFの自動抽出は現在停止しています。原本の内容と利用権利を確認してから入力してください。</p>
+
         {!canUseSelectedCreateMode && (
           <div data-testid="phrasebook-create-plan-warning" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
-            {createMode === 'TEXT'
-              ? `${currentPlanLabel} ではテキストからの教材化は使えません。`
-              : `${currentPlanLabel} では画像/PDFからの教材化は使えません。`}
+            {`${currentPlanLabel} ではこの単語帳の作成は使えません。`}
           </div>
         )}
         {pending && (
-          <p role="status" className="text-sm leading-relaxed text-slate-600">教材化しています。完了するまでこの内容を保持します。</p>
+          <p role="status" className="text-sm leading-relaxed text-slate-600">保存しています。完了するまでこの内容を保持します。</p>
         )}
         {createDisabledReason && canUseSelectedCreateMode && !pending && (
           <div data-testid="phrasebook-create-validation-message" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-bold text-amber-800">
@@ -217,8 +226,8 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
             disabled={createDisabled}
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-            {pending ? '教材化しています...' : '作成する'}
+            {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <BookOpen className="h-5 w-5" />}
+            {pending ? '保存しています...' : '作成する'}
           </button>
         </div>
       </MobileStickyActionBar>

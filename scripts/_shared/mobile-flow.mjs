@@ -61,7 +61,7 @@ export const MOBILE_FLOW_BUTTON_LABELS = {
 };
 
 export const MOBILE_FLOW_WRITING = {
-  transcriptPlaceholder: 'OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。',
+  transcriptPlaceholder: '必要に応じて、答案に書いた英文をそのまま入力してください。',
   feedbackSectionOrder: [
     'writing-feedback-comment',
     'writing-feedback-improvements',

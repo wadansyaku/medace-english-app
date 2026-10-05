@@ -19,6 +19,7 @@ import {
   createSubmissionCode,
   encodeSubmissionMarker,
 } from '../../../utils/writing';
+import { classifyWritingEvaluation, classifyWritingTranscript } from '../../../shared/writingAiSafety';
 import {
   WRITING_UPLOAD_MAX_BYTES,
   WRITING_UPLOAD_MAX_IMAGE_FILES,
@@ -74,6 +75,7 @@ import {
   enqueueWritingActivitySideEffect,
   runSideEffectJobById,
   type SideEffectJobRunResult,
+  type WritingActivitySideEffectPayload,
 } from '../side-effect-jobs';
 import { recordProductEventForUser } from '../product-events';
 
@@ -140,12 +142,7 @@ const readWritingUploadBody = async (request: Request, maxBytes: number): Promis
 
 const flushWritingActivitySideEffect = async (
   env: AppEnv,
-  payload: {
-    studentUid: string;
-    writingAssignmentId: string;
-    organizationId?: string | null;
-    activityAt: number;
-  },
+  payload: WritingActivitySideEffectPayload,
 ): Promise<WritingSideEffectJobResult | undefined> => {
   const job = await enqueueWritingActivitySideEffect(env, payload);
   const result = await runSideEffectJobById(env, job.id);
@@ -297,6 +294,7 @@ export const handleGenerateWritingAssignment = async (
     wordCountMax: Number(template.default_word_count_max || 0),
     submissionCode,
     markerValue: encodeSubmissionMarker(assignmentId, submissionCode, 1),
+    generationProvenance: generated.provenance,
   };
   const now = Date.now();
 
@@ -404,7 +402,7 @@ export const handleCreateWritingUploadUrl = async (
 
   const now = Date.now();
   const existingAssets = await readSubmissionAssetRowsForAttempt(env, request.assignmentId, attemptNo);
-  const activeAssets = existingAssets.filter((row) => isUploadReservationActive(row, now));
+  const activeAssets = existingAssets.filter((row) => row.draft_retired_at == null && isUploadReservationActive(row, now));
   const mimeType = resolveWritingUploadMimeType({
     name: request.fileName,
     type: String(request.mimeType || ''),
@@ -444,6 +442,7 @@ export const handleCreateWritingUploadUrl = async (
       FROM writing_submission_assets
       WHERE assignment_id = ?
         AND attempt_no = ?
+        AND draft_retired_at IS NULL
         AND (uploaded_at IS NOT NULL OR COALESCE(upload_expires_at, 0) > ?)
     ) AS active
     WHERE active.active_bytes + ? <= ?
@@ -509,7 +508,7 @@ export const handleWritingAssetUpload = async (
   if (Number(assetRow.upload_expires_at || 0) <= now) {
     throw new HttpError(410, 'アップロードURLの有効期限が切れています。再度アップロードURLを取得してください。');
   }
-  if (assetRow.upload_consumed_at || assetRow.uploaded_at) {
+  if (assetRow.upload_consumed_at && !assetRow.uploaded_at) {
     throw new HttpError(409, 'このアップロードURLはすでに使用済みです。');
   }
   if (!env.WRITING_ASSETS) {
@@ -524,6 +523,16 @@ export const handleWritingAssetUpload = async (
   const contentLength = parseWritingUploadContentLength(request);
   if (contentLength !== null && expectedByteSize > 0 && contentLength !== expectedByteSize) {
     throw new HttpError(400, '予約時と異なるファイルサイズではアップロードできません。');
+  }
+
+  // A lost successful PUT response can be confirmed with the same URL/body.
+  // This path never writes R2 or D1 and cannot replace an existing original.
+  if (assetRow.uploaded_at) {
+    if (!assetRow.uploaded_sha256_base64) throw new HttpError(409, 'このアップロードURLはすでに使用済みです。');
+    const body = await readWritingUploadBody(request, expectedByteSize > 0 ? Math.min(expectedByteSize, WRITING_UPLOAD_MAX_BYTES) : WRITING_UPLOAD_MAX_BYTES);
+    const checksum = encodeBase64(await crypto.subtle.digest('SHA-256', body));
+    if (body.byteLength !== assetRow.byte_size || checksum !== assetRow.uploaded_sha256_base64) throw new HttpError(400, '保存済み原本と異なる内容では再送できません。');
+    return noContent();
   }
 
   const reservationResult = await env.DB.prepare(`
@@ -645,24 +654,27 @@ export const handleFinalizeWritingSubmission = async (
 
   const assignment = toAssignment(assignmentRow);
   const aiMode = resolveWritingAiMode(env);
-  const ocrAssets = aiMode === 'fixture'
+  const ocrAssets = aiMode === 'fixture' || Boolean(request.manualTranscript?.trim())
     ? []
-    : await readAiAssetsForOcr(env, assetRows).catch((error) => {
-        if (aiMode === 'live') throw error;
-        console.warn('Falling back to fixture OCR because asset loading failed.', error);
-        return [];
-      });
+    : await readAiAssetsForOcr(env, assetRows);
   const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript, logContext);
+  if (classifyWritingTranscript(ocrResult.provenance) !== 'real') {
+    throw new HttpError(503, '答案の読み取りを確認できませんでした。サンプル本文を実際の答案として保存しません。提出は未確定です。再試行するか、原本の手動確認を講師に依頼してください。');
+  }
   const now = Date.now();
   const submissionId = crypto.randomUUID();
   const assignmentWithSubmission = await readAssignmentResponse(env, request.assignmentId);
-  const evaluations = await runWritingEvaluations(
+  const generatedEvaluations = await runWritingEvaluations(
     env,
     user,
     assignmentWithSubmission,
     ocrResult.transcript,
     logContext,
   );
+  const evaluations = generatedEvaluations.filter((evaluation) => classifyWritingEvaluation(evaluation, ocrResult.provenance) === 'real');
+  if (evaluations.length === 0) {
+    throw new HttpError(503, '実際の答案のAI評価を確認できませんでした。サンプル評価で提出完了にしません。提出は未確定です。再試行するか、原本の手動確認を講師に依頼してください。');
+  }
   const selectedEvaluation = evaluations.find((evaluation) => evaluation.isDefault) || evaluations[0];
 
   await commitFinalizedSubmission(env, {
@@ -697,6 +709,7 @@ export const handleFinalizeWritingSubmission = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: assignmentRow.student_user_id,
     writingAssignmentId: request.assignmentId,
+    writingSubmissionId: submissionId,
     organizationId: assignmentRow.organization_id,
     activityAt: now,
   });
@@ -748,6 +761,7 @@ const reconcileTeacherReviewSideEffects = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: detail.assignment.studentUid,
     writingAssignmentId: detail.assignment.id,
+    writingSubmissionId: detail.submission.id,
     organizationId: detail.assignment.organizationId,
     activityAt: review.releasedAt ?? review.updatedAt,
   });
@@ -765,6 +779,13 @@ const applyTeacherReview = async (
   guardTeacher(user);
   const detail = existingDetail || (await readSubmissionContext(env, submissionId)).detail;
   await ensureAssignmentAccess(env, user, detail.assignment);
+  const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === payload.selectedEvaluationId);
+  if (!selectedEvaluation) {
+    throw new HttpError(400, '選択したAI評価が見つかりません。');
+  }
+  if (classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta) !== 'real') {
+    throw new HttpError(409, 'サンプルまたは処理元未確認の評価は成績・返却として確定できません。実際の答案を講師が手動確認してください。');
+  }
 
   const latestSubmission = await readLatestSubmissionRowForAssignment(env, detail.assignment.id);
   if (
@@ -791,11 +812,6 @@ const applyTeacherReview = async (
   if (detail.assignment.status !== AssignmentStatus.REVIEW_READY) {
     if (isExactRetry) return reconcileTeacherReviewSideEffects(env, detail);
     throw new HttpError(409, '現在の状態では提出を返却できません。');
-  }
-
-  const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === payload.selectedEvaluationId);
-  if (!selectedEvaluation) {
-    throw new HttpError(400, '選択したAI評価が見つかりません。');
   }
 
   const now = Date.now();
@@ -846,10 +862,24 @@ export const handleCompleteWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  let completedSubmissionId: string | null = null;
+  if (row.status === AssignmentStatus.RETURNED || row.status === AssignmentStatus.COMPLETED) {
+    const latestSubmission = await readLatestSubmissionRowForAssignment(env, assignmentId);
+    if (!latestSubmission) {
+      throw new HttpError(409, '返却済みの答案を確認できませんでした。講師の手動確認をお待ちください。');
+    }
+    completedSubmissionId = latestSubmission.id;
+    const detail = (await readSubmissionContext(env, latestSubmission.id)).detail;
+    const selectedId = detail.submission.teacherReview?.selectedEvaluationId || detail.submission.selectedEvaluationId;
+    const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === selectedId);
+    if (!selectedEvaluation || classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta) !== 'real') {
+      throw new HttpError(409, 'サンプルまたは処理元未確認の評価は課題完了として確定できません。実際の答案を講師が手動確認してください。');
+    }
+  }
   if (row.status === AssignmentStatus.COMPLETED) {
     return readAssignmentResponse(env, assignmentId);
   }
-  if (row.status !== AssignmentStatus.RETURNED) {
+  if (row.status !== AssignmentStatus.RETURNED || !completedSubmissionId) {
     throw new HttpError(409, '現在の状態では課題を完了できません。');
   }
   const now = Date.now();
@@ -858,6 +888,7 @@ export const handleCompleteWritingAssignment = async (
   const sideEffectJob = await flushWritingActivitySideEffect(env, {
     studentUid: row.student_user_id,
     writingAssignmentId: assignmentId,
+    writingSubmissionId: completedSubmissionId,
     organizationId: row.organization_id,
     activityAt: now,
   });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { generateInstructorFollowUp } from '../services/gemini';
+import { buildInstructorFollowUpTemplate } from '../shared/instructorFollowUp';
 import { workspaceService } from '../services/workspace';
 import {
   InterventionKind,
@@ -19,21 +19,6 @@ import {
   sortStudentsByPriority,
   type InstructorStudentFilter,
 } from '../utils/instructorDashboard';
-
-const buildFallbackMessage = (student: StudentSummary, instructorName: string): string => {
-  const days =
-    student.lastActive > 0
-      ? Math.floor((Date.now() - student.lastActive) / (1000 * 60 * 60 * 24))
-      : 0;
-  if (student.riskLevel === StudentRiskLevel.DANGER) {
-    const opening = student.lastActive > 0 ? `${days}日ほど学習が空いているので、` : '';
-    return `${instructorName}より: ${student.name}さん、${opening}今日はまず10語だけ復習して流れを戻しましょう。短時間で大丈夫です。`;
-  }
-  if (student.riskLevel === StudentRiskLevel.WARNING) {
-    return `${instructorName}より: ${student.name}さん、このまま少しずつ続ければ安定します。今日は前回の復習を15分だけ進めてみましょう。`;
-  }
-  return `${instructorName}より: ${student.name}さん、良いペースです。次回も同じリズムで続けて、定着を一段上げていきましょう。`;
-};
 
 const getTriggerReason = (student: StudentSummary): string => {
   if (student.riskLevel === StudentRiskLevel.DANGER) return '離脱リスクフォロー';
@@ -180,7 +165,12 @@ export const useInstructorDashboardController = ({
       setDrafting(false);
       setNotice(null);
       setComposerStudentUid(student.uid);
-      setMessageDraft(buildFallbackMessage(student, user.displayName));
+      setMessageDraft(buildInstructorFollowUpTemplate({
+        instructorName: user.displayName,
+        studentName: student.name,
+        interventionKind: getDefaultInterventionKind(student),
+        hasLearningPlan: student.hasLearningPlan,
+      }));
       setCustomInstruction('');
       setInterventionKind(getDefaultInterventionKind(student));
       setUsedAi(false);
@@ -201,8 +191,7 @@ export const useInstructorDashboardController = ({
   }, []);
 
   const editMessageDraft = useCallback((value: string) => {
-    // Manual input is newer than any pending AI result. Unlock immediately so
-    // the instructor can save the edited message without waiting for that result.
+    // Manual input remains the authoritative draft.
     draftVersion.current += 1;
     draftingLock.current = false;
     setDrafting(false);
@@ -218,33 +207,18 @@ export const useInstructorDashboardController = ({
     setNotice(null);
     setDrafting(true);
     try {
-      const daysSinceActive =
-        selectedStudent.lastActive > 0
-          ? Math.max(
-              0,
-              Math.floor((Date.now() - selectedStudent.lastActive) / (1000 * 60 * 60 * 24)),
-            )
-          : 0;
-
-      const draft = await generateInstructorFollowUp({
+      const message = buildInstructorFollowUpTemplate({
         instructorName: user.displayName,
         studentName: selectedStudent.name,
-        riskLevel: selectedStudent.riskLevel,
-        daysSinceActive,
-        totalLearned: selectedStudent.totalLearned,
-        currentLevel: undefined,
+        interventionKind,
+        hasLearningPlan: selectedStudent.hasLearningPlan,
         customInstruction,
       });
 
       if (version !== draftVersion.current || account !== activeAccount.current) return;
 
-      if (draft?.message) {
-        setMessageDraft(draft.message);
-        setUsedAi(true);
-      } else {
-        setMessageDraft(buildFallbackMessage(selectedStudent, user.displayName));
-        setUsedAi(false);
-      }
+      setMessageDraft(message);
+      setUsedAi(false);
     } catch (draftError) {
       if (version !== draftVersion.current || account !== activeAccount.current) return;
       setNoticeKind('error');
@@ -255,7 +229,7 @@ export const useInstructorDashboardController = ({
         setDrafting(false);
       }
     }
-  }, [customInstruction, selectedStudent, user.displayName, user.uid]);
+  }, [customInstruction, interventionKind, selectedStudent, user.displayName, user.uid]);
 
   const handleSendNotification = useCallback(async () => {
     if (!selectedStudent || !messageDraft.trim() || sendingLock.current || draftingLock.current)

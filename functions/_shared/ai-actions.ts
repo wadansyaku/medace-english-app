@@ -35,11 +35,12 @@ import {
   type InstructorFollowUpDraft,
   validateAiActionRequest,
 } from '../../contracts/ai';
+import { buildInstructorFollowUpTemplate } from '../../shared/instructorFollowUp';
 import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
 import { normalizeAiGrammarQuestionDrafts } from '../../utils/aiGrammarQuestions';
-import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../../utils/learningPlan';
+import { buildFallbackLearningPlan } from '../../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import {
   filterWorksheetQuestionCandidates,
@@ -62,12 +63,10 @@ import {
 import { HttpError } from './http';
 import { requireRole } from './auth';
 import { AppEnv, DbUserRow } from './types';
+import { rejectLegacyLiveAi } from './ai-execution-policy';
 
 const getAiClient = (env: AppEnv): GoogleGenAI => {
-  if (!env.GEMINI_API_KEY) {
-    throw new HttpError(503, 'GEMINI_API_KEY が未設定です。');
-  }
-  return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+  return rejectLegacyLiveAi();
 };
 
 const DEFAULT_GRAMMAR_PRACTICE_MODEL = 'gemini-3-flash-preview';
@@ -142,6 +141,8 @@ const runMeteredAiAction = async <T>(
   logContext?: AiUsageLogContext,
   metering?: Partial<AiUsageEventInput>,
 ): Promise<T> => {
+  assertAiActionAllowed(user, action);
+  rejectLegacyLiveAi();
   if (typeof metering?.estimatedCostMilliYen === 'number') {
     await assertBudgetAvailable(env, user, action, metering.estimatedCostMilliYen);
   } else {
@@ -546,6 +547,7 @@ const generateGrammarPracticeWithCloudflare = async (
   userLevel: EnglishLevel,
   grammarScopeId: GrammarCurriculumScopeId | null,
 ): Promise<GrammarPracticeGenerationBatch> => {
+  rejectLegacyLiveAi();
   if (!env.AI) throw new HttpError(503, 'Cloudflare Workers AI binding が未設定です。');
   const model = resolveCloudflareGrammarPracticeModel(env);
   const response = await env.AI.run(
@@ -636,127 +638,9 @@ const generateGrammarPracticeQuestions = async (
       }
     }
 
-    const cachedWordIds = new Set(cachedQuestions.map((question) => question.wordId));
-    const missingWords = candidateWords.filter((word) => !cachedWordIds.has(word.id));
-    const remainingCount = Math.max(0, requestedCount - cachedQuestions.length);
-    if (remainingCount === 0 || missingWords.length === 0) {
-      return {
-        questions: cachedQuestions.slice(0, requestedCount),
-        usedAi: false,
-        generatedCount: 0,
-        billableGeneratedCount: 0,
-        provider: 'GEMINI',
-        model,
-      };
-    }
-
-    const aiRequestCount = Math.min(remainingCount, missingWords.length);
-    const providerPreference = resolveGrammarPracticeProviderPreference(env);
-    const generatedBatches: GrammarPracticeGenerationBatch[] = [];
-    let remainingWordsForAi = missingWords.slice(0, aiRequestCount);
-    let attemptedProvider: GrammarPracticeLiveProvider | null = null;
-
-    const refreshRemainingWords = () => {
-      const generatedWordIds = new Set(
-        generatedBatches.flatMap((batch) => batch.questions.map((question) => question.wordId)),
-      );
-      remainingWordsForAi = missingWords
-        .filter((word) => !generatedWordIds.has(word.id))
-        .slice(0, Math.max(0, aiRequestCount - generatedWordIds.size));
-    };
-
-    if (providerPreference !== 'GEMINI' && env.AI && remainingWordsForAi.length > 0) {
-      try {
-        attemptedProvider = 'CLOUDFLARE';
-        const cloudflareBatch = await generateGrammarPracticeWithCloudflare(
-          env,
-          remainingWordsForAi,
-          mode,
-          remainingWordsForAi.length,
-          userLevel,
-          grammarScopeId,
-        );
-        if (cloudflareBatch.questions.length > 0) {
-          generatedBatches.push(cloudflareBatch);
-          refreshRemainingWords();
-        }
-      } catch (error) {
-        console.warn('Cloudflare grammar generation skipped; falling back when available:', error);
-      }
-    }
-
-    const shouldTryGemini = providerPreference === 'GEMINI'
-      || (providerPreference === 'AUTO' && (Boolean(env.GEMINI_API_KEY) || !env.AI));
-    if (shouldTryGemini && remainingWordsForAi.length > 0) {
-      await beforeAiGenerate?.(remainingWordsForAi.length);
-      attemptedProvider = 'GEMINI';
-      const geminiBatch = await generateGrammarPracticeWithGemini(
-        env,
-        remainingWordsForAi,
-        mode,
-        remainingWordsForAi.length,
-        userLevel,
-        grammarScopeId,
-        model,
-      );
-      if (geminiBatch.questions.length > 0) {
-        generatedBatches.push(geminiBatch);
-        refreshRemainingWords();
-      }
-    }
-
-    const generatedEntries: PersistedGrammarPracticeEntry[] = generatedBatches.flatMap((batch) => (
-      batch.questions.map((question) => ({ question, provider: batch.provider, model: batch.model }))
-    ));
-    const persistedEntries: PersistedGrammarPracticeEntry[] = env.DB
-      ? await Promise.all(generatedEntries.map(async ({ question, provider, model: generatedModel }) => {
-        try {
-          const row = await recordAiGeneratedProblem(env, {
-            question,
-            model: cacheModelForGrammarProvider(provider, generatedModel),
-            provider: provider.toLowerCase(),
-            promptVersion: GRAMMAR_PRACTICE_PROMPT_VERSION,
-            sourceText: `${question.wordId}:${question.mode}:${question.grammarScope?.scopeId || grammarScopeId || 'auto'}:${question.promptText}:${question.answer}`,
-          });
-          return {
-            provider,
-            model: generatedModel,
-            question: {
-              ...question,
-              generatedProblemId: row.id,
-              aiContentId: row.content_id,
-            },
-          };
-        } catch (cacheError) {
-          console.warn('AI grammar cache write skipped:', cacheError);
-          return { question, provider, model: generatedModel };
-        }
-      }))
-      : generatedEntries;
-    const persistedGeneratedQuestions = persistedEntries.map((entry) => entry.question);
-    const billableGeneratedCount = persistedEntries.filter((entry) => entry.provider === 'GEMINI').length;
-    const usedProviders = new Set(generatedBatches.map((batch) => batch.provider));
-    const usageProvider: GrammarPracticeUsageProvider = usedProviders.has('CLOUDFLARE') && usedProviders.has('GEMINI')
-      ? 'MIXED'
-      : usedProviders.has('CLOUDFLARE')
-        ? 'CLOUDFLARE'
-        : usedProviders.has('GEMINI')
-          ? 'GEMINI'
-          : attemptedProvider || 'GEMINI';
-    const usageModel = generatedBatches.length > 0
-      ? Array.from(new Set(generatedBatches.map((batch) => cacheModelForGrammarProvider(batch.provider, batch.model)))).join('+')
-      : usageProvider === 'CLOUDFLARE'
-        ? cacheModelForGrammarProvider('CLOUDFLARE', resolveCloudflareGrammarPracticeModel(env))
-      : model;
-
-    return {
-      questions: cachedQuestions.slice(0, requestedCount),
-      usedAi: persistedGeneratedQuestions.length > 0,
-      generatedCount: persistedGeneratedQuestions.length,
-      billableGeneratedCount,
-      provider: usageProvider,
-      model: usageModel,
-    };
+    // Only reviewed, persisted questions are returned. Missing questions are
+    // filled by the client's existing static exercises; no provider is called.
+    return { ...emptyResult(), questions: cachedQuestions.slice(0, requestedCount) };
   } catch (error) {
     handleAiError(error, 'AI文法問題生成に失敗しました。');
   }
@@ -1024,122 +908,19 @@ const extractVocabularyFromMedia = async (env: AppEnv, payload: ExtractVocabular
   }
 };
 
-const generateLearningPlan = async (env: AppEnv, payload: GenerateLearningPlanPayload): Promise<LearningPlan | null> => {
-  const ai = getAiClient(env);
-  const grade = payload.grade as UserGrade;
-  const level = payload.level as EnglishLevel;
-  const availableBooks = (Array.isArray(payload.availableBooks) ? payload.availableBooks : []) as BookMetadata[];
-  const learningPreference = (payload.learningPreference || null) as LearningPreference | null;
+const generateLearningPlan = (user: DbUserRow, payload: GenerateLearningPlanPayload): LearningPlan => (
+  buildFallbackLearningPlan({
+    uid: user.id,
+    grade: payload.grade,
+    level: payload.level,
+    availableBooks: payload.availableBooks,
+    learningPreference: payload.learningPreference,
+  })
+);
 
-  try {
-    const bookList = availableBooks.map((book) => ({
-      id: book.id,
-      title: book.title,
-      priority: book.isPriority,
-      source: book.catalogSource,
-      accessScope: book.accessScope,
-    }));
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `
-        User Profile: Grade ${grade}, Level ${level}.
-        Learning Preference: ${JSON.stringify(learningPreference || {})}.
-        Available Books: ${JSON.stringify(bookList)}.
-
-        Task: Create a personalized learning plan (Curriculum).
-        1. Select the most appropriate books (Max 5) for this user's level, weak points, available study time, and target exam. Do not select everything.
-        2. Determine a realistic daily word goal based on daily study minutes and weekly study days.
-        3. Reflect urgency if exam_date is near, but do not output reckless word counts.
-        4. Set a concrete goal description and target completion days.
-
-        Output JSON.
-      `,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            goalDescription: { type: Type.STRING },
-            targetDays: { type: Type.NUMBER },
-            dailyWordGoal: { type: Type.NUMBER },
-            selectedBookIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-          },
-          required: ['goalDescription', 'targetDays', 'dailyWordGoal', 'selectedBookIds'],
-        },
-      },
-    });
-
-    if (!response.text) return null;
-    const parsed = JSON.parse(response.text);
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + (parsed.targetDays || 30));
-
-    return normalizeGeneratedLearningPlan({
-      plan: {
-        uid: '',
-        createdAt: Date.now(),
-        targetDate: formatDateKey(targetDate),
-        goalDescription: parsed.goalDescription,
-        dailyWordGoal: parsed.dailyWordGoal,
-        selectedBookIds: parsed.selectedBookIds,
-        status: 'ACTIVE',
-      },
-      uid: '',
-      grade,
-      level,
-      availableBooks,
-      learningPreference,
-    });
-  } catch (error) {
-    handleAiError(error, '学習プラン生成に失敗しました。');
-  }
-};
-
-const generateInstructorFollowUp = async (env: AppEnv, payload: GenerateInstructorFollowUpPayload): Promise<InstructorFollowUpDraft> => {
-  const ai = getAiClient(env);
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `
-        あなたは日本の学習塾で、生徒に寄り添う講師の代筆アシスタントです。
-
-        講師名: ${payload.instructorName}
-        生徒名: ${payload.studentName}
-        離脱リスク: ${payload.riskLevel || StudentRiskLevel.WARNING}
-        最終学習からの日数: ${payload.daysSinceActive ?? 0}
-        習得単語数: ${payload.totalLearned ?? 0}
-        現在のレベル: ${payload.currentLevel || '未診断'}
-        補足指示: ${payload.customInstruction || 'やさしく背中を押す'}
-
-        条件:
-        1. 文頭を「${payload.instructorName}より:」で始める。
-        2. 自然な日本語で 1〜2 文、80〜120 文字程度。
-        3. 怒らず、具体的な次の一歩を 1 つだけ提案する。
-        4. 生徒名は呼び捨てにしない。
-
-        JSON で返す:
-        { "message": "..." }
-      `,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            message: { type: Type.STRING },
-          },
-          required: ['message'],
-        },
-      },
-    });
-
-    if (!response.text) throw new Error('Empty response');
-    return JSON.parse(response.text) as InstructorFollowUpDraft;
-  } catch (error) {
-    handleAiError(error, '講師フォロー通知の生成に失敗しました。');
-  }
-};
+const generateInstructorFollowUp = (payload: GenerateInstructorFollowUpPayload): InstructorFollowUpDraft => (
+  { message: buildInstructorFollowUpTemplate(payload) }
+);
 
 const generateDiagnosticTest = async (env: AppEnv, payload: GenerateDiagnosticTestPayload): Promise<DiagnosticQuestion[]> => {
   const ai = getAiClient(env);
@@ -1360,19 +1141,11 @@ export const handleAiAction = async (
     case 'extractVocabularyFromMedia':
       return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, request.payload), logContext);
     case 'generateLearningPlan':
-      if (!env.GEMINI_API_KEY) {
-        assertAiActionAllowed(user, 'generateLearningPlan');
-        return buildFallbackLearningPlan({
-          uid: user.id,
-          grade: request.payload.grade,
-          level: request.payload.level,
-          availableBooks: request.payload.availableBooks as BookMetadata[],
-          learningPreference: request.payload.learningPreference as LearningPreference | null,
-        });
-      }
-      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, request.payload), logContext);
+      requireRole(user, [UserRole.STUDENT, UserRole.ADMIN]);
+      return generateLearningPlan(user, request.payload);
     case 'generateInstructorFollowUp':
-      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, request.payload), logContext);
+      requireRole(user, [UserRole.INSTRUCTOR, UserRole.ADMIN]);
+      return generateInstructorFollowUp(request.payload);
     case 'generateDiagnosticTest':
       return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, request.payload), logContext);
     case 'generateAdvancedDiagnosticTest':

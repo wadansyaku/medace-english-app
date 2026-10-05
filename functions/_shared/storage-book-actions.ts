@@ -3,7 +3,7 @@ import type {
   CatalogImportResult,
   PrepareBookExamplesResult,
 } from '../../contracts/storage';
-import { BookAccessScope, BookCatalogSource, BookMetadata, GeneratedAssetAuditStatus, LearningTaskIntentType, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
+import { BookAccessScope, BookCatalogSource, BookMetadata, LearningTaskIntentType, type EnglishLevel, type LearningTaskIntent, type UserGrade, UserRole, WordData } from '../../types';
 import { getBookProgressionIndex } from '../../shared/bookProgression';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
@@ -16,8 +16,6 @@ import { inspectCatalogImportContent } from '../../shared/catalogImport';
 import { rankWeaknessFocusedWords } from '../../shared/weakness';
 import type { RuntimeFlags } from '../../shared/runtimeFlags';
 import { formatDateKey } from '../../utils/date';
-import { generateMeteredGeminiSentence } from './ai-actions';
-import { assertBudgetAvailable } from './ai-metering';
 import { catalogRowsAreEquivalent, normalizeCatalogImport, type NormalizedCatalogImportRow } from './catalog-import';
 import { HttpError } from './http';
 import { requireRole } from './auth';
@@ -589,119 +587,7 @@ export const handlePrepareBookExamples = async (
   requireRole(user, [UserRole.ADMIN]);
   await assertBookWriteAccess(env, user, bookId);
 
-  const book = await readFirst<{ source_context: string | null }>(
-    env,
-    'SELECT source_context FROM books WHERE id = ?',
-    bookId,
-  );
-  if (!book) {
-    throw new HttpError(404, '対象の教材が見つかりません。');
-  }
-
-  const words = await readAll<DbWordRow>(
-    env,
-    `SELECT *
-       FROM words
-      WHERE book_id = ?
-        AND (
-          example_sentence IS NULL OR TRIM(example_sentence) = ''
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM word_example_generation_claims c WHERE c.word_id = words.id
-        )
-      ORDER BY word_number ASC
-      LIMIT 10`,
-    bookId,
-  );
-
-  let preparedCount = 0;
-  for (const word of words) {
-    // Known configuration and budget failures must not consume a durable claim.
-    if (!env.GEMINI_API_KEY) throw new HttpError(503, 'GEMINI_API_KEY が未設定です。');
-    await assertBudgetAvailable(env, user, 'generateGeminiSentence');
-    const claimId = crypto.randomUUID();
-    const claim = await env.DB.prepare(`
-      INSERT INTO word_example_generation_claims (word_id, claim_id, started_at)
-      SELECT id, ?, ? FROM words
-      WHERE id = ? AND book_id = ?
-        AND word IS ? AND definition IS ?
-        AND (example_sentence IS NULL OR TRIM(example_sentence) = '')
-      ON CONFLICT(word_id) DO NOTHING
-    `).bind(claimId, Date.now(), word.id, bookId, word.word, word.definition).run();
-    if ((claim.meta.changes ?? 0) !== 1) continue;
-
-    // Retain the claim after any failure, including uncertain provider responses or
-    // database write failures. Automatically retrying could incur a second charge.
-    const context = await generateMeteredGeminiSentence(
-      env,
-      user,
-      {
-        word: word.word,
-        definition: word.definition,
-        userLevel: (user.english_level as EnglishLevel | null) || undefined,
-        sourceContext: book.source_context || undefined,
-      },
-    );
-
-    if (typeof context?.english !== 'string' || !context.english.trim()
-      || typeof context?.japanese !== 'string' || !context.japanese.trim()) {
-      throw new HttpError(502, '例文準備の結果を確認できませんでした。再課金を防ぐため自動再試行は停止しています。');
-    }
-    const generatedAt = Date.now();
-    const saved = await env.DB.prepare(`
-      UPDATE words
-         SET example_sentence = ?,
-             example_meaning = ?,
-             example_generated_at = ?,
-             example_audit_status = ?,
-             example_audit_note = NULL,
-             example_audited_at = NULL,
-             updated_at = ?
-       WHERE id = ? AND book_id = ?
-         AND word IS ? AND definition IS ?
-         AND (example_sentence IS NULL OR TRIM(example_sentence) = '')
-         AND EXISTS (
-           SELECT 1 FROM word_example_generation_claims c
-           WHERE c.word_id = words.id AND c.claim_id = ? AND c.completed_at IS NULL
-         )
-    `).bind(
-      context.english.trim(),
-      context.japanese.trim(),
-      generatedAt,
-      GeneratedAssetAuditStatus.PENDING,
-      generatedAt,
-      word.id,
-      bookId,
-      word.word,
-      word.definition,
-      claimId,
-    ).run();
-    if ((saved.meta.changes ?? 0) !== 1) {
-      throw new HttpError(409, '単語が別の操作で更新されたため、既存の例文を保持しました。再課金を防ぐため自動再試行は停止しています。');
-    }
-    await env.DB.prepare(`
-      UPDATE word_example_generation_claims SET completed_at = ?
-      WHERE word_id = ? AND claim_id = ? AND completed_at IS NULL
-    `).bind(Date.now(), word.id, claimId).run();
-    preparedCount += 1;
-  }
-
-  const remainingRow = await readFirst<{ count: number }>(
-    env,
-    `SELECT COUNT(*) AS count
-       FROM words
-      WHERE book_id = ?
-        AND (
-          example_sentence IS NULL OR TRIM(example_sentence) = ''
-        )`,
-    bookId,
-  );
-
-  return {
-    bookId,
-    preparedCount,
-    remainingCount: Number(remainingRow?.count || 0),
-  };
+  throw new HttpError(410, '有料AIによる例文準備は終了しました。校正済みの例文を承認待ちデータとして取り込んでください。');
 };
 
 export const handleGetDailySessionWords = async (

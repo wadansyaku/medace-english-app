@@ -79,6 +79,12 @@ describe('buildFallbackLearningPlan', () => {
       .selectedBookIds).toEqual(buildFallbackLearningPlan({ ...defaultInput, useNaruDefault: false }).selectedBookIds);
   });
 
+  it('preserves selected book IDs and their order when rebuilding a standard plan', () => {
+    const plan = buildFallbackLearningPlan({ ...defaultInput, preferredBookIds: ['b1-reading', 'jhs1-core', 'b1-reading', 'missing'] });
+    expect(plan.selectedBookIds).toEqual(['b1-reading', 'jhs1-core']);
+    expect(plan.selectedBookIds).not.toContain(NARU_BOOK_ID);
+  });
+
   it('does not introduce Naru when it is unavailable or unapproved', () => {
     expect(buildFallbackLearningPlan({ ...defaultInput, availableBooks }).selectedBookIds).not.toContain(NARU_BOOK_ID);
     const blocked = { ...naru, qualityGate: { ...naru.qualityGate!, isSelectableForToday: false } };

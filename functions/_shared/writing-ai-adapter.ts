@@ -21,6 +21,7 @@ import {
 } from './ai-metering';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
+import { rejectLegacyLiveAi } from './ai-execution-policy';
 
 export type WritingAiMode = 'fixture' | 'live' | 'hybrid';
 
@@ -65,6 +66,13 @@ export interface WritingAiAdapter {
   ) => Promise<WritingEvaluationResult[]>;
 }
 
+// Explicit dependency injection is restricted to synthetic test code. The
+// production facade supplies no fourth argument, and request/env cannot opt in.
+export interface WritingSyntheticTestDependencies {
+  syntheticOnly: true;
+  client: GoogleGenAI;
+}
+
 const PROVIDER_COSTS: Record<WritingAiProvider, number> = {
   CLOUDFLARE: 340,
   GEMINI: 420,
@@ -87,11 +95,9 @@ const handleAiError = (error: unknown, fallbackMessage: string): never => {
   throw new HttpError(502, fallbackMessage);
 };
 
-const getAiClient = (env: AppEnv): GoogleGenAI => {
-  if (!env.GEMINI_API_KEY) {
-    throw new HttpError(503, 'GEMINI_API_KEY が未設定です。');
-  }
-  return new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+const getAiClient = (env: AppEnv, synthetic?: WritingSyntheticTestDependencies): GoogleGenAI => {
+  if (synthetic?.syntheticOnly === true) return synthetic.client;
+  return rejectLegacyLiveAi();
 };
 
 const LIVE_EVALUATION_PROVIDERS: WritingAiProvider[] = ['GEMINI'];
@@ -305,8 +311,9 @@ const runLivePrompt = async (
   studentName: string,
   topicHint?: string,
   notes?: string,
+  synthetic?: WritingSyntheticTestDependencies,
 ): Promise<WritingPromptResult> => {
-  const ai = getAiClient(env);
+  const ai = getAiClient(env, synthetic);
   const topic = topicHint?.trim() || template.sampleTopic || 'school life and society';
 
   try {
@@ -365,6 +372,7 @@ const runLiveOcr = async (
   assignment: Pick<WritingAssignment, 'promptText' | 'guidance' | 'wordCountMin'>,
   assets: WritingAiInputAsset[],
   manualTranscript?: string,
+  synthetic?: WritingSyntheticTestDependencies,
 ): Promise<WritingOcrResult> => {
   if (manualTranscript?.trim()) {
     return {
@@ -382,7 +390,7 @@ const runLiveOcr = async (
     throw new HttpError(400, 'OCR 実行にはアップロード済み資産が必要です。');
   }
 
-  const ai = getAiClient(env);
+  const ai = getAiClient(env, synthetic);
 
   try {
     const contents = [
@@ -451,12 +459,13 @@ const runLiveEvaluation = async (
   provider: WritingAiProvider,
   assignment: WritingAssignment,
   transcript: string,
+  synthetic?: WritingSyntheticTestDependencies,
 ): Promise<WritingEvaluationResult> => {
   if (provider !== 'GEMINI') {
     throw new HttpError(503, `${provider} live provider is not configured yet.`);
   }
 
-  const ai = getAiClient(env);
+  const ai = getAiClient(env, synthetic);
   const baseRubric = buildRubric(transcript, assignment.promptTitle);
 
   try {
@@ -538,6 +547,7 @@ export const createWritingAiAdapter = (
   env: AppEnv,
   user: DbUserRow,
   logContext?: AiUsageLogContext,
+  synthetic?: WritingSyntheticTestDependencies,
 ): WritingAiAdapter => {
   const mode = resolveWritingAiMode(env);
 
@@ -548,6 +558,16 @@ export const createWritingAiAdapter = (
     notes?: string,
   ): Promise<WritingPromptResult> => {
     assertAiActionAllowed(user, 'generateWritingPrompt');
+
+    // Normal operation uses the stored, teacher-selected template. It does not
+    // impersonate an AI response when providers are disabled.
+    if (!synthetic) return {
+      promptTitle: `${WRITING_EXAM_CATEGORY_LABELS[template.examCategory]} ${template.title}`,
+      promptText: [template.promptBase, topicHint?.trim() || template.sampleTopic || '', notes?.trim() || ''].filter(Boolean).join('\n'),
+      guidance: template.guidance,
+      provider: 'GEMINI',
+      provenance: buildProvenance('fixture', 'GEMINI', { model: 'stored-writing-template', notes: 'stored-template-no-ai' }),
+    };
 
     const fallback = async (fallbackReason?: string) => {
       const result = createFixturePrompt(
@@ -566,8 +586,9 @@ export const createWritingAiAdapter = (
 
     if (mode === 'fixture') return fallback();
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'generateWritingPrompt');
-      const result = await runLivePrompt(env, user, template, studentName, topicHint, notes);
+      const result = await runLivePrompt(env, user, template, studentName, topicHint, notes, synthetic);
       await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, true, logContext);
       return result;
     } catch (error) {
@@ -582,6 +603,7 @@ export const createWritingAiAdapter = (
     manualTranscript?: string,
   ): Promise<WritingOcrResult> => {
     assertAiActionAllowed(user, 'ocrWritingSubmission');
+    if (!synthetic) rejectLegacyLiveAi();
 
     if (manualTranscript?.trim()) {
       const result = mode === 'fixture'
@@ -611,8 +633,9 @@ export const createWritingAiAdapter = (
 
     if (mode === 'fixture') return fallback();
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'ocrWritingSubmission');
-      const result = await runLiveOcr(env, user, assignment, assets, manualTranscript);
+      const result = await runLiveOcr(env, user, assignment, assets, manualTranscript, synthetic);
       await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, true, logContext);
       return result;
     } catch (error) {
@@ -628,12 +651,12 @@ export const createWritingAiAdapter = (
     comparisonMode: WritingAiExecutionProvenance['mode'],
     fallbackReason?: string,
   ): Promise<WritingEvaluationResult> => {
-    const fallback = async (reason?: string) => {
+    const fallback = async (reason?: string, provenanceMode = comparisonMode) => {
       const result = createFixtureEvaluation(
         provider,
         assignment,
         transcript,
-        buildProvenance(comparisonMode, provider, {
+        buildProvenance(provenanceMode, provider, {
           requestedProvider: provider,
           fallbackReason: reason,
           model: 'fixture-writing-evaluation',
@@ -647,13 +670,14 @@ export const createWritingAiAdapter = (
     if (comparisonMode === 'hybrid-fallback' && fallbackReason) return fallback(fallbackReason);
 
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'evaluateWritingSubmission');
-      const result = await runLiveEvaluation(env, user, provider, assignment, transcript);
+      const result = await runLiveEvaluation(env, user, provider, assignment, transcript, synthetic);
       await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, true, logContext);
       return result;
     } catch (error) {
       if (mode === 'live' || !isFallbackEligibleError(error)) throw error;
-      return fallback(error instanceof Error ? error.message : 'live-evaluation-failed');
+      return fallback(error instanceof Error ? error.message : 'live-evaluation-failed', 'hybrid-fallback');
     }
   };
 
@@ -662,6 +686,7 @@ export const createWritingAiAdapter = (
     runOcr: withOcrFallback,
     runEvaluations: async (assignment, transcript) => {
       assertAiActionAllowed(user, 'evaluateWritingSubmission');
+      if (!synthetic) rejectLegacyLiveAi();
 
       const providers = mode === 'live'
         ? LIVE_EVALUATION_PROVIDERS
@@ -688,7 +713,7 @@ export const createWritingAiAdapter = (
         evaluations.push(await withEvaluationFallback(provider, assignment, transcript, 'live'));
       }
 
-      const preferred = choosePreferredEvaluation(evaluations);
+      const preferred = choosePreferredEvaluation(evaluations.filter((evaluation) => evaluation.provenance?.mode === 'live'));
       return evaluations.map((evaluation) => ({
         ...evaluation,
         isDefault: evaluation.id === preferred?.id,
