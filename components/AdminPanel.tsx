@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
 import getClientRuntimeFlags from '../config/runtime';
 import { dashboardService } from '../services/dashboard';
-import { extractVocabularyFromText, isAiUnavailableError } from '../services/gemini';
 import { BookAccessScope, BookCatalogSource, type BookMetadata, type WordData } from '../types';
-import { getAiActionEstimate } from '../config/subscription';
 import { BRAND } from '../config/brand';
 import { useAdminDashboardSnapshot } from '../hooks/useAdminDashboardSnapshot';
 import { useAdminCommercialOps } from '../hooks/useAdminCommercialOps';
@@ -36,7 +34,6 @@ const appendImportSummary = (
 const AdminPanel: React.FC = () => {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial'>('dashboard');
-  const [mode, setMode] = useState<'csv' | 'ai'>('ai');
   const {
     snapshot,
     loading: dashboardLoading,
@@ -60,8 +57,6 @@ const AdminPanel: React.FC = () => {
   } = useAdminCommercialOps();
 
   const [file, setFile] = useState<File | null>(null);
-  const [rawText, setRawText] = useState('');
-  const [contentTitle, setContentTitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const importPending = useRef(false);
   const importVersion = useRef(0);
@@ -71,8 +66,8 @@ const AdminPanel: React.FC = () => {
   const [catalogSource, setCatalogSource] = useState<BookCatalogSource>(BookCatalogSource.LICENSED_PARTNER);
   const [catalogBooks, setCatalogBooks] = useState<BookMetadata[]>([]);
   const [loadingCatalogBooks, setLoadingCatalogBooks] = useState(true);
-  const [preparingExamplesBookId, setPreparingExamplesBookId] = useState<string | null>(null);
-  const examplePreparationPending = useRef(false);
+  const [catalogBooksError, setCatalogBooksError] = useState<string | null>(null);
+  const examplePreviewRequest = useRef(0);
   const [examplePreview, setExamplePreview] = useState<{ book: BookMetadata; words: WordData[] | null; error: string | null } | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -91,12 +86,13 @@ const AdminPanel: React.FC = () => {
 
   const loadCatalogBooks = async () => {
     setLoadingCatalogBooks(true);
+    setCatalogBooksError(null);
     try {
       const nextBooks = await dashboardService.getBooks();
       setCatalogBooks(nextBooks);
     } catch (error) {
       console.error(error);
-      setLog((previous) => [...previous, `エラー: 公式教材一覧の取得に失敗しました。${(error as Error).message}`]);
+      setCatalogBooksError('公式教材一覧を取得できませんでした。再取得してください。');
     } finally {
       setLoadingCatalogBooks(false);
     }
@@ -175,64 +171,6 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const handleAiImport = async () => {
-    if (!rawText.trim() || !contentTitle.trim() || importPending.current || !destructiveActionsEnabled) return;
-
-    importPending.current = true;
-    const version = ++importVersion.current;
-    const isCurrent = () => mounted.current && version === importVersion.current;
-    setUploading(true);
-    setProgress(0);
-    setLog(['教材解析を開始します...', 'テキストから重要単語を抽出中...']);
-
-    try {
-      const extracted = await extractVocabularyFromText(rawText);
-      if (!isCurrent()) return;
-      if (extracted.words.length === 0) throw new Error('単語を抽出できませんでした。');
-
-      setLog((previous) => [...previous, `抽出成功: ${extracted.words.length}語を検出しました。`]);
-      setLog((previous) => [...previous, 'データベースへ保存中...']);
-      const result = await dashboardService.batchImportWords({
-        defaultBookName: contentTitle,
-        source: {
-          kind: 'rows',
-          rows: extracted.words.map((item, index) => ({
-            bookName: contentTitle,
-            number: index + 1,
-            word: item.word,
-            definition: item.definition,
-          })),
-        },
-        contextSummary: extracted.contextSummary,
-        options: {
-          catalogSource,
-          accessScope: BookAccessScope.BUSINESS_ONLY,
-        },
-      }, (nextProgress) => {
-        if (isCurrent()) setProgress(nextProgress);
-      });
-
-      if (!isCurrent()) return;
-      appendImportSummary(setLog, result, '独自教材の追加が完了');
-      setRawText('');
-      setContentTitle('');
-      await Promise.all([fetchDashboard(), loadCatalogBooks()]);
-    } catch (error) {
-      if (!isCurrent()) return;
-      console.error(error);
-      const message = isAiUnavailableError(error)
-        ? 'AI教材生成はまだ利用できません。CSV一括に切り替えるか、Gemini 設定後に再試行してください。'
-        : (error as Error).message;
-      setLog((previous) => [...previous, `エラー: ${message}`]);
-    } finally {
-      if (isCurrent()) {
-        importVersion.current += 1;
-        importPending.current = false;
-        setUploading(false);
-      }
-    }
-  };
-
   const handleReset = async () => {
     setResetting(true);
     try {
@@ -245,33 +183,24 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  const handlePrepareBookExamples = async (book: BookMetadata) => {
-    if (examplePreparationPending.current || uploading) return;
+  const closeExamplePreview = () => {
+    examplePreviewRequest.current += 1;
+    setExamplePreview(null);
+  };
+
+  const handleInspectBookExamples = async (book: BookMetadata) => {
+    if (uploading) return;
+    const requestId = ++examplePreviewRequest.current;
     setExamplePreview({ book, words: null, error: null });
     try {
       const words = await dashboardService.getWordsByBook(book.id);
-      setExamplePreview(previous => previous?.book.id === book.id ? { book, words, error: null } : previous);
+      if (mounted.current && requestId === examplePreviewRequest.current) {
+        setExamplePreview({ book, words, error: null });
+      }
     } catch (error) {
-      setExamplePreview(previous => previous?.book.id === book.id ? { book, words: null, error: error instanceof Error ? error.message : '例文の状態を読み込めませんでした。' } : previous);
-    }
-  };
-
-  const confirmPrepareBookExamples = async () => {
-    if (!examplePreview?.words || examplePreparationPending.current) return;
-    const book = examplePreview.book;
-    examplePreparationPending.current = true;
-    setPreparingExamplesBookId(book.id);
-    try {
-      const result = await dashboardService.prepareBookExamples(book.id);
-      setLog(previous => [...previous, `${book.title}: ${result.preparedCount}件を承認待ちで保存。英例文の欠損は残り ${result.remainingCount}件です。保存済みと学習者への公開は別です。`]);
-      const words = await dashboardService.getWordsByBook(book.id);
-      setExamplePreview(previous => previous?.book.id === book.id ? { book, words, error: null } : previous);
-      await loadCatalogBooks();
-    } catch (error) {
-      setExamplePreview(previous => previous?.book.id === book.id ? { ...previous, error: `準備結果を確認できませんでした。自動再送はしません。${error instanceof Error ? error.message : ''}` } : previous);
-    } finally {
-      examplePreparationPending.current = false;
-      setPreparingExamplesBookId(null);
+      if (mounted.current && requestId === examplePreviewRequest.current) {
+        setExamplePreview({ book, words: null, error: error instanceof Error ? error.message : '例文の状態を読み込めませんでした。' });
+      }
     }
   };
 
@@ -287,25 +216,19 @@ const AdminPanel: React.FC = () => {
 
   const contentOps = (
     <AdminContentImportView
-      mode={mode}
       file={file}
-      rawText={rawText}
-      contentTitle={contentTitle}
       uploading={uploading}
       progress={progress}
       log={log}
       catalogSource={catalogSource}
-      onModeChange={(value) => { if (!importPending.current) setMode(value); }}
       onCatalogSourceChange={(value) => { if (!importPending.current) setCatalogSource(value); }}
-      onContentTitleChange={(value) => { if (!importPending.current) setContentTitle(value); }}
-      onRawTextChange={(value) => { if (!importPending.current) setRawText(value); }}
       onFileChange={handleFileChange}
-      onAiImport={handleAiImport}
       onCsvUpload={handleCsvUpload}
       officialBooks={officialBooks}
       loadingOfficialBooks={loadingCatalogBooks}
-      preparingExamplesBookId={preparingExamplesBookId}
-      onPrepareExamples={handlePrepareBookExamples}
+      officialBooksError={catalogBooksError}
+      onRetryOfficialBooks={() => void loadCatalogBooks()}
+      onInspectExamples={handleInspectBookExamples}
       onOpenResetModal={() => {
         if (!destructiveActionsEnabled || importPending.current) return;
         setShowResetModal(true);
@@ -318,15 +241,14 @@ const AdminPanel: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
       <ProductFeedbackPanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
-      {examplePreview && <ModalOverlay ariaLabel="例文の事前準備" mobileBehavior="sheet" panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6" onClose={() => { if (!examplePreparationPending.current) setExamplePreview(null); }}>
-        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-xl font-bold text-slate-900">例文の事前準備</h2><p className="mt-1 break-words text-sm text-slate-600">{examplePreview.book.title}</p></div><button type="button" disabled={Boolean(preparingExamplesBookId)} onClick={() => setExamplePreview(null)} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm">閉じる</button></div>
+      {examplePreview && <ModalOverlay ariaLabel="保存済み例文の確認" mobileBehavior="sheet" panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6" onClose={closeExamplePreview}>
+        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-xl font-bold text-slate-900">保存済み例文の確認</h2><p className="mt-1 break-words text-sm text-slate-600">{examplePreview.book.title}</p></div><button type="button" onClick={closeExamplePreview} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm">閉じる</button></div>
         {examplePreview.error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{examplePreview.error}</p>}
-        {!examplePreview.words ? <div className="mt-4"><p role="status" className="text-sm text-slate-600">{examplePreview.error ? '状態を取得できていません。' : '保存済みの状態を確認中...'}</p>{examplePreview.error && <button type="button" onClick={() => void handlePrepareBookExamples(examplePreview.book)} className="mt-3 min-h-11 rounded-lg border px-3 text-sm">一覧を再取得</button>}</div> : <>
+        {!examplePreview.words ? <div className="mt-4"><p role="status" className="text-sm text-slate-600">{examplePreview.error ? '状態を取得できていません。' : '保存済みの状態を確認中...'}</p>{examplePreview.error && <button type="button" onClick={() => void handleInspectBookExamples(examplePreview.book)} className="mt-3 min-h-11 rounded-lg border px-3 text-sm">一覧を再取得</button>}</div> : <>
           <p className="mt-4 text-sm leading-relaxed text-slate-700">取得した {examplePreview.words.length}語のうち、学習画面で表示できる例文は {examplePreview.words.filter(word => word.exampleSentence?.trim()).length}件。訳がない例文は {examplePreview.words.filter(word => word.exampleSentence?.trim() && !word.exampleMeaning?.trim()).length}件です。</p>
           <details className="mt-3 rounded-xl border p-3"><summary className="min-h-11 cursor-pointer text-sm font-bold">表示できる例文がない単語（{examplePreview.words.filter(word => !word.exampleSentence?.trim()).length}件）</summary><ul className="mt-2 space-y-1 text-sm">{examplePreview.words.filter(word => !word.exampleSentence?.trim()).slice(0,20).map(word => <li key={word.id}>{word.number}. {word.word} {word.exampleAuditStatus ? '（内容確認中・非公開）' : '（未準備）'}</li>)}</ul>{examplePreview.words.filter(word => !word.exampleSentence?.trim()).length > 20 && <p className="mt-2 text-xs text-slate-500">先頭20件を表示しています。</p>}</details>
-          <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-relaxed text-amber-900">有料AIによる事前準備は1回最大10件、概算上限 {formatCost(getAiActionEstimate('generateGeminiSentence').estimatedCostMilliYen * 10)}。既存例文は上書きせず、作成結果は承認待ちで保存します。訳のみの欠損はこの処理では補完されません。</p>
-          <p className="mt-3 text-xs leading-relaxed text-slate-600">定期の有料再監査は停止しています。未承認内容は公開せず、内容確認済みの例文をCSVで事前保存する方法も使えます。結果不明の実行は管理者が確認し、自動再生成しません。</p>
-          <button type="button" disabled={Boolean(preparingExamplesBookId) || Boolean(examplePreview.error) || !examplePreview.words.some(word => !word.exampleSentence?.trim() && !word.exampleAuditStatus)} onClick={() => void confirmPrepareBookExamples()} className="mt-4 min-h-11 w-full rounded-xl bg-steady-action px-4 py-3 font-bold text-steady-on-action disabled:opacity-50">{preparingExamplesBookId ? '事前準備を実行中...' : '見積もりを確認して最大10件準備する'}</button>
+          <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">教材と例文は事前に内容を確認し、保存済みのものを表示します。この画面で外部AIを呼び出すことはありません。</p>
+          <p className="mt-3 text-xs leading-relaxed text-slate-600">新しい教材は例文・和訳を含むCSVから取り込めます。既存教材への追加例文・和訳は運用担当者へ依頼してください。原本と学習記録を保持し、下書きの保存と生徒への公開承認を別に行います。</p>
         </>}
       </ModalOverlay>}
 

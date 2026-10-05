@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { AlertTriangle, BookOpen, FileText, Loader2, Sparkles, Trash2, Upload } from 'lucide-react';
+import { AlertTriangle, FileText, Loader2, Trash2, Upload } from 'lucide-react';
 
 import {
   BookCatalogSource,
@@ -8,50 +8,38 @@ import {
 } from '../../types';
 
 interface AdminContentImportViewProps {
-  mode: 'csv' | 'ai';
   file: File | null;
-  rawText: string;
-  contentTitle: string;
   uploading: boolean;
   progress: number;
   log: string[];
   catalogSource: BookCatalogSource;
-  onModeChange: (mode: 'csv' | 'ai') => void;
   onCatalogSourceChange: (source: BookCatalogSource) => void;
-  onContentTitleChange: (value: string) => void;
-  onRawTextChange: (value: string) => void;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onAiImport: () => void;
   onCsvUpload: () => void;
   officialBooks: BookMetadata[];
   loadingOfficialBooks: boolean;
-  preparingExamplesBookId: string | null;
-  onPrepareExamples: (book: BookMetadata) => void;
+  officialBooksError: string | null;
+  onRetryOfficialBooks: () => void;
+  onInspectExamples: (book: BookMetadata) => void;
   onOpenResetModal: () => void;
   destructiveActionsEnabled: boolean;
   destructiveActionsMessage: string;
 }
 
 const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
-  mode,
   file,
-  rawText,
-  contentTitle,
   uploading,
   progress,
   log,
   catalogSource,
-  onModeChange,
   onCatalogSourceChange,
-  onContentTitleChange,
-  onRawTextChange,
   onFileChange,
-  onAiImport,
   onCsvUpload,
   officialBooks,
   loadingOfficialBooks,
-  preparingExamplesBookId,
-  onPrepareExamples,
+  officialBooksError,
+  onRetryOfficialBooks,
+  onInspectExamples,
   onOpenResetModal,
   destructiveActionsEnabled,
   destructiveActionsMessage,
@@ -63,24 +51,6 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
       <div>
         <h2 className="text-3xl font-bold text-medace-900">教材運用</h2>
         <p className="text-medace-700/70">教材追加と、ビジネス限定の公式カタログ運用をこの画面から管理します。</p>
-      </div>
-      <div className="inline-flex rounded-2xl border border-medace-100 bg-medace-50 p-1">
-        <button
-          type="button"
-          onClick={() => onModeChange('ai')}
-          disabled={uploading}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${mode === 'ai' ? 'bg-white text-medace-700 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
-        >
-          <Sparkles className="w-4 h-4" /> AI生成
-        </button>
-        <button
-          type="button"
-          onClick={() => onModeChange('csv')}
-          disabled={uploading}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${mode === 'csv' ? 'bg-white text-medace-700 shadow-sm' : 'text-medace-700/70 hover:text-medace-900'}`}
-        >
-          <FileText className="w-4 h-4" /> CSV / 名詞workbook
-        </button>
       </div>
     </div>
 
@@ -116,102 +86,49 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
         </p>
       </div>
 
-      {mode === 'ai' ? (
-        <div className="space-y-6 animate-in fade-in">
-          <div className="flex items-start gap-3 rounded-xl border border-medace-100 bg-medace-50 p-4">
-            <div className="rounded-full bg-white p-2 shadow-sm">
-              <Sparkles className="w-5 h-5 text-medace-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-medace-900">AI教材生成</h3>
-              <p className="mt-1 text-sm text-medace-700">
-                プリント、長文問題、Web記事の英語テキストから、学習させたい重要単語を抽出して教材へ変換します。
-              </p>
-            </div>
+      <div className="space-y-6 animate-in fade-in">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="rounded-lg bg-medace-50 p-3">
+            <Upload className="w-6 h-6 text-medace-600" />
           </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">教材タイトル</label>
-              <div className="relative">
-                <BookOpen className="absolute left-3 top-3 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  value={contentTitle}
-                  onChange={(event) => onContentTitleChange(event.target.value)}
-                  placeholder="例: 中3定期テスト対策 Lesson 4"
-                  disabled={!destructiveActionsEnabled || uploading}
-                  className="w-full rounded-xl border border-slate-300 py-3 pl-10 pr-4 font-bold text-slate-700 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-200"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">ソーステキスト (英語)</label>
-              <textarea
-                value={rawText}
-                onChange={(event) => onRawTextChange(event.target.value)}
-                placeholder="ここに英文を貼り付けてください..."
-                disabled={!destructiveActionsEnabled || uploading}
-                className="h-48 w-full rounded-xl border border-slate-300 p-4 font-mono text-sm text-slate-600 outline-none transition-all focus:border-medace-500 focus:ring-2 focus:ring-medace-200"
-              />
-            </div>
-
-            <button
-              onClick={onAiImport}
-              disabled={!destructiveActionsEnabled || uploading || !rawText || !contentTitle}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-4 text-lg font-bold text-steady-on-action shadow-lg transition-all ${!destructiveActionsEnabled || uploading || !rawText ? 'cursor-not-allowed bg-medace-200' : 'bg-steady-action hover:bg-steady-action-hover'}`}
-            >
-              {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-              {uploading ? '生成中...' : '教材を生成する'}
-            </button>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">校正済み教材のCSV取込</h3>
+            <p className="text-sm text-slate-500">事前に内容を確認した単語・語義・例文・和訳を取り込みます。取込は権利や公開の承認を意味しません。</p>
+            <p className="mt-1 text-xs text-slate-400">CSV は 1列目=単語帳名, 2列目=番号, 3列目=単語, 4列目=日本語訳, 5列目=例文, 6列目=例文訳。ヘッダー付きCSVも利用できます。名詞 workbook は npm run noun:analyze で未確認差分を 0 にしたうえで、CSV化済みデータを取り込みます。</p>
           </div>
         </div>
-      ) : (
-        <div className="space-y-6 animate-in fade-in">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-lg bg-medace-50 p-3">
-              <Upload className="w-6 h-6 text-medace-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">CSV / 名詞 workbook CSV インポート</h3>
-              <p className="text-sm text-slate-500">既存の単語リスト CSV、または監査済みの名詞 workbook CSV を取り込みます。</p>
-              <p className="mt-1 text-xs text-slate-400">CSV は 1列目=単語帳名, 2列目=番号, 3列目=単語, 4列目=日本語訳。名詞 workbook は npm run noun:analyze で未確認差分を 0 にしたうえで、CSV化済みデータを取り込みます。</p>
-            </div>
-          </div>
 
-          <div className="rounded-xl border-2 border-dashed border-medace-200 bg-[#fff8ef] p-10 text-center transition-colors hover:border-medace-400">
-            <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-            <p className="mb-4 text-slate-600">
-              {file ? `選択中: ${file.name}` : 'CSV ファイルを選択してください'}
-            </p>
-            <input ref={fileInput} type="file" accept=".csv" onChange={onFileChange} className="hidden" id="csv-upload" disabled={!destructiveActionsEnabled || uploading} />
-            <button
-              type="button"
-              onClick={() => fileInput.current?.click()}
-              disabled={!destructiveActionsEnabled || uploading}
-              aria-controls="csv-upload"
-              className={`inline-block rounded-lg border border-medace-200 bg-white px-6 py-3 font-medium text-medace-800 shadow-sm transition-all ${
-                destructiveActionsEnabled && !uploading
-                  ? 'cursor-pointer hover:border-medace-500 hover:bg-medace-50 hover:text-medace-700'
-                  : 'cursor-not-allowed opacity-60'
-              }`}
-            >
-              ファイルを選択
-            </button>
-          </div>
-
-          {file && (
-            <button
-              onClick={onCsvUpload}
-              disabled={!destructiveActionsEnabled || uploading}
-              className={`w-full rounded-xl py-3 font-bold text-steady-on-action transition-colors ${!destructiveActionsEnabled || uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-steady-action hover:bg-steady-action-hover'}`}
-            >
-              {uploading ? '処理中...' : 'CSVを取り込む'}
-            </button>
-          )}
+        <div className="rounded-xl border-2 border-dashed border-medace-200 bg-[#fff8ef] p-10 text-center transition-colors hover:border-medace-400">
+          <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+          <p className="mb-4 text-slate-600">
+            {file ? `選択中: ${file.name}` : 'CSV ファイルを選択してください'}
+          </p>
+          <input ref={fileInput} type="file" accept=".csv" onChange={onFileChange} className="hidden" id="csv-upload" disabled={!destructiveActionsEnabled || uploading} />
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={!destructiveActionsEnabled || uploading}
+            aria-controls="csv-upload"
+            className={`inline-block rounded-lg border border-medace-200 bg-white px-6 py-3 font-medium text-medace-800 shadow-sm transition-all ${
+              destructiveActionsEnabled && !uploading
+                ? 'cursor-pointer hover:border-medace-500 hover:bg-medace-50 hover:text-medace-700'
+                : 'cursor-not-allowed opacity-60'
+            }`}
+          >
+            ファイルを選択
+          </button>
         </div>
-      )}
+
+        {file && (
+          <button
+            onClick={onCsvUpload}
+            disabled={!destructiveActionsEnabled || uploading}
+            className={`w-full rounded-xl py-3 font-bold text-steady-on-action transition-colors ${!destructiveActionsEnabled || uploading ? 'cursor-not-allowed bg-medace-300' : 'bg-steady-action hover:bg-steady-action-hover'}`}
+          >
+            {uploading ? '処理中...' : 'CSVを取り込む'}
+          </button>
+        )}
+      </div>
 
       {(uploading || progress > 0) && (
         <div className="mt-8">
@@ -235,14 +152,14 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
     <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="text-xs font-bold text-slate-400">例文準備</div>
-          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">公式教材の例文を先に保存する</h3>
+          <div className="text-xs font-bold text-slate-400">保存済み例文</div>
+          <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">公式教材の例文を確認する</h3>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
-            生徒の学習中にAIを呼ばないため、公式教材の例文は事前に保存します。準備前に欠損一覧と費用見積もりを確認できます。
+            校正した例文と和訳を事前に保存し、学習画面では再利用します。ここでは表示できる例文と欠損を確認できます。
           </p>
         </div>
         <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
-          単語の例文・画像生成は学習画面から撤去
+          外部AI呼出しなし
         </div>
       </div>
 
@@ -251,9 +168,14 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
           <Loader2 className="mr-2 h-4 w-4 animate-spin text-medace-500" />
           公式教材を読み込み中...
         </div>
+      ) : officialBooksError ? (
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p role="alert" className="text-sm text-red-800">{officialBooksError}</p>
+          <button type="button" onClick={onRetryOfficialBooks} className="mt-3 min-h-11 rounded-lg border border-red-200 bg-white px-4 text-sm font-bold text-red-800">教材一覧を再取得</button>
+        </div>
       ) : officialBooks.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-          例文準備の対象になる公式教材はまだありません。
+          公式教材はまだありません。
         </div>
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -271,16 +193,15 @@ const AdminContentImportView: React.FC<AdminContentImportViewProps> = ({
                 </div>
               </div>
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
-                {book.description || '教材内で未生成の例文だけを保存し、生徒画面では再利用します。'}
+                {book.description || '保存した例文と和訳を確認します。追加は原本を保持して承認待ちで行います。'}
               </p>
               <button
                 type="button"
-                onClick={() => onPrepareExamples(book)}
-                disabled={uploading || preparingExamplesBookId !== null}
+                onClick={() => onInspectExamples(book)}
+                disabled={uploading}
                 className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
               >
-                {preparingExamplesBookId === book.id ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {preparingExamplesBookId === book.id ? '例文を準備中...' : '欠損・見積もりを確認'}
+                保存済み例文・欠損を確認
               </button>
             </article>
           ))}

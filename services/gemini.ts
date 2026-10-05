@@ -46,7 +46,7 @@ const isAccessDeniedError = (error: unknown): boolean => error instanceof ApiErr
 export const isAiUnavailableError = (error: unknown): boolean => {
   if (error instanceof ApiError && error.status === 503) return true;
   if (error instanceof Error) {
-    return error.message.includes('GEMINI_API_KEY') || error.message.includes('AI教材化はまだ利用できません');
+    return error.message.includes('GEMINI_API_KEY') || error.message.includes('AI教材化はまだ利用できません') || error.message.includes('AIによる教材抽出は利用できません');
   }
   return false;
 };
@@ -202,7 +202,7 @@ export const extractVocabularyFromText = async (rawText: string): Promise<Extrac
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
     }
     if (isAiUnavailableError(error)) {
-      throw new Error('AI教材化はまだ利用できません。Gemini 設定後に再試行してください。');
+      throw new Error('AIによる教材抽出は利用できません。事前に校正した単語・例文をCSVから取り込んでください。');
     }
     throw new Error(error instanceof Error ? error.message : 'AIによる抽出に失敗しました。');
   }
@@ -216,7 +216,7 @@ export const extractVocabularyFromMedia = async (base64Data: string, mimeType: s
       throw new Error('AIの利用制限(RPM)に達しました。1分ほど待ってから再試行してください。(Error: 429)');
     }
     if (isAiUnavailableError(error)) {
-      throw new Error('AI教材化はまだ利用できません。Gemini 設定後に再試行してください。');
+      throw new Error('AIによる教材抽出は利用できません。事前に校正した単語・例文をCSVから取り込んでください。');
     }
     throw new Error(error instanceof Error ? error.message : 'AIによる画像解析に失敗しました。');
   }

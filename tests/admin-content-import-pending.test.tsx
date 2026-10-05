@@ -37,7 +37,6 @@ vi.mock('react', async () => {
   };
 });
 const service = vi.hoisted(() => ({
-  extract: vi.fn(),
   import: vi.fn(),
   getBooks: vi.fn(),
   refresh: vi.fn(),
@@ -45,10 +44,6 @@ const service = vi.hoisted(() => ({
 }));
 vi.mock('../services/dashboard', () => ({
   dashboardService: { batchImportWords: service.import, getBooks: service.getBooks },
-}));
-vi.mock('../services/gemini', () => ({
-  extractVocabularyFromText: service.extract,
-  isAiUnavailableError: () => false,
 }));
 vi.mock('../config/runtime', () => ({
   default: () => ({ enableDestructiveAdminActions: service.enabled }),
@@ -111,11 +106,10 @@ const openContent = () => {
   tab('教材運用').props.onClick();
   return content();
 };
-const prepareAi = () => {
+const prepareCsv = () => {
   const props = openContent();
-  props.onContentTitleChange('Official A');
-  props.onRawTextChange('Synthetic source A.');
   props.onCatalogSourceChange(BookCatalogSource.STEADY_STUDY_ORIGINAL);
+  chooseFile(props, { name: 'A.csv', text: async () => 'A,1,synthetic,合成,Synthetic example.,合成の例文。' });
   return content();
 };
 const result: CatalogImportResult = {
@@ -133,10 +127,6 @@ const deferred = <T,>() => {
   });
   return { promise, resolve, reject };
 };
-const extracted = {
-  words: [{ word: 'synthetic', definition: '合成テスト用' }],
-  contextSummary: 'Synthetic fixture only.',
-};
 const chooseFile = (
   props: Record<string, any>,
   file: { name: string; text: () => Promise<string> },
@@ -150,148 +140,137 @@ beforeEach(() => {
   harness.cleanups = [];
   vi.resetAllMocks();
   service.enabled = true;
-  service.extract.mockResolvedValue(extracted);
   service.import.mockResolvedValue(result);
   service.getBooks.mockResolvedValue([]);
   service.refresh.mockResolvedValue(undefined);
 });
 
-describe('admin content pending operations', () => {
-  it('locks draft and navigation while saving captured A and accepts new B only after completion', async () => {
+describe('administrator prepared content import', () => {
+  it('locks the captured file and source while saving A and accepts B after completion', async () => {
     const save = deferred<CatalogImportResult>();
     service.import.mockReturnValue(save.promise);
-    const props = prepareAi();
-    const request = props.onAiImport();
+    const props = prepareCsv();
+    const request = props.onCsvUpload();
     await Promise.resolve();
     const pending = content();
     expect(pending.uploading).toBe(true);
-    pending.onContentTitleChange('New B');
-    pending.onRawTextChange('New B text');
+    chooseFile(pending, { name: 'B.csv', text: async () => 'B,1,new,新規' });
     pending.onCatalogSourceChange(BookCatalogSource.LICENSED_PARTNER);
-    pending.onModeChange('csv');
     tab('分析ダッシュボード').props.onClick();
     const retained = content();
-    expect(retained.contentTitle).toBe('Official A');
-    expect(retained.rawText).toBe('Synthetic source A.');
-    expect(retained.mode).toBe('ai');
+    expect(retained.file.name).toBe('A.csv');
+    expect(retained.catalogSource).toBe(BookCatalogSource.STEADY_STUDY_ORIGINAL);
     expect(service.import.mock.calls[0][0]).toMatchObject({
-      defaultBookName: 'Official A',
+      defaultBookName: 'A', source: { kind: 'csv', fileName: 'A.csv' },
       options: { catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL },
     });
     save.resolve(result);
     await request;
     const finished = content();
     expect(finished.uploading).toBe(false);
-    expect(finished.contentTitle).toBe('');
-    finished.onContentTitleChange('New B');
-    finished.onRawTextChange('New B text');
-    expect(content().contentTitle).toBe('New B');
-    expect(content().rawText).toBe('New B text');
+    chooseFile(finished, { name: 'B.csv', text: async () => 'B,1,new,新規' });
+    expect(content().file.name).toBe('B.csv');
   });
 
-  it('starts one AI operation for two submissions in the same tick', async () => {
-    const extraction = deferred<typeof extracted>();
-    service.extract.mockReturnValue(extraction.promise);
-    const props = prepareAi();
-    const first = props.onAiImport();
-    const second = props.onAiImport();
-    expect(service.extract).toHaveBeenCalledTimes(1);
-    extraction.resolve(extracted);
-    await Promise.all([first, second]);
-    expect(service.import).toHaveBeenCalledTimes(1);
-  });
-
-  it('shares the operation lock between CSV and AI and ignores pending file changes', async () => {
+  it('starts one import for duplicate submissions and retains the pending file', async () => {
     const reading = deferred<string>();
-    const props = prepareAi();
+    const props = prepareCsv();
     chooseFile(props, { name: 'A.csv', text: () => reading.promise });
     const ready = content();
     const first = ready.onCsvUpload();
     const duplicate = ready.onCsvUpload();
-    const ai = ready.onAiImport();
     chooseFile(content(), { name: 'B.csv', text: async () => 'B,1,new,新規' });
     expect(content().file.name).toBe('A.csv');
-    expect(service.extract).not.toHaveBeenCalled();
     reading.resolve('A,1,synthetic,合成');
-    await Promise.all([first, duplicate, ai]);
+    await Promise.all([first, duplicate]);
     expect(service.import).toHaveBeenCalledTimes(1);
-    expect(service.import.mock.calls[0][0].source.fileName).toBe('A.csv');
   });
 
-  it('retains the submitted draft and unlocks editing after a save failure', async () => {
+  it('retains the selected file and permits correction after save failure', async () => {
     const save = deferred<CatalogImportResult>();
     service.import.mockReturnValue(save.promise);
-    const request = prepareAi().onAiImport();
+    const request = prepareCsv().onCsvUpload();
     await Promise.resolve();
     save.reject(new Error('Synthetic offline failure'));
     await request;
     const failed = content();
     expect(failed.uploading).toBe(false);
-    expect(failed.contentTitle).toBe('Official A');
-    expect(failed.rawText).toBe('Synthetic source A.');
-    failed.onRawTextChange('Corrected B');
-    expect(content().rawText).toBe('Corrected B');
+    expect(failed.file.name).toBe('A.csv');
+    expect(failed.log.at(-1)).toContain('Synthetic offline failure');
+    chooseFile(failed, { name: 'Corrected.csv', text: async () => 'B,1,new,新規' });
+    expect(content().file.name).toBe('Corrected.csv');
   });
 
-  it('does not begin a save after leaving the panel during AI extraction', async () => {
-    const extraction = deferred<typeof extracted>();
-    service.extract.mockReturnValue(extraction.promise);
-    const request = prepareAi().onAiImport();
+  it('does not begin saving after leaving during file reading', async () => {
+    const reading = deferred<string>();
+    const props = prepareCsv();
+    chooseFile(props, { name: 'A.csv', text: () => reading.promise });
+    const request = content().onCsvUpload();
     harness.cleanups.forEach((cleanup) => cleanup());
-    extraction.resolve(extracted);
+    reading.resolve('A,1,synthetic,合成');
     await request;
     expect(service.import).not.toHaveBeenCalled();
   });
 
-  it.each(['success', 'failure'])(
-    'ignores delayed %s after the panel has unmounted',
-    async (outcome) => {
-      const save = deferred<CatalogImportResult>();
-      service.import.mockReturnValue(save.promise);
-      const request = prepareAi().onAiImport();
-      await Promise.resolve();
-      const previous = content();
-      harness.cleanups.forEach((cleanup) => cleanup());
-      if (outcome === 'success') save.resolve(result);
-      else save.reject(new Error('Synthetic late failure'));
-      await request;
-      expect(content().contentTitle).toBe(previous.contentTitle);
-      expect(content().log).toEqual(previous.log);
-      expect(service.refresh).not.toHaveBeenCalled();
-    },
-  );
+  it.each(['success', 'failure'])('ignores delayed %s after unmount', async (outcome) => {
+    const save = deferred<CatalogImportResult>();
+    service.import.mockReturnValue(save.promise);
+    const request = prepareCsv().onCsvUpload();
+    await Promise.resolve();
+    const previous = content();
+    harness.cleanups.forEach((cleanup) => cleanup());
+    if (outcome === 'success') save.resolve(result);
+    else save.reject(new Error('Synthetic late failure'));
+    await request;
+    expect(content().file).toBe(previous.file);
+    expect(content().log).toEqual(previous.log);
+    expect(service.refresh).not.toHaveBeenCalled();
+  });
 
-  it('does not publish a late progress callback after the operation has completed', async () => {
-    await prepareAi().onAiImport();
+  it('ignores a late progress callback after completion', async () => {
+    await prepareCsv().onCsvUpload();
     const progressCallback = service.import.mock.calls[0][1];
     chooseFile(content(), { name: 'B.csv', text: async () => '' });
     progressCallback(100);
     expect(content().progress).toBe(0);
   });
 
-  it('keeps disabled runtime actions unavailable even through captured handlers', async () => {
+  it('keeps the disabled runtime write gate even through captured handlers', async () => {
     service.enabled = false;
-    const props = prepareAi();
-    await props.onAiImport();
-    chooseFile(props, { name: 'A.csv', text: async () => 'A,1,word,語' });
-    await content().onCsvUpload();
-    expect(service.extract).not.toHaveBeenCalled();
+    const props = prepareCsv();
+    await props.onCsvUpload();
     expect(service.import).not.toHaveBeenCalled();
     expect(content().file).toBeNull();
   });
 
-  it('renders a native keyboard button for CSV selection and locks all draft fields when pending', () => {
-    const props = prepareAi();
+  it('offers CSV only with a keyboard button and locks it while pending', () => {
+    const props = prepareCsv();
     harness.cursor = 0;
-    const csv = renderToStaticMarkup(<AdminContentImportView {...(props as any)} mode="csv" />);
-    expect(csv).toMatch(/<button[^>]*aria-controls="csv-upload"/);
-    expect(csv).not.toMatch(/<label[^>]*for="csv-upload"/);
+    const markup = renderToStaticMarkup(<AdminContentImportView {...(props as any)} />);
+    expect(markup).toMatch(/<button[^>]*aria-controls="csv-upload"/);
+    expect(markup).toContain('校正済み教材のCSV取込');
+    expect(markup).toContain('取込は権利や公開の承認を意味しません');
+    expect(markup).not.toContain('AI生成');
+    expect(props.onAiImport).toBeUndefined();
     harness.cursor = 0;
-    const pending = renderToStaticMarkup(
-      <AdminContentImportView {...(props as any)} uploading={true} />,
-    );
-    expect(pending).toMatch(/<textarea[^>]*disabled/);
+    const pending = renderToStaticMarkup(<AdminContentImportView {...(props as any)} uploading={true} />);
     expect(pending).toMatch(/<input[^>]*disabled/);
     expect(pending).toContain('aria-busy="true"');
+  });
+
+  it('distinguishes a failed catalog read from an empty catalog', async () => {
+    service.getBooks.mockRejectedValueOnce(new Error('Synthetic catalog unavailable'));
+    openContent();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(content().officialBooksError).toContain('取得できません');
+    expect(content().loadingOfficialBooks).toBe(false);
+    harness.cursor = 0;
+    const markup = renderToStaticMarkup(<AdminContentImportView {...(content() as any)} />);
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('教材一覧を再取得');
+    expect(markup).not.toContain('公式教材はまだありません');
+    await content().onRetryOfficialBooks();
+    expect(content().officialBooksError).toBeNull();
   });
 });
