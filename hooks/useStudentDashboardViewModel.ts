@@ -321,12 +321,10 @@ export const useStudentDashboardViewModel = ({
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
     : 0;
 
-  const aiUsageLabel = aiBudgetPercent >= 85 ? '控えめに利用中' : aiBudgetPercent >= 55 ? '通常利用中' : 'ゆとりあり';
-  const aiUsageCopy = aiBudgetPercent >= 85
-    ? '今月は教材作成と添削を軽めにします。'
-    : aiBudgetPercent >= 55
-      ? '教材作成と添削は通常どおり使えます。'
-      : '教材作成や添削にまだ余裕があります。';
+  const aiUsageLabel = accountOverview ? '従来AIの参考記録' : '利用記録は未取得';
+  const aiUsageCopy = accountOverview
+    ? '過去の円建て利用記録です。現在の機能の利用可否やGPT利用額を示すものではありません。'
+    : '利用記録を取得できていません。標準学習プランと手入力・CSVのMy単語帳はAIを使いません。';
 
   const preferenceSummaryParts = [
     learningPreference?.targetExam ? `目標: ${learningPreference.targetExam}` : null,

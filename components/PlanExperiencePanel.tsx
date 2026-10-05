@@ -44,7 +44,7 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
           </div>
           <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">まずは無料で学習習慣を作る</h3>
           <p className="mt-3 text-sm leading-relaxed text-slate-600">
-            フリープランは自己学習を軽く始めるための入口です。広告表示でコストを抑えつつ、オリジナル単語データベースのスターター教材と小さなAI補助を軸にテンポ良く使えます。
+            フリープランは自己学習を始めるための入口です。広告表示でコストを抑えつつ、スターター教材、保存済み例文、標準学習プランで毎日の学習を進められます。
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
@@ -53,9 +53,9 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
               <div className="mt-1 text-sm text-slate-500">個人で進める標準導線</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">AI枠</div>
-              <div className="mt-2 text-lg font-black text-slate-950">ライト</div>
-              <div className="mt-1 text-sm text-slate-500">保存済み例文と小クイズ中心</div>
+              <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">教材</div>
+              <div className="mt-2 text-lg font-black text-slate-950">保存済み</div>
+              <div className="mt-1 text-sm text-slate-500">例文・復習・小テスト</div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
               <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">次の伸びしろ</div>
@@ -169,15 +169,15 @@ const PlanExperiencePanel: React.FC<PlanExperiencePanelProps> = ({
           {getWorkspaceRoleLabel(user)}
         </div>
       </div>
-      <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">学習体験を広げる個人向け上位プラン</h3>
+      <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">自分の教材で続ける個人向けプラン</h3>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">
-        広告なしで集中しつつ、画像やPDFからの教材化まで使える個人向けプランです。フリープランとの差は、学習の深さと素材化の自由度にあります。
+        広告なしで集中しながら、スターター教材と手入力・CSVで作るMy単語帳を使って学習できます。学習プランは教材と学習時間から標準ロジックで作成します。画像・PDFの自動教材化は現在停止しています。
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {[
-          { icon: <Sparkles className="h-5 w-5" />, label: '教材化', value: '画像 / PDF対応' },
+          { icon: <Sparkles className="h-5 w-5" />, label: 'My単語帳', value: '手入力 / CSV' },
           { icon: <Crown className="h-5 w-5" />, label: '環境', value: '広告なし' },
-          { icon: <ArrowUpRight className="h-5 w-5" />, label: '活用幅', value: '個人最適化を拡張' },
+          { icon: <ArrowUpRight className="h-5 w-5" />, label: '学習プラン', value: '標準プラン' },
         ].map((item) => (
           <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="flex items-center gap-2 text-medace-600">{item.icon}<span className="text-xs font-bold uppercase tracking-[0.16em]">{item.label}</span></div>

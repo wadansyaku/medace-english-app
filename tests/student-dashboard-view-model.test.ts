@@ -1094,3 +1094,23 @@ describe('useStudentDashboardViewModel', () => {
     });
   });
 });
+
+
+describe('legacy AI usage presentation', () => {
+  it.each([0, 600, 900])('does not advertise current feature availability from legacy cost=%i', estimatedCostMilliYen => {
+    const snapshot = buildSnapshot({});
+    snapshot.accountOverview!.subscriptionPlan = SubscriptionPlan.TOC_PAID;
+    snapshot.accountOverview!.aiUsage.estimatedCostMilliYen = estimatedCostMilliYen;
+    const view = useStudentDashboardViewModel({ user: { ...baseUser, subscriptionPlan: SubscriptionPlan.TOC_PAID }, snapshot });
+    expect(view.aiBudgetPercent).toBe(estimatedCostMilliYen / 10);
+    expect(view.aiUsageLabel).toBe('従来AIの参考記録');
+    expect(view.aiUsageCopy).toContain('過去の円建て利用記録');
+    expect(view.aiUsageCopy).toContain('現在の機能の利用可否やGPT利用額を示すものではありません');
+    expect(view.aiUsageCopy).not.toMatch(/通常どおり使えます|まだ余裕|軽めにします/);
+  });
+  it('keeps an unacquired account overview unknown instead of calling unused budget available', () => {
+    const view = useStudentDashboardViewModel({ user: baseUser, snapshot: buildSnapshot({ accountOverview: null }) });
+    expect(view.aiUsageLabel).toBe('利用記録は未取得'); expect(view.aiUsageCopy).toContain('取得できていません');
+    expect(view.aiUsageLabel).not.toBe('ゆとりあり');
+  });
+});

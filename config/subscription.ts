@@ -48,7 +48,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     featureSummary: [
       'オリジナル単語データベースのスターター教材と通常学習を無理なく始められます',
       '学習プランはAIではなく標準ロジックで自動提案します',
-      '保存済み例文で学習し、AIは小さなクイズ補助に使えます',
+      '保存済みの例文と問題で、単語学習・復習・小テストに取り組めます',
       'フルの既存公式教材カタログは含めず、低コスト運用を優先します',
     ],
   },
@@ -57,7 +57,7 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     label: 'パーソナルプラン',
     audienceLabel: '個人向け',
     priceLabel: '月額課金想定',
-    pricingNote: '広告なしの個人向け拡張プラン。スターター公式教材に加えてAI教材化まで利用できます',
+    pricingNote: '広告なしの個人向けプラン。スターター教材と、手入力・CSVで作るMy単語帳を利用できます',
     monthlyAiBudgetMilliYen: 12000,
     allowedAiActions: [
       'generateAIQuiz',
@@ -70,8 +70,8 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
       'extractVocabularyFromMedia',
     ],
     featureSummary: [
-      'スターター公式教材に加えて、個人向けのAI教材化まで利用できます。学習プランは標準ロジックで作成します',
-      '画像やPDFからの抽出にも対応します',
+      'スターター教材と保存済み例文で学習・復習できます。学習プランは標準ロジックで作成します',
+      'My単語帳は手入力・CSVで作成できます。画像・PDFの自動抽出は停止しています',
       'フルの既存公式教材ではなく、自作教材とスターター教材中心で学習を広げます',
     ],
   },
@@ -118,8 +118,8 @@ export const SUBSCRIPTION_POLICIES: Record<SubscriptionPlan, SubscriptionPolicy>
     ],
     featureSummary: [
       '講師フォロー通知と正式教材カタログをどちらも使えます',
-      '教室運用に必要なAI利用枠を広めに確保します',
-      '高コスト機能も月次の利用枠で自動調整します',
+      '教材と学習時間から標準学習プランを作成します',
+      '講師フォロー通知はテンプレートを編集して使えます',
     ],
   },
 };
