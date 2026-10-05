@@ -262,6 +262,12 @@ test('desktop dashboard keeps one selected resource full-width and mission deadl
     await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);
     await openDashboardReference(studentPage, 'plan');
     await expect(studentPage.getByTestId('dashboard-plan-anchor')).toBeVisible();
+    for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+      await studentPage.setViewportSize(viewport);
+      await studentPage.getByTestId('dashboard-plan-anchor').scrollIntoViewIfNeeded();
+      expect(await studentPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+      await studentPage.screenshot({ path: testInfo.outputPath(`standard-plan-${viewport.width}.png`) });
+    }
     await expect(studentPage.getByTestId('dashboard-progress-section')).toHaveCount(0);
     await studentPage.getByRole('button', { name: '閉じて今日の画面に戻る', exact: true }).click();
     await expect(studentPage.getByTestId('dashboard-reference-panel')).toHaveCount(0);

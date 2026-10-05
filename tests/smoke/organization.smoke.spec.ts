@@ -380,7 +380,7 @@ test('group admin can scope cohorts and instructor dashboard only shows assigned
   await studentBContext.close();
 });
 
-test('instructor can edit and save a local template without requesting AI', async ({ browser }) => {
+test('instructor can edit and save a local template without requesting AI', async ({ browser }, testInfo) => {
   const adminContext = await browser.newContext();
   const instructorContext = await browser.newContext();
   const studentContext = await browser.newContext();
@@ -430,6 +430,12 @@ test('instructor can edit and save a local template without requesting AI', asyn
   await expect(draftField).not.toHaveValue('');
   await expect(draftField).toHaveValue(/\n一緒に復習しましょう。$/);
   expect(aiRequests).toEqual([]);
+  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+    await instructorPage.setViewportSize(viewport);
+    await templateButton.scrollIntoViewIfNeeded();
+    expect(await instructorPage.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+    await instructorPage.screenshot({ path: testInfo.outputPath(`ai-free-notification-${viewport.width}.png`) });
+  }
 
   await instructorPage.getByTestId('notification-send-submit').click();
   await expect(instructorPage.getByText(/アプリ内通知を保存しました。/)).toBeVisible();
