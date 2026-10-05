@@ -172,7 +172,10 @@ for (const width of [320, 1366]) {
     if (width === 1366) {
       await openDashboardReference(page, 'account');
       const account = page.getByTestId('dashboard-account-section');
-      await account.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+      // The account shortcut opens these details; toggle only if still closed.
+      if (await account.getByText('従来AIの参考記録', { exact: true }).count() === 0) {
+        await account.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+      }
       await expect(account.getByText('従来AIの参考記録', { exact: true })).toBeVisible();
       await expect(account).not.toContainText('画像/PDFの単語抽出');
       await expect(account).not.toContainText('専用AI予算');
