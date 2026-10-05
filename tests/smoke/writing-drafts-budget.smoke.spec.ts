@@ -58,6 +58,8 @@ test('teacher distinguishes safe same-request resume from result-only recheck an
   expect(posts[0].requestId).not.toBe(canonicalId);
   await resume.click();
   await expect(page.getByRole('button', { name: '結果を再確認', exact: true })).toBeVisible();
+  await expect(page.getByTestId('writing-gpt-recheck')).toBeEnabled();
+  await expect(page.getByTestId('writing-gpt-feedback')).toBeDisabled();
   expect(posts).toHaveLength(2);
   expect(posts[1]).toEqual(posts[0]);
   for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
@@ -72,6 +74,7 @@ test('teacher distinguishes safe same-request resume from result-only recheck an
   expect(posts).toHaveLength(2);
   await page.getByRole('button', { name: '結果を再確認', exact: true }).click();
   await expect(page.getByTestId('writing-gpt-unassessed-result')).toContainText('未評価');
+  await expect(page.getByTestId('writing-gpt-unassessed-result')).toContainText('結果を確認できないため、同じ答案を再送しません。');
   await expect(page.getByTestId('writing-gpt-unassessed-result')).not.toContainText('RESULT_UNAVAILABLE');
   await expect(resume).toHaveCount(0);
   expect(gets).toEqual([canonicalId, canonicalId]);
