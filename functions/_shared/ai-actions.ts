@@ -35,11 +35,12 @@ import {
   type InstructorFollowUpDraft,
   validateAiActionRequest,
 } from '../../contracts/ai';
+import { buildInstructorFollowUpTemplate } from '../../shared/instructorFollowUp';
 import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
 import { normalizeAiGrammarQuestionDrafts } from '../../utils/aiGrammarQuestions';
-import { buildFallbackLearningPlan, normalizeGeneratedLearningPlan } from '../../utils/learningPlan';
+import { buildFallbackLearningPlan } from '../../utils/learningPlan';
 import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import {
   filterWorksheetQuestionCandidates,
@@ -1023,122 +1024,19 @@ const extractVocabularyFromMedia = async (env: AppEnv, payload: ExtractVocabular
   }
 };
 
-const generateLearningPlan = async (env: AppEnv, payload: GenerateLearningPlanPayload): Promise<LearningPlan | null> => {
-  const ai = getAiClient(env);
-  const grade = payload.grade as UserGrade;
-  const level = payload.level as EnglishLevel;
-  const availableBooks = (Array.isArray(payload.availableBooks) ? payload.availableBooks : []) as BookMetadata[];
-  const learningPreference = (payload.learningPreference || null) as LearningPreference | null;
+const generateLearningPlan = (user: DbUserRow, payload: GenerateLearningPlanPayload): LearningPlan => (
+  buildFallbackLearningPlan({
+    uid: user.id,
+    grade: payload.grade,
+    level: payload.level,
+    availableBooks: payload.availableBooks,
+    learningPreference: payload.learningPreference,
+  })
+);
 
-  try {
-    const bookList = availableBooks.map((book) => ({
-      id: book.id,
-      title: book.title,
-      priority: book.isPriority,
-      source: book.catalogSource,
-      accessScope: book.accessScope,
-    }));
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `
-        User Profile: Grade ${grade}, Level ${level}.
-        Learning Preference: ${JSON.stringify(learningPreference || {})}.
-        Available Books: ${JSON.stringify(bookList)}.
-
-        Task: Create a personalized learning plan (Curriculum).
-        1. Select the most appropriate books (Max 5) for this user's level, weak points, available study time, and target exam. Do not select everything.
-        2. Determine a realistic daily word goal based on daily study minutes and weekly study days.
-        3. Reflect urgency if exam_date is near, but do not output reckless word counts.
-        4. Set a concrete goal description and target completion days.
-
-        Output JSON.
-      `,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            goalDescription: { type: Type.STRING },
-            targetDays: { type: Type.NUMBER },
-            dailyWordGoal: { type: Type.NUMBER },
-            selectedBookIds: { type: Type.ARRAY, items: { type: Type.STRING } },
-          },
-          required: ['goalDescription', 'targetDays', 'dailyWordGoal', 'selectedBookIds'],
-        },
-      },
-    });
-
-    if (!response.text) return null;
-    const parsed = JSON.parse(response.text);
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + (parsed.targetDays || 30));
-
-    return normalizeGeneratedLearningPlan({
-      plan: {
-        uid: '',
-        createdAt: Date.now(),
-        targetDate: formatDateKey(targetDate),
-        goalDescription: parsed.goalDescription,
-        dailyWordGoal: parsed.dailyWordGoal,
-        selectedBookIds: parsed.selectedBookIds,
-        status: 'ACTIVE',
-      },
-      uid: '',
-      grade,
-      level,
-      availableBooks,
-      learningPreference,
-    });
-  } catch (error) {
-    handleAiError(error, '学習プラン生成に失敗しました。');
-  }
-};
-
-const generateInstructorFollowUp = async (env: AppEnv, payload: GenerateInstructorFollowUpPayload): Promise<InstructorFollowUpDraft> => {
-  const ai = getAiClient(env);
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: `
-        あなたは日本の学習塾で、生徒に寄り添う講師の代筆アシスタントです。
-
-        講師名: ${payload.instructorName}
-        生徒名: ${payload.studentName}
-        離脱リスク: ${payload.riskLevel || StudentRiskLevel.WARNING}
-        最終学習からの日数: ${payload.daysSinceActive ?? 0}
-        習得単語数: ${payload.totalLearned ?? 0}
-        現在のレベル: ${payload.currentLevel || '未診断'}
-        補足指示: ${payload.customInstruction || 'やさしく背中を押す'}
-
-        条件:
-        1. 文頭を「${payload.instructorName}より:」で始める。
-        2. 自然な日本語で 1〜2 文、80〜120 文字程度。
-        3. 怒らず、具体的な次の一歩を 1 つだけ提案する。
-        4. 生徒名は呼び捨てにしない。
-
-        JSON で返す:
-        { "message": "..." }
-      `,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            message: { type: Type.STRING },
-          },
-          required: ['message'],
-        },
-      },
-    });
-
-    if (!response.text) throw new Error('Empty response');
-    return JSON.parse(response.text) as InstructorFollowUpDraft;
-  } catch (error) {
-    handleAiError(error, '講師フォロー通知の生成に失敗しました。');
-  }
-};
+const generateInstructorFollowUp = (payload: GenerateInstructorFollowUpPayload): InstructorFollowUpDraft => (
+  { message: buildInstructorFollowUpTemplate(payload) }
+);
 
 const generateDiagnosticTest = async (env: AppEnv, payload: GenerateDiagnosticTestPayload): Promise<DiagnosticQuestion[]> => {
   const ai = getAiClient(env);
@@ -1359,19 +1257,11 @@ export const handleAiAction = async (
     case 'extractVocabularyFromMedia':
       return runMeteredAiAction(env, user, 'extractVocabularyFromMedia', () => extractVocabularyFromMedia(env, request.payload), logContext);
     case 'generateLearningPlan':
-      if (!env.GEMINI_API_KEY) {
-        assertAiActionAllowed(user, 'generateLearningPlan');
-        return buildFallbackLearningPlan({
-          uid: user.id,
-          grade: request.payload.grade,
-          level: request.payload.level,
-          availableBooks: request.payload.availableBooks as BookMetadata[],
-          learningPreference: request.payload.learningPreference as LearningPreference | null,
-        });
-      }
-      return runMeteredAiAction(env, user, 'generateLearningPlan', () => generateLearningPlan(env, request.payload), logContext);
+      requireRole(user, [UserRole.STUDENT, UserRole.ADMIN]);
+      return generateLearningPlan(user, request.payload);
     case 'generateInstructorFollowUp':
-      return runMeteredAiAction(env, user, 'generateInstructorFollowUp', () => generateInstructorFollowUp(env, request.payload), logContext);
+      requireRole(user, [UserRole.INSTRUCTOR, UserRole.ADMIN]);
+      return generateInstructorFollowUp(request.payload);
     case 'generateDiagnosticTest':
       return runMeteredAiAction(env, user, 'generateDiagnosticTest', () => generateDiagnosticTest(env, request.payload), logContext);
     case 'generateAdvancedDiagnosticTest':

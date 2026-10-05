@@ -657,7 +657,7 @@ describe('handleAiAction metering integration', () => {
     }));
   });
 
-  it('keeps learning-plan fallback on access check only when GEMINI_API_KEY is missing', async () => {
+  it('uses an authenticated standard learning plan without provider, budget, or usage calls', async () => {
     const env = {} as any;
     const user = createUser() as any;
 
@@ -674,7 +674,8 @@ describe('handleAiAction metering integration', () => {
       uid: user.id,
       status: 'ACTIVE',
     }));
-    expect(assertAiActionAllowedMock).toHaveBeenCalledWith(user, 'generateLearningPlan');
+    expect(assertAiActionAllowedMock).not.toHaveBeenCalled();
+    expect(generateContentMock).not.toHaveBeenCalled();
     expect(assertBudgetAvailableMock).not.toHaveBeenCalled();
     expect(recordAiUsageEventMock).not.toHaveBeenCalled();
   });

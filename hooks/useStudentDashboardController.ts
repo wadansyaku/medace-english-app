@@ -12,7 +12,6 @@ interface UseStudentDashboardControllerParams {
   learningPlan: LearningPlan | null;
   learningPreference: LearningPreference | null;
   planningBooks: BookMetadata[];
-  canGenerateAiPlan: boolean;
   onUserUpdate: (user: UserProfile) => void;
   refreshDashboard: () => Promise<void>;
   updateLearningPlan: (plan: LearningPlan | null) => void;
@@ -25,7 +24,6 @@ export const useStudentDashboardController = ({
   learningPlan,
   learningPreference,
   planningBooks,
-  canGenerateAiPlan,
   onUserUpdate,
   refreshDashboard,
   updateLearningPlan,
@@ -112,7 +110,6 @@ export const useStudentDashboardController = ({
     learningPlan,
     learningPreference,
     planningBooks,
-    canGenerateAiPlan,
     onUserUpdate,
     refreshDashboard,
     updateLearningPlan,

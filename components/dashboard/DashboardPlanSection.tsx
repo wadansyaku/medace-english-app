@@ -7,7 +7,6 @@ interface DashboardPlanSectionProps {
   learningPreference: LearningPreference | null;
   preferenceSummary: string;
   plannedBooks: BookMetadata[];
-  canGenerateAiPlan: boolean;
   generatingPlan: boolean;
   hasStudyBooks: boolean;
   isCompact?: boolean;
@@ -20,7 +19,6 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
   learningPreference,
   preferenceSummary,
   plannedBooks,
-  canGenerateAiPlan,
   generatingPlan,
   hasStudyBooks,
   isCompact = false,
@@ -92,11 +90,9 @@ const DashboardPlanSection: React.FC<DashboardPlanSectionProps> = ({
         <p className="text-sm leading-relaxed">
           目標日と学習時間から、今日やる量を決めます。
         </p>
-        {!canGenerateAiPlan && (
-          <p className="mt-3 text-xs leading-relaxed text-slate-500">
-            教材と学習時間から標準プランを作ります。
-          </p>
-        )}
+        <p className="mt-3 text-xs leading-relaxed text-slate-500">
+          教材と学習時間から、AIを使わない標準プランを作ります。
+        </p>
         <button
           onClick={onGeneratePlan}
           disabled={generatingPlan || !hasStudyBooks}

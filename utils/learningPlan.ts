@@ -19,6 +19,7 @@ interface BuildFallbackLearningPlanInput {
   availableBooks: BookMetadata[];
   learningPreference?: LearningPreference | null;
   useNaruDefault?: boolean;
+  preferredBookIds?: string[];
   now?: Date;
 }
 
@@ -212,6 +213,7 @@ export const buildFallbackLearningPlan = ({
   availableBooks,
   learningPreference = null,
   useNaruDefault = true,
+  preferredBookIds,
   now = new Date(),
 }: BuildFallbackLearningPlanInput): LearningPlan => {
   const weeklyStudyDays = clamp(learningPreference?.weeklyStudyDays || 4, 1, 7);
@@ -221,7 +223,10 @@ export const buildFallbackLearningPlan = ({
   const daysUntilExam = getDaysUntil(examDate, now);
   const dailyWordGoal = getDailyGoal(level, dailyStudyMinutes, intensity, daysUntilExam);
   const keywords = tokenize(learningPreference?.targetExam, learningPreference?.weakSkillFocus);
-  const selectedBooks = selectBooks(availableBooks, grade, level, keywords, dailyStudyMinutes, intensity, useNaruDefault);
+  const preferredIds = normalizeSelectedBookIds(preferredBookIds, availableBooks);
+  const selectedBooks = preferredIds.length > 0
+    ? preferredIds.map((id) => availableBooks.find((book) => book.id === id)!)
+    : selectBooks(availableBooks, grade, level, keywords, dailyStudyMinutes, intensity, useNaruDefault);
   const estimatedTotalWords = selectedBooks.reduce((total, book) => total + Math.max(book.wordCount || 0, 120), 0) || Math.max(dailyWordGoal * 14, 160);
   const studyDaysNeeded = Math.ceil(estimatedTotalWords / Math.max(dailyWordGoal, 1));
   let targetDays = clamp(Math.ceil((studyDaysNeeded * 7) / weeklyStudyDays), 14, 210);

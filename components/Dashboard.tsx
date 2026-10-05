@@ -132,7 +132,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     learningPlan: viewModel.learningPlan,
     learningPreference: viewModel.learningPreference,
     planningBooks: viewModel.planningBooks,
-    canGenerateAiPlan: viewModel.canGenerateAiPlan,
     onUserUpdate,
     refreshDashboard,
     updateLearningPlan,

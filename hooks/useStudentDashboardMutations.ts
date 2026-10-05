@@ -1,10 +1,9 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { dashboardService } from '../services/dashboard';
 import {
   extractVocabularyFromMedia,
   extractVocabularyFromText,
-  generateLearningPlan,
   isAiUnavailableError,
 } from '../services/gemini';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
@@ -30,7 +29,6 @@ interface UseStudentDashboardMutationsParams {
   learningPlan: LearningPlan | null;
   learningPreference: LearningPreference | null;
   planningBooks: BookMetadata[];
-  canGenerateAiPlan: boolean;
   onUserUpdate: (user: UserProfile) => void;
   refreshDashboard: () => Promise<void>;
   updateLearningPlan: (plan: LearningPlan | null) => void;
@@ -75,7 +73,6 @@ export const useStudentDashboardMutations = ({
   learningPlan,
   learningPreference,
   planningBooks,
-  canGenerateAiPlan,
   onUserUpdate,
   refreshDashboard,
   updateLearningPlan,
@@ -114,46 +111,33 @@ export const useStudentDashboardMutations = ({
   uploadFile,
   newBookTitle,
 }: UseStudentDashboardMutationsParams) => {
+  const planSaveInFlight = useRef(false);
   const handleGeneratePlan = useCallback(async () => {
-    if (planningBooks.length === 0) return;
+    if (planningBooks.length === 0 || planSaveInFlight.current) return;
+    planSaveInFlight.current = true;
     setGeneratingPlan(true);
     try {
-      let usedStandardFallback = false;
-      const plan = canGenerateAiPlan
-        ? await generateLearningPlan(
-            user.grade || UserGrade.ADULT,
-            user.englishLevel || EnglishLevel.B1,
-            planningBooks,
-            learningPreference,
-            () => { usedStandardFallback = true; },
-          )
-        : buildFallbackLearningPlan({
-            uid: user.uid,
-            grade: user.grade || UserGrade.ADULT,
-            level: user.englishLevel || EnglishLevel.B1,
-            availableBooks: planningBooks,
-            learningPreference,
-          });
-
-      if (plan) {
-        plan.uid = user.uid;
-        await dashboardService.saveLearningPlan(plan);
-        updateLearningPlan(plan);
-        setPageNotice({ tone: 'success', message: usedStandardFallback
-          ? 'AIが利用できないため、標準の学習プランを作成しました。'
-          : '学習プランを作成しました。' });
-      } else {
-        setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
-      }
+      const plan = buildFallbackLearningPlan({
+        uid: user.uid,
+        grade: user.grade || UserGrade.ADULT,
+        level: user.englishLevel || EnglishLevel.B1,
+        availableBooks: planningBooks,
+        learningPreference,
+        preferredBookIds: learningPlan?.selectedBookIds,
+      });
+      await dashboardService.saveLearningPlan(plan);
+      updateLearningPlan(plan);
+      setPageNotice({ tone: 'success', message: '標準の学習プランを保存しました。' });
     } catch (error) {
       console.error(error);
-      setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
+      setPageNotice({ tone: 'error', message: '学習プランの保存を確認できませんでした。プランを再取得してから再度操作してください。' });
     } finally {
+      planSaveInFlight.current = false;
       setGeneratingPlan(false);
     }
   }, [
     planningBooks,
-    canGenerateAiPlan,
+    learningPlan,
     user,
     learningPreference,
     setGeneratingPlan,

@@ -244,7 +244,6 @@ export const useStudentDashboardViewModel = ({
   const currentPlan = accountOverview?.subscriptionPlan || user.subscriptionPlan || SubscriptionPlan.TOC_FREE;
   const currentPlanPolicy = getSubscriptionPolicy(currentPlan);
   const showAdSlots = isAdSupportedPlan(currentPlan);
-  const canGenerateAiPlan = currentPlanPolicy.allowedAiActions.includes('generateLearningPlan');
   const canCreateFromText = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromText');
   const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
   const canCreateBook = canCreateFromText || canCreateFromFile;
@@ -811,7 +810,6 @@ export const useStudentDashboardViewModel = ({
     todayProgressPercent,
     currentPlanPolicy,
     showAdSlots,
-    canGenerateAiPlan,
     canCreateFromText,
     canCreateFromFile,
     plannedBooks,
