@@ -20,7 +20,10 @@ const WritingTeacherDraftModal: React.FC<Props> = ({ assignment, onClose, legacy
     <button type="button" onClick={() => void draft.reload()} disabled={draft.busy || draft.loading} className="mt-3 min-h-11 rounded-xl border px-3 text-sm font-bold">{draft.loading ? '下書きを確認中' : '下書きを再取得'}</button>
     {draft.saved?.assets.map(asset => <div key={asset.id} className="mt-2 flex items-start justify-between gap-2 rounded-xl border p-3 text-sm"><span className="min-w-0 break-all">保存済み: {asset.fileName}</span><button type="button" disabled={draft.busy || draft.loading} onClick={() => draft.removeAsset(asset.id)} className="min-h-11 shrink-0 px-2">外す</button></div>)}
     <label htmlFor="writing-teacher-draft-files" className="mt-4 block text-sm font-bold">画像最大4件／PDF 1件</label>
-    <input id="writing-teacher-draft-files" data-testid="writing-teacher-draft-files" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={draft.busy || draft.loading} onChange={event => draft.setFiles(Array.from(event.target.files || []))} className="mt-2 block w-full min-w-0 rounded-xl border p-3 text-sm" />
+    <input id="writing-teacher-draft-files" data-testid="writing-teacher-draft-files" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={draft.busy || draft.loading} onChange={event => {
+      draft.setFiles(Array.from(event.currentTarget.files || []));
+      event.currentTarget.value = '';
+    }} className="mt-2 block w-full min-w-0 rounded-xl border p-3 text-sm" />
     {draft.files.map((file, index) => <p key={index} className="mt-1 break-all text-xs text-slate-600">未保存: {file.name}</p>)}
     <label htmlFor="writing-teacher-draft-manual" className="mt-4 block text-sm font-bold">答案本文（手入力）</label>
     <textarea id="writing-teacher-draft-manual" data-testid="writing-teacher-draft-manual" value={draft.manual} readOnly={draft.busy || draft.loading} onChange={event => draft.setManual(event.target.value)} rows={6} className="mt-2 w-full rounded-xl border p-3 text-sm" />

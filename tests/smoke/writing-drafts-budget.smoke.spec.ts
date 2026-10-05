@@ -39,6 +39,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await teacher.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'synthetic-original.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') });
   await teacher.getByTestId('writing-teacher-draft-save').click();
   await expect(teacherDialog.getByRole('status')).toContainText('下書きを保存しました');
+  await expect(teacher.getByTestId('writing-teacher-draft-files')).toHaveValue('');
   await expect(teacher.getByTestId('writing-gpt-ocr')).toBeDisabled();
   await expect(teacher.getByTestId('writing-gpt-feedback')).toBeDisabled();
   for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
@@ -77,7 +78,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await expect(studentDialog.getByRole('alert')).toBeFocused();
   await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
   await student.getByTestId('writing-submit-upload').click();
-  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('下書きを保存しました');
   const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
   expect(saved.draft.revision).toBe(3);
   expect(saved.draft.assets).toHaveLength(1);
@@ -86,18 +87,19 @@ test('unassessed originals survive a lost save response and browser revisit with
     return response.status;
   }, { id: assignment.id, assetIds: saved.draft.assetIds });
   expect(concurrent).toBe(200);
-  await manual.fill('Synthetic learner revision retained after a lost response.');
+  const conflictManual = 'Synthetic learner edit kept after a concurrent teacher save.';
+  await manual.fill(conflictManual);
   await student.getByTestId('writing-submit-upload').click();
   await expect(studentDialog.getByRole('alert')).toBeVisible();
   await studentDialog.getByRole('button', { name: '下書きを再取得する', exact: true }).click();
-  await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await expect(manual).toHaveValue(conflictManual);
   await expect(student.getByTestId('writing-submit-upload')).toBeEnabled();
   await student.getByTestId('writing-submit-upload').click();
-  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('下書きを保存しました');
   await student.reload();
   await openDashboardWriting(student);
   await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
-  await expect(manual).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await expect(manual).toHaveValue(conflictManual);
   await student.setViewportSize({ width: 320, height: 568 });
   await student.getByRole('button', { name: 'ファイル選択へ進む', exact: true }).click();
   await student.getByRole('button', { name: '本文・保存へ進む', exact: true }).click();
@@ -111,7 +113,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await studentDialog.getByRole('button', { name: '外す', exact: true }).click();
   await studentDialog.locator('input[type=file]').setInputFiles({ name: 'synthetic-replacement.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic replacement') });
   await student.getByTestId('writing-submit-upload').click();
-  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('下書きを保存しました');
   const replaced = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
   expect(replaced.draft.revision).toBe(7);
   expect(replaced.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-replacement.pdf']);
@@ -127,7 +129,7 @@ test('unassessed originals survive a lost save response and browser revisit with
   await expect(teacher.getByTestId('writing-teacher-draft-error')).toBeVisible();
   failTeacherRestore = false;
   await teacher.getByRole('button', { name: '下書きを再取得', exact: true }).click();
-  await expect(teacher.getByTestId('writing-teacher-draft-manual')).toHaveValue('Synthetic learner revision retained after a lost response.');
+  await expect(teacher.getByTestId('writing-teacher-draft-manual')).toHaveValue(conflictManual);
   await teacher.getByRole('dialog').getByRole('button', { name: '外す', exact: true }).click();
   const images = [1, 2, 3, 4].map(index => ({ name: `synthetic-page-${index}.png`, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6q98AAAAASUVORK5CYII=', 'base64') }));
   await teacher.getByTestId('writing-teacher-draft-files').setInputFiles(images);
@@ -229,9 +231,6 @@ test('student can reacquire a concurrent draft after losing a successful origina
   await loginGroupAdminDemo(teacher);
   const bootstrap = await runtimeAdminPost<{ studentUid: string }>(teacher, 'runtime-admin/bootstrap-demo-organization');
   await storageAction(teacher, 'sendInstructorNotification', { studentUid: bootstrap.studentUid, message: 'Synthetic student upload recovery only.', triggerReason: 'smoke-student-upload-bootstrap', usedAi: false, interventionKind: 'REVIEW_RESTART' });
-  const templates = await teacher.evaluate(async () => (await fetch('/api/writing/templates')).json());
-  const assignment = await runtimeAdminPost<{ id: string }>(teacher, '/api/writing/assignments/generate', { studentUid: bootstrap.studentUid, templateId: templates.templates[0].id });
-  await runtimeAdminPost(teacher, '/api/writing/assignments/issue', { assignmentId: assignment.id });
   const studentContext = await browser.newContext();
   const student = await studentContext.newPage();
   let formalCalls = 0;
@@ -244,6 +243,13 @@ test('student can reacquire a concurrent draft after losing a successful origina
   });
   await loginBusinessStudentDemo(student);
   await maybeCompleteOnboarding(student);
+  await teacher.reload();
+  await teacher.getByTestId('workspace-tab-writing').click();
+  const studentUid = await resolveWritingStudentSelectValue(teacher, await getCurrentSessionUser(student));
+  const templates = await teacher.evaluate(async () => (await fetch('/api/writing/templates')).json());
+  const assignment = await runtimeAdminPost<{ id: string }>(teacher, '/api/writing/assignments/generate', { studentUid, templateId: templates.templates[0].id });
+  await runtimeAdminPost(teacher, '/api/writing/assignments/issue', { assignmentId: assignment.id });
+  await student.reload();
   await openDashboardWriting(student);
   await student.getByTestId(`writing-open-submit-${assignment.id}`).click();
   const dialog = student.getByRole('dialog');
@@ -267,13 +273,14 @@ test('student can reacquire a concurrent draft after losing a successful origina
   await expect(manual).toHaveValue('Synthetic student edit retained after reacquiring a concurrent draft.');
   await expect(student.getByTestId('writing-submit-upload')).toBeEnabled();
   await student.getByTestId('writing-submit-upload').click();
-  await expect(student.getByTestId('writing-draft-saved')).toContainText('未評価');
+  await expect(student.getByTestId('writing-draft-saved')).toContainText('下書きを保存しました');
   expect(putStatuses).toEqual([204, 204]);
   const saved = await student.evaluate(async id => (await fetch(`/api/writing/input-draft?assignmentId=${id}&attemptNo=1`)).json(), assignment.id);
   expect(saved.draft.assets.map((asset: any) => asset.fileName)).toEqual(['synthetic-student-retry.pdf']);
   expect(saved.draft.manualTranscript).toBe('Synthetic student edit retained after reacquiring a concurrent draft.');
   expect(saved.draft.assessmentStatus).toBe('UNASSESSED');
   expect(formalCalls).toBe(0);
+  await expect(student.getByTestId('writing-student-file-input')).toHaveValue('');
   await student.setViewportSize({ width: 390, height: 844 });
   await student.screenshot({ path: testInfo.outputPath('student-upload-reacquire-390.png') });
   await studentContext.close();

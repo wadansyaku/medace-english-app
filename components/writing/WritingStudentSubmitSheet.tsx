@@ -260,7 +260,10 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                 accept="application/pdf,image/*"
                 multiple
                 disabled={submitting || draftLoading}
-                onChange={(event) => onChangeFiles(Array.from(event.target.files || []))}
+                onChange={(event) => {
+                  onChangeFiles(Array.from(event.currentTarget.files || []));
+                  event.currentTarget.value = '';
+                }}
                 className="mt-4 block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-bold"
               />
               {files.length > 0 ? (
