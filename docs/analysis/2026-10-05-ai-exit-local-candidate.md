@@ -11,6 +11,7 @@
 | プランや講師通知のためにAIを呼ぶ | 全4プランで既存標準builder、純粋な介入テンプレートと手編集を使用 | 本人教材・ACTIVE組織・担当範囲・保存成功確認を保持。下書きだけでは通知しない |
 | AI停止で承認済み文法問題も失う | 承認済みcacheを部分返却し、不足を既存static演習で補う | 未承認問題は出さない。provider/有料予算を呼ばない |
 | 管理画面が生成ボタン・費用見積もりを表示する | CSV取込と保存済み例文/欠損/非公開の確認へ変更。旧prepareBookExamplesは権限確認後410 | claimや結果不明の処理を消さず、公式教材の承認/出典gateを保持 |
+| 個人単語帳が停止中のAI抽出へ進み、狭い画面では保存失敗も見えない | 手入力CSV/.csvを本人単語帳へ保存。失敗は入力を保持し、open+error時にalertへfocusして画面内へ表示 | PDF/画像はbytes読出し前に停止。作成権限・価格・quota、本人所有の保存境界を保持 |
 | 事前作成例文を原本へ直接流し込む | 0049別表にPENDING下書き。対象ID/原文/更新時刻/空欄を照合したSQL artifactだけを生成 | learner readは別表を参照しない。原本七表、words、SRS IDs/履歴/receipt、ledger不変。昇格APIなし |
 
 詳細は[Writing安全](./2026-10-05-writing-ai-safety.md)、[AIなしプラン・通知](./2026-10-05-ai-free-plans-notifications.md)、[校正済み事前準備](./2026-10-05-prepared-content-offline-drafts.md)を参照する。過去の個別検証数は各候補の証拠であり、この統合版の最終gateとは分ける。
@@ -28,15 +29,15 @@
 
 ## ローカル検証
 
-Node 22.19.0。production codeは `7ff17c117a3d9dc80906d01f41e48a065518e73b` から固定し、後続は検証fixture/実UI受入/文書だけを更新した。
+Node 22.19.0。最終アプリsourceは `6ca9a016f944d585e5275a78312e25feb5707189`。320×568の実画像で個人取込の保存エラーが上に隠れる問題を確認し、このcommitでopen+error時のfocusを追加した。後続差分は本analysis/todo文書だけである。
 
 - `verify:fast`: migration名・50 migrationの新規local replay・到達性・依存境界/循環・型・177files/1527unit、全成功。
 - Cloudflare mode buildと合成D1の全API回帰が成功。旧管理者準備410、許可済み事業生徒の抽出503・費用記録0、無料生徒標準plan200、講師actionの生徒403も実HTTPで確認。
-- 既存全smoke: Cloudflare形式171成功/配備専用2skip、IDB9成功。合成アカウント/データだけを使用。通常runnerのWritingはnetwork-free synthetic provider注入なので、実AI可用性の証拠としない。
-- 注入なしのsource-disabled runtime（専用42425、新規合成D1）で追加4成功。個人CSVと標準planの320×568/1366×900、失敗保持・再取得・retry・連打1保存・実保存/再訪・AI通信0を確認。元の個人2ケースを小さい画面とviewport画像で再確認し、新しいplan2ケースを加えた。合計184成功実行/182 unique。アプリsourceは同じである。
+- 最終全smokeはCloudflare形式172成功/1ブラウザー終了/配備専用2skip、IDB9成功。中断したWritingの再提出→返却→8幅/200% zoomは、同じアプリsource・新規合成D1で3回連続成功した。中断原因は断定しない。全実行のexit1と失敗詳細も保全し、初回から全コマンド成功とは表現しない。成功確認済みuniqueはCloud173＋IDB9＝182。合成アカウント/データだけを使用。通常runnerのWritingはnetwork-free synthetic provider注入なので、実AI可用性の証拠としない。
+- 注入なしのsource-disabled runtime（専用42425、新規合成D1）で追加4成功。個人CSVと標準planの320×568/1366×900、失敗保持・再取得・retry・連打1保存・実保存/再訪・AI通信0を確認。個人取込はalertのfocus/viewport内表示も確認する。この4ケースは全smokeにも含まれ、uniqueへ重複加算しない。
 - 管理者例文5幅、通知/plan 320/390/PC、Writing sample/不明の確定拒否、keyboard/閉じる、保存境界の実renderと画像を保全。Browser plugin not availableのため既存Playwright/Chromeを使用。
 - `security:audit` 成功。既存のxlsx高severity例外1件は継続（npmの修正版がなく、ローカル教材QAに限定）。依存/lock変更なし。
-- 独立読み取りレビュー2回でblocking指摘なし。個人importの一覧更新失敗catchは実refreshの例外吸収契約では到達しない、という非blocking指摘を記録。実画面は既存の一覧更新失敗表示と保存成功通知を区別する。
+- 独立読み取りレビュー3回でblocking指摘なし。個人importの一覧更新失敗catchは実refreshの例外吸収契約では到達しない、という非blocking指摘を記録。実画面は既存の一覧更新失敗表示と保存成功通知を区別する。最後の320 focus修正も独立レビュー済み。
 
 初回unitはlocalhost sandbox制約6件と診断fixture不足2件で失敗。localhost権限の安全な許可と私有Writing fixtureの整合修正後、全1527成功。追加API停止検証の最初の抽出fixtureは既存の利用権限を持たなかったため、権限がある合成事業生徒へ変更した。権限/価格を緩めていない。これらを必須checkのskipやgate変更で通していない。
 
