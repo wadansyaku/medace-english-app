@@ -12,7 +12,9 @@
 
 ## 保存と費用
 
-追加migration `0050_ai_provider_budget.sql` と `0051_writing_unassessed_drafts.sql`。旧migration・原本・学習履歴は保持。月はUTC、全利用者で一つのアプリ予算を共有する。
+追加migration `0050_ai_provider_budget.sql`、`0051_writing_unassessed_drafts.sql`、`0052_writing_draft_attachment_retirement.sql`。旧migration・原本・学習履歴は保持。月はUTC、全利用者で一つのアプリ予算を共有する。
+
+添付の置換はrevision/CASによる保存準備のcommit後にuploadへ進む。古い未提出原本はrow/objectを保持したままdraftの有効添付・upload quotaから退役する。競合する古いrevisionやDB失敗では退役しない。正常保存、PUT成功応答の喪失、手入力の編集、再取得、期限切れURL、別ファイルの再選択を区別して回復する。期限内の完了済み同一body PUTはchecksum/byte size一致時だけwrite-free204を返し、原本・etag・timestampを再書込しない。
 
 送信前に入力/最大出力tokenから保守的な上限を予約する。月$5は計画上限候補、$0.50を余白として新規送信枠は$4.50。D1 batch/triggerで月合計・予約・監査を同時commitし、別workerの同時処理でも上限を守る。同じrequest/fingerprintの再送は二重送信・二重計上しない。provider response IDの重複決済も拒否する。
 
@@ -32,9 +34,10 @@
 
 ## 検証・配備記録
 
-- 統合 `verify:fast`: 52 migration、到達性、依存境界/循環、型、184 files / 1667 unit成功。
+- 初回最終gate: 53 migration、audit、到達性、依存境界/循環、型、184 files / 1707 unit、build成功。その後のAPI失敗は完了済み同一PUT再送の旧期待値が原因。新契約に合わせつつ、row/checksum/etag/timestamp不変の検証を追加し、API全回帰成功。追加の再取得回復8unitを含む最終gateは実行結果を下記へ追記する。
 - 通常source-disabled runtimeの実Chrome: 管理者の失敗→retryと未有効表示、320/390/横844/tablet768/PC1366で横overflowなし。生徒/講師の原本保存、lost response同一request再送、revision=2へ一回だけ更新、再訪復元、GPT/正式提出呼出し0、Escape/focus復帰を確認。
 - 初回unit2失敗はdiagnostic fixtureのcapability不足を補って解消。初回browserの通知未投入と不存在selectを検証側で修正し、成功実行を別記録で保持。必須checkと本番認可は維持した。
+- 独立レビューで保存済み本文の復元、upload応答喪失後の手入力変更・期限切れ・再取得、原本置換のquotaとCASを確認した。未確認PUTを再prepareより先に確認し、成功済み原本を保持する追加修正を受入。`8016b39`の読み取りレビューで残るblockingなし。対象7files/97unitと型成功。
 - 最終build/API/full browser/security/remote-readonly/preview/productionは完了後に個別追記する。ローカル検証を配備成功と記載しない。
 
 ## 復旧と次の承認
