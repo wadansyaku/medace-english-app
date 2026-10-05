@@ -6,7 +6,7 @@ Candidate base: `a17a0caa63b94d39282825bded6c23536e7cbd51`. The second ordinary 
 
 Root isolated a direct parser comparison on the preview D1 REST query path using EXPLAIN rather than executing CREATE. A single-line trigger containing `SELECT CASE WHEN NEW.name IS NULL THEN RAISE(...) END; SELECT 1;` returned error 7500. The otherwise equivalent trigger using `SELECT RAISE(...) WHERE NEW.name IS NULL; SELECT 1;` succeeded, returning 15 EXPLAIN opcodes with `rows_written = 0`, `changes = 0` and `changed_db = false`. A minimal `SELECT 1` trigger also succeeded. The subsequent schema query found no probe trigger or budget objects, and no 0050 ledger registration.
 
-Evidence files are `/tmp/medace-ai-exit-release-evidence-20261006/d1-explain-singleline.stderr`, `d1-explain-singleline-no-case.json`, `d1-explain-singleline-minimal.json` and `d1-explain-schema-after.json`. This is direct evidence that the remote path handles the CASE/END form differently in the controlled probe. It supports the CASE END boundary hypothesis; ordinary CREATE and complete migration success still require the preview gate.
+Evidence files are `/tmp/medace-ai-exit-release-evidence-20261006/d1-explain-singleline.json`, `d1-explain-singleline-no-case.json`, `d1-explain-singleline-minimal.json` and `d1-explain-schema-after.json`. The first JSON contains the explicit API error code 7500. This is direct evidence that the remote path handles the CASE/END form differently in the controlled probe. It supports the CASE END boundary hypothesis; ordinary CREATE and complete migration success still require the preview gate.
 
 ## Minimal equivalent change
 
