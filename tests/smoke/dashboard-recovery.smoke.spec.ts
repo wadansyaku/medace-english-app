@@ -169,6 +169,18 @@ for (const width of [320, 1366]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await section.scrollIntoViewIfNeeded();
     await page.screenshot({ path: info.outputPath(`standard-plan-saved-${width}.png`) });
+    if (width === 1366) {
+      await openDashboardReference(page, 'account');
+      const account = page.getByTestId('dashboard-account-section');
+      await account.getByRole('button', { name: /プラン・学習環境の詳細/ }).click();
+      await expect(account.getByText('従来AIの参考記録', { exact: true })).toBeVisible();
+      await expect(account).not.toContainText('画像/PDFの単語抽出');
+      await expect(account).not.toContainText('専用AI予算');
+      await expect(account).toContainText('標準');
+      await account.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: info.outputPath('available-plan-features-1366.png'), fullPage: true });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
     expect(aiRequests).toEqual([]);
     await info.attach('standard-plan-acceptance', { body: JSON.stringify({ width, saves, duplicateSaves: 0, selectedBookCount: saved.selectedBookIds.length, aiRequests, revisited: true }), contentType: 'application/json' });
   });
