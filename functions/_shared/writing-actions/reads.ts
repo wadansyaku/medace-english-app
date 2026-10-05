@@ -17,6 +17,7 @@ import {
   WritingAssignmentStatus as AssignmentStatus,
 } from '../../../types';
 import { buildPrintableFeedbackHtml } from '../../../utils/writing';
+import { classifyWritingEvaluation } from '../../../shared/writingAiSafety';
 import { HttpError } from '../http';
 import type { AppEnv, DbUserRow } from '../types';
 import {
@@ -29,6 +30,7 @@ import {
   requireWritingOrganizationContext,
 } from './access';
 import {
+  parseAiProvenance,
   parsePromptSnapshot,
   toAsset,
   toAssignment,
@@ -173,12 +175,25 @@ export const handleListWritingReviewQueue = async (
   const submissionIds = visibleRows
     .map((row) => latestSubmissionRows.get(row.id)?.id)
     .filter(Boolean) as string[];
-  const recommendedProviders = await readRecommendedEvaluationProviders(env, submissionIds);
+  const [recommendedProviders, evaluationRowsBySubmissionId, reviewRowsBySubmissionId] = await Promise.all([
+    readRecommendedEvaluationProviders(env, submissionIds),
+    readSubmissionEvaluationRowsBySubmissionIds(env, submissionIds),
+    readTeacherReviewRowsBySubmissionIds(env, submissionIds),
+  ]);
 
   const items: WritingQueueItem[] = [];
   for (const row of visibleRows) {
     const latestSubmission = latestSubmissionRows.get(row.id);
     if (!latestSubmission) continue;
+    const evaluationRows = evaluationRowsBySubmissionId.get(latestSubmission.id) || [];
+    const selectedId = reviewRowsBySubmissionId.get(latestSubmission.id)?.selected_evaluation_id || latestSubmission.selected_evaluation_id;
+    const selectedRow = selectedId
+      ? evaluationRows.find((evaluation) => evaluation.id === selectedId)
+      : evaluationRows.find((evaluation) => Boolean(evaluation.is_default));
+    const assessmentStatus = classifyWritingEvaluation(
+      { provenance: parseAiProvenance(selectedRow?.raw_payload) },
+      parseAiProvenance(latestSubmission.ocr_meta),
+    );
 
     items.push({
       assignmentId: row.id,
@@ -192,6 +207,7 @@ export const handleListWritingReviewQueue = async (
       submittedAt: Number(latestSubmission.submitted_at || 0),
       transcriptConfidence: Number(latestSubmission.transcript_confidence || 0),
       recommendedProvider: recommendedProviders.get(latestSubmission.id),
+      ...(assessmentStatus === 'real' ? {} : { assessmentStatus }),
       instructorName: row.instructor_name,
     });
   }
@@ -219,11 +235,15 @@ export const handleGetWritingPrintableFeedback = async (
   const context = await readSubmissionContext(env, submissionId);
   await ensureSubmissionViewAccess(env, user, context.detail);
 
-  const selectedEvaluation = context.detail.submission.evaluations.find((evaluation) => (
-    evaluation.id === (context.detail.submission.teacherReview?.selectedEvaluationId || context.detail.submission.selectedEvaluationId)
-  )) || context.detail.submission.evaluations[0];
+  const selectedId = context.detail.submission.teacherReview?.selectedEvaluationId || context.detail.submission.selectedEvaluationId;
+  const selectedEvaluation = selectedId
+    ? context.detail.submission.evaluations.find((evaluation) => evaluation.id === selectedId)
+    : context.detail.submission.evaluations.find((evaluation) => evaluation.isDefault);
   if (!selectedEvaluation) {
     throw new HttpError(404, '印刷できる添削結果がありません。');
+  }
+  if (classifyWritingEvaluation(selectedEvaluation, context.detail.submission.ocrMeta) !== 'real') {
+    throw new HttpError(409, 'サンプルまたは処理元未確認の評価は正式な添削結果として印刷できません。実際の答案を講師が手動確認してください。');
   }
 
   return {

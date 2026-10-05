@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, ClipboardCheck, Clock3, Loader2, ScanText } from 'lucide-react';
 
 import type { WritingAssignment } from '../../../types';
+import { isSampleWritingProvenance } from '../../../shared/writingAiSafety';
 import WritingPrintLauncher from '../../WritingPrintLauncher';
 import {
   WRITING_ASSIGNMENT_STATUS_LABELS,
@@ -45,7 +46,7 @@ const getPrintActionCopy = (assignment: WritingAssignment) => {
     case 'REVIEW_READY':
       return {
         title: '添削キューで返却判断',
-        body: 'AI 比較が済んでいます。添削キューで講師コメントと返却判断を確定します。',
+        body: '添削キューで原本と処理状態を確認します。実際の答案に基づく評価を確認してから返却を判断します。',
         tone: 'border-amber-200 bg-amber-50 text-amber-800',
         icon: <ScanText className="h-4 w-4" />,
       };
@@ -93,6 +94,9 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
             <div>
               <div className="text-sm font-bold text-slate-950">{assignment.studentName}</div>
               <div className="mt-1 text-xs text-slate-400">{assignment.promptTitle}</div>
+              {isSampleWritingProvenance(assignment.promptProvenance) && (
+                <p className="mt-2 text-xs font-bold text-slate-600">テンプレート課題（AI生成なし）</p>
+              )}
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusTone(assignment.status)}`}>
               {WRITING_ASSIGNMENT_STATUS_LABELS[assignment.status]}
@@ -131,6 +135,9 @@ const WritingOpsPrintSection: React.FC<WritingOpsPrintSectionProps> = ({
               <div>
                 <div className="text-sm font-bold text-slate-950">{selectedAssignment.studentName}</div>
                 <div className="mt-1 text-xs text-slate-400">{selectedAssignment.promptTitle}</div>
+                {isSampleWritingProvenance(selectedAssignment.promptProvenance) && (
+                  <p data-testid="writing-template-prompt-notice" className="mt-2 text-xs font-bold text-slate-600">テンプレート課題（AI生成なし）</p>
+                )}
               </div>
               <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusTone(selectedAssignment.status)}`}>
                 {WRITING_ASSIGNMENT_STATUS_LABELS[selectedAssignment.status]}

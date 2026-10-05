@@ -19,6 +19,7 @@ import {
   createSubmissionCode,
   encodeSubmissionMarker,
 } from '../../../utils/writing';
+import { classifyWritingEvaluation, classifyWritingTranscript } from '../../../shared/writingAiSafety';
 import {
   WRITING_UPLOAD_MAX_BYTES,
   WRITING_UPLOAD_MAX_IMAGE_FILES,
@@ -297,6 +298,7 @@ export const handleGenerateWritingAssignment = async (
     wordCountMax: Number(template.default_word_count_max || 0),
     submissionCode,
     markerValue: encodeSubmissionMarker(assignmentId, submissionCode, 1),
+    generationProvenance: generated.provenance,
   };
   const now = Date.now();
 
@@ -645,7 +647,7 @@ export const handleFinalizeWritingSubmission = async (
 
   const assignment = toAssignment(assignmentRow);
   const aiMode = resolveWritingAiMode(env);
-  const ocrAssets = aiMode === 'fixture'
+  const ocrAssets = aiMode === 'fixture' || Boolean(request.manualTranscript?.trim())
     ? []
     : await readAiAssetsForOcr(env, assetRows).catch((error) => {
         if (aiMode === 'live') throw error;
@@ -653,16 +655,23 @@ export const handleFinalizeWritingSubmission = async (
         return [];
       });
   const ocrResult = await runWritingOcr(env, user, assignment, ocrAssets, request.manualTranscript, logContext);
+  if (classifyWritingTranscript(ocrResult.provenance) !== 'real') {
+    throw new HttpError(503, '答案の読み取りを確認できませんでした。サンプル本文を実際の答案として保存しません。提出は未確定です。再試行するか、原本の手動確認を講師に依頼してください。');
+  }
   const now = Date.now();
   const submissionId = crypto.randomUUID();
   const assignmentWithSubmission = await readAssignmentResponse(env, request.assignmentId);
-  const evaluations = await runWritingEvaluations(
+  const generatedEvaluations = await runWritingEvaluations(
     env,
     user,
     assignmentWithSubmission,
     ocrResult.transcript,
     logContext,
   );
+  const evaluations = generatedEvaluations.filter((evaluation) => classifyWritingEvaluation(evaluation, ocrResult.provenance) === 'real');
+  if (evaluations.length === 0) {
+    throw new HttpError(503, '実際の答案のAI評価を確認できませんでした。サンプル評価で提出完了にしません。提出は未確定です。再試行するか、原本の手動確認を講師に依頼してください。');
+  }
   const selectedEvaluation = evaluations.find((evaluation) => evaluation.isDefault) || evaluations[0];
 
   await commitFinalizedSubmission(env, {
@@ -765,6 +774,13 @@ const applyTeacherReview = async (
   guardTeacher(user);
   const detail = existingDetail || (await readSubmissionContext(env, submissionId)).detail;
   await ensureAssignmentAccess(env, user, detail.assignment);
+  const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === payload.selectedEvaluationId);
+  if (!selectedEvaluation) {
+    throw new HttpError(400, '選択したAI評価が見つかりません。');
+  }
+  if (classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta) !== 'real') {
+    throw new HttpError(409, 'サンプルまたは処理元未確認の評価は成績・返却として確定できません。実際の答案を講師が手動確認してください。');
+  }
 
   const latestSubmission = await readLatestSubmissionRowForAssignment(env, detail.assignment.id);
   if (
@@ -791,11 +807,6 @@ const applyTeacherReview = async (
   if (detail.assignment.status !== AssignmentStatus.REVIEW_READY) {
     if (isExactRetry) return reconcileTeacherReviewSideEffects(env, detail);
     throw new HttpError(409, '現在の状態では提出を返却できません。');
-  }
-
-  const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === payload.selectedEvaluationId);
-  if (!selectedEvaluation) {
-    throw new HttpError(400, '選択したAI評価が見つかりません。');
   }
 
   const now = Date.now();
@@ -846,6 +857,18 @@ export const handleCompleteWritingAssignment = async (
   guardTeacher(user);
   const row = await getAssignmentRowOrThrow(env, assignmentId);
   await ensureAssignmentAccess(env, user, row);
+  if (row.status === AssignmentStatus.RETURNED || row.status === AssignmentStatus.COMPLETED) {
+    const latestSubmission = await readLatestSubmissionRowForAssignment(env, assignmentId);
+    if (!latestSubmission) {
+      throw new HttpError(409, '返却済みの答案を確認できませんでした。講師の手動確認をお待ちください。');
+    }
+    const detail = (await readSubmissionContext(env, latestSubmission.id)).detail;
+    const selectedId = detail.submission.teacherReview?.selectedEvaluationId || detail.submission.selectedEvaluationId;
+    const selectedEvaluation = detail.submission.evaluations.find((evaluation) => evaluation.id === selectedId);
+    if (!selectedEvaluation || classifyWritingEvaluation(selectedEvaluation, detail.submission.ocrMeta) !== 'real') {
+      throw new HttpError(409, 'サンプルまたは処理元未確認の評価は課題完了として確定できません。実際の答案を講師が手動確認してください。');
+    }
+  }
   if (row.status === AssignmentStatus.COMPLETED) {
     return readAssignmentResponse(env, assignmentId);
   }

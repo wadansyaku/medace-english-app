@@ -124,7 +124,9 @@ export type WritingStudentSubmissionBase = Pick<
   | 'transcript'
   | 'submittedAt'
   | 'assets'
->;
+> & {
+  assessmentStatus?: 'sample' | 'unverified';
+};
 
 export type WritingStudentSubmissionReceipt = WritingStudentSubmissionBase & {
   evaluations: [];
@@ -137,7 +139,7 @@ export interface WritingStudentSubmissionReceiptResponse {
 }
 
 export type WritingStudentReleasedSubmission = WritingStudentSubmissionBase & {
-  evaluations: [WritingStudentEvaluation];
+  evaluations: [WritingStudentEvaluation] | [];
   teacherReview: WritingStudentTeacherReview;
 };
 

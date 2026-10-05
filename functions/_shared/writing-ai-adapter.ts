@@ -628,12 +628,12 @@ export const createWritingAiAdapter = (
     comparisonMode: WritingAiExecutionProvenance['mode'],
     fallbackReason?: string,
   ): Promise<WritingEvaluationResult> => {
-    const fallback = async (reason?: string) => {
+    const fallback = async (reason?: string, provenanceMode = comparisonMode) => {
       const result = createFixtureEvaluation(
         provider,
         assignment,
         transcript,
-        buildProvenance(comparisonMode, provider, {
+        buildProvenance(provenanceMode, provider, {
           requestedProvider: provider,
           fallbackReason: reason,
           model: 'fixture-writing-evaluation',
@@ -653,7 +653,7 @@ export const createWritingAiAdapter = (
       return result;
     } catch (error) {
       if (mode === 'live' || !isFallbackEligibleError(error)) throw error;
-      return fallback(error instanceof Error ? error.message : 'live-evaluation-failed');
+      return fallback(error instanceof Error ? error.message : 'live-evaluation-failed', 'hybrid-fallback');
     }
   };
 
@@ -688,7 +688,7 @@ export const createWritingAiAdapter = (
         evaluations.push(await withEvaluationFallback(provider, assignment, transcript, 'live'));
       }
 
-      const preferred = choosePreferredEvaluation(evaluations);
+      const preferred = choosePreferredEvaluation(evaluations.filter((evaluation) => evaluation.provenance?.mode === 'live'));
       return evaluations.map((evaluation) => ({
         ...evaluation,
         isDefault: evaluation.id === preferred?.id,

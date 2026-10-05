@@ -90,7 +90,7 @@ export const getWritingAssignmentPhase = (
     case 'REVIEW_READY':
       return {
         label: '処理中',
-        description: 'AI 比較の下書きができました。講師の最終確認を待っています。',
+        description: '提出内容を講師が確認します。返却までお待ちください。',
         tone: 'border-sky-200 bg-sky-50 text-sky-700',
         activeStep: 3,
       };

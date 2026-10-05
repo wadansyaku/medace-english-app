@@ -44,7 +44,7 @@ const isRateLimitError = (error: unknown): boolean => error instanceof ApiError 
 const isAccessDeniedError = (error: unknown): boolean => error instanceof ApiError && error.status === 403;
 const shouldUseFallbackLearningPlan = (error: unknown): boolean => {
   if (isAiUnavailableError(error) || isRateLimitError(error)) return true;
-  return isAccessDeniedError(error);
+  return isAccessDeniedError(error) || (error instanceof ApiError && error.status === 502);
 };
 
 export const isAiUnavailableError = (error: unknown): boolean => {
@@ -231,6 +231,7 @@ export const generateLearningPlan = async (
   level: EnglishLevel,
   availableBooks: BookMetadata[],
   learningPreference?: LearningPreference | null,
+  onFallback?: () => void,
 ): Promise<LearningPlan | null> => {
   if (availableBooks.length === 0) return null;
 
@@ -251,13 +252,15 @@ export const generateLearningPlan = async (
     });
   } catch (error) {
     if (shouldUseFallbackLearningPlan(error)) {
-      return buildFallbackLearningPlan({
+      const plan = buildFallbackLearningPlan({
         uid: '',
         grade,
         level,
         availableBooks,
         learningPreference,
       });
+      onFallback?.();
+      return plan;
     }
     console.error('Plan generation failed:', error);
     return null;

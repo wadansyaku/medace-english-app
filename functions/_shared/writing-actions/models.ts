@@ -230,6 +230,10 @@ export const toTeacherReview = (row: DbWritingReviewRow): WritingTeacherReview =
   releasedAt: Number(row.released_at || 0) || undefined,
 });
 
+const toPublicPromptProvenance = (meta?: WritingAiExecutionProvenance): WritingAiExecutionProvenance | undefined => (
+  meta ? { mode: meta.mode, provider: meta.provider, model: meta.model } : undefined
+);
+
 export const toAssignment = (
   row: DbWritingAssignmentLikeRow,
   options: {
@@ -251,6 +255,7 @@ export const toAssignment = (
   promptTitle: row.prompt_title,
   promptText: row.prompt_text,
   guidance: row.guidance,
+  promptProvenance: toPublicPromptProvenance(parsePromptSnapshot(row).generationProvenance),
   wordCountMin: Number(row.word_count_min || 0),
   wordCountMax: Number(row.word_count_max || 0),
   submissionCode: row.submission_code,

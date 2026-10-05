@@ -33,6 +33,8 @@ import {
   type WritingOpsTab,
 } from '../utils/writingOps';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
+import { resolveWritingUploadRetryCache, type WritingUploadRetryCache } from '../utils/writingUploadRetry';
+import { isSampleWritingProvenance } from '../shared/writingAiSafety';
 import {
   resolveWritingUploadMimeType,
   validateWritingSubmissionFiles,
@@ -76,6 +78,7 @@ export const useWritingOpsController = () => {
   const [submittingScan, setSubmittingScan] = useState(false);
   const [scannerError, setScannerError] = useState<string | null>(null);
   const operationLock = useRef(false);
+  const uploadedScannerFilesRef = useRef<WritingUploadRetryCache | null>(null);
   const refreshVersion = useRef(0);
   const detailVersion = useRef(0);
   const tabRef = useRef(tab);
@@ -224,6 +227,7 @@ export const useWritingOpsController = () => {
   ), [currentDetail, selectedEvaluationId]);
 
   const clearScanner = useCallback(() => {
+    uploadedScannerFilesRef.current = null;
     setScannerFiles([]);
     setScannerManualTranscript('');
     setScannerTarget(null);
@@ -245,7 +249,9 @@ export const useWritingOpsController = () => {
         notes,
       });
 
-      setNotice({ tone: 'success', message: `${assignment.studentName} さん向けの自由英作文課題を生成しました。` });
+      setNotice({ tone: 'success', message: isSampleWritingProvenance(assignment.promptProvenance)
+        ? `${assignment.studentName} さん向けにテンプレート課題を作成しました。AI生成は行っていません。`
+        : `${assignment.studentName} さん向けの自由英作文課題を生成しました。` });
       setSelectedAssignmentId(assignment.id);
       setTab('PRINT');
       setTopicHint('');
@@ -377,9 +383,17 @@ export const useWritingOpsController = () => {
     operationLock.current = true;
     setScannerError(null);
     setSubmittingScan(true);
+    const attemptNo = scannerTarget.attemptCount + 1;
+    const cache = resolveWritingUploadRetryCache(uploadedScannerFilesRef.current, `${scannerTarget.id}:${attemptNo}`, scannerFiles);
+    uploadedScannerFilesRef.current = cache;
     try {
       const assetIds: string[] = [];
       for (const [index, file] of scannerFiles.entries()) {
+        const existingAssetId = cache.assetIds[index];
+        if (existingAssetId) {
+          assetIds.push(existingAssetId);
+          continue;
+        }
         const upload = await createWritingUploadUrl({
           assignmentId: scannerTarget.id,
           fileName: file.name,
@@ -387,9 +401,10 @@ export const useWritingOpsController = () => {
           byteSize: file.size,
           sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,
-          attemptNo: scannerTarget.attemptCount + 1,
+          attemptNo,
         });
         await uploadWritingAsset(upload, file);
+        cache.assetIds[index] = upload.assetId;
         assetIds.push(upload.assetId);
       }
 
@@ -397,7 +412,7 @@ export const useWritingOpsController = () => {
         assignmentId: scannerTarget.id,
         source: WritingSubmissionSource.STAFF_SCANNER,
         assetIds,
-        attemptNo: scannerTarget.attemptCount + 1,
+        attemptNo,
         manualTranscript: scannerManualTranscript.trim() || undefined,
       });
 

@@ -61,7 +61,7 @@ const WritingOpsScannerModal: React.FC<WritingOpsScannerModalProps> = ({
         {error && (
           <div ref={errorRef} tabIndex={-1} role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">
             <p className="font-bold">{error}</p>
-            <p className="mt-1">答案と補助テキストは保持しています。通信を確認して、もう一度登録してください。</p>
+            <p className="mt-1">答案と補助テキストはこの画面に保持しています。再試行するか、原本の手動確認を担当講師に依頼してください。提出完了はまだ確認できていません。</p>
           </div>
         )}
         <div className="mt-6 space-y-4">

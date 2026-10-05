@@ -101,11 +101,13 @@ import {
   handleCompleteWritingAssignment,
   handleFinalizeWritingSubmission,
   handleIssueWritingAssignment,
+  handleRequestWritingRevision,
 } from '../functions/_shared/writing-actions/mutations';
 import {
   handleGetWritingPrintableFeedback,
   handleGetWritingSubmissionDetail,
 } from '../functions/_shared/writing-actions/reads';
+import { toAssignment } from '../functions/_shared/writing-actions/models';
 
 const ASSIGNMENT_ID = 'assignment-org-a';
 const SUBMISSION_ID = 'submission-1';
@@ -229,7 +231,7 @@ const createSubmissionBaseRow = (status: WritingAssignmentStatus) => ({
   ocr_provider: 'CLOUDFLARE',
   ocr_meta: JSON.stringify({
     provenance: {
-      mode: 'fixture',
+      mode: 'live',
       provider: 'CLOUDFLARE',
     },
   }),
@@ -257,6 +259,7 @@ const evaluations: WritingEvaluation[] = [
     costMilliYen: 2,
     latencyMs: 20,
     isDefault: true,
+    provenance: { mode: 'live', provider: 'GEMINI', model: 'gemini-2.5-flash' },
   },
   {
     id: SELECTED_EVALUATION_ID,
@@ -276,6 +279,7 @@ const evaluations: WritingEvaluation[] = [
     costMilliYen: 3,
     latencyMs: 30,
     isDefault: false,
+    provenance: { mode: 'live', provider: 'CLOUDFLARE', model: 'test-live-provider' },
   },
 ];
 
@@ -297,7 +301,7 @@ const evaluationRows = evaluations.map((evaluation) => ({
   selection_score: evaluation.selectionScore,
   cost_milli_yen: evaluation.costMilliYen,
   latency_ms: evaluation.latencyMs,
-  raw_payload: null,
+  raw_payload: JSON.stringify({ provenance: evaluation.provenance }),
   is_default: evaluation.isDefault ? 1 : 0,
 }));
 
@@ -403,7 +407,7 @@ beforeEach(() => {
     confidence: 0.96,
     provider: 'CLOUDFLARE',
     provenance: {
-      mode: 'fixture',
+      mode: 'live',
       provider: 'CLOUDFLARE',
     },
   });
@@ -579,11 +583,131 @@ describe('writing student response security boundaries', () => {
     expect(response.submission).toMatchObject({
       ocrProvider: 'CLOUDFLARE',
       ocrMeta: {
-        mode: 'fixture',
+        mode: 'live',
         provider: 'CLOUDFLARE',
       },
     });
     expect(teacherReview).toHaveProperty('privateMemo', PRIVATE_MEMO);
+  });
+});
+
+describe('writing sample and unverified processing boundaries', () => {
+  it('preserves template prompt provenance in the existing snapshot without a new schema field', () => {
+    const row = createAssignmentRow();
+    const generationProvenance = { mode: 'hybrid-fallback' as const, provider: 'GEMINI' as const, model: 'fixture-writing-prompt' };
+    row.prompt_snapshot = JSON.stringify({ ...JSON.parse(row.prompt_snapshot), generationProvenance: { ...generationProvenance, fallbackReason: 'Internal provider response.' } });
+    expect(toAssignment(row).promptProvenance).toEqual(generationProvenance);
+  });
+  const request = {
+    assignmentId: ASSIGNMENT_ID,
+    source: WritingSubmissionSource.STUDENT_MOBILE,
+    assetIds: [uploadedAssetRow.id],
+    attemptNo: 1,
+    manualTranscript: 'My original draft stays available.',
+  };
+  const instructor = createUser({ id: 'instructor-org-a', role: UserRole.INSTRUCTOR, organizationId: 'org-a', organizationRole: OrganizationRole.INSTRUCTOR });
+  const allowTeacher = () => mocks.readActiveOrganizationContextForUser.mockResolvedValue({
+    organizationId: 'org-a', organizationName: 'Organization A', subscriptionPlan: SubscriptionPlan.TOB_PAID, organizationRole: OrganizationRole.INSTRUCTOR,
+  });
+  const noActivity = () => {
+    expect(mocks.commitFinalizedSubmission).not.toHaveBeenCalled();
+    expect(mocks.commitTeacherReviewDecision).not.toHaveBeenCalled();
+    expect(mocks.recordProductEventForUser).not.toHaveBeenCalled();
+    expect(mocks.enqueueWritingActivitySideEffect).not.toHaveBeenCalled();
+  };
+  const sampleEvaluationRows = () => evaluationRows.map((row) => ({
+    ...row,
+    raw_payload: JSON.stringify({ provenance: { mode: 'live', provider: row.provider, model: 'fixture-writing-evaluation' } }),
+  }));
+
+  it.each(['fixture', 'hybrid-fallback', 'unverified'])('rejects %s OCR before evaluation, submission persistence or activity', async (mode) => {
+    mocks.runWritingOcr.mockResolvedValue({
+      transcript: 'A fabricated OCR sample.', confidence: 0.58, provider: 'OPENAI',
+      provenance: mode === 'unverified' ? undefined : { mode, provider: 'OPENAI', model: 'fixture-writing-ocr' },
+    });
+    await expect(handleFinalizeWritingSubmission(createEnv(), student, request)).rejects.toMatchObject({ status: 503 });
+    expect(mocks.runWritingEvaluations).not.toHaveBeenCalled();
+    noActivity();
+  });
+
+  it.each(['fixture', 'hybrid-fallback', 'unverified', 'legacy-wrong-mode'])('rejects %s evaluation without recording a successful submission', async (mode) => {
+    mocks.runWritingEvaluations.mockResolvedValue(evaluations.map((evaluation) => ({
+      ...evaluation,
+      provenance: mode === 'unverified' ? undefined : {
+        mode: mode === 'legacy-wrong-mode' ? 'live' : mode,
+        provider: evaluation.provider,
+        model: 'fixture-writing-evaluation',
+      },
+    })));
+    await expect(handleFinalizeWritingSubmission(createEnv(), student, request)).rejects.toMatchObject({ status: 503 });
+    noActivity();
+  });
+
+  it('preserves real manual text and saves only live evaluation when hybrid also produces a sample comparison', async () => {
+    mocks.resolveWritingAiMode.mockReturnValue('live');
+    mocks.runWritingOcr.mockResolvedValue({
+      transcript: request.manualTranscript, confidence: 0.96, provider: 'GEMINI',
+      provenance: { mode: 'fixture', provider: 'GEMINI', notes: 'manual-transcript', model: 'manual-transcript' },
+    });
+    const live = { ...evaluations[0], isDefault: false };
+    const sample = { ...evaluations[1], isDefault: true, provenance: { mode: 'hybrid-fallback' as const, provider: 'OPENAI' as const, model: 'fixture-writing-evaluation' } };
+    mocks.runWritingEvaluations.mockResolvedValue([sample, live]);
+    await handleFinalizeWritingSubmission(createEnv(), student, request);
+    expect(mocks.commitFinalizedSubmission).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      transcript: request.manualTranscript, evaluations: [live], selectedEvaluationId: live.id,
+    }));
+    expect(mocks.recordProductEventForUser).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['OCR', 'evaluation'])('does not commit or publish success after a live %s provider error', async (stage) => {
+    const failure = Object.assign(new Error('Provider temporarily unavailable.'), { status: 502 });
+    if (stage === 'OCR') mocks.runWritingOcr.mockRejectedValue(failure);
+    else mocks.runWritingEvaluations.mockRejectedValue(failure);
+    await expect(handleFinalizeWritingSubmission(createEnv(), student, request)).rejects.toBe(failure);
+    noActivity();
+  });
+
+  it('redacts a previously released sample grade while retaining the human comment and source assets', async () => {
+    setSubmissionDetail({ status: WritingAssignmentStatus.RETURNED, released: true });
+    mocks.readSubmissionEvaluationRowsBySubmissionIds.mockResolvedValue(new Map([[SUBMISSION_ID, sampleEvaluationRows()]]));
+    mocks.readSubmissionDetailBaseRow.mockResolvedValue({
+      ...createSubmissionBaseRow(WritingAssignmentStatus.RETURNED),
+      transcript: 'Fabricated sample OCR.',
+      ocr_meta: JSON.stringify({ provenance: { mode: 'hybrid-fallback', provider: 'OPENAI', model: 'fixture-writing-ocr' } }),
+    });
+    const detail = await handleGetWritingSubmissionDetail(createEnv(), student, SUBMISSION_ID);
+    expect(detail.submission).toMatchObject({ assessmentStatus: 'sample', evaluations: [], transcript: '', assets: [{ id: uploadedAssetRow.id }] });
+    expect('teacherReview' in detail.submission && detail.submission.teacherReview).toEqual({ publicComment: 'Two reasons are clear.', releasedAt: 140 });
+    expect(JSON.stringify(detail)).not.toContain(PRIVATE_MEMO);
+    await expect(handleGetWritingPrintableFeedback(createEnv(), student, SUBMISSION_ID)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('labels missing historical provenance as unverified instead of showing an actual grade', async () => {
+    setSubmissionDetail({ status: WritingAssignmentStatus.RETURNED, released: true });
+    mocks.readSubmissionEvaluationRowsBySubmissionIds.mockResolvedValue(new Map([[SUBMISSION_ID, evaluationRows.map((row) => ({ ...row, raw_payload: null }))]]));
+    const detail = await handleGetWritingSubmissionDetail(createEnv(), student, SUBMISSION_ID);
+    expect(detail.submission).toMatchObject({ assessmentStatus: 'unverified', evaluations: [], transcript: 'I think school uniforms are useful.' });
+  });
+
+  it.each(['return', 'revision', 'exact return retry'])('blocks unsafe %s before a review write or activity reconciliation', async (action) => {
+    allowTeacher();
+    setSubmissionDetail({ status: action === 'exact return retry' ? WritingAssignmentStatus.RETURNED : WritingAssignmentStatus.REVIEW_READY, released: action === 'exact return retry' });
+    mocks.readSubmissionEvaluationRowsBySubmissionIds.mockResolvedValue(new Map([[SUBMISSION_ID, sampleEvaluationRows()]]));
+    const payload = { selectedEvaluationId: SELECTED_EVALUATION_ID, publicComment: 'Two reasons are clear.', privateMemo: PRIVATE_MEMO };
+    const perform = action === 'revision' ? handleRequestWritingRevision : handleApproveWritingReturn;
+    await expect(perform(createEnv(), instructor, SUBMISSION_ID, payload)).rejects.toMatchObject({ status: 409 });
+    noActivity();
+  });
+
+  it.each([WritingAssignmentStatus.RETURNED, WritingAssignmentStatus.COMPLETED])('blocks a saved sample completion from %s, including idempotent retries', async (status) => {
+    allowTeacher();
+    mocks.readAssignmentRow.mockResolvedValue(createAssignmentRow(status));
+    setSubmissionDetail({ status, released: true });
+    mocks.readSubmissionEvaluationRowsBySubmissionIds.mockResolvedValue(new Map([[SUBMISSION_ID, sampleEvaluationRows()]]));
+    const env = createEnv();
+    await expect(handleCompleteWritingAssignment(env, instructor, ASSIGNMENT_ID)).rejects.toMatchObject({ status: 409 });
+    expect(env.DB.prepare).not.toHaveBeenCalled();
+    noActivity();
   });
 });
 

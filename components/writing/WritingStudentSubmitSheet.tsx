@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Image, ListChecks, Loader2, ScanSearch, X } from 'lucide-react';
 
 import type { WritingAssignment } from '../../types';
@@ -20,6 +20,7 @@ interface WritingStudentSubmitSheetProps {
   manualTranscript: string;
   mobileSubmitStep: number;
   submitting: boolean;
+  submissionError?: string | null;
   onClose: () => void;
   onChangeFiles: (files: File[]) => void;
   onChangeManualTranscript: (value: string) => void;
@@ -34,12 +35,15 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
   manualTranscript,
   mobileSubmitStep,
   submitting,
+  submissionError,
   onClose,
   onChangeFiles,
   onChangeManualTranscript,
   onChangeStep,
   onSubmit,
 }) => {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (submissionError) errorRef.current?.focus(); }, [submissionError]);
   const fileValidation = useMemo(() => validateWritingSubmissionFiles(files), [files]);
   const fileRows = useMemo(() => files.map((file) => ({
     file,
@@ -105,11 +109,11 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
           className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
-          答案を提出する
+          {submissionError ? '処理を再試行する' : '答案を提出する'}
         </button>
       </div>
     );
-  }, [fileValidation.valid, isMobileViewport, mobileSubmitStep, onChangeStep, onSubmit, submitting]);
+  }, [fileValidation.valid, isMobileViewport, mobileSubmitStep, onChangeStep, onSubmit, submitting, submissionError]);
 
   return (
     <MobileSheetDialog
@@ -148,6 +152,12 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
 
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="space-y-4">
+          {submissionError && (
+            <div ref={errorRef} tabIndex={-1} role="alert" data-testid="writing-submit-error" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">
+              <p className="font-bold">提出完了を確認できません</p>
+              <p className="mt-1">{submissionError}</p>
+            </div>
+          )}
           {isMobileViewport && (
             <MobileStepPager
               steps={SUBMIT_FLOW_STEPS.map((step) => ({ ...step }))}
@@ -252,7 +262,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-medace-600 text-xs font-black text-slate-950">3</div>
                 <div>
                   <div className="text-sm font-black text-slate-950">最終送信</div>
-                  <div className="mt-1 text-sm text-slate-500">OCR が読み取りにくい場合だけ補助テキストを入れて送信します。</div>
+                  <div className="mt-1 text-sm text-slate-500">本文を入力すると、その英文を読み取り結果として使います。答案と同じ英文を入力してください。</div>
                 </div>
               </div>
               <div className={`mt-4 flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-bold ${validationTone}`}>
@@ -260,10 +270,13 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
                 <span>{fileValidation.message}</span>
               </div>
               <textarea
+                id="writing-submit-manual-transcript"
+                aria-label="答案本文（任意）"
+                readOnly={submitting}
                 value={manualTranscript}
                 onChange={(event) => onChangeManualTranscript(event.target.value)}
                 className="mt-4 min-h-40 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700"
-                placeholder="OCR が読み取りにくいときのために、書いた英文をおおまかに入力できます。"
+                placeholder="必要に応じて、答案に書いた英文をそのまま入力してください。"
               />
             </section>
           )}
@@ -290,7 +303,7 @@ const WritingStudentSubmitSheet: React.FC<WritingStudentSubmitSheetProps> = ({
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-3 text-sm font-bold text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
-              答案を提出する
+              {submissionError ? '処理を再試行する' : '答案を提出する'}
             </button>
           </div>
         )}

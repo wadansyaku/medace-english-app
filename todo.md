@@ -2,6 +2,8 @@
 
 2026-10-05本人承認: [登録不要Naru版の公開工程](./docs/analysis/2026-10-05-guest-public-release.md)を開始。保存候補13e1ee3だけを最新mainへ統合し、通常PR/CI、正規preview、0048、productionと公開動線を確認する。Writing e615746とAPI移行は分離。下記の候補検証は作成時の証拠として保持する。
 
+2026-10-05追加: [英作文サンプル評価の安全な分離](./docs/analysis/2026-10-05-writing-ai-safety.md)。sample/処理元不明の成績確定・返却・印刷・学習副作用をサーバーでも防ぎ、原本と講師コメント、画面内draftと成功済みuploadを保持。AIプラン502は標準ロジックへの切替を明示。14files/140unit、型/build/境界、限定22browserを合成データで確認した非公開候補。実Gemini・Pages runtime・過去集計訂正・全release gateは未確認、配備と設定変更なし。
+
 2026-10-05追加: [登録なしNaru基本学習候補](./docs/analysis/2026-10-05-guest-naru-basic-learning.md)。カードの次語答え先出し、登録前5語の制限、Naru既定、評価表示、端末記録と本人への引継ぎを独立branchで実装。1366unit、型/build/API、Cloud157＋IDB9の166unique browser、6種演習・320px長文・連続動画までローカル合成データで受入済み。今回の候補は本番未反映、0048のremote適用・preview/production配備は実施しない。
 
 更新日: 2026-10-03。プロダクト方針は [project](./project.md)、根拠と全体WBSは [再構築計画](./docs/analysis/rebuild-plan-2026-09-07.md)。完了は実装と検証が揃った項目だけに付ける。以下の非公開候補記録に対し、後続の本人承認で [PR54の公開作業](./docs/analysis/2026-10-03-ui-start-release.md) を開始した。最初のpreviewは成功し、保存レビュー修正後の最終gateを進めている。

@@ -141,7 +141,9 @@ try {
   await runCommand(guestFixture.command, guestFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
-  localWranglerProject = await createLocalWranglerProject();
+  // This disposable runtime exercises the live writing contract with a
+  // network-free synthetic provider; it does not verify Gemini availability.
+  localWranglerProject = await createLocalWranglerProject({ writingProviderMock: true });
   const wranglerPagesDev = createNodeToolCommand('wrangler', [
     '--cwd',
     localWranglerProject.cwd,

@@ -171,6 +171,9 @@ describe('writing operations recover without changing the pending target', () =>
     expect(render().scannerManualTranscript).toBe('補助文A');
     await render().handleScannerSubmit();
     expect(api.finalize).toHaveBeenCalledTimes(2);
+    expect(api.createUpload).toHaveBeenCalledTimes(1);
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(api.finalize.mock.calls[0][0]).toEqual(api.finalize.mock.calls[1][0]);
     expect(api.finalize.mock.calls.map(([input]) => input.manualTranscript)).toEqual(['補助文A', '補助文A']);
     expect(render().scannerTarget).toBeNull();
   });

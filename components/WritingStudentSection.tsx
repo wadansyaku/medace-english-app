@@ -166,6 +166,7 @@ const WritingStudentSection: React.FC<WritingStudentSectionProps> = ({ user }) =
           manualTranscript={controller.manualTranscript}
           mobileSubmitStep={controller.mobileSubmitStep}
           submitting={controller.submitting}
+          submissionError={controller.submissionError}
           onClose={controller.resetSubmitDialog}
           onChangeFiles={controller.setFiles}
           onChangeManualTranscript={controller.setManualTranscript}

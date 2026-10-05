@@ -2,6 +2,7 @@ import React from 'react';
 import { CheckCircle2, Clock3, ClipboardList, Eye, Loader2, MessageSquareText, Send } from 'lucide-react';
 
 import { WRITING_ASSIGNMENT_STATUS_LABELS, type WritingAssignment } from '../../types';
+import { isSampleWritingProvenance } from '../../shared/writingAiSafety';
 import MobileStepPager from '../mobile/MobileStepPager';
 import {
   WORKFLOW_STEPS,
@@ -82,6 +83,9 @@ const WritingStudentAssignmentCard: React.FC<{
   const canOpenFeedback = canOpenWritingFeedback(assignment);
   const feedbackSubmissionId = getWritingFeedbackSubmissionId(assignment);
   const showFeedbackFirst = assignment.status === 'REVISION_REQUESTED' || (canOpenFeedback && !canSubmit);
+  const promptNotice = isSampleWritingProvenance(assignment.promptProvenance) ? (
+    <p data-testid="writing-template-prompt-notice" className="mt-2 text-xs font-bold leading-relaxed text-slate-600">テンプレート課題（AI生成なし）</p>
+  ) : null;
   const submitButton = canSubmit ? (
     <button
       type="button"
@@ -126,6 +130,7 @@ const WritingStudentAssignmentCard: React.FC<{
           <div>
             <div className="text-base font-bold text-slate-950">{assignment.promptTitle}</div>
             <div className="mt-1 text-xs text-slate-400">{assignment.wordCountMin} - {assignment.wordCountMax} words</div>
+            {promptNotice}
           </div>
         </div>
 
@@ -193,6 +198,7 @@ const WritingStudentAssignmentCard: React.FC<{
             <div>
               <div className="text-sm font-bold text-slate-950">{assignment.promptTitle}</div>
               <div className="mt-1 text-xs text-slate-400">{assignment.wordCountMin} - {assignment.wordCountMax} words</div>
+              {promptNotice}
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${phase.tone}`}>
               {phase.label}

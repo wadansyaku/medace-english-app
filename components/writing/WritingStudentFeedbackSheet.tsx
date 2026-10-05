@@ -3,6 +3,7 @@ import { CheckCircle2, FileDown, MessageSquareText, X } from 'lucide-react';
 
 import type { WritingStudentSubmissionDetailResponse } from '../../contracts/writing';
 import { WRITING_ASSIGNMENT_STATUS_LABELS, WRITING_SUBMISSION_SOURCE_LABELS } from '../../types';
+import { writingAssessmentNotice } from '../../shared/writingAiSafety';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 import {
@@ -29,6 +30,9 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
   onClose,
   onPrintFeedback,
 }) => {
+  const assessmentStatus = feedbackDetail.submission.assessmentStatus
+    ?? (selectedEvaluation && feedbackDetail.submission.evaluations.length > 0 ? 'real' : 'unverified');
+  const canUseAssessment = assessmentStatus === 'real';
   return (
     <MobileSheetDialog
       onClose={onClose}
@@ -46,12 +50,12 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
           <X className="h-5 w-5" />
         </button>
         <div className="pr-12">
-          <p className="text-xs font-bold text-slate-400">添削フィードバック</p>
+          <p className="text-xs font-bold text-slate-400">{canUseAssessment ? '添削フィードバック' : '答案と講師コメントの確認'}</p>
           <h3 className={`mt-2 font-black tracking-tight text-slate-950 ${isMobileViewport ? 'text-xl leading-tight' : 'text-2xl'}`}>
             {feedbackDetail.assignment.promptTitle}
           </h3>
           <p className="mt-2 text-sm text-slate-500">
-            {isMobileViewport
+            {!canUseAssessment ? '実評価の確認待ちです。提出した原本と講師コメントを確認してください。' : isMobileViewport
               ? '返却済みの添削です。まず講師コメントと改善点だけ確認できる並びにしています。'
               : '講師確認後に返却された内容です。面談前後の見直し用にそのまま印刷もできます。'}
           </p>
@@ -60,6 +64,11 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
 
       <div className="flex-1 overflow-y-auto px-4 py-5 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
         <div className="space-y-5">
+          {!canUseAssessment && (
+            <div role="status" data-testid="writing-feedback-assessment-warning" className="rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm font-bold leading-relaxed text-amber-950">
+              {writingAssessmentNotice(assessmentStatus)}
+            </div>
+          )}
           <div className="grid gap-2 grid-cols-2 md:gap-3 md:grid-cols-4">
             <div className={`rounded-2xl border border-slate-200 bg-slate-50 ${isMobileViewport ? 'px-3.5 py-3.5' : 'px-4 py-4'}`}>
               <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">状態</div>
@@ -81,7 +90,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             </div>
           </div>
 
-          {selectedEvaluation && (
+          {canUseAssessment && selectedEvaluation && (
             <div className="rounded-3xl border border-medace-200 bg-medace-50 px-5 py-5">
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-medace-700" />
@@ -133,7 +142,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             )}
           </div>
 
-          {selectedEvaluation && (
+          {canUseAssessment && selectedEvaluation && (
             <div
               data-testid="writing-feedback-approved-evaluation"
               className="flex items-center justify-between gap-4 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4"
@@ -151,7 +160,7 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
             </div>
           )}
 
-          {selectedEvaluation && (
+          {canUseAssessment && selectedEvaluation && (
             isMobileViewport ? (
               <div className="space-y-4" data-testid="writing-feedback-mobile-view">
                 <div data-testid="writing-feedback-improvements" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
@@ -251,11 +260,26 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
               </div>
             )
           )}
+          {!canUseAssessment && (
+            <div data-testid="writing-feedback-assets" className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                <MessageSquareText aria-hidden="true" className="h-4 w-4" />
+                提出した原本
+              </div>
+              {feedbackDetail.submission.assets.length > 0 ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {feedbackDetail.submission.assets.map((asset) => <div key={asset.id}>{renderWritingAsset(asset)}</div>)}
+                </div>
+              ) : (
+                <p className="text-sm leading-relaxed text-slate-600">この返却内容には原本がありません。講師に確認してください。</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[28px]">
-        <div className={isMobileViewport ? 'grid grid-cols-2 gap-3' : 'flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'}>
+        <div className={isMobileViewport && canUseAssessment ? 'grid grid-cols-2 gap-3' : 'flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'}>
           <button
             type="button"
             onClick={onClose}
@@ -267,18 +291,21 @@ const WritingStudentFeedbackSheet: React.FC<WritingStudentFeedbackSheetProps> = 
           >
             閉じる
           </button>
-          <button
-            type="button"
-            onClick={onPrintFeedback}
-            className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
-              isMobileViewport
-                ? 'border border-slate-200 bg-white text-slate-700'
-                : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
-            }`}
-          >
-            <FileDown className="h-4 w-4" />
-            添削結果を印刷
-          </button>
+          {canUseAssessment && (
+            <button
+              type="button"
+              data-testid="writing-print-feedback"
+              onClick={onPrintFeedback}
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold ${
+                isMobileViewport
+                  ? 'border border-slate-200 bg-white text-slate-700'
+                  : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
+              }`}
+            >
+              <FileDown className="h-4 w-4" />
+              添削結果を印刷
+            </button>
+          )}
         </div>
       </MobileStickyActionBar>
     </MobileSheetDialog>

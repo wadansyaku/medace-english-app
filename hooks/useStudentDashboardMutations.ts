@@ -118,12 +118,14 @@ export const useStudentDashboardMutations = ({
     if (planningBooks.length === 0) return;
     setGeneratingPlan(true);
     try {
+      let usedStandardFallback = false;
       const plan = canGenerateAiPlan
         ? await generateLearningPlan(
             user.grade || UserGrade.ADULT,
             user.englishLevel || EnglishLevel.B1,
             planningBooks,
             learningPreference,
+            () => { usedStandardFallback = true; },
           )
         : buildFallbackLearningPlan({
             uid: user.uid,
@@ -137,7 +139,9 @@ export const useStudentDashboardMutations = ({
         plan.uid = user.uid;
         await dashboardService.saveLearningPlan(plan);
         updateLearningPlan(plan);
-        setPageNotice({ tone: 'success', message: '学習プランを作成しました。' });
+        setPageNotice({ tone: 'success', message: usedStandardFallback
+          ? 'AIが利用できないため、標準の学習プランを作成しました。'
+          : '学習プランを作成しました。' });
       } else {
         setPageNotice({ tone: 'error', message: 'プラン作成に失敗しました。' });
       }

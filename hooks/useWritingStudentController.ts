@@ -23,6 +23,7 @@ import {
   isWritingSubmissionPending,
 } from '../components/writing/studentSectionUtils';
 import { appendWritingSideEffectWarning } from '../utils/writingSideEffects';
+import { resolveWritingUploadRetryCache, type WritingUploadRetryCache } from '../utils/writingUploadRetry';
 import {
   resolveWritingUploadMimeType,
   validateWritingSubmissionFiles,
@@ -45,6 +46,9 @@ export const useWritingStudentController = (user: UserProfile) => {
   const [files, setFiles] = useState<File[]>([]);
   const [manualTranscript, setManualTranscript] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const uploadedFilesRef = useRef<WritingUploadRetryCache | null>(null);
+  const submitLockRef = useRef(false);
   const [openingFeedbackId, setOpeningFeedbackId] = useState<string | null>(null);
   const [feedbackCommentExpanded, setFeedbackCommentExpanded] = useState(false);
   const [mobileSubmitStep, setMobileSubmitStep] = useState(0);
@@ -134,6 +138,8 @@ export const useWritingStudentController = (user: UserProfile) => {
     setSubmitTarget(null);
     setFiles([]);
     setManualTranscript('');
+    setSubmissionError(null);
+    uploadedFilesRef.current = null;
     setOpeningFeedbackId(null);
     setFeedbackCommentExpanded(false);
     setMobileSubmitStep(0);
@@ -166,10 +172,13 @@ export const useWritingStudentController = (user: UserProfile) => {
   }, [refresh, submitting]);
 
   const resetSubmitDialog = () => {
+    if (submitLockRef.current) return;
     setSubmitTarget(null);
     setFiles([]);
     setManualTranscript('');
     setMobileSubmitStep(0);
+    setSubmissionError(null);
+    uploadedFilesRef.current = null;
   };
 
   const openSubmitDialog = (assignment: WritingAssignment) => {
@@ -177,10 +186,12 @@ export const useWritingStudentController = (user: UserProfile) => {
     setFiles([]);
     setManualTranscript('');
     setMobileSubmitStep(0);
+    setSubmissionError(null);
+    uploadedFilesRef.current = null;
   };
 
   const handleSubmit = async () => {
-    if (!submitTarget) return;
+    if (!submitTarget || submitLockRef.current) return;
     const validation = validateWritingSubmissionFiles(files);
     if (!validation.valid) {
       setNotice({
@@ -190,44 +201,61 @@ export const useWritingStudentController = (user: UserProfile) => {
       return;
     }
 
+    submitLockRef.current = true;
     setSubmitting(true);
+    setSubmissionError(null);
+    const target = submitTarget;
+    const attemptNo = target.attemptCount + 1;
+    const cache = resolveWritingUploadRetryCache(uploadedFilesRef.current, `${user.uid}:${target.id}:${attemptNo}`, files);
+    uploadedFilesRef.current = cache;
     try {
       const uploadResults: string[] = [];
       for (const [index, file] of files.entries()) {
+        const existingAssetId = cache.assetIds[index];
+        if (existingAssetId) {
+          uploadResults.push(existingAssetId);
+          continue;
+        }
         const upload = await createWritingUploadUrl({
-          assignmentId: submitTarget.id,
+          assignmentId: target.id,
           fileName: file.name,
           mimeType: resolveWritingUploadMimeType(file),
           byteSize: file.size,
           sha256Base64: await calculateWritingAssetSha256Base64(file),
           assetOrder: index + 1,
-          attemptNo: submitTarget.attemptCount + 1,
+          attemptNo,
         });
         await uploadWritingAsset(upload, file);
+        cache.assetIds[index] = upload.assetId;
         uploadResults.push(upload.assetId);
       }
 
       const detail = await finalizeStudentWritingSubmission({
-        assignmentId: submitTarget.id,
+        assignmentId: target.id,
         source: WritingSubmissionSource.STUDENT_MOBILE,
         assetIds: uploadResults,
-        attemptNo: submitTarget.attemptCount + 1,
+        attemptNo,
         manualTranscript: manualTranscript.trim() || undefined,
       });
 
+      if (activeUserUidRef.current !== user.uid) return;
       setNotice({
         tone: 'success',
         message: appendWritingSideEffectWarning('答案を提出しました。講師確認後に返却されます。', detail),
       });
+      submitLockRef.current = false;
       resetSubmitDialog();
       await refresh();
     } catch (error) {
+      if (activeUserUidRef.current !== user.uid) return;
       console.error(error);
+      setSubmissionError(`${(error as Error).message || '答案提出に失敗しました。'} 入力とファイルはこの画面に保持しています。再試行するか、原本の手動確認を講師に依頼してください。`);
       setNotice({
         tone: 'error',
         message: (error as Error).message || '答案提出に失敗しました。',
       });
     } finally {
+      submitLockRef.current = false;
       setSubmitting(false);
     }
   };
@@ -288,6 +316,7 @@ export const useWritingStudentController = (user: UserProfile) => {
     files,
     manualTranscript,
     submitting,
+    submissionError,
     openingFeedbackId,
     selectedEvaluation,
     feedbackCommentExpanded,
@@ -299,8 +328,8 @@ export const useWritingStudentController = (user: UserProfile) => {
     refresh,
     openSubmitDialog,
     resetSubmitDialog,
-    setFiles,
-    setManualTranscript,
+    setFiles: (value: File[]) => { if (!submitLockRef.current) setFiles(value); },
+    setManualTranscript: (value: string) => { if (!submitLockRef.current) setManualTranscript(value); },
     handleSubmit,
     openFeedback,
     closeFeedback,

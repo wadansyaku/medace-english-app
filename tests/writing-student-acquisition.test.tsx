@@ -33,11 +33,11 @@ vi.mock('react', async importOriginal => {
   return { ...original, ...replacements, default: { ...original.default, ...replacements } };
 });
 vi.mock('../hooks/useIsMobileViewport', () => ({ default: () => false }));
-const api = vi.hoisted(() => ({ assignments: vi.fn(), finalize: vi.fn() }));
+const api = vi.hoisted(() => ({ assignments: vi.fn(), finalize: vi.fn(), hash: vi.fn(), createUpload: vi.fn(), upload: vi.fn() }));
 vi.mock('../services/writing', () => ({
   listWritingAssignments: api.assignments, finalizeStudentWritingSubmission: api.finalize,
-  calculateWritingAssetSha256Base64: vi.fn(), createWritingUploadUrl: vi.fn(),
-  getWritingPrintableFeedback: vi.fn(), getStudentWritingSubmissionDetail: vi.fn(), uploadWritingAsset: vi.fn(),
+  calculateWritingAssetSha256Base64: api.hash, createWritingUploadUrl: api.createUpload,
+  getWritingPrintableFeedback: vi.fn(), getStudentWritingSubmissionDetail: vi.fn(), uploadWritingAsset: api.upload,
 }));
 import WritingStudentSection from '../components/WritingStudentSection';
 import WritingStudentAssignmentList from '../components/writing/WritingStudentAssignmentList';
@@ -76,10 +76,56 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   api.assignments.mockResolvedValue({ assignments: [] });
+  api.hash.mockResolvedValue('synthetic-hash');
+  api.createUpload.mockResolvedValue({ assetId: 'synthetic-asset' });
+  api.upload.mockResolvedValue(undefined);
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('writing assignment acquisition', () => {
+  it('keeps failed AI input and reuses the uploaded PDF on retry without duplicate submissions', async () => {
+    await settle();
+    const file = new File(['%PDF-1.4 synthetic'], 'synthetic.pdf', { type: 'application/pdf' });
+    controller().openSubmitDialog(assignment);
+    controller().setFiles([file]);
+    controller().setManualTranscript('My unchanged draft.');
+    const pending = deferred<any>();
+    api.finalize.mockReturnValueOnce(pending.promise).mockResolvedValueOnce({ submission: { id: 'real-receipt' } });
+    const firstController = controller();
+    const first = firstController.handleSubmit();
+    const duplicate = firstController.handleSubmit();
+    firstController.resetSubmitDialog();
+    await vi.waitFor(() => expect(api.finalize).toHaveBeenCalledTimes(1));
+    pending.reject(new Error('AI処理待ちです。提出は未確定です。'));
+    await Promise.all([first, duplicate]);
+    expect(controller().files).toEqual([file]);
+    expect(controller().manualTranscript).toBe('My unchanged draft.');
+    expect(controller().submissionError).toContain('手動確認');
+    expect(controller().submitTarget?.id).toBe(assignment.id);
+    await controller().handleSubmit();
+    expect(api.createUpload).toHaveBeenCalledTimes(1);
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(api.finalize).toHaveBeenCalledTimes(2);
+    expect(api.finalize.mock.calls[0][0]).toEqual(api.finalize.mock.calls[1][0]);
+    expect(controller().submitTarget).toBeNull();
+    expect(controller().submissionError).toBeNull();
+  });
+
+  it('reuses only completed files after a partial upload fails', async () => {
+    await settle();
+    const files = [new File(['a'], 'a.png', { type: 'image/png' }), new File(['b'], 'b.png', { type: 'image/png' })];
+    controller().openSubmitDialog(assignment);
+    controller().setFiles(files);
+    api.createUpload.mockResolvedValueOnce({ assetId: 'asset-a' }).mockResolvedValueOnce({ assetId: 'asset-b-failed' }).mockResolvedValueOnce({ assetId: 'asset-b' });
+    api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('Upload failed')).mockResolvedValueOnce(undefined);
+    api.finalize.mockResolvedValue({ submission: { id: 'real-receipt' } });
+    await controller().handleSubmit();
+    expect(api.finalize).not.toHaveBeenCalled();
+    await controller().handleSubmit();
+    expect(api.createUpload.mock.calls.map(([input]) => input.fileName)).toEqual(['a.png', 'b.png', 'b.png']);
+    expect(api.finalize).toHaveBeenCalledWith(expect.objectContaining({ assetIds: ['asset-a', 'asset-b'] }));
+  });
+
   it('keeps pending and failed acquisition unknown, deduplicates retry and only shows empty after a successful response', async () => {
     const first = deferred<{ assignments: WritingAssignment[] }>();
     api.assignments.mockReturnValueOnce(first.promise);

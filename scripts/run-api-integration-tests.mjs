@@ -462,7 +462,9 @@ const main = async () => {
     await runCommand(wranglerMigrate.command, wranglerMigrate.args);
 
     console.log('Starting local Pages Functions server...');
-    localWranglerProject = await createLocalWranglerProject();
+    // Only the temporary writing adapter receives synthetic provider output.
+    // The real guards, parser, metering, D1 commits and side effects still run.
+    localWranglerProject = await createLocalWranglerProject({ writingProviderMock: true });
     server = startServer(persistDir, port, {
       INTERNAL_JOB_SECRET: internalJobSecret,
     }, localWranglerProject.cwd);
@@ -1717,10 +1719,10 @@ const main = async () => {
     assert(queueItem, 'writing submission should appear in the teacher review queue');
 
     const queueDetail = await groupAdmin.get(`/api/writing/submissions/${queueItem.submissionId}`);
-    assert(queueDetail.submission.evaluations.length === 3, 'teacher detail should expose all provider evaluations');
-    assert(queueDetail.submission.evaluations.every((evaluation) => evaluation.provenance?.mode), 'teacher evaluations should expose provenance');
-    assert(queueDetail.submission.ocrProvider === 'OPENAI', 'teacher detail should show that OCR reran with OPENAI when fallback confidence was low');
-    assert(queueDetail.submission.ocrMeta?.mode === 'fixture', 'teacher detail should expose OCR provenance');
+    assert(queueDetail.submission.evaluations.length === 1, 'teacher detail should expose the one configured live provider evaluation');
+    assert(queueDetail.submission.evaluations.every((evaluation) => evaluation.provider === 'GEMINI' && evaluation.provenance?.mode === 'live'), 'teacher evaluations should expose the mocked live Gemini contract provenance');
+    assert(queueDetail.submission.ocrProvider === 'GEMINI', 'teacher detail should show the configured writing OCR provider');
+    assert(queueDetail.submission.ocrMeta?.mode === 'live', 'teacher detail should expose the mocked live OCR contract provenance');
 
     const revisionDecision = await groupAdmin.post(`/api/writing/submissions/${queueItem.submissionId}/request-revision`, {
       selectedEvaluationId: queueDetail.submission.selectedEvaluationId || queueDetail.submission.evaluations[0].id,

@@ -210,4 +210,29 @@ describe('writing ai adapter', () => {
     });
     expect(dbMock.usageEvents[0].estimated_cost_milli_yen).toBeGreaterThan(0);
   });
+
+  it('marks failed hybrid Gemini evaluation as a sample and never selects sample providers by default', async () => {
+    generateContentMock.mockRejectedValueOnce(new Error('provider unavailable'));
+    const dbMock = createDbMock();
+    const adapter = createWritingAiAdapter({ DB: dbMock.DB, GEMINI_API_KEY: 'test-key', WRITING_AI_MODE: 'hybrid' } as any, user);
+    const evaluations = await adapter.runEvaluations(assignment, 'My actual draft.');
+    expect(evaluations).toHaveLength(3);
+    expect(evaluations.every((evaluation) => evaluation.provenance?.mode === 'hybrid-fallback')).toBe(true);
+    expect(evaluations.every((evaluation) => evaluation.provenance?.model === 'fixture-writing-evaluation')).toBe(true);
+    expect(evaluations.some((evaluation) => evaluation.isDefault)).toBe(false);
+    expect(dbMock.usageEvents.every((event) => event.used_ai === 0)).toBe(true);
+  });
+
+  it('prefers actual Gemini over fabricated comparison providers in hybrid mode', async () => {
+    generateContentMock.mockResolvedValueOnce({ text: JSON.stringify({
+      strengths: ['主張が明確です。'], improvementPoints: ['理由を追加しましょう。'], correctedDraft: 'My actual draft.', modelAnswer: 'Actual generated model answer.',
+    }) });
+    const dbMock = createDbMock();
+    const adapter = createWritingAiAdapter({ DB: dbMock.DB, GEMINI_API_KEY: 'test-key', WRITING_AI_MODE: 'hybrid' } as any, user);
+    const evaluations = await adapter.runEvaluations(assignment, 'My actual draft.');
+    expect(evaluations.filter((evaluation) => evaluation.isDefault)).toEqual([
+      expect.objectContaining({ provider: 'GEMINI', provenance: expect.objectContaining({ mode: 'live' }) }),
+    ]);
+    expect(evaluations.filter((evaluation) => evaluation.provider !== 'GEMINI').every((evaluation) => !evaluation.isDefault)).toBe(true);
+  });
 });

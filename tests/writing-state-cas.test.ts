@@ -168,13 +168,13 @@ describe('writing teacher review post-commit recovery', () => {
         'Test prompt', 'Test question', 'Guidance', 40, 60, 'TEST-01', '{}', 'REVIEW_READY', 1, 2, 1, 1);
       INSERT INTO writing_submissions (
         id, assignment_id, attempt_no, submission_source, submitted_by_user_id, transcript,
-        processing_state, selected_evaluation_id, created_at, submitted_at, updated_at
+        processing_state, selected_evaluation_id, created_at, submitted_at, updated_at, ocr_meta
       ) VALUES ('submission-2', 'assignment-1', 1, 'ONLINE', 'student-1', 'Fixture response',
-        'EVALUATED', 'evaluation-2', 1, 1, 1);
+        'EVALUATED', 'evaluation-2', 1, 1, 1, '{"provenance":{"mode":"live","provider":"GEMINI","model":"gemini-2.5-flash"}}');
       INSERT INTO writing_ai_evaluations (
         id, submission_id, provider, overall_score, rubric_json, strengths_json, improvement_points_json,
-        sentence_corrections_json, corrected_draft, model_answer, prompt_snapshot, is_default, created_at
-      ) VALUES ('evaluation-2', 'submission-2', 'fixture', 80, '{}', '[]', '[]', '[]', '', '', '{}', 1, 1);
+        sentence_corrections_json, corrected_draft, model_answer, prompt_snapshot, is_default, created_at, raw_payload
+      ) VALUES ('evaluation-2', 'submission-2', 'GEMINI', 14, '{}', '[]', '[]', '[]', '', '', '{}', 1, 1, '{"provenance":{"mode":"live","provider":"GEMINI","model":"gemini-2.5-flash"}}');
     `);
     return {
       ...fixture,
