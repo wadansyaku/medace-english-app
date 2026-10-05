@@ -100,7 +100,16 @@ export const useWritingDraftEditor = (assignmentId: string, attemptNo: number) =
       };
       // Preparation releases removed/orphaned originals before any new upload.
       // Retrying unchanged Files reuses its confirmed revision and successful uploads.
-      const preparationSignature = JSON.stringify({ assetIds: assets.map(asset => asset.id), manual });
+      // An uncertain completed PUT may still have consumed its URL. After expiry,
+      // prepare again before minting a replacement so its orphan frees the quota.
+      for (const [index, issued] of pendingUploads.current!.requests.entries()) {
+        if (issued && !cache.assetIds[index] && issued.expiresAt <= Date.now()) {
+          pendingUploads.current!.requests[index] = undefined;
+          preparedInput.current = null;
+        }
+      }
+      // Manual text is saved by the final CAS; it does not change upload preparation.
+      const preparationSignature = JSON.stringify({ assetIds: assets.map(asset => asset.id) });
       if (files.length > 0 || assetsNeedRetirement.current) {
         const prepared = preparedInput.current;
         if (files.length > 0 && !assetsNeedRetirement.current && prepared?.cache === cache

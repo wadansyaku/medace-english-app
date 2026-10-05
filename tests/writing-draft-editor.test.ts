@@ -144,7 +144,7 @@ describe('teacher input and GPT draft editor', () => {
     });
     await settle();
     render().setFiles(selected);
-    return { selected, active };
+    return { selected, active, metadata };
   };
   it('prepares an initially empty draft before upload and replays the exact uncertain preparation', async () => {
     const { selected } = await prepareFreshDraft();
@@ -187,18 +187,63 @@ describe('teacher input and GPT draft editor', () => {
     expect(api.save).toHaveBeenCalledTimes(2);
     expect(render().saved?.assetIds).toEqual(['uploaded-a.png', 'uploaded-b.png']); expect(render().saved?.revision).toBe(2);
   });
-  it('retains cached uploads in a new preparation after editing the manual text without duplicate asset IDs', async () => {
+  it('saves manual-only edits in the final CAS while retaining completed uploads without another preparation', async () => {
     const { active } = await prepareFreshDraft(); const persist = api.save.getMockImplementation()!;
     api.save.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
     await render().save(); render().setManual('My updated text.');
-    api.save.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('second final response lost'));
+    api.save.mockRejectedValueOnce(new Error('second final response lost'));
     await render().save();
     expect(render().saved?.assetIds).toEqual([]); expect(render().saved?.assets).toEqual([]);
     await render().save();
-    expect(api.save.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.', prepareUpload: true });
-    expect(api.save.mock.calls[3][0]).toEqual(api.save.mock.calls[4][0]);
+    expect(api.save.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.' });
+    expect(api.save.mock.calls[2][0].prepareUpload).toBeUndefined();
+    expect(api.save.mock.calls[2][0]).toEqual(api.save.mock.calls[3][0]);
+    expect(api.save.mock.calls.filter(([request]) => request.prepareUpload)).toHaveLength(1);
     expect(render().saved?.assetIds).toEqual(['uploaded-a.pdf']); expect(render().saved?.manualTranscript).toBe('My updated text.');
     expect(active.size).toBe(1); expect(api.url).toHaveBeenCalledTimes(1); expect(render().error).toBeNull();
+  });
+  it('replays a successful-but-uncertain PUT after a manual-only edit without retiring its original', async () => {
+    const { active } = await prepareFreshDraft();
+    api.upload.mockRejectedValueOnce(new Error('successful PUT response lost')).mockImplementationOnce(async (upload: any) => {
+      if (!active.has(upload.assetId)) throw new Error('original retired before PUT receipt');
+    });
+    await render().save(); render().setManual('My text after the lost PUT.'); await render().save();
+    expect(api.save).toHaveBeenCalledTimes(2);
+    expect(api.save.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, manualTranscript: 'My text after the lost PUT.', assetIds: ['uploaded-a.pdf'] });
+    expect(api.url).toHaveBeenCalledTimes(1); expect(api.upload.mock.calls[0]).toEqual(api.upload.mock.calls[1]);
+    expect(render().saved?.revision).toBe(2); expect(render().error).toBeNull();
+  });
+  it.each([false, true])('renews an expired unconfirmed URL after preparation, previously uploaded=%s', async uploaded => {
+    const { active, selected, metadata } = await prepareFreshDraft();
+    const record = (id: string, index = 0) => metadata.set(id, { id, fileName: selected[index].name, mimeType: selected[index].type, byteSize: selected[index].size });
+    const firstIssued = { assetId: 'uncertain-old', uploadUrl: 'https://example.invalid/old', expiresAt: Date.now() + 60_000 };
+    const nextIssued = { assetId: 'confirmed-new', uploadUrl: 'https://example.invalid/new', expiresAt: Date.now() + 120_000 };
+    api.url.mockImplementationOnce(async () => { if (uploaded) active.add(firstIssued.assetId); record(firstIssued.assetId); return firstIssued; })
+      .mockImplementationOnce(async () => { if (active.size) throw new Error('old quota not retired'); active.add(nextIssued.assetId); record(nextIssued.assetId); return nextIssued; });
+    api.upload.mockRejectedValueOnce(new Error(uploaded ? 'successful PUT response lost' : 'PUT never reached server')).mockResolvedValueOnce(undefined);
+    await render().save();
+    firstIssued.expiresAt = Date.now() - 1;
+    await render().save();
+    expect(api.save.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, assetIds: [], prepareUpload: true });
+    expect(api.save.mock.invocationCallOrder[1]).toBeLessThan(api.url.mock.invocationCallOrder[1]);
+    expect(api.url).toHaveBeenCalledTimes(2); expect(api.upload.mock.calls[1][0]).toEqual(nextIssued);
+    expect(render().saved?.assetIds).toEqual(['confirmed-new']); expect(render().saved?.revision).toBe(3); expect(render().error).toBeNull();
+  });
+  it('keeps known successful originals when renewing another expired pending image URL', async () => {
+    const { active, selected, metadata } = await prepareFreshDraft('images');
+    const record = (id: string, index: number) => metadata.set(id, { id, fileName: selected[index].name, mimeType: selected[index].type, byteSize: selected[index].size });
+    const first = { assetId: 'image-success', uploadUrl: 'https://example.invalid/first', expiresAt: Date.now() + 60_000 };
+    const unknown = { assetId: 'image-uncertain', uploadUrl: 'https://example.invalid/unknown', expiresAt: Date.now() + 60_000 };
+    const replacement = { assetId: 'image-replacement', uploadUrl: 'https://example.invalid/replacement', expiresAt: Date.now() + 120_000 };
+    api.url.mockImplementationOnce(async () => { active.add(first.assetId); record(first.assetId, 0); return first; })
+      .mockImplementationOnce(async () => { active.add(unknown.assetId); record(unknown.assetId, 1); return unknown; })
+      .mockImplementationOnce(async () => { expect(active).toEqual(new Set([first.assetId])); active.add(replacement.assetId); record(replacement.assetId, 1); return replacement; });
+    api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('second image PUT response lost')).mockResolvedValueOnce(undefined);
+    await render().save(); first.expiresAt = Date.now() - 1; unknown.expiresAt = Date.now() - 1;
+    await render().save();
+    expect(api.save.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, prepareUpload: true, assetIds: [first.assetId] });
+    expect(api.url).toHaveBeenCalledTimes(3); expect(api.upload).toHaveBeenCalledTimes(3);
+    expect(render().saved?.assetIds).toEqual([first.assetId, replacement.assetId]); expect(render().error).toBeNull();
   });
 
 });

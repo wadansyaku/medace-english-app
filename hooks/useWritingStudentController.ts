@@ -224,7 +224,7 @@ export const useWritingStudentController = (user: UserProfile) => {
         setDraftLoadError('課題に対応する下書きを確認できません。入力を保持しています。');
       } else {
         committedInputRef.current = draft; assetsNeedRetirementRef.current = false;
-        setSavedInputDraft(draft); setDraftLoaded(true);
+        setSavedInputDraft(draft); setDraftLoaded(true); setSubmissionError(null);
         const keepEditedManual = preserveInput && manualDirtyRef.current;
         if (!keepEditedManual) { setManualTranscript(draft?.manualTranscript || ''); manualDirtyRef.current = false; }
         setDraftSavedMessage(draft ? (keepEditedManual
@@ -307,7 +307,16 @@ export const useWritingStudentController = (user: UserProfile) => {
         return response.draft;
       };
       if (!gradingEnabled && (files.length > 0 || assetsNeedRetirementRef.current)) {
-        const preparationSignature = JSON.stringify({ assetIds: existingAssets.map(asset => asset.id), manualTranscript });
+        // Expired, unconfirmed PUTs require preparation before a fresh upload URL.
+        // Keep known successful IDs so that preparation cannot retire their originals.
+        for (const [index, issued] of pendingUploadsRef.current!.requests.entries()) {
+          if (issued && !cache.assetIds[index] && issued.expiresAt <= Date.now()) {
+            pendingUploadsRef.current!.requests[index] = undefined;
+            preparedInputRef.current = null;
+          }
+        }
+        // Manual-only edits belong to the final CAS, not upload preparation.
+        const preparationSignature = JSON.stringify({ assetIds: existingAssets.map(asset => asset.id) });
         const prepared = preparedInputRef.current;
         if (files.length > 0 && !assetsNeedRetirementRef.current && prepared?.cache === cache
           && prepared.signature === preparationSignature && prepared.revision === expectedRevision) {

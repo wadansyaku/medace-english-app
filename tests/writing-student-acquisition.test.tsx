@@ -344,7 +344,7 @@ describe('writing assignment acquisition', () => {
     });
     await settle(); controller().openSubmitDialog(assignment); await settle();
     controller().setFiles(selected);
-    return { selected, active };
+    return { selected, active, metadata };
   };
   it('prepares an initially empty draft before upload and replays the exact uncertain preparation', async () => {
     const { selected } = await prepareFreshDraft();
@@ -387,18 +387,79 @@ describe('writing assignment acquisition', () => {
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
     expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-a.png', 'uploaded-b.png']); expect(controller().savedInputDraft?.revision).toBe(2);
   });
-  it('retains cached uploads in a new preparation after editing the manual text without duplicate asset IDs', async () => {
+  it('saves manual-only edits in the final CAS while retaining completed uploads without another preparation', async () => {
     const { active } = await prepareFreshDraft(); const persist = api.saveDraft.getMockImplementation()!;
     api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('final failed before commit'));
     await controller().handleSubmit(); controller().setManualTranscript('My updated text.');
-    api.saveDraft.mockImplementationOnce(persist).mockRejectedValueOnce(new Error('second final response lost'));
+    api.saveDraft.mockRejectedValueOnce(new Error('second final response lost'));
     await controller().handleSubmit();
     expect(controller().savedInputDraft?.assetIds).toEqual([]); expect(controller().savedInputDraft?.assets).toEqual([]);
     await controller().handleSubmit();
-    expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.', prepareUpload: true });
-    expect(api.saveDraft.mock.calls[3][0]).toEqual(api.saveDraft.mock.calls[4][0]);
+    expect(api.saveDraft.mock.calls[2][0]).toMatchObject({ expectedRevision: 1, assetIds: ['uploaded-a.pdf'], manualTranscript: 'My updated text.' });
+    expect(api.saveDraft.mock.calls[2][0].prepareUpload).toBeUndefined();
+    expect(api.saveDraft.mock.calls[2][0]).toEqual(api.saveDraft.mock.calls[3][0]);
+    expect(api.saveDraft.mock.calls.filter(([request]) => request.prepareUpload)).toHaveLength(1);
     expect(controller().savedInputDraft?.assetIds).toEqual(['uploaded-a.pdf']); expect(controller().savedInputDraft?.manualTranscript).toBe('My updated text.');
     expect(active.size).toBe(1); expect(api.createUpload).toHaveBeenCalledTimes(1); expect(controller().submissionError).toBeNull();
+  });
+  it('replays a successful-but-uncertain PUT after a manual-only edit without retiring its original', async () => {
+    const { active } = await prepareFreshDraft();
+    api.upload.mockRejectedValueOnce(new Error('successful PUT response lost')).mockImplementationOnce(async (upload: any) => {
+      if (!active.has(upload.assetId)) throw new Error('original retired before PUT receipt');
+    });
+    await controller().handleSubmit(); controller().setManualTranscript('My text after the lost PUT.'); await controller().handleSubmit();
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    expect(api.saveDraft.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, manualTranscript: 'My text after the lost PUT.', assetIds: ['uploaded-a.pdf'] });
+    expect(api.createUpload).toHaveBeenCalledTimes(1); expect(api.upload.mock.calls[0]).toEqual(api.upload.mock.calls[1]);
+    expect(controller().savedInputDraft?.revision).toBe(2); expect(controller().submissionError).toBeNull();
+  });
+  it.each([false, true])('renews an expired unconfirmed URL after preparation, previously uploaded=%s', async uploaded => {
+    const { active, selected, metadata } = await prepareFreshDraft();
+    const record = (id: string, index = 0) => metadata.set(id, { id, fileName: selected[index].name, mimeType: selected[index].type, byteSize: selected[index].size });
+    const firstIssued = { assetId: 'uncertain-old', uploadUrl: 'https://example.invalid/old', expiresAt: Date.now() + 60_000 };
+    const nextIssued = { assetId: 'confirmed-new', uploadUrl: 'https://example.invalid/new', expiresAt: Date.now() + 120_000 };
+    api.createUpload.mockImplementationOnce(async () => { if (uploaded) active.add(firstIssued.assetId); record(firstIssued.assetId); return firstIssued; })
+      .mockImplementationOnce(async () => { if (active.size) throw new Error('old quota not retired'); active.add(nextIssued.assetId); record(nextIssued.assetId); return nextIssued; });
+    api.upload.mockRejectedValueOnce(new Error(uploaded ? 'successful PUT response lost' : 'PUT never reached server')).mockResolvedValueOnce(undefined);
+    await controller().handleSubmit();
+    firstIssued.expiresAt = Date.now() - 1;
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, assetIds: [], prepareUpload: true });
+    expect(api.saveDraft.mock.invocationCallOrder[1]).toBeLessThan(api.createUpload.mock.invocationCallOrder[1]);
+    expect(api.createUpload).toHaveBeenCalledTimes(2); expect(api.upload.mock.calls[1][0]).toEqual(nextIssued);
+    expect(controller().savedInputDraft?.assetIds).toEqual(['confirmed-new']); expect(controller().savedInputDraft?.revision).toBe(3); expect(controller().submissionError).toBeNull();
+  });
+  it('keeps known successful originals when renewing another expired pending image URL', async () => {
+    const { active, selected, metadata } = await prepareFreshDraft('images');
+    const record = (id: string, index: number) => metadata.set(id, { id, fileName: selected[index].name, mimeType: selected[index].type, byteSize: selected[index].size });
+    const first = { assetId: 'image-success', uploadUrl: 'https://example.invalid/first', expiresAt: Date.now() + 60_000 };
+    const unknown = { assetId: 'image-uncertain', uploadUrl: 'https://example.invalid/unknown', expiresAt: Date.now() + 60_000 };
+    const replacement = { assetId: 'image-replacement', uploadUrl: 'https://example.invalid/replacement', expiresAt: Date.now() + 120_000 };
+    api.createUpload.mockImplementationOnce(async () => { active.add(first.assetId); record(first.assetId, 0); return first; })
+      .mockImplementationOnce(async () => { active.add(unknown.assetId); record(unknown.assetId, 1); return unknown; })
+      .mockImplementationOnce(async () => { expect(active).toEqual(new Set([first.assetId])); active.add(replacement.assetId); record(replacement.assetId, 1); return replacement; });
+    api.upload.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('second image PUT response lost')).mockResolvedValueOnce(undefined);
+    await controller().handleSubmit(); first.expiresAt = Date.now() - 1; unknown.expiresAt = Date.now() - 1;
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[1][0]).toMatchObject({ expectedRevision: 1, prepareUpload: true, assetIds: [first.assetId] });
+    expect(api.createUpload).toHaveBeenCalledTimes(3); expect(api.upload).toHaveBeenCalledTimes(3);
+    expect(controller().savedInputDraft?.assetIds).toEqual([first.assetId, replacement.assetId]); expect(controller().submissionError).toBeNull();
+  });
+
+  it('clears the old save error after a successful conflict recovery while keeping edited text and Files', async () => {
+    const { selected } = await prepareFreshDraft('images');
+    controller().setManualTranscript('My retained edited text.');
+    api.saveDraft.mockRejectedValueOnce(new Error('409 revision conflict'));
+    await controller().handleSubmit(); expect(controller().submissionError).toContain('revision conflict');
+    api.inputDraft.mockResolvedValue({ draft: { assignmentId: assignment.id, attemptNo: 1, revision: 4,
+      manualTranscript: 'Text changed in another tab.', assetIds: [], assets: [], assessmentStatus: 'UNASSESSED', updatedAt: 2 } });
+    controller().retryDraftLoad(); await settle();
+    expect(controller().submissionError).toBeNull(); expect(controller().manualTranscript).toBe('My retained edited text.');
+    expect(controller().files).toEqual(selected); expect(controller().savedInputDraft?.revision).toBe(4);
+    expect(controller().draftSavedMessage).toContain('編集中の本文は保持');
+    await controller().handleSubmit();
+    expect(api.saveDraft.mock.calls[1][0]).toMatchObject({ expectedRevision: 4, prepareUpload: true, manualTranscript: 'My retained edited text.' });
+    expect(controller().savedInputDraft?.revision).toBe(6); expect(controller().submissionError).toBeNull();
   });
 
 });
