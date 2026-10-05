@@ -141,6 +141,8 @@ const runMeteredAiAction = async <T>(
   logContext?: AiUsageLogContext,
   metering?: Partial<AiUsageEventInput>,
 ): Promise<T> => {
+  assertAiActionAllowed(user, action);
+  rejectLegacyLiveAi();
   if (typeof metering?.estimatedCostMilliYen === 'number') {
     await assertBudgetAvailable(env, user, action, metering.estimatedCostMilliYen);
   } else {
@@ -636,127 +638,9 @@ const generateGrammarPracticeQuestions = async (
       }
     }
 
-    const cachedWordIds = new Set(cachedQuestions.map((question) => question.wordId));
-    const missingWords = candidateWords.filter((word) => !cachedWordIds.has(word.id));
-    const remainingCount = Math.max(0, requestedCount - cachedQuestions.length);
-    if (remainingCount === 0 || missingWords.length === 0) {
-      return {
-        questions: cachedQuestions.slice(0, requestedCount),
-        usedAi: false,
-        generatedCount: 0,
-        billableGeneratedCount: 0,
-        provider: 'GEMINI',
-        model,
-      };
-    }
-
-    const aiRequestCount = Math.min(remainingCount, missingWords.length);
-    const providerPreference = resolveGrammarPracticeProviderPreference(env);
-    const generatedBatches: GrammarPracticeGenerationBatch[] = [];
-    let remainingWordsForAi = missingWords.slice(0, aiRequestCount);
-    let attemptedProvider: GrammarPracticeLiveProvider | null = null;
-
-    const refreshRemainingWords = () => {
-      const generatedWordIds = new Set(
-        generatedBatches.flatMap((batch) => batch.questions.map((question) => question.wordId)),
-      );
-      remainingWordsForAi = missingWords
-        .filter((word) => !generatedWordIds.has(word.id))
-        .slice(0, Math.max(0, aiRequestCount - generatedWordIds.size));
-    };
-
-    if (providerPreference !== 'GEMINI' && env.AI && remainingWordsForAi.length > 0) {
-      try {
-        attemptedProvider = 'CLOUDFLARE';
-        const cloudflareBatch = await generateGrammarPracticeWithCloudflare(
-          env,
-          remainingWordsForAi,
-          mode,
-          remainingWordsForAi.length,
-          userLevel,
-          grammarScopeId,
-        );
-        if (cloudflareBatch.questions.length > 0) {
-          generatedBatches.push(cloudflareBatch);
-          refreshRemainingWords();
-        }
-      } catch (error) {
-        console.warn('Cloudflare grammar generation skipped; falling back when available:', error);
-      }
-    }
-
-    const shouldTryGemini = providerPreference === 'GEMINI'
-      || (providerPreference === 'AUTO' && (Boolean(env.GEMINI_API_KEY) || !env.AI));
-    if (shouldTryGemini && remainingWordsForAi.length > 0) {
-      await beforeAiGenerate?.(remainingWordsForAi.length);
-      attemptedProvider = 'GEMINI';
-      const geminiBatch = await generateGrammarPracticeWithGemini(
-        env,
-        remainingWordsForAi,
-        mode,
-        remainingWordsForAi.length,
-        userLevel,
-        grammarScopeId,
-        model,
-      );
-      if (geminiBatch.questions.length > 0) {
-        generatedBatches.push(geminiBatch);
-        refreshRemainingWords();
-      }
-    }
-
-    const generatedEntries: PersistedGrammarPracticeEntry[] = generatedBatches.flatMap((batch) => (
-      batch.questions.map((question) => ({ question, provider: batch.provider, model: batch.model }))
-    ));
-    const persistedEntries: PersistedGrammarPracticeEntry[] = env.DB
-      ? await Promise.all(generatedEntries.map(async ({ question, provider, model: generatedModel }) => {
-        try {
-          const row = await recordAiGeneratedProblem(env, {
-            question,
-            model: cacheModelForGrammarProvider(provider, generatedModel),
-            provider: provider.toLowerCase(),
-            promptVersion: GRAMMAR_PRACTICE_PROMPT_VERSION,
-            sourceText: `${question.wordId}:${question.mode}:${question.grammarScope?.scopeId || grammarScopeId || 'auto'}:${question.promptText}:${question.answer}`,
-          });
-          return {
-            provider,
-            model: generatedModel,
-            question: {
-              ...question,
-              generatedProblemId: row.id,
-              aiContentId: row.content_id,
-            },
-          };
-        } catch (cacheError) {
-          console.warn('AI grammar cache write skipped:', cacheError);
-          return { question, provider, model: generatedModel };
-        }
-      }))
-      : generatedEntries;
-    const persistedGeneratedQuestions = persistedEntries.map((entry) => entry.question);
-    const billableGeneratedCount = persistedEntries.filter((entry) => entry.provider === 'GEMINI').length;
-    const usedProviders = new Set(generatedBatches.map((batch) => batch.provider));
-    const usageProvider: GrammarPracticeUsageProvider = usedProviders.has('CLOUDFLARE') && usedProviders.has('GEMINI')
-      ? 'MIXED'
-      : usedProviders.has('CLOUDFLARE')
-        ? 'CLOUDFLARE'
-        : usedProviders.has('GEMINI')
-          ? 'GEMINI'
-          : attemptedProvider || 'GEMINI';
-    const usageModel = generatedBatches.length > 0
-      ? Array.from(new Set(generatedBatches.map((batch) => cacheModelForGrammarProvider(batch.provider, batch.model)))).join('+')
-      : usageProvider === 'CLOUDFLARE'
-        ? cacheModelForGrammarProvider('CLOUDFLARE', resolveCloudflareGrammarPracticeModel(env))
-      : model;
-
-    return {
-      questions: cachedQuestions.slice(0, requestedCount),
-      usedAi: persistedGeneratedQuestions.length > 0,
-      generatedCount: persistedGeneratedQuestions.length,
-      billableGeneratedCount,
-      provider: usageProvider,
-      model: usageModel,
-    };
+    // Only reviewed, persisted questions are returned. Missing questions are
+    // filled by the client's existing static exercises; no provider is called.
+    return { ...emptyResult(), questions: cachedQuestions.slice(0, requestedCount) };
   } catch (error) {
     handleAiError(error, 'AI文法問題生成に失敗しました。');
   }

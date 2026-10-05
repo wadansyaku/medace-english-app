@@ -68,6 +68,7 @@ export interface SyntheticAiMockDriver {
 }
 
 export interface CandidateAiBoundary {
+  readonly mode: 'DISABLED' | 'SYNTHETIC_MOCK';
   execute(request: CandidateAiRequest): Promise<CandidateAiResult>;
 }
 
@@ -122,6 +123,7 @@ const validRequest = (request: CandidateAiRequest): boolean => {
 };
 
 export const createDisabledAiProviderBoundary = (): CandidateAiBoundary => ({
+  mode: 'DISABLED',
   async execute() { return failure('DISABLED'); },
 });
 
@@ -144,6 +146,7 @@ export const createSyntheticMockAiProviderBoundary = (options: {
   now?: () => Date;
   timeoutMs?: number;
 }): CandidateAiBoundary => ({
+  mode: 'SYNTHETIC_MOCK',
   async execute(input) {
     if (!isRecord(input) || input.dataOrigin !== 'SYNTHETIC_FIXTURE') return failure('SYNTHETIC_ONLY');
     // Keep the hashed request and dispatched input equal across await points.

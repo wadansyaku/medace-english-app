@@ -242,4 +242,27 @@ describe('writing ai adapter', () => {
     ]);
     expect(evaluations.filter((evaluation) => evaluation.provider !== 'GEMINI').every((evaluation) => !evaluation.isDefault)).toBe(true);
   });
+  it('production live mode cannot call a provider when credentials and binding are present', async () => {
+    const dbMock = createDbMock();
+    const binding = vi.fn();
+    const adapter = createProductionWritingAiAdapter({ DB: dbMock.DB, GEMINI_API_KEY: 'synthetic-test-key', AI: { run: binding }, WRITING_AI_MODE: 'live' } as any, user);
+    await expect(adapter.generatePrompt(template, 'Synthetic Student')).rejects.toMatchObject({ status: 503 });
+    await expect(adapter.runOcr(assignment, [{ mimeType: 'image/png', base64Data: 'c3ludGhldGlj' }] as any)).rejects.toMatchObject({ status: 503 });
+    await expect(adapter.runEvaluations(assignment, 'Synthetic draft.')).rejects.toMatchObject({ status: 503 });
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(binding).not.toHaveBeenCalled();
+    expect(dbMock.usageEvents).toEqual([]);
+  });
+
+  it('production hybrid remains unverified and manual text never enables evaluation', async () => {
+    const dbMock = createDbMock();
+    const adapter = createProductionWritingAiAdapter({ DB: dbMock.DB, GEMINI_API_KEY: 'synthetic-test-key', WRITING_AI_MODE: 'hybrid' } as any, user);
+    const ocr = await adapter.runOcr(assignment, [], 'My retained synthetic draft.');
+    expect(ocr.transcript).toBe('My retained synthetic draft.');
+    const evaluations = await adapter.runEvaluations(assignment, ocr.transcript);
+    expect(evaluations.every((item) => item.provenance?.mode === 'hybrid-fallback' && !item.isDefault)).toBe(true);
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(dbMock.usageEvents.every((event) => event.used_ai === 0 && event.estimated_cost_milli_yen === 0)).toBe(true);
+  });
+
 });

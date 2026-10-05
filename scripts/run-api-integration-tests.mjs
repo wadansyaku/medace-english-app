@@ -642,6 +642,20 @@ const main = async () => {
     }
     const refusedLearnerPreparation = await freeStudent.storageRaw('prepareBookExamples', { bookId: starterHintBook.id });
     assert(refusedLearnerPreparation.status === 403, 'learner must not start admin example preparation');
+    const refusedAdminPreparation = await admin.storageRaw('prepareBookExamples', { bookId: starterHintBook.id });
+    assert(refusedAdminPreparation.status === 410, 'admin example generation must be retired before provider or claims');
+    for (const request of [
+      { action: 'generateAIQuiz', payload: { targetWords: [{ id: starterWord.id, word: starterWord.word, definition: starterWord.definition }] } },
+      { action: 'extractVocabularyFromText', payload: { rawText: 'A synthetic API test sentence.' } },
+      { action: 'evaluateJapaneseTranslationAnswer', payload: { sourceSentence: 'A term is reviewed.', expectedTranslation: '語が復習される。', userTranslation: '語を復習する。', examTarget: 'UNIVERSITY_ENTRANCE' } },
+    ]) {
+      const result = await admin.request('/api/ai', { method: 'POST', body: JSON.stringify(request) });
+      assert(result.status === 503, `local candidate ${request.action} must be disabled`);
+    }
+    const standardPlan = await freeStudent.request('/api/ai', { method: 'POST', body: JSON.stringify({ action: 'generateLearningPlan', payload: { grade: 'ADULT', level: 'B1', availableBooks: [] } }) });
+    assert(standardPlan.status === 200 && standardPlan.data?.uid === freeStudentUser.uid && standardPlan.data?.status === 'ACTIVE', 'free learner standard plan must be AI-free and scoped to the authenticated learner');
+    const studentFollowUpDenied = await freeStudent.request('/api/ai', { method: 'POST', body: JSON.stringify({ action: 'generateInstructorFollowUp', payload: { instructorName: 'Synthetic Instructor', studentName: 'Synthetic Student', riskLevel: 'SAFE', daysSinceActive: 1, totalLearned: 0 } }) });
+    assert(studentFollowUpDenied.status === 403, 'student cannot use the instructor draft compatibility action');
     assert((await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM ai_usage_events'))[0].n === usageBeforeRetiredCalls, 'retired actions must not record provider cost or usage');
     const starterWordsAfterRejectedRefresh = await freeStudent.storage('getWordsByBook', { bookId: starterHintBook.id });
     const starterWordAfterRejectedRefresh = starterWordsAfterRejectedRefresh.find((word) => word.id === starterWord.id);

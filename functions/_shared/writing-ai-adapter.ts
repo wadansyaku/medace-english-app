@@ -576,6 +576,7 @@ export const createWritingAiAdapter = (
 
     if (mode === 'fixture') return fallback();
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'generateWritingPrompt');
       const result = await runLivePrompt(env, user, template, studentName, topicHint, notes, synthetic);
       await recordWritingUsage(env, user, 'generateWritingPrompt', result.provenance, true, logContext);
@@ -621,6 +622,7 @@ export const createWritingAiAdapter = (
 
     if (mode === 'fixture') return fallback();
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'ocrWritingSubmission');
       const result = await runLiveOcr(env, user, assignment, assets, manualTranscript, synthetic);
       await recordWritingUsage(env, user, 'ocrWritingSubmission', result.provenance, true, logContext);
@@ -657,6 +659,7 @@ export const createWritingAiAdapter = (
     if (comparisonMode === 'hybrid-fallback' && fallbackReason) return fallback(fallbackReason);
 
     try {
+      if (!synthetic) rejectLegacyLiveAi();
       await assertBudgetAvailable(env, user, 'evaluateWritingSubmission');
       const result = await runLiveEvaluation(env, user, provider, assignment, transcript, synthetic);
       await recordWritingUsage(env, user, 'evaluateWritingSubmission', result.provenance, true, logContext);
