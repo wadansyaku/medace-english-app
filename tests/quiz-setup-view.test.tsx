@@ -41,9 +41,9 @@ describe('QuizSetupView compact setup', () => {
     const update = vi.fn();
     const view = QuizSetupView({
       bookId: NARU_BOOK_ID, setupConfig: baseConfig, setupSummary: '全範囲から5問',
-      setupCandidateWordsLength: 1530, setupActualQuestionCount: 5,
-      setupEmptyCopy: '', allWordsLength: 1530, normalizedSetupRange: { start: 1, end: 1530 },
-      minWordNumber: 1, maxWordNumber: 1530, onUpdateSetupConfig: update, onAdvanceToReady: noop,
+      setupCandidateWordsLength: 1531, setupActualQuestionCount: 5,
+      setupEmptyCopy: '', allWordsLength: 1531, normalizedSetupRange: { start: 1, end: 1531 },
+      minWordNumber: 1, maxWordNumber: 1531, onUpdateSetupConfig: update, onAdvanceToReady: noop,
     });
     if (!React.isValidElement(view)) throw new Error('Quiz setup did not return an element.');
     const buttons = new Map<string, () => void>();
@@ -56,13 +56,13 @@ describe('QuizSetupView compact setup', () => {
     });
     visit(view);
     for (const [id, start, end] of [
-      ['verb', 1, 353], ['noun', 354, 1285], ['adverb', 1286, 1371], ['adjective', 1372, 1530],
+      ['verb', 1, 353], ['noun', 354, 1285], ['adverb', 1286, 1372], ['adjective', 1373, 1531],
     ] as const) {
       buttons.get(`naru-range-${id}`)!();
       expect(update).toHaveBeenLastCalledWith({ selectionMode: 'RANGE_RANDOM', rangeStart: start, rangeEnd: end });
     }
     buttons.get('naru-range-all')!();
-    expect(update).toHaveBeenLastCalledWith({ selectionMode: 'FULL_RANDOM', rangeStart: 1, rangeEnd: 1530 });
+    expect(update).toHaveBeenLastCalledWith({ selectionMode: 'FULL_RANDOM', rangeStart: 1, rangeEnd: 1531 });
   });
 
   it('offers part-of-speech ranges only for the canonical Naru book', () => {

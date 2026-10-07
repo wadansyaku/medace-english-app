@@ -1,4 +1,5 @@
 import React, { type ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Exercise the real controller and button handlers. Browser checks cover geometry.
@@ -76,6 +77,20 @@ afterEach(() => {
 });
 
 describe('accepted study rating feedback', () => {
+  it('keeps translation provenance on the meaning face and clears it when advancing to an original word', async () => {
+    api.getBookSession.mockResolvedValue([{ ...words[0], aichiExamAppeared: true, definitionSupplemented: true }, words[1]]);
+    await load();
+    const back = find(view(), 'study-card-back')!;
+    expect(back.props['aria-hidden']).toBe(false);
+    expect(renderToStaticMarkup(back)).toContain('訳・例文訳：アプリ補完（辞書を参照）');
+    const pending = controller().handleRating(3);
+    await settle(); await vi.advanceTimersByTimeAsync(400); await pending;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(controller().currentIndex).toBe(1);
+    controller().openBack();
+    expect(renderToStaticMarkup(find(view(), 'study-card-back')!)).not.toContain('word-definition-supplement-note');
+  });
+
   it.each([false, true])('shows the accepted button for at least 400ms, including reduced motion: %s', async reducedMotion => {
     vi.stubGlobal('window', { matchMedia: () => ({ matches: reducedMotion }), speechSynthesis: { getVoices: () => [] } });
     await load();

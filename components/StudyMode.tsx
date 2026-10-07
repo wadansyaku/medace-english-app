@@ -1,3 +1,4 @@
+import WordExamBadge from './WordExamBadge';
 import React, { useEffect, useRef } from 'react';
 import {
   AlertCircle,
@@ -228,6 +229,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
 
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <h2 className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
+          <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>
           <WordSourceDetails word={controller.currentWord} compact />
         </div>
 
@@ -246,11 +248,13 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
       onClick={controller.closeBack}
     >
-      <div className="flex h-full min-h-0 flex-col">
+      <div ref={controller.backFaceScrollRef} role="region" aria-label="単語の意味と例文" tabIndex={0} className="h-full min-h-0 overflow-y-auto pr-1 scrollbar-hide">
         <div className="flex shrink-0 items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-800">意味</div>
             <div className="mt-2 text-base font-black text-slate-950 sm:text-lg">{controller.currentWord.word}</div>
+            {(controller.currentWord.aichiExamAppeared || controller.currentWord.definitionSupplemented) &&
+              <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>}
           </div>
           {!controller.isEditing ? (
             <button
@@ -271,8 +275,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-          <div ref={controller.backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
+        <div className="mt-3">
         <div className="mb-3 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
           {controller.isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
@@ -294,7 +297,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               {controller.editError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{controller.editError}</p>}
             </div>
           ) : (
-            <p className="text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
+            <p className="whitespace-pre-line break-words text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
           )}
         </div>
 
@@ -320,7 +323,6 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               </div>
             )}
 
-          </div>
         </div>
       </div>
     </section>
@@ -455,7 +457,9 @@ const StudyMode: React.FC<StudyModeProps> = (props) => {
   if (!isReady) return <NaruStudySetup user={props.user} chapter={chapter || NARU_RANGE_PRESETS[0]} kind={kind}
     invalidSelection={!chapter} onSelect={task => props.onStartTask(props.user, task)} onBack={props.onBack} />;
   const returnToChapter = (user: UserProfile) => props.onStartTask(user, createNaruChapterReturnTask(props.taskIntent!));
+  const taskIntent = { ...props.taskIntent!, wordRange: { start: chapter.start, end: chapter.end } };
   return <StudySession {...props} key={`${props.user.uid}:${chapter.id}:${kind}`}
+    taskIntent={taskIntent}
     onBack={() => returnToChapter(props.user)} onSessionComplete={returnToChapter} backLabel="章の学習に戻る" />;
 };
 

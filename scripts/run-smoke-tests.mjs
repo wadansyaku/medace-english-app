@@ -298,6 +298,7 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/aichi-exam-badge.smoke.spec.ts',
   'tests/smoke/product-feedback.smoke.spec.ts',
   'tests/smoke/admin-example-preparation.smoke.spec.ts',
   'tests/smoke/guest-trial.smoke.spec.ts',

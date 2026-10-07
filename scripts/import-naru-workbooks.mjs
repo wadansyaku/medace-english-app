@@ -5,9 +5,13 @@ import { execFileSync } from 'node:child_process';
 import XLSX from 'xlsx';
 import { archiveWorkbook, digest, ORIGINAL_WORKBOOKS, parseOriginalWorkbook } from './_shared/original-workbook-import.mjs';
 import { buildNaruApprovalSql, buildNaruStageSql, createNaruWorkbookImport, naruImportQueries, verifyNaruImportRows } from './_shared/naru-workbook-import.mjs';
+import { auditNaruExamAnnotations, buildNaruExamAnnotationSql } from './_shared/naru-exam-annotations.mjs';
+import { buildNaruDefinitionSupplementSql, NARU_DEFINITION_SUPPLEMENTS } from './_shared/naru-definition-supplements.mjs';
 
 // This command generates private files and optionally performs read-only D1
-// verification. Applying either SQL file is an explicit separate operation.
+// verification. Applying each SQL file is an explicit separate operation.
+// Verify/approve the original 1530-word snapshot before applying the separately
+// reviewed app supplement. Its SQL cannot approve a pending original book.
 const options = { inputDir: null, outputDir: 'tmp/naru-import', database: null, mode: null, persistTo: null, approval: null, expectApproved: false };
 const fields = { '--input-dir': 'inputDir', '--output-dir': 'outputDir', '--database': 'database', '--persist-to': 'persistTo', '--approval-basis': 'approval' };
 const args = process.argv.slice(2);
@@ -40,6 +44,12 @@ manifest.stageSqlSha256 = digest(stageSql);
 if (!options.database) {
   await fs.writeFile(path.join(outputDir, 'naru-workbooks.pending.sql'), stageSql, { mode: 0o600 });
   await fs.writeFile(path.join(outputDir, 'naru-workbook-manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  // Separate additive metadata artifact: never rewrite the seven original
+  // snapshot tables or silently turn an annotation into publication approval.
+  const annotations = auditNaruExamAnnotations(workbooks);
+  await fs.writeFile(path.join(outputDir, 'naru-workbooks.exam-annotations.sql'), buildNaruExamAnnotationSql(annotations), { mode: 0o600 });
+  await fs.writeFile(path.join(outputDir, 'naru-workbooks.definition-supplements.sql'), buildNaruDefinitionSupplementSql(), { mode: 0o600 });
+  await fs.writeFile(path.join(outputDir, 'naru-app-definition-supplements.json'), JSON.stringify(NARU_DEFINITION_SUPPLEMENTS, null, 2) + '\n', { mode: 0o600 });
 } else if (generatedManifest.revision !== model.revision || generatedManifest.stageSqlSha256 !== digest(stageSql) || digest(await fs.readFile(path.join(outputDir, 'naru-workbooks.pending.sql'))) !== digest(stageSql)) throw new Error('Generated snapshot changed; verification never replaces the reviewed SQL');
 if (options.database) {
   const queries = naruImportQueries(model);
@@ -55,4 +65,4 @@ if (options.database) {
   await fs.writeFile(path.join(outputDir, 'naru-readback-proof.json'), JSON.stringify({ ...proof, revision: model.revision, database: options.database, mode: options.mode, checkedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
   if (options.approval) await fs.writeFile(path.join(outputDir, 'naru-workbooks.approval.sql'), buildNaruApprovalSql(model, options.approval), { mode: 0o600 });
 }
-console.log(JSON.stringify({ outputDir, bookId: model.bookId, title: model.title, wordCount: model.wordCount, heldCount: model.held.length, chapters: model.chapters, verified: Boolean(options.database), approvalSqlGenerated: Boolean(options.approval) }, null, 2));
+console.log(JSON.stringify({ outputDir, bookId: model.bookId, title: model.title, wordCount: model.wordCount, heldCount: model.held.length, originalWordCount: model.wordCount, originalHeldCount: model.held.length, chapters: model.chapters, verified: Boolean(options.database), approvalSqlGenerated: Boolean(options.approval), appSupplement: { generated: !options.database, requiresApprovedOriginal: true, wordCountAfterSeparateApplication: 1531, aichiMarksAfterSeparateApplication: 638 } }, null, 2));

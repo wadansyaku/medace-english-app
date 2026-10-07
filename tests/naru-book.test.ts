@@ -9,8 +9,8 @@ const baseConfig: QuizSessionConfig = {
 };
 
 describe('Naru book range presets', () => {
-  it('selects all 1530 words or the exact part-of-speech boundaries through the existing range filter', () => {
-    const words: WordData[] = Array.from({ length: 1530 }, (_, index) => ({
+  it('selects all 1531 words or the exact part-of-speech boundaries through the existing range filter', () => {
+    const words: WordData[] = Array.from({ length: 1531 }, (_, index) => ({
       id: `synthetic-${index + 1}`, bookId: 'naru-shisto-original-v1', number: index + 1,
       word: `word${index + 1}`, definition: '合成テスト用',
     }));
@@ -19,7 +19,7 @@ describe('Naru book range presets', () => {
       expect(config.questionCount).toBe(10);
       expect(config.questionMode).toBe('EN_TO_JA');
       const candidates = getQuizCandidateWords({
-        words, ...config, minWordNumber: 1, maxWordNumber: 1530, learnedWordIds: new Set(),
+        words, ...config, minWordNumber: 1, maxWordNumber: 1531, learnedWordIds: new Set(),
       });
       expect(candidates).toHaveLength(preset.end - preset.start + 1);
       expect(candidates[0].number).toBe(preset.start);
@@ -27,8 +27,19 @@ describe('Naru book range presets', () => {
       return candidates;
     });
     const allParts = selections.slice(1).flat();
-    expect(new Set(allParts.map((word) => word.id)).size).toBe(1530);
-    expect(allParts).toHaveLength(1530);
+    expect(new Set(allParts.map((word) => word.id)).size).toBe(1531);
+    expect(allParts).toHaveLength(1531);
+  });
+
+  it('includes supplemented actually in the 87-word adverb range and keeps the adjective boundary separate', () => {
+    const adverb = NARU_RANGE_PRESETS.find(preset => preset.id === 'adverb')!;
+    const adjective = NARU_RANGE_PRESETS.find(preset => preset.id === 'adjective')!;
+    expect(adverb).toMatchObject({ start: 1286, end: 1372 });
+    expect(adverb.end - adverb.start + 1).toBe(87);
+    expect(1361).toBeGreaterThanOrEqual(adverb.start);
+    expect(1361).toBeLessThanOrEqual(adverb.end);
+    expect(adjective).toMatchObject({ start: 1373, end: 1531 });
+    expect(adjective.start).toBe(adverb.end + 1);
   });
 
   it('keeps custom and learned-only selections distinct from a preset', () => {

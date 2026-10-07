@@ -345,10 +345,10 @@ test.describe('study reliability', () => {
     await page.getByTestId(`book-study-${bookId}`).click();
     await page.getByTestId('study-flip-button').click();
     await page.getByRole('button', { name: '定義を編集', exact: true }).click();
-    await page.getByLabel('単語の意味').fill('編集後の定義');
+    await page.getByLabel('単語の意味', { exact: true }).fill('編集後の定義');
     await page.getByRole('button', { name: '定義の変更を保存', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('変更を保存できませんでした');
-    await expect(page.getByLabel('単語の意味')).toHaveValue('編集後の定義');
+    await expect(page.getByLabel('単語の意味', { exact: true })).toHaveValue('編集後の定義');
     await page.getByRole('button', { name: '定義の変更を保存', exact: true }).click();
     await expect(page.getByRole('button', { name: '定義を編集', exact: true })).toBeVisible();
     await expect(page.getByTestId('study-card-back')).toContainText('編集後の定義');

@@ -1,3 +1,5 @@
+import WordExamBadge from '../WordExamBadge';
+import type { WordData } from '../../types';
 import React, { type FormEvent } from 'react';
 import {
   AlertCircle,
@@ -16,6 +18,7 @@ import type { JapaneseTranslationFeedback } from '../../types';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 
 interface QuizRunningViewProps {
+  currentWord?: WordData;
   currentQuestion: GeneratedWorksheetQuestion;
   currentModeLabel: string;
   activeSummary: string;
@@ -63,6 +66,7 @@ const QUESTION_QUALITY_BADGE_CLASSES: Record<QuestionQualityTone, string> = {
 
 const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   currentQuestion,
+  currentWord,
   currentModeLabel,
   activeSummary,
   currentQIndex,
@@ -196,6 +200,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       <h2 className="mt-3 text-3xl font-black leading-tight text-slate-800 sm:text-4xl">
         {currentQuestion.promptText}
       </h2>
+      {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(currentQuestion.mode) && <div className="mt-2"><WordExamBadge word={currentWord} /></div>}
       {currentQuestion.instruction && (
         <p className="mt-3 text-sm leading-relaxed text-slate-500">{currentQuestion.instruction}</p>
       )}

@@ -1,3 +1,5 @@
+import WordExamBadge from '../WordExamBadge';
+import type { WordData } from '../../types';
 import React from 'react';
 import {
   AlertCircle,
@@ -9,6 +11,7 @@ import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
 
 interface QuizResultViewProps {
+  words?: WordData[];
   percentage: number;
   currentModeLabel: string;
   activeSummary: string;
@@ -26,6 +29,7 @@ interface QuizResultViewProps {
 
 const QuizResultView: React.FC<QuizResultViewProps> = ({
   percentage,
+  words,
   currentModeLabel,
   activeSummary,
   score,
@@ -40,7 +44,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
   backLabel = 'ダッシュボードへ戻る',
 }) => (
   <div data-testid="quiz-result-view" className="space-y-4">
-    <section className="rounded-[32px] bg-white p-6 shadow-lg sm:p-8">
+    <section className="rounded-[32px] bg-white p-4 shadow-lg sm:p-8">
       <div className="text-center">
         <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
           {percentage >= 80 ? (
@@ -61,15 +65,18 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
       </div>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次に直す3問</div>
           {reviewTargets.length > 0 ? (
             <div className="mt-4 space-y-3">
               {reviewTargets.map((question) => (
-                <div key={question.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{question.promptText}</div>
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                <div key={question.id} className="rounded-2xl border border-slate-200 bg-white px-2 py-3 sm:px-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div data-testid="quiz-review-word" className="min-w-0 flex-1 basis-full sm:basis-0">
+                      <div className="break-words font-bold text-slate-900">{question.promptText}</div>
+                      {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
                       10分後
                     </span>
                   </div>
@@ -133,9 +140,12 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                   className="rounded-2xl border border-medace-100 bg-white px-4 py-4"
                   data-testid="quiz-result-translation-feedback-item"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{question.promptText}</div>
-                    <span className="rounded-full bg-medace-50 px-3 py-1 text-xs font-black text-medace-800">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div data-testid="quiz-review-word" className="min-w-0 flex-1 basis-full sm:basis-0">
+                      <div className="break-words font-bold text-slate-900">{question.promptText}</div>
+                      {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-medace-50 px-3 py-1 text-xs font-black text-medace-800">
                       {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
                     </span>
                   </div>

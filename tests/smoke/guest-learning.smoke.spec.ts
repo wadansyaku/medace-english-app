@@ -66,10 +66,27 @@ test('guest Naru learns beyond five words and shows a stable accepted rating at 
       for (let i = 0; i < 7; i++) {
         const front = page.getByTestId('guest-card-front'); const word = await front.locator('h2').innerText();
         await page.getByTestId('guest-flip').click(); await expect(page.getByTestId('guest-card-back')).toHaveAttribute('aria-hidden', 'false');
-        const before = await page.getByTestId('guest-rating-actions').boundingBox();
+        // Record the accepted state in its render, before the timed next-card
+        // transition can remove it between separate browser protocol calls.
+        const before = await page.getByTestId('guest-rating-actions').evaluate(element => {
+          const height = element.getBoundingClientRect().height;
+          (window as any).__medaceGuestRatingGeometry = null;
+          const observer = new MutationObserver(() => {
+            const button = element.querySelector('[data-testid="guest-rate-3"]');
+            if (button?.getAttribute('aria-pressed') !== 'true') return;
+            (window as any).__medaceGuestRatingGeometry = {
+              pressed: true, disabled: (button as HTMLButtonElement).disabled,
+              height: element.getBoundingClientRect().height,
+            };
+            observer.disconnect();
+          });
+          observer.observe(element, { attributes: true, subtree: true, attributeFilter: ['aria-pressed'] });
+          return height;
+        });
         const clicked = Date.now(); await page.getByTestId('guest-rate-3').click();
-        await expect(page.getByTestId('guest-rate-3')).toHaveAttribute('aria-pressed', 'true');
-        const after = await page.getByTestId('guest-rating-actions').boundingBox(); expect(after!.height).toBeCloseTo(before!.height, 0);
+        await expect.poll(() => page.evaluate(() => (window as any).__medaceGuestRatingGeometry)).toMatchObject({ pressed: true, disabled: true });
+        const after = await page.evaluate(() => (window as any).__medaceGuestRatingGeometry);
+        expect(after.height).toBeCloseTo(before, 0);
         if (i === 0) await page.screenshot({ path: info.outputPath(`guest-rating-${viewport.width}x${viewport.height}.png`) });
         await expect(front.locator('h2')).not.toHaveText(word); expect(Date.now() - clicked).toBeGreaterThanOrEqual(350);
         await expect(page.getByTestId('guest-card-back')).toHaveAttribute('aria-hidden', 'true');
