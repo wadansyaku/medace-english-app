@@ -65,12 +65,12 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
       </div>
 
       <div className="mt-8 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:p-5">
           <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">次に直す3問</div>
           {reviewTargets.length > 0 ? (
             <div className="mt-4 space-y-3">
               {reviewTargets.map((question) => (
-                <div key={question.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div key={question.id} className="rounded-2xl border border-slate-200 bg-white px-2 py-3 sm:px-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div data-testid="quiz-review-word" className="min-w-0 flex-1 basis-full sm:basis-0">
                       <div className="break-words font-bold text-slate-900">{question.promptText}</div>
