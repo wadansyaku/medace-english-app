@@ -46,4 +46,4 @@ guest APIと認証済みAPIは同じ `toWordData` を使い、全4プランで�
 
 本人の最新承認は「訳がないものはどれかを明記した上でアプリのために訳を入れてください。以前のものも含めて本番に反映してください。」。先行PR57の本番再開は依存だけのPR58で分離し、CI・preview成功後にmainへ通常mergeした。本番run37593113211の全工程が成功し、main a71b55aを公開。新注記・補完はそのmainから独立PRにし、必須CI/preview/production workflowで公開する。ローカル検証、preview、本番SHAと集計確認を段階別に成果パッケージへ記録する。
 
-既定監査で新規highが検出されたため、開発依存のsharp 0.35.4→0.35.5、source-map-js 1.2.1→1.2.2をoverrideし、独立node_modulesへnpm ciした。Wrangler等の直接依存版・本番設定は保持。根拠は https://github.com/advisories/GHSA-wq5f-xc86-pv6w と https://github.com/advisories/GHSA-68fv-2mgg-jv7q 。既定のローカルExcelツールxlsx例外以外の脆弱性は最終監査で確認する。
+先行PR58で、開発依存sharp 0.35.4→0.35.5、source-map-js 1.2.1→1.2.2をoverrideして監査を修復済み。本候補はそのmainのpackage/lockを保持し、追加の依存変更を含めない。Wrangler等の直接依存版・本番設定は保持。根拠は https://github.com/advisories/GHSA-wq5f-xc86-pv6w と https://github.com/advisories/GHSA-68fv-2mgg-jv7q 。既定のローカルExcelツールxlsx例外以外の脆弱性は最終監査で確認する。
