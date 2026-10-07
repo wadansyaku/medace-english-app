@@ -482,6 +482,8 @@ export interface WordData {
   inflections?: string;
   pronunciation?: string;
   sourceNote?: string;
+  /** Verified bright-yellow mark on this exact original workbook entry. */
+  aichiExamAppeared?: boolean;
   searchKey?: string;
   category?: string;
   subcategory?: string;

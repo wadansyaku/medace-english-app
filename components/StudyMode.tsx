@@ -1,3 +1,4 @@
+import WordExamBadge from './WordExamBadge';
 import React, { useEffect, useRef } from 'react';
 import {
   AlertCircle,
@@ -228,6 +229,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
 
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <h2 className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
+          <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>
           <WordSourceDetails word={controller.currentWord} compact />
         </div>
 

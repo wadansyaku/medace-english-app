@@ -1,3 +1,4 @@
+import WordExamBadge from '../WordExamBadge';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { EnglishLevel, type GrammarCurriculumScopeId, type WordData } from '../../types';
@@ -105,6 +106,7 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
             <h2 ref={questionHeading} tabIndex={-1} aria-label={`${index + 1}問目。${grammar.clozeSentence}`} className="mt-3 break-words text-xl font-black leading-relaxed text-steady-ink outline-none" lang="en">{grammar.clozeSentence}</h2>
           </> : <>
             <h2 ref={questionHeading} tabIndex={-1} aria-label={`${index + 1}問目。${mode === 'spelling' ? wordQuestion?.answer : wordQuestion?.word.word}`} className="mt-3 break-words text-3xl font-black leading-relaxed text-steady-ink outline-none" lang={mode === 'meaning' ? 'en' : 'ja'}>{mode === 'spelling' ? wordQuestion?.answer : wordQuestion?.word.word}</h2>
+            {mode === 'meaning' && <div className="mt-2"><WordExamBadge word={wordQuestion?.word} /></div>}
             <p className="mt-3 text-sm font-bold text-slate-700">{mode === 'spelling' ? 'この意味の英単語を入力してください' : '意味を選んでください'}</p>
           </>}
           {mode === 'spelling' ? <label className="mt-4 block text-sm font-bold text-slate-700">英単語
@@ -130,6 +132,7 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
                 {!currentAnswer.correct && <p className="mt-2">{grammar.feedback?.distractorReasons[currentAnswer.response]}</p>}
               </> : <>
                 <p className="mt-2"><strong lang="en">{wordQuestion?.word.word}</strong> — {wordQuestion?.answer}</p>
+                <div className="mt-2"><WordExamBadge word={wordQuestion?.word} /></div>
                 {wordQuestion?.word.exampleSentence && <p className="mt-2" lang="en">{wordQuestion.word.exampleSentence}</p>}
                 {wordQuestion?.word.exampleMeaning && <p className="mt-2">{wordQuestion.word.exampleMeaning}</p>}
               </>}

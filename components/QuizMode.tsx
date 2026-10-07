@@ -163,6 +163,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
 
       {controller.screen === 'RUNNING' && controller.currentQuestion && (
         <QuizRunningView
+          currentWord={controller.allWords.find(word => word.id === controller.currentQuestion?.wordId && word.bookId === controller.currentQuestion?.bookId)}
           currentQuestion={controller.currentQuestion}
           currentModeLabel={controller.currentModeLabel}
           activeSummary={controller.activeSummary}
@@ -203,6 +204,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
 
       {controller.screen === 'RESULT' && controller.activeConfig && (
         <QuizResultView
+          words={controller.allWords}
           percentage={controller.percentage}
           currentModeLabel={controller.currentModeLabel}
           activeSummary={controller.activeSummary}

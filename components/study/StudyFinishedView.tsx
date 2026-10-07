@@ -1,3 +1,4 @@
+import WordExamBadge from '../WordExamBadge';
 import React from 'react';
 import { Award } from 'lucide-react';
 
@@ -78,6 +79,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
                   <div key={word.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-bold text-slate-900">{word.word}</div>
+                      <WordExamBadge word={word} />
                       <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">今夜もう一度</span>
                     </div>
                     <div className="mt-1 text-sm text-slate-500">{word.definition}</div>
@@ -145,6 +147,7 @@ export const StudyFinishedView: React.FC<StudyFinishedViewProps> = ({
                   <div key={word.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-bold text-slate-900">{word.word}</div>
+                      <WordExamBadge word={word} />
                       <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">今夜もう一度</span>
                     </div>
                     <div className="mt-1 text-sm text-slate-500">{word.definition}</div>

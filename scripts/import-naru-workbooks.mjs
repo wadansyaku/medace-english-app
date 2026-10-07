@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import XLSX from 'xlsx';
 import { archiveWorkbook, digest, ORIGINAL_WORKBOOKS, parseOriginalWorkbook } from './_shared/original-workbook-import.mjs';
 import { buildNaruApprovalSql, buildNaruStageSql, createNaruWorkbookImport, naruImportQueries, verifyNaruImportRows } from './_shared/naru-workbook-import.mjs';
+import { auditNaruExamAnnotations, buildNaruExamAnnotationSql } from './_shared/naru-exam-annotations.mjs';
 
 // This command generates private files and optionally performs read-only D1
 // verification. Applying either SQL file is an explicit separate operation.
@@ -40,6 +41,10 @@ manifest.stageSqlSha256 = digest(stageSql);
 if (!options.database) {
   await fs.writeFile(path.join(outputDir, 'naru-workbooks.pending.sql'), stageSql, { mode: 0o600 });
   await fs.writeFile(path.join(outputDir, 'naru-workbook-manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
+  // Separate additive metadata artifact: never rewrite the seven original
+  // snapshot tables or silently turn an annotation into publication approval.
+  const annotations = auditNaruExamAnnotations(workbooks);
+  await fs.writeFile(path.join(outputDir, 'naru-workbooks.exam-annotations.sql'), buildNaruExamAnnotationSql(annotations), { mode: 0o600 });
 } else if (generatedManifest.revision !== model.revision || generatedManifest.stageSqlSha256 !== digest(stageSql) || digest(await fs.readFile(path.join(outputDir, 'naru-workbooks.pending.sql'))) !== digest(stageSql)) throw new Error('Generated snapshot changed; verification never replaces the reviewed SQL');
 if (options.database) {
   const queries = naruImportQueries(model);
