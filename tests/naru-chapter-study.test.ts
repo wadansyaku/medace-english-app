@@ -7,8 +7,8 @@ import { LearningTaskIntentType, type LearningTaskIntent } from '../types';
 
 describe('Naru chapter study intents and routes', () => {
   it.each([
-    ['all', 1, 1530], ['verb', 1, 353], ['noun', 354, 1285],
-    ['adverb', 1286, 1371], ['adjective', 1372, 1530],
+    ['all', 1, 1531], ['verb', 1, 353], ['noun', 354, 1285],
+    ['adverb', 1286, 1372], ['adjective', 1373, 1531],
   ] as const)('uses the published %s chapter boundaries for both study choices', (id, start, end) => {
     const chapter = NARU_RANGE_PRESETS.find(item => item.id === id)!;
     for (const kind of ['new', 'due'] as const) {
@@ -21,6 +21,24 @@ describe('Naru chapter study intents and routes', () => {
       expect(running.autoStart).toBe(true);
       expect(createNaruChapterReturnTask(running)).toEqual(task);
     }
+  });
+
+  it.each([
+    ['all', 1, 1530], ['adverb', 1286, 1371], ['adjective', 1372, 1530],
+  ] as const)('restores the old full %s chapter to the same POS on URL revisit and return', (id, start, end) => {
+    const chapter = NARU_RANGE_PRESETS.find(item => item.id === id)!;
+    for (const kind of ['new', 'due'] as const) {
+      const legacyTask = { ...createNaruChapterTask(chapter, kind, true), wordRange: { start, end } };
+      const restored = parseNavigationPath(`/study/${NARU_BOOK_ID}`, buildTaskQueryString(legacyTask)).selectedTask!;
+      expect(restored.wordRange).toEqual({ start, end });
+      expect(resolveNaruStudyChapter(restored.wordRange)).toEqual(chapter);
+      expect(createNaruChapterReturnTask(restored)).toEqual(createNaruChapterTask(chapter, kind));
+      expect(legacyTask.wordRange).toEqual({ start, end });
+    }
+  });
+
+  it.each([{ start: 1286, end: 1370 }, { start: 1372, end: 1529 }, { start: 1361, end: 1371 }])('keeps a nearby custom range distinct from published chapters: %j', range => {
+    expect(resolveNaruStudyChapter(range)).toBeNull();
   });
 
   it('recognizes only this book’s ordinary study flow and keeps mission study separate', () => {

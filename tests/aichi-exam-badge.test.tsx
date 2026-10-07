@@ -82,6 +82,33 @@ describe('verified Aichi exam word badge', () => {
     expect(html).not.toMatch(/button|tabindex|role="button"/);
   });
 
+  it('identifies a supplemented translation in a separate readable note without changing the exam badge', () => {
+    const original = renderToStaticMarkup(<WordExamBadge word={word} />);
+    const html = renderToStaticMarkup(<WordExamBadge word={{ ...word, definitionSupplemented: true }} />);
+    expect(html).toContain(original);
+    expect(html).toContain('</span><span data-testid="word-definition-supplement-note" role="note" lang="ja"');
+    expect(html).toContain('訳・例文訳：アプリ補完（辞書を参照）');
+    expect(html).toContain('block max-w-full break-words text-xs');
+    expect(html).toContain('text-medace-900');
+    expect(html).not.toMatch(/tabindex|aria-live|role="button"/);
+  });
+
+  it.each([false, undefined])('preserves the existing badge markup when supplementation is %s', definitionSupplemented => {
+    expect(renderToStaticMarkup(<WordExamBadge word={{ ...word, definitionSupplemented }} />)).toBe(renderToStaticMarkup(<WordExamBadge word={word} />));
+  });
+
+  it('can show a supplementation note for an unmarked word without falsely claiming exam appearance', () => {
+    const html = renderToStaticMarkup(<WordExamBadge word={{ definitionSupplemented: true }} />);
+    expect(html).toContain('word-definition-supplement-note');
+    expect(html).not.toContain('aichi-exam-badge');
+  });
+
+  it('shows translation provenance in a reverse question without revealing its hidden English answer', () => {
+    const html = renderQuiz({ currentWord: { ...word, definitionSupplemented: true }, currentQuestion: { ...baseQuestion, mode: 'JA_TO_EN', promptText: '注意', answer: 'care', options: undefined } });
+    expect(html).toContain('word-definition-supplement-note');
+    expect(html).not.toContain('>care<');
+  });
+
   it.each([false, undefined])('renders nothing when the verified mark is %s', mark => {
     expect(renderToStaticMarkup(<WordExamBadge word={{ aichiExamAppeared: mark }} />)).toBe('');
   });

@@ -128,7 +128,7 @@ describe('Naru setup acquisition and controlled choices', () => {
     button(tree, 'naru-study-start').onClick!();
     expect(props.onSelect).toHaveBeenLastCalledWith(createNaruChapterTask(props.chapter, 'new', true));
     button(tree, 'naru-study-chapter-all').onClick!();
-    expect(props.onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ wordRange: { start: 1, end: 1530 }, autoStart: false }));
+    expect(props.onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ wordRange: { start: 1, end: 1531 }, autoStart: false }));
   });
 
   it.each(['success', 'failure'] as const)('ignores the previous chapter’s late %s after selection changes', async outcome => {
@@ -157,7 +157,7 @@ describe('Naru setup acquisition and controlled choices', () => {
     await settle(); props.user = { ...user, uid: 'synthetic-second-user' }; tree = render();
     expect(renderToStaticMarkup(tree)).not.toContain('naru-study-count-');
     expect(button(tree, 'naru-study-start').disabled).toBe(true);
-    await settle(); expect(api.overview).toHaveBeenLastCalledWith('synthetic-second-user', NARU_BOOK_ID, { start: 1286, end: 1371 });
+    await settle(); expect(api.overview).toHaveBeenLastCalledWith('synthetic-second-user', NARU_BOOK_ID, { start: 1286, end: 1372 });
   });
 
   it('does not start an invalid restored chapter even with positive counters', async () => {
