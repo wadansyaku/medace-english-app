@@ -44,7 +44,7 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
   backLabel = 'ダッシュボードへ戻る',
 }) => (
   <div data-testid="quiz-result-view" className="space-y-4">
-    <section className="rounded-[32px] bg-white p-6 shadow-lg sm:p-8">
+    <section className="rounded-[32px] bg-white p-4 shadow-lg sm:p-8">
       <div className="text-center">
         <div className="mb-5 inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
           {percentage >= 80 ? (
