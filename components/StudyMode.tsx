@@ -250,9 +250,11 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
     >
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-800">意味</div>
             <div className="mt-2 text-base font-black text-slate-950 sm:text-lg">{controller.currentWord.word}</div>
+            {(controller.currentWord.aichiExamAppeared || controller.currentWord.definitionSupplemented) &&
+              <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>}
           </div>
           {!controller.isEditing ? (
             <button
