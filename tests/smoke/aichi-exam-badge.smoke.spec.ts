@@ -20,7 +20,9 @@ for(const viewport of [{width:320,height:740},{width:390,height:844},{width:844,
   await page.getByRole('button',{name:'すぐ分かる',exact:true}).click();
   await expect(front.getByTestId('aichi-exam-badge')).toHaveCount(0);
   await page.goto('/start');await expect(page.getByTestId('guest-study-start')).toBeEnabled();
-  await page.getByTestId('guest-study-start').click();
+  // A normal revisit skips already answered words. Explicit repeat is the
+  // user's way to reopen the same original word rather than resume the queue.
+  await page.getByRole('button',{name:'同じ範囲をもう一度学ぶ',exact:true}).click();
   await expect(front.getByTestId('aichi-exam-badge')).toBeVisible();
  });
 }
