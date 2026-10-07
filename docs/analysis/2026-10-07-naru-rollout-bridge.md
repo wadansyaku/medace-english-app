@@ -1,0 +1,11 @@
+# Naru補完の段階公開
+
+0057は保持された原本ready0/blocked1のactuallyを別台帳でアプリ補完する。現行a71のゲストAPIは原本ready1だけを受け入れるため、通常workflowのmigration→教材gate→Pages配備の間にNaru全体を503にしてしまう。旧コードのpredicateを原本合成DB mode=roで評価し、一件の拒否によるcatalog/import503を確認した。
+
+このbridgeはAPI・optional投影・固定canonical期待値だけを先に配備する。migration・1530語の本文/番号・承認・UI・章範囲は変更しない。actuallyが存在しない現行schema55では新台帳SQLを実行せず、optional列が無い結果も既存のJSON形状を維持する。0056後も通常原本のreadyゲートを維持し、0057後は原本SHA/payload/archive/座標、補完台帳、正確な訳、公開承認とsource linkが一致するcanonical一語だけを認める。canonicalIDを普通のready1にして迂回することは許さない。本人保存の所有者・利用権限・単語ID・transactionの境界は変更しない。
+
+先行APIはPR59の受入済み候補2abbd0aとbyte同一。原本1530・補完1531、原本変更/台帳変更/承認変更/ready1迂回の拒否、本人保存/同一ID再送の成功証拠を保持し、bridgeでは新schemaが無い状態の実SQLiteテストを追加する。type/unit/API/full smoke/security/remote-readonly/preview/productionの既存gateを維持する。
+
+公開順序はbridgeの通常PR→CI/preview→production完了→本番匿名1530取得と原本/件数readback→PR59へbridge mainを取り込む→同じ最終treeのCI/preview→0056/0057を含む通常production。直接配備やDBrestoreは行わない。後段で補完表示と1531章範囲のUIを公開し、本番1531/638/1、原本と既存1530ID/本文、履歴保持を読み取りで照合する。
+
+bridgeは移行中のAPI互換層である。0057後の長期切戻しは、補完表示と新章範囲も持つ0057-aware artifactが必要。a71へのコード単独rollback、原本ready1化、単語/履歴削除で旧版へ合わせない。AI有効化設定・キー・料金を変更せず、実生徒や答案を外部に送信しない。

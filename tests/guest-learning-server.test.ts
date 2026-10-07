@@ -10,10 +10,10 @@ import { createSqliteD1 } from './helpers/sqlite-d1';
 
 const databases: ReturnType<typeof createSqliteD1>[] = [];
 afterEach(() => { databases.splice(0).forEach(({ sqlite }) => sqlite.close()); vi.restoreAllMocks(); });
-const setup = () => {
+const setup = ({ through = Infinity } = {}) => {
   const fixture = createSqliteD1(); databases.push(fixture);
   const dir = new URL('../migrations/', import.meta.url);
-  for (const file of readdirSync(dir).filter((file) => file.endsWith('.sql')).sort()) fixture.sqlite.exec(readFileSync(new URL(file, dir), 'utf8'));
+  for (const file of readdirSync(dir).filter((file) => file.endsWith('.sql') && Number(file.slice(0, 4)) <= through).sort()) fixture.sqlite.exec(readFileSync(new URL(file, dir), 'utf8'));
   fixture.sqlite.exec(`INSERT INTO users(id,email,display_name,role,stats_xp,stats_level,created_at,updated_at) VALUES
     ('student-1','one@example.test','One','STUDENT',47,2,1,1),('student-2','two@example.test','Two','STUDENT',0,1,1,1);
     INSERT INTO books(id,title,word_count,is_priority,catalog_source,access_scope,created_at,updated_at) VALUES
@@ -41,6 +41,32 @@ const candidate = () => ({ expectedUserId: 'student-1', sessionId: '11111111-111
   attempts: [1, 2, 3].map((i) => ({ attemptId: `22222222-2222-4222-8222-${String(i).padStart(12, '0')}`, wordId: `naru-word-${i}`, rating: 2 as const, responseTimeMs: 1200, answeredAt: Date.now() - 1000 + i })) });
 
 describe('fixed anonymous Naru catalogue', () => {
+  it('serves the existing schema without querying future supplement tables or emitting absent flags', async () => {
+    const f = setup({ through: 54 });
+    expect(f.sqlite.prepare("SELECT name FROM sqlite_master WHERE name='catalog_word_definition_supplements'").get()).toBeUndefined();
+    const columns = f.sqlite.prepare('PRAGMA table_info(words)').all().map(row => row.name);
+    expect(columns).not.toContain('definition_supplemented');
+    expect(columns).not.toContain('aichi_exam_appeared');
+    const prepare = vi.spyOn(f.env.DB, 'prepare');
+    const result = await readGuestLearningCatalog(f.env);
+    expect(result.words).toHaveLength(3);
+    expect(result.words[0]).not.toHaveProperty('definitionSupplemented');
+    expect(result.words[0]).not.toHaveProperty('aichiExamAppeared');
+    expect(prepare.mock.calls.some(([sql]) => sql.includes('catalog_word_definition_supplements'))).toBe(false);
+  });
+  it('rejects an unreviewed canonical supplement ID even if its ordinary source is ready in the old schema', async () => {
+    const f = setup({ through: 54 });
+    const supplement = JSON.parse(readFileSync(new URL('../data/naru-app-definition-supplements.json', import.meta.url), 'utf8')).supplements[0];
+    f.sqlite.prepare(`INSERT INTO words(id,book_id,word_number,word,definition,search_key,source_sheet,created_at,updated_at)
+      VALUES(?,?,4,'actually','Unreviewed fixture meaning','actually','adverb',1,1)`).run(supplement.wordId, NARU_BOOK_ID);
+    f.sqlite.exec("INSERT INTO catalog_source_entries(id,source_id,source_key,content_hash,payload_json,ready) VALUES('unreviewed-future-entry','naru-workbook','source-key-4','synthetic-hash','{}',1)");
+    f.sqlite.prepare("INSERT INTO catalog_word_source_links(source_entry_id,word_id,match_kind) VALUES('unreviewed-future-entry',?,'snapshot_import')").run(supplement.wordId);
+    f.sqlite.exec('UPDATE books SET word_count=4 WHERE id=\'naru-shisto-original-v1\'; UPDATE material_source_ledger SET qa_word_count=4;');
+    const prepare = vi.spyOn(f.env.DB, 'prepare');
+    await expect(readGuestLearningCatalog(f.env)).rejects.toMatchObject({ status: 503 });
+    expect(prepare.mock.calls.some(([sql]) => sql.includes('catalog_word_definition_supplements'))).toBe(false);
+    expect(f.count('guest_learning_claims')).toBe(0);
+  });
   it('returns only canonical Naru words with no private ledger paths and approved source examples', async () => {
     const f = setup(); const result = await readGuestLearningCatalog(f.env);
     expect(result.book).toMatchObject({ id: NARU_BOOK_ID, wordCount: 3 });
