@@ -15,6 +15,12 @@
 
 失効は永続し、解除は原本SHA・payload/link・黄色セルを厳密に再reviewした別操作を要する。0058は適用前から存在する誤点灯を自動backfillしない。公開直前に原本のremote-readonly全照合を行い、現データに不一致がある場合は適用を進めない。本番誤りの証拠はなく、合成再現を本番データの異常と混同しない。
 
-対象検証: Study関連23、Quiz関連46、source失効42、CLI7の対象テスト成功。修正前のfailureを保存。最初のverify:fastは既存schema fixtureの57件固定だけで失敗したため、58件と0058存在を明記して全体を再確認した。最新verify:fastは58migration/type/architecture/reachability、196files/2001unit全成功。build成功。初回source fixtureのsyntax failureとREPLACEの意図した4failureも保全し、試験保証を弱めていない。
+対象検証: Study関連23、Quiz関連46、source失効42、CLI7の対象テスト成功。修正前のfailureを保存。最初のverify:fastは既存schema fixtureの57件固定だけで失敗したため、58件と0058存在を明記して全体を再確認した。最新verify:fastは58migration/type/architecture/reachability、196files/2001unit全成功。build/API/security audit成功。独立read-onlyレビューで具体的blockerなし。初回source fixtureのsyntax failureとREPLACEの意図した4failureも保全し、試験保証を弱めていない。
 
-配備状態: 追加修正は独立branch `codex/medace-postrelease-review-fixes-20261007` のローカル候補。実画面、API/security/full browser、必須CI/preview、productionと公開後readbackは未完了。本番更新済みとは扱わない。原本・課金・権限・AI設定・実生徒の外部送信を変更しない。実Safari/iOS/物理印刷は未検証。
+実画面: frozen公開182rendererと28e988d候補rendererを専用42511/42521・別freshD1・原本1531・合成利用者で比較。親Appのfeed内容を保ったstate identity更新を実行し、PC1366/320/390で旧2/10裏面→1/10表面/余分な再取得を再現。候補は3幅とも2/10/裏面/内容/取得数を維持し、実保存204・戻る・再訪・横overflow0を確認。旧副詞quizは実pool86→87語/1372を取得、旧形容詞の副詞混入を解消し1373から取得。全章の要求終端1531を確認したが、100語上限のため実quizpoolに1531は含まれず、境界の実包含と要求範囲を区別する。keyboard二段階hint/誤答保存/戻るも成功。両backendは28e988d、rendererのみ比較。初回の正常204を200期待で誤失敗したharnessと、SPELLING_HINT初回誤答がhintのみで保存されないharnessの診断を保全し、正常契約へ修正後に全比較成功。
+
+公開前read-only: 原本436項目すべて成功、skip0、全SELECT rows_written0/changed_dbfalse。旧8migration/schema/AI8台帳0/履歴218以上/receipt23以上/FK0を再照合。0058専用6項目もbefore成功、既存1531/638/annotation638/補完1、canonical ready0、新表/17trigger未適用を確認。doctor error0、Content QA/source ledger/B2B整合性gate成功。
+
+全browser: source `89655e71ccfe25a0bae065a71cfe7978cd2b1f83` で標準runner/Chrome/既定timeout/retryなしのCloud183成功＋既存preview-only2skip、IDB9成功、command exit0。最初の2回は各1件失敗したためログと対象再試験を保全。第1回のWriting下書き再訪deadline失敗は同じ90秒条件の個別再試験で成功。第2回はdraft取得中のdisabled file inputへPlaywright setInputFilesが合成changeを送ってcontrollerが無視するfixture競合を特定した。実ユーザー操作と同じenabled待ちを当該testだけ追加し、アプリsource/timeout/保存assertを変えず全体を通した。
+
+配備状態: 追加修正は独立branch `codex/medace-postrelease-review-fixes-20261007` のローカル候補。push/PR作成は自動承認レビューが当初の「push・merge・deployなし」を理由に拒否したため未実行。必須CI/preview、productionと公開後readbackは未完了。本番更新済みとは扱わない。原本・課金・権限・AI設定・実生徒の外部送信を変更しない。実Safari/iOS/物理印刷は未検証。

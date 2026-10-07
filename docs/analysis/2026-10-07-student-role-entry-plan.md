@@ -15,3 +15,9 @@
 受入は通常入口の管理カード不在、専用URLと旧URLの直接アクセス、ログイン後のrole別遷移、同じSTUDENTの個人/所属の保存・再訪を確認する。サーバーでは非STUDENT登録拒否、profileへのrole/所属/plan注入で不変、非ADMIN provision拒否、他tenant/担当外アクセス拒否、ADMINによる合成所属付与後の同じuid・学習履歴保持・監査を検証する。PC/mobile/keyboard/back/reload、エラーとretryを含め、デモ案内と実アカウントを区別する。
 
 実装と検証をローカルbranchで進める。必須gateと親側の公開判断まで、公開済み・本番所属変更済みとは扱わない。
+
+## 最終ローカル受入（2026-10-07）
+
+アプリ受入source `896a4a031138e8fa85d8544cf5202a3a4220e8b2`、branch `codex/medace-student-entry-20261007`。型/199files2045unit/build成功。標準全browserはCloud188PASS＋preview専用2SKIP、IDB9PASS、90秒/retry0/worker1、command exit0。構成/到達性、API・認可と保存、58migration、security例外1件は証拠sourceを区別し保持する。実nativeはsourceごとの7core＋2layout（97資産hash照合）を保持し、最終Adminの通常応答/表示onlyfixture 2case・10幅scene・18資産hash照合を追加。詳細は[確認問題と受入](./2026-10-07-integrated-ui-acceptance.md)。
+
+根本のrole/RBAC/tenant/plan/原本/保存を維持。TOB_FREEの正規GROUP_ADMINをWriting任意取得403で全体errorにするUI不具合と、Admin mobile横はみ出しを追加修正。最終通常入口は生徒のみ、CTA「登録不要」は途中折れを避ける。実Safari/iOS/IME/実zoomは未検証。公開は未実行、最初の公開禁止によりpush/PRが自動レビューで拒否されたため明示許可待ち。長期復習0ae54239は独立の未接続契約であり、B1の本番再参加は未実装。

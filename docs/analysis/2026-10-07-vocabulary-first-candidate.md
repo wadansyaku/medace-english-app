@@ -13,3 +13,9 @@ snapshotには教材の最終利用時刻がないため、学習済み教材の
 対象unitに加えて、意味ページ容量修正8da5075を取り込んだ統合版317e225で198files/2041unit、型検査、buildが成功。実Chromeは320/390/844横/768/1366で主操作、学習・単語小テスト、全文の意味、例文・補足、保存・戻る・再訪を確認。324文字の長い意味は12ページ、2語義が収まる場合は1ページ、収まらない場合は語義の境界で2ページ。各ページの全文・行数・はみ出しを測定した。実computed font/line-heightから容量を計算し、1〜2文字だけの余計なページを減らす。API/RBAC検証も成功。全browserは追加した役割入口・管理画面修正まで含めた最終sourceで再受入中であり、この文書だけで全回帰完了とは扱わない。失敗ログと修正理由を保全する。実Safari/iOS、物理IME、実Chrome 200%/400% zoomは未検証。公開・利用者到達や教育効果を検証完了として扱わない。
 
 将来の改善は[全体改善計画](./2026-10-07-steady-study-improvement-plan.md)へ分ける。長期復習の純粋選択契約と合成比較は独立候補0ae54239で作成済みだが現行学習には未接続。遅延想起、全例文訳、教室運用、保存統一、支援技術、性能、商用評価は次段階の計画として扱う。
+
+## 最終ローカル受入（2026-10-07）
+
+アプリ受入source `896a4a031138e8fa85d8544cf5202a3a4220e8b2`、branch `codex/medace-student-entry-20261007`。型/199files2045unit/build成功。標準全browserはCloud188PASS＋preview専用2SKIP、IDB9PASS、90秒/retry0/worker1、command exit0。構成/到達性、API・認可と保存、58migration、security例外1件は証拠sourceを区別し保持する。実nativeはsourceごとの7core＋2layout（97資産hash照合）を保持し、最終Adminの通常応答/表示onlyfixture 2case・10幅scene・18資産hash照合を追加。詳細は[確認問題と受入](./2026-10-07-integrated-ui-acceptance.md)。
+
+根本のrole/RBAC/tenant/plan/原本/保存を維持。TOB_FREEの正規GROUP_ADMINをWriting任意取得403で全体errorにするUI不具合と、Admin mobile横はみ出しを追加修正。最終通常入口は生徒のみ、CTA「登録不要」は途中折れを避ける。実Safari/iOS/IME/実zoomは未検証。公開は未実行、最初の公開禁止によりpush/PRが自動レビューで拒否されたため明示許可待ち。長期復習0ae54239は独立の未接続契約であり、B1の本番再参加は未実装。

@@ -2,7 +2,7 @@
 
 # 実装・運用バックログ
 
-2026-10-07追加: [単語優先おすすめの独立候補](./docs/analysis/2026-10-07-vocabulary-first-candidate.md)。通常主操作は単語、初回Naru・既存教材/期限復習を尊重し、文法・和訳は副操作。配布課題と本人の教材選択を保持。対象75テスト/型成功、統合検証中・公開判断別。[全体改善計画](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)の保存/教材/遅延想起/教室運用等は将来計画であり実装済みではない。
+2026-10-07追加: [単語優先おすすめの独立候補](./docs/analysis/2026-10-07-vocabulary-first-candidate.md)。通常主操作は単語、初回Naru・既存教材/期限復習を尊重し、文法・和訳は副操作。配布課題と本人の教材選択を保持。最終統合896a4a03で199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）、公開判断別。[全体改善計画](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)の保存/教材/遅延想起/教室運用等は将来計画であり実装済みではない。
 
 2026-10-06追加: [GPT下書き・永続予算台帳の公開候補](./docs/analysis/2026-10-06-writing-gpt-budget-release.md)。本人の公開承認に基づき通常PR/preview/productionへ進める。OCR/コメント下書きadapter、D1 global月$5計画/$4.50送信枠、usage/未知費用保持、未評価原本の保存・再訪、管理者表示を接続した。実API・キー/feature設定・承認行は未実行。未成年の外部送信条件と正式なGPT採点は未対応。最終gateと配備状態は日付付き記録を正本とする。
 
@@ -99,3 +99,13 @@ PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで�
 - [x] 最終統合の全回帰・5幅実UI・ゲスト取得・CI/previewと本番0056/0057適用。本番182ba3d、1531語/638印/補完1、原本436readback/履歴保持/AI未有効化を確認。
 - [x] [公開後レビュー4件](./docs/analysis/2026-10-07-naru-postrelease-review.md)を合成環境で再現し、セッションの参照安定・旧quiz章・原本根拠失効・標準CLI分類gateを修正。58migration/196files/2001unit成功。
 - [ ] 追加候補の実UI/API/security/full browser、CI/preview、0058の本番適用と公開後照合を完了する。公開済み182と追加修正は別記録。
+
+## 2026-10-07 統合UIローカル受入
+
+- [x] 通常生徒入口・専用旧URL・同uid履歴保持とRBAC、単語優先、低い画面の回答・全文語義・例文パネルを受入。
+- [x] 実TOB_FREE所属管理者の取得403連鎖と、Admin横溢れ・CTA途中折返しを修正、5幅確認。
+- [x] 型/199files2045unit/build、標準Cloud188＋IDB9全回帰、90秒/retry0。証拠は[受入記録](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。
+- [x] 長期復習の純粋選択契約75unit・60条件合成比較を独立候補0ae54239で保全。
+- [ ] B1の長期復習再参加は未接続。公平性・日cap・Cloud/IDB/due/home/missionの統一を次段階で実装・限定受入。
+- [ ] 実Safari/iOS、物理IME、実200%/400%zoomと限定利用/7・28日評価は未検証。
+- [ ] 公開後4件と統合候補の公開は未実行。自動承認レビューの初期公開禁止に対する明示許可待ち。

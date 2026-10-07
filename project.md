@@ -1,3 +1,5 @@
+2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。
+
 # Steady Study — プロダクト方針
 
 更新日: 2026-10-07。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
