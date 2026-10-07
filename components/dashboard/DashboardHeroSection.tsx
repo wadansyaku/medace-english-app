@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Brain, Play, Settings } from 'lucide-react';
+import { ArrowRight, Brain, Languages, Play, Settings } from 'lucide-react';
 import type { LearningPlan, UserGrade } from '../../types';
 import type { StudentDashboardHeroMetric, StudentDashboardLearningRouteId, StudentDashboardPracticeRecommendation } from '../../hooks/useStudentDashboardViewModel';
 
@@ -73,7 +73,9 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
       {hasStudyBooks && <div role="progressbar" aria-label="今日の学習目標" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${todayWordGoal}語の目標に対して${todayCount}語、${progress}%`} className="mt-4 h-1.5 overflow-hidden rounded-full bg-medace-50"><div className="h-full rounded-full bg-medace-500" style={{width:`${progress}%`}} /></div>}
       <div ref={practiceAnchorRef} data-testid="dashboard-english-practice-entry" style={practiceAnchorStyle} className="mt-4">
         <div data-testid="dashboard-practice-dock">
+          <p className="mb-1 text-xs text-slate-500">ほかの練習</p>
           {!isGrammarPrimary && <button type="button" data-testid="dashboard-practice-lane-grammar" onClick={() => onSelectPracticeLane('grammar')} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-steady-ink"><Brain className="h-4 w-4" aria-hidden="true" /> 文法を解く <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>}
+          {primaryPracticeLane !== 'translation' && <button type="button" data-testid="dashboard-practice-lane-translation" onClick={() => onSelectPracticeLane('translation')} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-steady-ink"><Languages className="h-4 w-4" aria-hidden="true" /> 和訳を練習 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>}
         </div>
       </div>
     </section>

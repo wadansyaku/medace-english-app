@@ -12,6 +12,7 @@ import {
   type UserGrade,
   UserRole,
 } from '../types';
+import { NARU_BOOK_ID } from './naruBook';
 import {
   buildMissionProgress,
   buildSuggestedMissionDraft,
@@ -109,6 +110,8 @@ export const buildSuggestedDashboardPrimaryMission: DashboardSuggestedPrimaryMis
     catalogSource: BookCatalogSource.STEADY_STUDY_ORIGINAL,
     accessScope: BookAccessScope.ALL_PLANS,
   }));
+  const defaultVocabularyBook = !learningPlan?.selectedBookIds.length
+    ? missionBooks.find(book => book.id === NARU_BOOK_ID) : undefined;
   const draft = buildSuggestedMissionDraft({
     grade: user.grade as UserGrade | undefined,
     level: user.english_level as EnglishLevel | undefined,
@@ -137,7 +140,7 @@ export const buildSuggestedDashboardPrimaryMission: DashboardSuggestedPrimaryMis
           updatedAt: now,
         }
       : null,
-    books: missionBooks,
+    books: defaultVocabularyBook ? [defaultVocabularyBook] : missionBooks,
     writingAssignmentId,
     writingPromptTitle,
     now,

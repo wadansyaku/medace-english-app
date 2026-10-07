@@ -2,6 +2,8 @@
 
 # 実装・運用バックログ
 
+2026-10-07追加: [単語優先おすすめの独立候補](./docs/analysis/2026-10-07-vocabulary-first-candidate.md)。通常主操作は単語、初回Naru・既存教材/期限復習を尊重し、文法・和訳は副操作。配布課題と本人の教材選択を保持。対象75テスト/型成功、統合検証中・公開判断別。[全体改善計画](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)の保存/教材/遅延想起/教室運用等は将来計画であり実装済みではない。
+
 2026-10-06追加: [GPT下書き・永続予算台帳の公開候補](./docs/analysis/2026-10-06-writing-gpt-budget-release.md)。本人の公開承認に基づき通常PR/preview/productionへ進める。OCR/コメント下書きadapter、D1 global月$5計画/$4.50送信枠、usage/未知費用保持、未評価原本の保存・再訪、管理者表示を接続した。実API・キー/feature設定・承認行は未実行。未成年の外部送信条件と正式なGPT採点は未対応。最終gateと配備状態は日付付き記録を正本とする。
 
 2026-10-05追加: [Gemini停止・AIなし運用の統合候補](./docs/analysis/2026-10-05-ai-exit-local-candidate.md)。公開済みb7e0c0cを保持した独立branchでWriting安全候補、全4プランの標準プラン/通知、校正済み素材のCSV/下書き、コード固定disabled provider、合成mockの$5計画枠を統合した。1527unit・型/境界/migration/build/API/audit、local browser182unique＋source-disabled追加4実行を確認（全Cloudでブラウザー終了の1件は同じアプリsourceで3回連続成功、配備専用2件はlocal対象外）。320pxの保存エラーを画面内へfocusする実UI修正も受入済み。本番/preview配備・キー/課金・実AI生成・実生徒送信は行わない。live OCR/個別評価、D1永続予算、同意/保持/外部送信条件、過去sample集計修復、claim/leaseは未接続として残す。

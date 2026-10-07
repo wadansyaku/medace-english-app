@@ -46,7 +46,7 @@ export const resolveStudentDashboardCommand = (
 ): StudentDashboardCommand => {
   const { primaryMission: mission } = input;
   const emptyLearningCommand: StudentDashboardCommand = input.canCreateBook === false
-    ? { type: 'open_practice', lane: 'grammar' }
+    ? { type: 'open_section', sectionId: 'library' }
     : { type: 'create_book' };
   const missionContext: MissionContext = mission?.assignmentId
     ? { missionAssignmentId: mission.assignmentId }

@@ -4,6 +4,9 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
+- [単語学習を優先するおすすめ候補](./analysis/2026-10-07-vocabulary-first-candidate.md): 通常ホームの単語/続き/復習を優先し、文法・和訳を副操作へ。明示教材・配布課題・保存を保持。公開判断は別工程。
+- [Steady Study全体改善計画](./analysis/2026-10-07-steady-study-improvement-plan.md): 現行コード・実操作・本番集計から評価。実施済み、候補、未検証の学習効果と将来計画を分ける。
+
 - [Naru公開後レビューの修正候補](./analysis/2026-10-07-naru-postrelease-review.md): 公開済み182ba3dと追加候補を分離。学習sessionの再描画、旧quiz章、原本変更時の出題失効、標準import分類gate。
 
 - [GPT下書き・永続予算台帳の公開候補](./analysis/2026-10-06-writing-gpt-budget-release.md): 本人の公開承認。未評価原本の永続保存、OpenAI adapter、D1 global月枠とusage、管理者表示。GPTは初期無効、外部実送信/キー設定は別の実行承認が必要。

@@ -58,18 +58,11 @@ export const resolveStudentDashboardPrimaryLearningRouteId = ({
   hasStudyBooks,
   hasActionableWriting,
   hasActiveMission,
-  shouldPrioritizePractice,
-  remainingWords,
-  hasWeaknessSignals,
-  canShowWritingSection,
 }: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardLearningRouteId => {
   if (hasActionableWriting) return 'writing';
   if (hasActiveMission) return 'mission';
   if (!hasStudyBooks) return 'today';
-  if (shouldPrioritizePractice) return 'englishPractice';
-  if (remainingWords > 0) return 'today';
-  if (hasWeaknessSignals) return 'weakness';
-  if (canShowWritingSection) return 'writing';
+  // Practice and diagnostics remain secondary to the vocabulary session.
   return 'today';
 };
 
@@ -78,19 +71,12 @@ export const resolveStudentDashboardPrimaryTaskId = ({
   hasActionableWriting,
   hasActiveMission,
   hasActionableCoachNotification,
-  shouldPrioritizePractice,
-  remainingWords,
-  hasWeaknessSignals,
-  canShowWritingSection,
 }: StudentDashboardPrimaryTaskDecisionInput): StudentDashboardTaskId => {
   if (hasActionableWriting) return 'writing';
   if (hasActiveMission) return 'mission';
   if (!hasStudyBooks) return 'today';
   if (hasActionableCoachNotification) return 'coach';
-  if (shouldPrioritizePractice) return 'englishPractice';
-  if (remainingWords > 0) return 'today';
-  if (hasWeaknessSignals) return 'weakness';
-  if (canShowWritingSection) return 'writing';
+  // Practice and diagnostics remain secondary to the vocabulary session.
   return 'today';
 };
 
@@ -249,20 +235,28 @@ export const useStudentDashboardViewModel = ({
   const canCreateFromFile = currentPlanPolicy.allowedAiActions.includes('extractVocabularyFromMedia');
   const canCreateBook = canCreateFromText || canCreateFromFile;
 
+  // No last-used timestamp is present in the snapshot. Keep the existing order
+  // of learned books rather than inventing recency; explicit plans still win.
+  const startedPlanningBooks = selectablePlanningBooks.filter(book => (progressMap[book.id]?.learnedCount ?? 0) > 0);
+  const hasStartedVocabulary = startedPlanningBooks.length > 0;
+  const fallbackSourceBooks = startedPlanningBooks.length > 0 ? startedPlanningBooks : selectablePlanningBooks;
+
   const fallbackPlanSuggestion = hasStudyBooks
     ? buildFallbackLearningPlan({
         uid: user.uid,
         grade: user.grade || UserGrade.ADULT,
         level: user.englishLevel || EnglishLevel.B1,
-        availableBooks: selectablePlanningBooks,
+        availableBooks: fallbackSourceBooks,
+        preferredBookIds: hasStartedVocabulary ? startedPlanningBooks.map(book => book.id) : undefined,
         learningPreference,
-        useNaruDefault: !learningPlan?.selectedBookIds.length,
+        useNaruDefault: !learningPlan?.selectedBookIds.length && !hasStartedVocabulary,
       })
     : null;
 
   const fallbackPlannedBooks = (() => {
     const suggested = orderBooksByIds(selectablePlanningBooks, fallbackPlanSuggestion?.selectedBookIds ?? []);
-    if (!learningPlan?.selectedBookIds.length && suggested.length === 1 && suggested[0].id === NARU_BOOK_ID) return suggested;
+    if (!learningPlan?.selectedBookIds.length && suggested.length > 0
+      && (hasStartedVocabulary || (suggested.length === 1 && suggested[0].id === NARU_BOOK_ID))) return suggested;
     const prioritized = selectablePlanningBooks.filter((book) => book.isPriority);
     return (prioritized.length > 0 ? prioritized : selectablePlanningBooks).slice(0, 3);
   })();
@@ -290,32 +284,34 @@ export const useStudentDashboardViewModel = ({
   const heroTitle = !hasStudyBooks
     ? blockedOfficialBookCount > 0
       ? '配布教材を確認中'
-      : canCreateBook ? '教材を1冊作る' : '教材なしで文法を試す'
+      : canCreateBook ? '教材を1冊作る' : '単語帳を確認する'
     : remainingWords > 0
-      ? `今日の目標まであと${remainingWords}語`
-      : '今日は完了';
+      ? dueCount > 0 ? '単語の復習から始める' : hasStartedVocabulary ? '単語の続きを進める' : '単語学習から始める'
+      : dueCount > 0 ? '期限が来た単語を復習する' : '今日の単語学習は完了';
 
   const heroCopy = !hasStudyBooks
     ? blockedOfficialBookCount > 0
       ? canCreateBook
         ? '配布教材は確認が終わると使えます。今はMy単語帳で始められます。'
-        : '配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。'
+        : '配布教材は確認が終わると使えます。教材一覧で利用できる単語帳を確認してください。'
       : canCreateBook
         ? '校正した単語・語義を手入力するか、CSVから作成できます。'
-        : '利用できる単語帳はまだありません。文法のお試し問題から始められます。'
+        : '利用できる単語帳はまだありません。教材一覧で配布・利用条件を確認してください。'
     : remainingWords > 0
       ? dueCount > 0
         ? `1回${DEFAULT_SMART_SESSION_LIMIT}語まで、期限が来た復習を優先して進めます。`
         : `1回${DEFAULT_SMART_SESSION_LIMIT}語まで進めます。終わったら、残りを続けられます。`
-      : '余力があれば、英語演習を1セットだけ追加します。';
+      : dueCount > 0
+        ? `今日の目標は達成済みです。期限が来た${dueCount}語の復習を続けられます。`
+        : '今日の目標は達成済みです。必要なら単語学習を続けられます。文法や和訳は下から選べます。';
 
   const questButtonLabel = !hasStudyBooks
-    ? !canCreateBook ? '文法演習を試す' : blockedOfficialBookCount > 0
+    ? !canCreateBook ? '単語帳を確認' : blockedOfficialBookCount > 0
       ? 'My単語帳を作る'
       : '教材を作る'
     : remainingWords > 0
-      ? '学習を始める'
-      : '復習を足す';
+      ? dueCount > 0 ? '単語を復習する' : hasStartedVocabulary ? '単語学習を続ける' : '単語学習を始める'
+      : dueCount > 0 ? '単語を復習する' : '単語学習を続ける';
 
   const aiBudgetPercent = accountOverview
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
@@ -367,6 +363,7 @@ export const useStudentDashboardViewModel = ({
   const hasActionableWriting = Boolean(
     canShowWritingSection
       && primaryMission
+      && !primaryMission.isSuggested
       && (
         primaryMission.nextActionType === MissionNextActionType.OPEN_WRITING
         || (primaryMission.writingRequired && !primaryMission.writingCompleted)
@@ -378,19 +375,12 @@ export const useStudentDashboardViewModel = ({
       && primaryMission.status !== WeeklyMissionStatus.COMPLETED
       && primaryMission.completionRate < 100,
   );
-  const hasEnglishPracticeWeakness = hasWeaknessSignals && Boolean(getEnglishPracticeLaneForWeakness(topWeakness));
-  const shouldPrioritizePractice = Boolean(
-    hasStudyBooks
-      && !hasActionableWriting
-      && !hasActiveMission
-      && (hasEnglishPracticeWeakness || (!hasWeaknessSignals && remainingWords <= 0)),
-  );
   const primaryTaskDecisionInput: StudentDashboardPrimaryTaskDecisionInput = {
     hasStudyBooks,
     hasActionableWriting,
     hasActiveMission,
     hasActionableCoachNotification: Boolean(latestActionableCoachNotification),
-    shouldPrioritizePractice,
+    shouldPrioritizePractice: false,
     remainingWords,
     hasWeaknessSignals,
     canShowWritingSection,
@@ -400,14 +390,14 @@ export const useStudentDashboardViewModel = ({
   const learningRouteCardDrafts: Array<Omit<StudentDashboardLearningRouteCard, 'isPrimary'> | null> = [
     {
       id: 'today' as const,
-      title: '今日の学習',
+      title: '単語学習',
       body: !hasStudyBooks
-        ? canCreateBook ? 'My単語帳を1冊作ると、学習を始められます。' : '教材がなくても、文法のお試し問題を解けます。'
+        ? canCreateBook ? 'My単語帳を1冊作ると、学習を始められます。' : '教材一覧で利用できる単語帳を確認します。'
         : remainingWords > 0
           ? dueCount > 0
             ? `復習から入り、残り${remainingWords}語へ進みます。`
             : `残り${remainingWords}語を進めます。`
-          : '今日の目標は達成済みです。余力があれば復習します。',
+          : dueCount > 0 ? '今日の目標は達成済みです。期限が来た単語を復習します。' : '今日の目標は達成済みです。必要なら単語学習を続けられます。',
       ctaLabel: questButtonLabel,
       metricLabel: hasStudyBooks ? `${remainingWords}語` : '教材未作成',
       stateLabel: hasStudyBooks ? `${estimatedMinutes}分目安` : '準備',
