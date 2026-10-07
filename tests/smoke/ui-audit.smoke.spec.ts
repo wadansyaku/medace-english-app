@@ -262,7 +262,30 @@ for (const viewport of [
 ]) {
   test(`service-admin keeps trend overflow internal and keyboard scroll reachable at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport);
+    // Layout fixture only: retain the actual ADMIN authorization/status and all
+    // other snapshot fields. This creates no provider request or paid ledger row.
+    const syntheticTitle = 'SyntheticAdministrationVocabularyCollectionWithoutSpaces原文を全文表示';
+    let fixtureResponses = 0;
+    await page.route('**/api/storage', async route => {
+      const request = route.request().postDataJSON();
+      if (request?.action !== 'getAdminDashboardSnapshot') { await route.continue(); return; }
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      const snapshot = await response.json();
+      expect(Array.isArray(snapshot.topBooks)).toBe(true);
+      expect(Array.isArray(snapshot.aiActions)).toBe(true);
+      fixtureResponses += 1;
+      await route.fulfill({ response, json: { ...snapshot,
+        topBooks: [...snapshot.topBooks, { bookId: 'synthetic-layout-only', title: syntheticTitle,
+          wordCount: 1531, learnerCount: 123, learnedEntries: 123456, averageProgress: 54, isOfficial: false }],
+        aiActions: [...snapshot.aiActions, { action: 'evaluateWritingSubmissionLayoutFixture',
+          label: '自由英作文添削（合成レイアウト確認）', requestCount: 2, estimatedCostMilliYen: 2000 }],
+      } });
+    });
     await loginAdminDemo(page);
+    await expect(page.getByText(syntheticTitle, { exact: true })).toBeVisible();
+    await expect(page.getByText('自由英作文添削（合成レイアウト確認）', { exact: true })).toBeVisible();
+    expect(fixtureResponses).toBeGreaterThan(0);
     const section = page.getByTestId('admin-trend-section');
     const scroller = page.getByTestId('admin-trend-scroll');
     const plot = page.getByTestId('admin-trend-plot');
