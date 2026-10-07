@@ -71,10 +71,12 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
             <div className="mt-4 space-y-3">
               {reviewTargets.map((question) => (
                 <div key={question.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{question.promptText}</div>
-                    {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
-                    <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div data-testid="quiz-review-word" className="min-w-0 flex-1 basis-full sm:basis-0">
+                      <div className="break-words font-bold text-slate-900">{question.promptText}</div>
+                      {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
                       10分後
                     </span>
                   </div>
@@ -138,10 +140,12 @@ const QuizResultView: React.FC<QuizResultViewProps> = ({
                   className="rounded-2xl border border-medace-100 bg-white px-4 py-4"
                   data-testid="quiz-result-translation-feedback-item"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="font-bold text-slate-900">{question.promptText}</div>
-                    {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
-                    <span className="rounded-full bg-medace-50 px-3 py-1 text-xs font-black text-medace-800">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div data-testid="quiz-review-word" className="min-w-0 flex-1 basis-full sm:basis-0">
+                      <div className="break-words font-bold text-slate-900">{question.promptText}</div>
+                      {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(question.mode) && <WordExamBadge word={words?.find(word => word.id === question.wordId && word.bookId === question.bookId)} />}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-medace-50 px-3 py-1 text-xs font-black text-medace-800">
                       {feedback.score} / {feedback.maxScore}・{feedback.verdictLabel}
                     </span>
                   </div>

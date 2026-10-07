@@ -6,6 +6,7 @@ import QuizRunningView from '../components/quiz/QuizRunningView';
 import type { WordData } from '../types';
 import GuestPractice from '../components/guest/GuestPractice';
 import WordExamBadge from '../components/WordExamBadge';
+import QuizResultView from '../components/quiz/QuizResultView';
 import StudyFinishedView from '../components/study/StudyFinishedView';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 
@@ -88,7 +89,8 @@ describe('verified Aichi exam word badge', () => {
   it.each([true, false])('renders verified words in the finished review on mobile=%s', isMobileViewport => {
     const html = renderToStaticMarkup(<StudyFinishedView isMobileViewport={isMobileViewport} leveledUp={false} sessionWordCount={2} earnedXP={10} streakBonusXP={0} nextReviewMessage="復習" weaknessSummary="意味" reviewPreview={[word, { ...word, id: 'unmarked', word: 'book', aichiExamAppeared: false }]} onStartSpellingCheck={noop} onExit={noop} />);
     expect(html.match(/data-testid="aichi-exam-badge"/g)).toHaveLength(1);
-    expect(html).toContain('care</div><span data-testid="aichi-exam-badge"');
+    expect(html).toContain('data-testid="study-review-word" class="min-w-0 flex-1 basis-full sm:basis-0"><div class="break-words font-bold text-slate-900">care</div><span data-testid="aichi-exam-badge"');
+    expect(html).toContain('</span></div><span class="shrink-0 rounded-full bg-amber-50');
     expect(html).toContain('book</div>');
   });
 
@@ -103,6 +105,13 @@ describe('verified Aichi exam word badge', () => {
     const words = [word, { ...word, id: 'word-2', word: 'book', definition: '本', aichiExamAppeared: undefined }];
     expect(renderToStaticMarkup(<GuestPractice words={words} onBack={noop} />)).toContain(badgeText);
     expect(renderToStaticMarkup(<GuestPractice words={words.map(w => ({ ...w, aichiExamAppeared: undefined }))} onBack={noop} />)).not.toContain(badgeText);
+  });
+
+  it('keeps a result badge below its prompt in the same full-width mobile container, apart from the timing pill', () => {
+    const question = { ...baseQuestion, mode: 'EN_TO_JA' as const, promptText: 'care', answer: '注意' };
+    const html = renderToStaticMarkup(<QuizResultView words={[word]} percentage={0} currentModeLabel="意味" activeSummary="1問" score={0} questionsLength={1} reviewTargets={[question]} translationFeedbackSummaries={[]} nextReviewCopy="復習" onRetry={noop} onReset={noop} onBack={noop} />);
+    expect(html).toContain('data-testid="quiz-review-word" class="min-w-0 flex-1 basis-full sm:basis-0"><div class="break-words font-bold text-slate-900">care</div><span data-testid="aichi-exam-badge"');
+    expect(html).toContain('</span></div><span class="shrink-0 rounded-full bg-amber-50');
   });
 
   it('does not call an entire grammar sentence an exam word', () => {
