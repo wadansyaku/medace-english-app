@@ -324,8 +324,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     </section>
 
     {isTextInputMode ? (
-      <form data-testid="quiz-response-pane" onSubmit={onHintSubmit} className={isVocabularyQuestion ? "min-w-0 space-y-2" : "space-y-4 animate-in slide-in-from-bottom-2 fade-in"}>
-        <section className={isVocabularyQuestion ? "rounded-2xl border border-slate-200 bg-white p-3" : "rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"}>
+      <form data-testid="quiz-response-pane" onSubmit={onHintSubmit} className={isVocabularyQuestion ? "min-w-0 space-y-2 [@media(max-width:639px)_and_(max-height:500px)]:grid [@media(max-width:639px)_and_(max-height:500px)]:grid-cols-[minmax(0,1fr)_auto] [@media(max-width:639px)_and_(max-height:500px)]:gap-2 [@media(max-width:639px)_and_(max-height:500px)]:space-y-0" : "space-y-4 animate-in slide-in-from-bottom-2 fade-in"}>
+        <section className={isVocabularyQuestion ? "min-w-0 rounded-2xl border border-slate-200 bg-white p-2" : "rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"}>
           <label htmlFor="quiz-answer-input" className="mb-1 block text-sm font-bold text-slate-600">
             {isTranslationInputMode ? '日本語訳を入力' : '英語を入力'}
           </label>
@@ -348,7 +348,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               onChange={(event) => onChangeAnswerInput(event.target.value)}
               disabled={!!inputResult || isInputBusy}
               autoFocus
-              className="ui-input text-lg"
+              className={isVocabularyQuestion ? "ui-input min-h-11 min-w-0 py-2 text-lg" : "ui-input text-lg"}
               placeholder={showSpellingHint ? `${currentQuestion.hintPrefix || ''}...` : '英語をそのまま入力'}
             />
           )}
@@ -462,22 +462,22 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               <ArrowRight className="h-5 w-5" /> {translationAdvanceLabel}
             </button>
           ) : (
-            <div className={isVocabularyQuestion ? "flex gap-2" : "flex flex-col gap-3 sm:flex-row"}>
+            <div className={isVocabularyQuestion ? "flex gap-2 [@media(max-width:639px)_and_(max-height:500px)]:flex-col [@media(max-width:639px)_and_(max-height:500px)]:gap-1" : "flex flex-col gap-3 sm:flex-row"}>
               <button
                 data-testid="quiz-answer-submit"
                 type="submit"
                 disabled={!answerInput.trim() || !!inputResult || isInputBusy}
-                className={isVocabularyQuestion ? "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-steady-action px-3 py-2 font-bold text-steady-on-action disabled:cursor-not-allowed disabled:bg-slate-300" : "flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"}
+                className={isVocabularyQuestion ? "flex min-h-11 min-w-0 flex-1 whitespace-nowrap text-base leading-6 items-center justify-center gap-2 rounded-xl bg-steady-action px-3 py-2 font-bold text-steady-on-action disabled:cursor-not-allowed disabled:bg-slate-300" : "flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"}
               >
-                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : isVocabularyQuestion ? '判定する' : '入力して判定する'}
+                <CheckCircle className="h-5 w-5 shrink-0" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : isVocabularyQuestion ? '判定する' : '入力して判定する'}
               </button>
               {isHintMode && !showSpellingHint && !inputResult && (
                 <button
                   type="button"
                   onClick={onRevealSpellingHint}
-                  className={isVocabularyQuestion ? "flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 font-bold text-amber-800 hover:bg-amber-100" : "flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"}
+                  className={isVocabularyQuestion ? "flex min-h-11 shrink-0 whitespace-nowrap text-base leading-6 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 font-bold text-amber-800 hover:bg-amber-100" : "flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"}
                 >
-                  <SpellCheck className="h-5 w-5" /> ヒントを見る
+                  <SpellCheck className="h-5 w-5 shrink-0" /> ヒントを見る
                 </button>
               )}
             </div>

@@ -419,6 +419,9 @@ describe('compact vocabulary question and response', () => {
     expect(html).toContain('id="quiz-answer-input"');
     expect(html).toContain('data-testid="quiz-answer-submit"');
     expect(html).toContain('判定する');
+    expect(html).toMatch(/data-testid="quiz-answer-submit"[^>]*whitespace-nowrap text-base leading-6/);
+    expect(html).toContain('ui-input min-h-11 min-w-0 py-2 text-lg');
+    expect(html).toContain('max-width:639px)_and_(max-height:500px)]:grid-cols-[minmax(0,1fr)_auto]');
     expect(html).toContain('ヒントを見る');
     expect(html).not.toContain('まずはヒントなしで全文を入力');
     expect(html).not.toContain('スペルチェック</div>');

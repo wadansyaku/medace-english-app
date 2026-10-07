@@ -75,11 +75,54 @@ const getHiddenHintReviewState = (
   }
 };
 
-// Keep every character; the page size follows the available text region.
+// Preserve exact source text, preferring complete meaning paragraphs and clauses.
 export const splitStudyMeaning = (text: string, capacity: number): string[] => {
   const chars = Array.from(text);
-  const size = Math.max(1, Math.floor(capacity));
-  return chars.length ? Array.from({ length: Math.ceil(chars.length / size) }, (_, i) => chars.slice(i * size, (i + 1) * size).join('')) : [''];
+  const size = Number.isFinite(capacity) ? Math.max(1, Math.floor(capacity)) : Math.max(1, chars.length);
+  if (!chars.length) return [''];
+  const pages: string[] = [];
+  let start = 0;
+  while (start < chars.length) {
+    const limit = Math.min(start + size, chars.length);
+    if (limit === chars.length) { pages.push(chars.slice(start).join('')); break; }
+    const boundaries: number[][] = [[], [], [], [], []];
+    let depth = 0;
+    for (let i = start; i < limit; i += 1) {
+      const char = chars[i];
+      if ('（([【「『'.includes(char)) {
+        if (depth === 0 && i > start) boundaries[4].push(i);
+        depth += 1;
+      } else if ('）)]】」』'.includes(char)) depth = Math.max(0, depth - 1);
+      if (char === '\n') boundaries[0].push(i + 1);
+      else if (depth === 0) {
+        if ('。！？!?；;'.includes(char)) boundaries[1].push(i + 1);
+        else if ('、，,'.includes(char)) boundaries[2].push(i + 1);
+        else if (/\s/u.test(char)) boundaries[3].push(i + 1);
+      }
+    }
+    // A newline just beyond the budget still marks the preceding complete
+    // meaning. Retain the newline on a following page rather than splitting it.
+    if (chars[limit] === '\n') boundaries[0].push(limit);
+    else if (depth === 0 && /\s/u.test(chars[limit])) boundaries[3].push(limit);
+    const preferred = boundaries.find(candidates => candidates.length > 0);
+    const end = preferred?.[preferred.length - 1] ?? limit;
+    pages.push(chars.slice(start, end).join(''));
+    start = end;
+  }
+  // The budget covers meaning glyphs. Separator-only fragments may make a
+  // neighbouring page longer; preserve them without an empty learning step.
+  const meaningPages: string[] = [];
+  let leadingSeparators = '';
+  for (const page of pages) {
+    if (/^\s*$/u.test(page)) {
+      if (meaningPages.length) meaningPages[meaningPages.length - 1] += page;
+      else leadingSeparators += page;
+    } else {
+      meaningPages.push(leadingSeparators + page);
+      leadingSeparators = '';
+    }
+  }
+  return meaningPages.length ? meaningPages : [leadingSeparators];
 };
 const StudyMeaning: React.FC<{ text: string }> = ({ text }) => {
   const region = useRef<HTMLDivElement>(null);
