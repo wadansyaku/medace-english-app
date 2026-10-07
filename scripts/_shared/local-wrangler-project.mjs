@@ -11,6 +11,7 @@ const LOCAL_PROJECT_LINKS = [
   'utils',
   'config',
   'contracts',
+  'data',
   'types.ts',
   'node_modules',
   'package.json',

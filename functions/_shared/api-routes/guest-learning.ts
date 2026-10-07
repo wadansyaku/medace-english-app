@@ -1,3 +1,4 @@
+import definitionSupplements from '../../../data/naru-app-definition-supplements.json';
 import type { GuestLearningCatalogResponse, GuestLearningImportRequest, GuestLearningImportResponse, GuestLearningSummary } from '../../../contracts/guestLearning';
 import { NARU_BOOK_ID } from '../../../shared/naruBook';
 import { GUEST_LEARNING_VERSION, GUEST_LEARNING_TTL_MS, GUEST_LEARNING_MAX_RESPONSE_TIME_MS, GUEST_LEARNING_UUID_PATTERN } from '../../../shared/guestLearning';
@@ -51,6 +52,44 @@ const assertPublicNaru = (row: DbBookRow | null): DbBookRow => {
   return row;
 };
 
+// Original held readiness stays immutable. This separate gate accepts only the
+// reviewed application content, evidence and original source; it never grants
+// approval or broadens the readiness rule for ordinary source entries.
+const reviewedSupplement = definitionSupplements.supplements[0];
+const supplementExpectation = JSON.stringify({ ...reviewedSupplement, evidence: {
+  sheet: reviewedSupplement.sourceSheet, wordCell: reviewedSupplement.sourceWordCell,
+  definitionCell: reviewedSupplement.sourceDefinitionCell, exampleCell: reviewedSupplement.sourceExampleCell,
+  fillRgb: reviewedSupplement.sourceFillRgb, originalContentHash: reviewedSupplement.originalContentHash,
+} });
+const isReviewedGuestSupplement = async (env: AppEnv): Promise<boolean> => {
+  const verified = await env.DB.prepare(`WITH expected(payload) AS (SELECT ?)
+    SELECT 1 AS valid FROM expected x
+    JOIN catalog_word_definition_supplements d ON d.id=json_extract(x.payload,'$.id')
+    JOIN words w ON w.id=d.word_id
+    JOIN catalog_word_source_links l ON l.source_entry_id=d.source_entry_id AND l.word_id=w.id AND l.match_kind='snapshot_import'
+    JOIN catalog_source_entries e ON e.id=d.source_entry_id
+    JOIN catalog_workbook_sources s ON s.id=e.source_id
+    JOIN catalog_workbook_sheet_rows r ON r.source_id=s.id AND r.sheet_name=json_extract(x.payload,'$.sourceSheet') AND r.row_number=json_extract(x.payload,'$.sourceRow')
+    JOIN books b ON b.id=w.book_id
+    JOIN material_source_ledger ml ON ml.book_id=b.id
+    WHERE d.word_id=json_extract(x.payload,'$.wordId') AND d.source_entry_id=json_extract(x.payload,'$.sourceEntryId')
+      AND d.source_content_hash=json_extract(x.payload,'$.sourceContentHash') AND d.source_file=json_extract(x.payload,'$.sourceFile') AND d.source_sha256=json_extract(x.payload,'$.sourceSha256') AND d.source_key=json_extract(x.payload,'$.sourceKey')
+      AND d.original_definition IS NULL AND d.definition=json_extract(x.payload,'$.definition') AND d.original_example_meaning IS NULL AND d.example_meaning=json_extract(x.payload,'$.exampleMeaning')
+      AND d.reason=json_extract(x.payload,'$.reason') AND d.references_json=json_extract(x.payload,'$.references') AND d.approval_json=json_extract(x.payload,'$.approval') AND d.evidence_json=json_extract(x.payload,'$.evidence') AND d.applied_at>0
+      AND e.source_id=json_extract(x.payload,'$.sourceId') AND e.source_key=json_extract(x.payload,'$.sourceKey') AND e.content_hash=json_extract(x.payload,'$.sourceContentHash') AND e.ready=0 AND e.payload_json=json_extract(x.payload,'$.originalPayloadJson')
+      AND s.series_key='adverb' AND s.source_file=json_extract(x.payload,'$.sourceFile') AND s.sha256=json_extract(x.payload,'$.sourceSha256')
+      AND r.payload_json=json_extract(x.payload,'$.originalArchiveRowPayloadJson')
+      AND json_extract(r.payload_json,'$.values[5]')=json_extract(x.payload,'$.word') AND json_extract(r.payload_json,'$.values[6]') IS NULL AND json_extract(r.payload_json,'$.values[7]')=json_extract(x.payload,'$.exampleSentence')
+      AND EXISTS(SELECT 1 FROM json_each(r.payload_json,'$.cells') c WHERE json_extract(c.value,'$.address')=json_extract(x.payload,'$.sourceWordCell') AND json_extract(c.value,'$.value')=json_extract(x.payload,'$.word') AND json_extract(c.value,'$.style.patternType')='solid' AND UPPER(json_extract(c.value,'$.style.fgColor.rgb')) IN ('FFFF00','FFFFFF00') AND COALESCE(json_extract(c.value,'$.style.fgColor.tint'),0)=0 AND json_extract(c.value,'$.style.fgColor.theme') IS NULL)
+      AND w.definition_supplemented=1 AND w.word=json_extract(x.payload,'$.word') AND w.definition=d.definition AND w.example_sentence=json_extract(x.payload,'$.exampleSentence') AND w.example_meaning=d.example_meaning
+      AND w.word_number=json_extract(x.payload,'$.wordNumber') AND w.search_key='actually' AND w.part_of_speech='adverb' AND w.category=json_extract(x.payload,'$.category') AND w.source_sheet=json_extract(x.payload,'$.sourceSheet') AND w.source_entry_id IS NULL AND w.subcategory='' AND w.section='' AND w.inflections='' AND w.pronunciation='' AND w.source_note=''
+      AND b.id=json_extract(x.payload,'$.bookId') AND b.title='Naruシスト' AND b.created_by IS NULL AND b.catalog_source='STEADY_STUDY_ORIGINAL' AND b.access_scope='ALL_PLANS' AND b.source_context='original-workbooks:'||json_extract(x.payload,'$.revision') AND b.word_count=json_extract(x.payload,'$.publishedWordCount')
+      AND ml.source_id='ledger-'||b.id AND ml.edition=json_extract(x.payload,'$.revision') AND ml.review_status='approved' AND ml.rights_status='approved' AND ml.qa_word_count=b.word_count
+      AND (SELECT COUNT(*) FROM catalog_word_source_links WHERE word_id=w.id)=1`)
+    .bind(supplementExpectation).first<{ valid:number }>();
+  return verified?.valid===1;
+};
+
 // This fixed route never accepts a caller-selected book or account scope.
 export const readGuestLearningCatalog = async (env: AppEnv): Promise<GuestLearningCatalogResponse> => {
   const row = assertPublicNaru(await getBookRow(env, NARU_BOOK_ID));
@@ -66,9 +105,25 @@ export const readGuestLearningCatalog = async (env: AppEnv): Promise<GuestLearni
     .all<DbWordRow & { source_ready: number; source_blocked: number }>();
   if (result.success === false || !result.results) throw new HttpError(500, '教材の取得に失敗しました。');
   const words = result.results;
+  const supplementWord = words.find(word => word.id === reviewedSupplement.wordId);
+  // Validate the returned row too: a later verification query must not authorize
+  // a stale, edited row read before that query. Canonical IDs always require this
+  // gate, including a held source maliciously changed to ready=1.
+  const supplementContentMatches = !!supplementWord && supplementWord.definition_supplemented === 1
+    && supplementWord.book_id === reviewedSupplement.bookId && supplementWord.word_number === reviewedSupplement.wordNumber
+    && supplementWord.word === reviewedSupplement.word && supplementWord.definition === reviewedSupplement.definition
+    && supplementWord.example_sentence === reviewedSupplement.exampleSentence && supplementWord.example_meaning === reviewedSupplement.exampleMeaning
+    && supplementWord.part_of_speech === reviewedSupplement.partOfSpeech && supplementWord.category === reviewedSupplement.category
+    && supplementWord.source_sheet === reviewedSupplement.sourceSheet && supplementWord.source_entry_id === null
+    && supplementWord.search_key === 'actually' && supplementWord.subcategory === '' && supplementWord.section === ''
+    && supplementWord.inflections === '' && supplementWord.pronunciation === '' && supplementWord.source_note === '';
+  const validSupplement = supplementContentMatches && await isReviewedGuestSupplement(env);
+  const hasVerifiedSource = (word: DbWordRow & { source_ready:number; source_blocked:number }) => word.id === reviewedSupplement.wordId
+    ? validSupplement && word.source_ready === 0 && word.source_blocked === 1
+    : word.source_ready === 1 && word.source_blocked === 0;
   if (words.length !== row.word_count || words.some((word) => !word.word?.trim() || !word.definition?.trim()
     || !word.source_sheet?.trim()
-    || word.source_ready !== 1 || word.source_blocked !== 0)) {
+    || !hasVerifiedSource(word))) {
     throw new HttpError(503, 'Naruシストは現在確認中です。時間をおいて再試行してください。');
   }
   const metadata = toBookMetadata(row);

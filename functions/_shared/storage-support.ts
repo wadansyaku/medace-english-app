@@ -74,6 +74,8 @@ export interface DbWordRow {
   inflections?: string | null;
   pronunciation?: string | null;
   source_note?: string | null;
+  aichi_exam_appeared?: number;
+  definition_supplemented?: number;
   example_sentence: string | null;
   example_meaning: string | null;
   example_generated_at: number | null;
@@ -247,6 +249,8 @@ export const toWordData = (row: DbWordRow): WordData => {
     ...(row.inflections ? { inflections: row.inflections } : {}),
     ...(row.pronunciation ? { pronunciation: row.pronunciation } : {}),
     ...(row.source_note ? { sourceNote: row.source_note } : {}),
+    ...(row.aichi_exam_appeared === 1 ? { aichiExamAppeared: true } : {}),
+    ...(row.definition_supplemented === 1 ? { definitionSupplemented: true } : {}),
     exampleSentence: row.example_sentence,
     exampleMeaning: row.example_meaning,
     exampleGeneratedAt: row.example_generated_at,

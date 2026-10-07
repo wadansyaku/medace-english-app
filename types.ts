@@ -482,6 +482,10 @@ export interface WordData {
   inflections?: string;
   pronunciation?: string;
   sourceNote?: string;
+  /** Verified bright-yellow mark on this exact original workbook entry. */
+  aichiExamAppeared?: boolean;
+  /** A reviewed app translation supplements a blank original definition. */
+  definitionSupplemented?: boolean;
   searchKey?: string;
   category?: string;
   subcategory?: string;
