@@ -219,7 +219,7 @@ test('different choices in one tick preserve the first payload, visible choice a
   expect((await saves(page))[0].payload.clientAttemptId).toMatch(/^[a-zA-Z0-9_-]{1,160}$/);
   await settleSave(page, 0);
   await expect.poll(() => state(page)).toMatchObject({ selectedOption: question.answer, saving: false, score: 1, index: 0 });
-  await expect(page.getByTestId('quiz-running-view')).toContainText('正解数: 1');
+  await expect(page.getByTestId('quiz-running-view')).toContainText('正解 1');
   const screenshot = testInfo.outputPath('first-choice-and-score.png');
   await page.screenshot({ path: screenshot, fullPage: true });
   await testInfo.attach('first-choice-and-score', { path: screenshot, contentType: 'image/png' });

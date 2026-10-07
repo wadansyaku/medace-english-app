@@ -18,7 +18,7 @@ test('public home offers clear account and learner trial actions before auth', a
   await page.goto('/');
 
   await expect(page.getByTestId('start-first-home')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '今日の学習を、ここから', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '今日の単語学習', exact: true })).toBeVisible();
   await expect(page.getByTestId('start-first-guest')).toBeVisible();
   await expect(page.getByTestId('demo-login-student')).toBeHidden();
   await expect(page.getByTestId('start-first-login')).toBeVisible();
@@ -68,7 +68,7 @@ test('public role link hub keeps the business role previews visible', async ({ p
   await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-student')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-instructor')).toBeVisible();
-  await expect(page.getByTestId('business-role-preview-group-admin')).toBeVisible();
+  await expect(page.getByTestId('business-role-preview-admin')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-service-admin')).toBeVisible();
 });
 

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { workspaceService } from '../services/workspace';
 import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
 import { resolveStorageMode } from '../shared/storageMode';
+import { SubscriptionPlan, type UserProfile } from '../types';
 import type {
   BookMetadata,
   WeeklyMissionBoard,
@@ -17,7 +18,8 @@ const canUseWritingApi = storageMode.capabilities.writing.available;
 const canUseBusinessWorkspaceApi = storageMode.capabilities.organization.available
   && storageMode.capabilities.missions.available;
 
-export const useBusinessAdminDashboardData = () => {
+export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscriptionPlan'>) => {
+  const writingEnabled = canUseWritingApi && user.subscriptionPlan === SubscriptionPlan.TOB_PAID;
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
   const [settingsSnapshot, setSettingsSnapshot] = useState<OrganizationSettingsSnapshot | null>(null);
   const [missionBoard, setMissionBoard] = useState<WeeklyMissionBoard | null>(null);
@@ -49,10 +51,10 @@ export const useBusinessAdminDashboardData = () => {
         workspaceService.getOrganizationSettingsSnapshot(),
         workspaceService.getWeeklyMissionBoard(),
         workspaceService.getBooks(),
-        !canUseWritingApi
+        !writingEnabled
           ? Promise.resolve<WritingAssignment[]>([])
           : listWritingAssignments('organization').then((response) => response.assignments),
-        !canUseWritingApi
+        !writingEnabled
           ? Promise.resolve<WritingQueueItem[]>([])
           : listWritingReviewQueue('QUEUE').then((response) => response.items),
       ]);
@@ -69,7 +71,7 @@ export const useBusinessAdminDashboardData = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [writingEnabled]);
 
   useEffect(() => {
     void refresh();

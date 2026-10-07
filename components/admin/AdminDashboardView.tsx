@@ -704,8 +704,8 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             </section>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm md:p-7">
+          <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+            <section data-testid="admin-trend-section" className="min-w-0 rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm md:p-7">
               <div className="flex items-center gap-3">
                 <BarChart3 className="h-5 w-5 text-medace-600" />
                 <div>
@@ -738,8 +738,8 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                 </div>
               </div>
 
-              <div className="mt-6 overflow-x-auto">
-                <div className="grid min-w-[720px] grid-cols-14 gap-3">
+              <div data-testid="admin-trend-scroll" role="region" aria-label="直近14日間の推移グラフ（横スクロール）" tabIndex={0} className="mt-6 min-w-0 max-w-full overflow-x-auto rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-medace-500">
+                <div data-testid="admin-trend-plot" className="grid min-w-[720px] grid-cols-14 gap-3">
                   {snapshot.trend.map((point) => {
                     const activeHeight = point.activeStudents > 0 ? Math.max(10, (point.activeStudents / maxTrendValue) * 120) : 0;
                     const studiedHeight = point.studiedWords > 0 ? Math.max(10, (point.studiedWords / maxTrendValue) * 120) : 0;
@@ -922,8 +922,8 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             </section>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-2">
+            <section className="min-w-0 rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-3">
                 <Clock3 className="h-5 w-5 text-medace-600" />
                 <div>
@@ -942,9 +942,9 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     return (
                       <div key={student.uid} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <div className="font-bold text-slate-900">{student.name}</div>
-                            <div className="mt-1 text-xs text-slate-500">{student.email}</div>
+                          <div className="min-w-0 max-w-full">
+                            <div className="break-words font-bold text-slate-900">{student.name}</div>
+                            <div className="mt-1 break-all text-xs text-slate-500">{student.email}</div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskTone(student.riskLevel)}`}>{student.riskLevel}</span>
@@ -953,7 +953,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                             </span>
                           </div>
                         </div>
-                        <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                           <div className="rounded-2xl bg-white px-3 py-3">
                             <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">学習語数</div>
                             <div className="mt-1 font-black text-slate-900">{student.totalLearned}</div>
@@ -974,7 +974,7 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
+            <section className="min-w-0 rounded-[32px] border border-medace-100 bg-white p-6 shadow-sm">
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-medace-600" />
                 <div>
@@ -989,10 +989,10 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                   snapshot.organizations.map((organization) => (
                     <div key={organization.organizationName} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-bold text-slate-900">{organization.organizationName}</div>
-                        <div className="text-sm font-bold text-slate-700">{organization.studentCount} 名</div>
+                        <div className="min-w-0 break-words font-bold text-slate-900">{organization.organizationName}</div>
+                        <div className="shrink-0 text-sm font-bold text-slate-700">{organization.studentCount} 名</div>
                       </div>
-                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                      <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                         <div className="rounded-2xl bg-white px-3 py-3">
                           <div className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">7日内学習</div>
                           <div className="mt-1 font-black text-slate-900">{organization.active7dCount}</div>

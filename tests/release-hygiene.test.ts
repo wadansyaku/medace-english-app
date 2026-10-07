@@ -415,7 +415,7 @@ describe('release hygiene contracts', () => {
       environment: 'production',
       workflow: '.github/workflows/deploy-pages.yml',
       expectedCount: 5,
-      evidence: ['start-first-home', '/api/session', 'business-role-preview-instructor', 'business-role-preview-group-admin', 'business-role-preview-service-admin', 'admin-demo-password', '/admin-access'],
+      evidence: ['start-first-home', '/api/session', 'business-role-preview-instructor', 'business-role-preview-admin', 'business-role-preview-service-admin', 'admin-demo-password', '/admin-access'],
     },
     {
       environment: 'preview',

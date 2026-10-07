@@ -83,7 +83,7 @@ describe('public business role entrypoints', () => {
     const authMarkup = buildAuthScreen();
 
     expect(authMarkup).toContain('data-testid="start-first-home"');
-    expect(authMarkup).toContain('今日の学習を、ここから');
+    expect(authMarkup).toContain('今日の単語学習');
     expect(authMarkup).toContain('data-testid="demo-login-student"');
     expect(authMarkup).toContain('data-testid="start-first-login"');
     expect(authMarkup).toContain('data-testid="start-first-signup"');

@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from '../../config/workspace';
 import { BRAND } from '../../config/brand';
 import { expect, test } from './diagnostics';
-import { loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
+import { loginAdminDemo, loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
 
 for (const role of ['student'] as const) {
   for (const width of [320, 390]) {
@@ -232,25 +232,80 @@ for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }
     await page.goto(`/study/${book.id}`);
     const word = page.getByTestId('study-card-front').getByRole('heading');
     await expect(word).toHaveText('triage');
-    const bar = page.locator('.mobile-sticky-action-bar');
+    const bar = page.locator('.study-actions');
     await expect(bar).toHaveCSS('position', 'static');
     const wordBounds = await word.boundingBox();
     const barBounds = await bar.boundingBox();
     expect(wordBounds!.y + wordBounds!.height).toBeLessThanOrEqual(barBounds!.y);
-    await word.evaluate(element => element.scrollIntoView({ block: 'center' }));
     await expect(word).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('study-flip-button')).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath('landscape-word-visible.png') });
     await page.getByTestId('study-flip-button').click();
     await expect(page.getByTestId('study-card-back')).toBeVisible();
-    await page.getByTestId('study-rate-3').evaluate(element => element.scrollIntoView({ block: 'center' }));
     await expect(page.getByTestId('study-rate-3')).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath('landscape-answer-controls.png') });
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(bar).toHaveCSS('position', 'sticky');
+    await expect(bar).toHaveCSS('position', 'static');
+    await expect(page.getByTestId('study-rate-3')).toBeInViewport({ ratio: 1 });
     await expect(page.getByTestId('study-rate-3')).toBeVisible();
     await page.getByTestId('study-rate-3').click();
     await expect(page.getByTestId('study-card-front')).toContainText('stabilize');
     const progress = await storageAction<{ learnedCount: number }>(page, 'getBookProgress', { bookId: book.id });
     expect(progress.learnedCount).toBe(1);
+  });
+}
+
+
+for (const viewport of [
+  { width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 },
+  { width: 768, height: 1024 }, { width: 1366, height: 900 },
+]) {
+  test(`service-admin keeps trend overflow internal and keyboard scroll reachable at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await loginAdminDemo(page);
+    const section = page.getByTestId('admin-trend-section');
+    const scroller = page.getByTestId('admin-trend-scroll');
+    const plot = page.getByTestId('admin-trend-plot');
+    await expect(section.getByRole('heading', { name: '直近14日間の推移', exact: true })).toBeVisible();
+    await expect(scroller).toHaveAttribute('tabindex', '0');
+    const originalText = await plot.textContent();
+    expect(originalText).toMatch(/学習.*人.*通知/s);
+    const measure = () => scroller.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      return { documentWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth,
+        viewport: innerWidth, left: rect.left, right: rect.right, clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth, scrollLeft: element.scrollLeft, overflowX: getComputedStyle(element).overflowX };
+    });
+    await scroller.scrollIntoViewIfNeeded();
+    const before = await measure();
+    const overflow = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('body *')].flatMap(element => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width === 0 || rect.right <= innerWidth || getComputedStyle(element).position === 'fixed') return [];
+      const ancestor = element.closest('[data-testid="admin-trend-scroll"]');
+      if (ancestor && element !== ancestor) return [];
+      return [{ tag: element.tagName, testId: element.dataset.testid, className: element.className,
+        left: rect.left, right: rect.right, width: rect.width, text: element.innerText?.slice(0, 140) }];
+    }));
+    await writeFile(testInfo.outputPath('service-admin-overflow-diagnostics.json'), JSON.stringify({ viewport, before, overflow }, null, 2));
+    expect(before.documentWidth).toBeLessThanOrEqual(viewport.width);
+    expect(before.bodyWidth).toBeLessThanOrEqual(viewport.width);
+    expect(before.left).toBeGreaterThanOrEqual(0);
+    expect(before.right).toBeLessThanOrEqual(viewport.width);
+    expect(before.overflowX).toBe('auto');
+    expect(await plot.locator(':scope > div').count()).toBe(14);
+    await scroller.focus();
+    await expect(scroller).toBeFocused();
+    if (before.scrollWidth > before.clientWidth) {
+      await page.keyboard.press('ArrowRight');
+      await expect.poll(() => scroller.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+      await page.keyboard.press('ArrowLeft');
+      await expect.poll(() => scroller.evaluate(element => element.scrollLeft)).toBe(0);
+    }
+    await expect(scroller).toBeFocused();
+    expect(await plot.textContent()).toBe(originalText);
+    const after = await measure();
+    expect(after.documentWidth).toBeLessThanOrEqual(viewport.width);
+    await writeFile(testInfo.outputPath('service-admin-trend-layout.json'), JSON.stringify({ viewport, before, after, originalText }, null, 2));
+    await page.screenshot({ path: testInfo.outputPath('service-admin-trend.png') });
   });
 }

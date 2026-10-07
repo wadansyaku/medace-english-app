@@ -2,15 +2,24 @@ import { exposeStudentDemo } from './smoke-support';
 import type { Page } from '@playwright/test';
 import type { WordData } from '../../types';
 import { expect, test } from './diagnostics';
-import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook } from './smoke-support';
+import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
 
-const prepareStudy = async (page: Page) => {
+const prepareStudy = async (page: Page, includeDetails = false) => {
   await page.goto('/');
   await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  const imported = await seedPhrasebook(page, 'Study Reliability Fixture');
+  const title = 'Study Reliability Fixture';
+  const imported = includeDetails
+    ? await storageAction<{ importedBookIds: string[] }>(page, 'batchImportWords', {
+      defaultBookName: title,
+      source: { kind: 'rows', rows: [
+        { bookName: title, number: 1, word: 'triage', definition: 'トリアージ', exampleSentence: 'Triage patients carefully.' },
+        { bookName: title, number: 2, word: 'stabilize', definition: '安定させる', exampleSentence: 'Stabilize the patient first.' },
+      ] },
+    })
+    : await seedPhrasebook(page, title);
   const bookId = imported.importedBookIds[0] as string;
   await page.reload();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -193,8 +202,9 @@ test.describe('study reliability', () => {
   test(`next card hides its answer through delayed save at ${viewport.width}x${viewport.height}, motion ${reducedMotion}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.emulateMedia({ reducedMotion });
-    const bookId = await prepareStudy(page);
+    const bookId = await prepareStudy(page, true);
     const words = await loadFixtureWords(page, bookId);
+    expect(words[0].exampleSentence).toBe('Triage patients carefully.');
     let release!: () => void;
     const pending = new Promise<void>(resolve => { release = resolve; });
     await page.route('**/api/storage', async route => {

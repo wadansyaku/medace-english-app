@@ -568,7 +568,7 @@ test.describe('student mobile ux', () => {
     expect((saveBox?.y ?? 1000) + (saveBox?.height ?? 0)).toBeLessThanOrEqual(844);
   });
 
-  test('free student without books can try grammar and return from the hero on mobile', async ({ page }) => {
+  test('free student without books can inspect the catalog and explicitly choose grammar on mobile', async ({ page }) => {
     // Exercise the genuine empty-catalog fallback, independently of the public Naru starter.
     await page.route('**/api/storage', async route => {
       if (route.request().postDataJSON()?.action === 'getBooks') {
@@ -586,9 +586,15 @@ test.describe('student mobile ux', () => {
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
 
     const primaryCta = page.getByTestId(MOBILE_FLOW_TEST_IDS.studentHeroPrimaryCta);
-    await expect(primaryCta).toContainText('文法演習を試す');
-    await expect(page.getByTestId('dashboard-practice-lane-grammar')).toHaveCount(0);
+    await expect(primaryCta).toContainText('単語帳を確認');
     await primaryCta.click();
+    await expect(page.getByTestId('dashboard-reference-panel')).toBeVisible();
+    await expect(page.getByRole('region', { name: '教材ライブラリ', exact: true })).toContainText('まだMy単語帳がありません');
+    await expect(page.getByRole('region', { name: '教材ライブラリ', exact: true })).toContainText('講師に教材の配布をご確認ください');
+    await expect(page.getByTestId('phrasebook-create-modal')).toHaveCount(0);
+    await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-practice-lane-grammar')).toBeVisible();
+    await page.getByTestId('dashboard-practice-lane-grammar').click();
 
     await expect(page).toHaveURL(/\/english-practice\/grammar$/);
     await expect(page.getByTestId('english-practice-hub')).toBeVisible();

@@ -195,7 +195,7 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
       <section data-testid="start-first-home" className="rounded-panel border border-medace-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 text-xl font-black text-medace-700">{BRAND.mark}</div>
         <p className="mt-5 text-sm font-bold text-medace-700">英単語学習スペース</p>
-        <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の学習を、ここから</h1>
+        <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の単語学習</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">Naruシストの単語・小テスト・文法を、登録なしで学べます。記録の保存や振り返りはログイン後に使えます。</p>
         {props.onStartGuestTrial && <button type="button" onClick={props.onStartGuestTrial} data-testid="start-first-guest" disabled={busy}
           className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50 sm:max-w-xl"><BookOpen className="h-4 w-4" aria-hidden="true" /> 今すぐ学ぶ（登録不要） <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}

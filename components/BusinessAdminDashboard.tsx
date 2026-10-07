@@ -204,7 +204,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
     loading,
     error,
     refresh,
-  } = useBusinessAdminDashboardData();
+  } = useBusinessAdminDashboardData(user);
   const controller = useBusinessAdminDashboardController({
     snapshot,
     settingsSnapshot,
