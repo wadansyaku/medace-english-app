@@ -248,7 +248,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
       onClick={controller.closeBack}
     >
-      <div className="flex h-full min-h-0 flex-col">
+      <div ref={controller.backFaceScrollRef} role="region" aria-label="単語の意味と例文" tabIndex={0} className="h-full min-h-0 overflow-y-auto pr-1 scrollbar-hide">
         <div className="flex shrink-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-800">意味</div>
@@ -275,8 +275,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-hidden">
-          <div ref={controller.backFaceScrollRef} className="h-full overflow-y-auto pr-1 scrollbar-hide">
+        <div className="mt-3">
         <div className="mb-3 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
           {controller.isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
@@ -298,7 +297,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               {controller.editError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{controller.editError}</p>}
             </div>
           ) : (
-            <p className="text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
+            <p className="whitespace-pre-line break-words text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
           )}
         </div>
 
@@ -324,7 +323,6 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               </div>
             )}
 
-          </div>
         </div>
       </div>
     </section>
