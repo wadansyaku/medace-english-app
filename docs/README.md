@@ -4,6 +4,8 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
+- [Naru公開後レビューの修正候補](./analysis/2026-10-07-naru-postrelease-review.md): 公開済み182ba3dと追加候補を分離。学習sessionの再描画、旧quiz章、原本変更時の出題失効、標準import分類gate。
+
 - [GPT下書き・永続予算台帳の公開候補](./analysis/2026-10-06-writing-gpt-budget-release.md): 本人の公開承認。未評価原本の永続保存、OpenAI adapter、D1 global月枠とusage、管理者表示。GPTは初期無効、外部実送信/キー設定は別の実行承認が必要。
 
 - [Gemini停止・AIなし運用のローカル候補](./analysis/2026-10-05-ai-exit-local-candidate.md): b7e0c0c基準の非公開候補。Writing安全、標準プラン/通知、事前準備下書き、disabled provider、合成mock予算と未接続条件。

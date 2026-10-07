@@ -9,6 +9,7 @@ import QuizResultView from './quiz/QuizResultView';
 import QuizRunningView from './quiz/QuizRunningView';
 import QuizSetupView from './quiz/QuizSetupView';
 import { useQuizModeController } from '../hooks/useQuizModeController';
+import { normalizeNaruChapterQuizTask } from '../shared/naruStudy';
 
 interface QuizModeProps {
   user: UserProfile;
@@ -23,7 +24,11 @@ const QuizMode: React.FC<QuizModeProps> = ({
   taskIntent,
   onBack,
 }) => {
-  const controller = useQuizModeController({ user, bookId, taskIntent });
+  const normalizedTaskIntent = React.useMemo(
+    () => normalizeNaruChapterQuizTask(bookId, taskIntent),
+    [bookId, taskIntent],
+  );
+  const controller = useQuizModeController({ user, bookId, taskIntent: normalizedTaskIntent });
   const returnToConditions = () => {
     if (controller.isScopedSession) onBack();
     else controller.resetToSetup();

@@ -1,6 +1,6 @@
 # Steady Study — プロダクト方針
 
-更新日: 2026-10-04。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
+更新日: 2026-10-07。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
 
 ## 誰の何を解決するか
 
@@ -47,7 +47,7 @@
 
 教材権利の実態はコード上のラベルだけでは証明できない。[台帳の運用](./docs/material-source-ledger-minimum-ops.md) と公開前の品質確認を必須にする。
 
-Naruシストは最新Excel四原本を一冊に収録し、元品詞・語義・英例文・分類・注記・出典を保持する。2026-10-03の公開版は1530語、欠訳一件を保留。 2026-10-07の本人依頼による[黄色セル注記・欠訳補完](./docs/analysis/2026-10-07-naru-aichi-exam-annotations.md)は原本記録を保持し、アプリ補完actuallyを別台帳で追加する1531語/638印の候補。配備の完了は本番SHAと集計の確認を要する。Notion企画に沿う例文和訳・収録語参照・用法別学習の拡充は、原本と追加生成を区別して段階的に進める。[公開と原本照合](./docs/analysis/2026-10-03-naru-one-book-release.md)、[後続計画](./docs/analysis/2026-10-03-medace-improvement-plan.md)を正本にする。
+Naruシストは最新Excel四原本を一冊に収録し、元品詞・語義・英例文・分類・注記・出典を保持する。2026-10-03の公開版は1530語、欠訳一件を保留。 2026-10-07の本人依頼による[黄色セル注記・欠訳補完](./docs/analysis/2026-10-07-naru-aichi-exam-annotations.md)は原本記録を保持し、アプリ補完actuallyを別台帳へ追加した。PR59/main `182ba3d3fd4a088e46c49acbace172588132fbc1` の通常本番配備と原本436項目・1531語/638印/補完1の公開後照合を完了。続く[公開後レビュー4件の追加修正](./docs/analysis/2026-10-07-naru-postrelease-review.md)は独立候補として配備状態を記録する。Notion企画に沿う例文和訳・収録語参照・用法別学習の拡充は、原本と追加生成を区別して段階的に進める。[公開と原本照合](./docs/analysis/2026-10-03-naru-one-book-release.md)、[後続計画](./docs/analysis/2026-10-03-medace-improvement-plan.md)を正本にする。
 
 ## 成功の測り方
 

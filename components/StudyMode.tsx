@@ -1,5 +1,5 @@
 import WordExamBadge from './WordExamBadge';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -449,15 +449,20 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
 };
 
 const StudyMode: React.FC<StudyModeProps> = (props) => {
-  if (!isNaruChapterStudyTask(props.bookId, props.taskIntent)) return <StudySession {...props} />;
-  const chapter = resolveNaruStudyChapter(props.taskIntent?.wordRange);
+  const isChapterStudy = isNaruChapterStudyTask(props.bookId, props.taskIntent);
+  const chapter = isChapterStudy ? resolveNaruStudyChapter(props.taskIntent?.wordRange) : null;
+  // The controller uses task identity to load a new session. Normalizing an
+  // unchanged chapter must not discard the active card or its pending receipt.
+  const taskIntent = useMemo(() => props.taskIntent && chapter
+    ? { ...props.taskIntent, wordRange: { start: chapter.start, end: chapter.end } }
+    : props.taskIntent, [props.taskIntent, chapter?.start, chapter?.end]);
+  if (!isChapterStudy) return <StudySession {...props} />;
   const kind = props.taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' ? 'due' : 'new';
   const isReady = props.taskIntent?.autoStart && chapter
     && (props.taskIntent.selectionPolicy === 'BOOK_NEW_ONLY' || props.taskIntent.selectionPolicy === 'BOOK_DUE_ONLY');
   if (!isReady) return <NaruStudySetup user={props.user} chapter={chapter || NARU_RANGE_PRESETS[0]} kind={kind}
     invalidSelection={!chapter} onSelect={task => props.onStartTask(props.user, task)} onBack={props.onBack} />;
   const returnToChapter = (user: UserProfile) => props.onStartTask(user, createNaruChapterReturnTask(props.taskIntent!));
-  const taskIntent = { ...props.taskIntent!, wordRange: { start: chapter.start, end: chapter.end } };
   return <StudySession {...props} key={`${props.user.uid}:${chapter.id}:${kind}`}
     taskIntent={taskIntent}
     onBack={() => returnToChapter(props.user)} onSessionComplete={returnToChapter} backLabel="章の学習に戻る" />;

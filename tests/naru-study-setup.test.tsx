@@ -13,6 +13,7 @@ const harness = vi.hoisted(() => ({ slots: [] as any[], cursor: 0,
 vi.mock('react', async importOriginal => {
   const actual = await importOriginal<typeof import('react')>();
   return { ...actual,
+    useMemo: (factory: () => unknown) => factory(),
     useState: (initial: unknown) => {
       const index = harness.cursor++;
       if (!(index in harness.slots)) harness.slots[index] = initial;

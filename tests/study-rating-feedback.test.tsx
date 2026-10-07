@@ -15,6 +15,7 @@ vi.mock('react', async importOriginal => {
     }
   };
   const hooks = {
+    useMemo: (factory: () => unknown) => factory(),
     useState: (initial: any) => {
       const index = harness.cursor++;
       if (!(index in harness.slots)) harness.slots[index] = typeof initial === 'function' ? initial() : initial;
