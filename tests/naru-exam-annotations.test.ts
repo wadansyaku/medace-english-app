@@ -13,7 +13,7 @@ const fixtures: ReturnType<typeof createSqliteD1>[] = [];
 afterEach(() => fixtures.splice(0).forEach(f=>f.sqlite.close()));
 const setup = () => {
  const f=createSqliteD1();fixtures.push(f);
- for(const name of fs.readdirSync('migrations').filter(n=>n.endsWith('.sql')&&!n.startsWith('0056')).sort()) f.sqlite.exec(fs.readFileSync(`migrations/${name}`,'utf8'));
+ for(const name of fs.readdirSync('migrations').filter(n=>n.endsWith('.sql')&&n<'0056').sort()) f.sqlite.exec(fs.readFileSync(`migrations/${name}`,'utf8'));
  const marks=[audit.marks[0],audit.marks.find(m=>m.word==='history'&&m.matchKind==='unique_index')];
  f.sqlite.exec(`INSERT INTO books(id,title,word_count,catalog_source,access_scope,created_at,updated_at) VALUES('naru-shisto-original-v1','Naruシスト',3,'STEADY_STUDY_ORIGINAL','ALL_PLANS',1,1);
  INSERT INTO material_source_ledger(source_id,book_id,catalog_source,book_title,edition,rights_status,review_status,source_file,extracted_at,transform_log,content_qa_report,qa_word_count,qa_source_coverage_rate,created_at,updated_at) VALUES('ledger','naru-shisto-original-v1','STEADY_STUDY_ORIGINAL','Naruシスト','v1','approved','approved','source','date','log','local',3,1,1,1);`);

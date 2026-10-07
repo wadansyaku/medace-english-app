@@ -457,7 +457,9 @@ const StudyMode: React.FC<StudyModeProps> = (props) => {
   if (!isReady) return <NaruStudySetup user={props.user} chapter={chapter || NARU_RANGE_PRESETS[0]} kind={kind}
     invalidSelection={!chapter} onSelect={task => props.onStartTask(props.user, task)} onBack={props.onBack} />;
   const returnToChapter = (user: UserProfile) => props.onStartTask(user, createNaruChapterReturnTask(props.taskIntent!));
+  const taskIntent = { ...props.taskIntent!, wordRange: { start: chapter.start, end: chapter.end } };
   return <StudySession {...props} key={`${props.user.uid}:${chapter.id}:${kind}`}
+    taskIntent={taskIntent}
     onBack={() => returnToChapter(props.user)} onSessionComplete={returnToChapter} backLabel="章の学習に戻る" />;
 };
 

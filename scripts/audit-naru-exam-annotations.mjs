@@ -3,6 +3,7 @@ import path from 'node:path';
 import XLSX from 'xlsx';
 import { archiveWorkbook, digest, ORIGINAL_WORKBOOKS, parseOriginalWorkbook } from './_shared/original-workbook-import.mjs';
 import { auditNaruExamAnnotations, buildNaruExamAnnotationSql } from './_shared/naru-exam-annotations.mjs';
+import { buildNaruDefinitionSupplementSql, NARU_DEFINITION_SUPPLEMENTS } from './_shared/naru-definition-supplements.mjs';
 const args = process.argv.slice(2);
 const value = key => { const i = args.indexOf(key); return i < 0 ? null : args[i + 1]; };
 const input = value('--input-dir'); const output = value('--output-dir');
@@ -16,4 +17,6 @@ if(audit.marks.length!==637 || audit.held.length!==1) throw new Error('Reviewed 
 await fs.mkdir(output,{recursive:true,mode:0o700});
 await fs.writeFile(path.join(output,'naru-aichi-exam-annotations.json'),JSON.stringify(audit,null,2)+'\n');
 await fs.writeFile(path.join(output,'naru-aichi-exam-annotations.sql'),buildNaruExamAnnotationSql(audit));
-console.log(JSON.stringify({output,ready:audit.marks.length,held:audit.held.length,direct:audit.marks.filter(m=>m.matchKind==='word_cell').length,uniqueIndex:audit.marks.filter(m=>m.matchKind==='unique_index').length,unresolvedCells:audit.unresolved.length}));
+await fs.writeFile(path.join(output,'naru-app-definition-supplements.sql'),buildNaruDefinitionSupplementSql());
+await fs.writeFile(path.join(output,'naru-app-definition-supplements.json'),JSON.stringify(NARU_DEFINITION_SUPPLEMENTS,null,2)+'\n');
+console.log(JSON.stringify({output,originalReadyMarks:audit.marks.length,originalMissingDefinitions:audit.held.length,direct:audit.marks.filter(m=>m.matchKind==='word_cell').length,uniqueIndex:audit.marks.filter(m=>m.matchKind==='unique_index').length,unresolvedCells:audit.unresolved.length,reviewedAppSupplements:1,appMarkedWordsAfterSeparateSupplement:638}));

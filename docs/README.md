@@ -86,4 +86,4 @@ These docs are useful background, but implementation details may have changed. C
 
 - [2026-10-03 ホーム整理・章別学習・文法追加の非公開候補](./analysis/2026-10-03-smart-ui-and-grammar.md)
 
-- [2026-10-07 Naru愛知県高校入試出題済み表示](./analysis/2026-10-07-naru-aichi-exam-annotations.md) — 原本色/座標監査、637語のメタデータ、表示・保存・公開境界。
+- [2026-10-07 Naru愛知県高校入試出題済み表示](./analysis/2026-10-07-naru-aichi-exam-annotations.md) — 原本色/座標監査、元注記637語とactuallyの別台帳補完（最終1531語/638印）、章範囲・表示・保存・公開境界。

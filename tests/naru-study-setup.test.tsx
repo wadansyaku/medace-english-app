@@ -186,6 +186,17 @@ describe('StudyMode chapter setup boundary', () => {
     expect(React.isValidElement<{ invalidSelection?: boolean }>(tree) && tree.props.invalidSelection).toBe(true);
     expect(api.controller).not.toHaveBeenCalled();
   });
+  it.each([
+    [{ start: 1, end: 1530 }, { start: 1, end: 1531 }],
+    [{ start: 1286, end: 1371 }, { start: 1286, end: 1372 }],
+    [{ start: 1372, end: 1530 }, { start: 1373, end: 1531 }],
+  ])('runs a restored chapter with its current boundaries', (previous, current) => {
+    const task = { ...createNaruChapterTask(NARU_RANGE_PRESETS[0], 'new', true), wordRange: previous };
+    const session = StudyMode(outerProps(task));
+    if (!React.isValidElement<React.ComponentProps<typeof StudyMode>>(session)) throw new Error('Missing session');
+    expect(session.type).not.toBe(NaruStudySetup);
+    expect(session.props.taskIntent?.wordRange).toEqual(current);
+  });
   it.each(['new', 'due'] as const)('returns the running %s session to the same chapter without auto-start', kind => {
     const task = createNaruChapterTask(NARU_RANGE_PRESETS[2], kind, true); const input = outerProps(task);
     const session = StudyMode(input);
