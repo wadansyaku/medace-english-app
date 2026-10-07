@@ -1,5 +1,5 @@
 import WordExamBadge from './WordExamBadge';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -23,7 +23,6 @@ import {
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { getHintAuditTone } from '../shared/wordHintAssets';
 import { getSmartSessionConfig } from '../shared/studySession';
-import MobileStickyActionBar from './mobile/MobileStickyActionBar';
 import ModalOverlay from './ModalOverlay';
 import { useStudyModeController } from '../hooks/useStudyModeController';
 import { recordClientProductEvent } from '../services/productEvents';
@@ -89,6 +88,45 @@ const getHiddenHintReviewState = (
   }
 };
 
+// Keep every character; the page size follows the available text region.
+export const splitStudyMeaning = (text: string, capacity: number): string[] => {
+  const chars = Array.from(text);
+  const size = Math.max(1, Math.floor(capacity));
+  return chars.length ? Array.from({ length: Math.ceil(chars.length / size) }, (_, i) => chars.slice(i * size, (i + 1) * size).join('')) : [''];
+};
+const StudyMeaning: React.FC<{ text: string }> = ({ text }) => {
+  const region = useRef<HTMLDivElement>(null);
+  const [capacity, setCapacity] = useState(100);
+  const [page, setPage] = useState(0);
+  useLayoutEffect(() => {
+    const update = () => {
+      const box = region.current;
+      if (!box) return;
+      // Conservative full-width glyph budget, including explicit line breaks.
+      const columns = Math.max(1, Math.floor(box.clientWidth / 22));
+      const lines = Math.max(1, Math.floor(box.clientHeight / 32));
+      setCapacity(Math.max(1, columns * Math.max(1, lines - 1)));
+    };
+    update();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (region.current) observer?.observe(region.current);
+    return () => observer?.disconnect();
+  }, []);
+  useEffect(() => setPage(0), [text, capacity]);
+  const pages = splitStudyMeaning(text, capacity);
+  const current = Math.min(page, pages.length - 1);
+  return <div className="study-meaning" onClick={event => event.stopPropagation()}>
+    <div ref={region} className="study-meaning-text" role="region" aria-label="単語の意味" tabIndex={0}>
+      <p className="whitespace-pre-wrap break-words text-center text-xl font-bold leading-8">{pages[current]}</p>
+    </div>
+    {pages.length > 1 && <nav aria-label="意味のページ" className="study-meaning-pages">
+      <button type="button" disabled={current === 0} onClick={() => setPage(current - 1)}>前へ</button>
+      <span aria-live="polite">{current + 1} / {pages.length}</span>
+      <button type="button" disabled={current === pages.length - 1} onClick={() => setPage(current + 1)}>次へ</button>
+    </nav>}
+  </div>;
+};
+
 const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBack, onSessionComplete, onStartTask, backLabel = 'ダッシュボードに戻る' }) => {
   const controller = useStudyModeController({
     user,
@@ -96,6 +134,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
     taskIntent,
     onSessionComplete,
   });
+  const [showDetails, setShowDetails] = useState(false);
+  useEffect(() => setShowDetails(false), [controller.currentWord?.id, controller.currentIndex]);
   const startedRef = useRef(false);
   const finishedRef = useRef(false);
 
@@ -211,7 +251,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       data-testid="study-card-front"
       aria-hidden={controller.isFlipped}
       inert={controller.isFlipped}
-      className="study-card-face border border-slate-200 bg-white px-5 py-5 shadow-xl transition-shadow hover:shadow-2xl sm:px-8 sm:py-8"
+      className="study-card-face border border-slate-200 bg-white p-3 shadow-sm"
       onClick={controller.openBack}
     >
       <div className="flex h-full flex-col">
@@ -233,9 +273,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           <WordSourceDetails word={controller.currentWord} compact />
         </div>
 
-        <div className="px-4 py-2 text-center text-xs font-medium text-slate-500">
-          カードか下のボタンで答えを確認
-        </div>
+
       </div>
     </section>
   );
@@ -245,14 +283,14 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       data-testid="study-card-back"
       aria-hidden={!controller.isFlipped}
       inert={!controller.isFlipped}
-      className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 px-4 py-4 text-slate-950 shadow-xl sm:px-6 sm:py-5"
+      className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 p-3 text-slate-950 shadow-sm"
       onClick={controller.closeBack}
     >
-      <div ref={controller.backFaceScrollRef} role="region" aria-label="単語の意味と例文" tabIndex={0} className="h-full min-h-0 overflow-y-auto pr-1 scrollbar-hide">
+      <div ref={controller.backFaceScrollRef} role="region" aria-label="単語の意味と例文" tabIndex={0} className="study-back-content">
         <div className="flex shrink-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-medace-800">意味</div>
-            <div className="mt-2 text-base font-black text-slate-950 sm:text-lg">{controller.currentWord.word}</div>
+
             {(controller.currentWord.aichiExamAppeared || controller.currentWord.definitionSupplemented) &&
               <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>}
           </div>
@@ -275,8 +313,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           )}
         </div>
 
-        <div className="mt-3">
-        <div className="mb-3 rounded-[24px] border border-medace-200 bg-white/80 px-4 py-4">
+        <div className="study-answer-content">
+        <div className={`study-definition-panel ${controller.isEditing ? 'study-definition-editing' : ''}`}>
           {controller.isEditing ? (
             <div className="flex flex-col gap-3" onClick={(event) => event.stopPropagation()}>
               <input
@@ -297,31 +335,11 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               {controller.editError && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{controller.editError}</p>}
             </div>
           ) : (
-            <p className="whitespace-pre-line break-words text-center text-[1.35rem] font-black leading-snug text-slate-950 sm:text-3xl">{controller.currentWord.definition}</p>
+            <StudyMeaning text={controller.currentWord.definition} />
           )}
         </div>
 
-            {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
-              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
-              <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
-              {controller.currentWord.exampleMeaning?.trim() && (controller.showTranslation
-                ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">{controller.currentWord.exampleMeaning}</p>
-                : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}
-            </section>}
-            {hiddenExampleReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenExampleReviewState.title}。{hiddenExampleReviewState.description}</p>}
-            {(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null))) && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
-              <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-600">{controller.currentWord.bookId === NARU_BOOK_ID ? '補足' : '補足・出典'}</summary>
-              <WordSourceDetails word={controller.currentWord} />
-            </details>}
-            {!hasCoreExample && !hiddenExampleReviewState && <p data-testid="study-example-missing" className="mb-3 text-sm leading-relaxed text-slate-600">例文は準備中です。意味で学習を続けられます。</p>}
-            {controller.currentWord.exampleImageUrl && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-3" onClick={event => event.stopPropagation()}>
-                <button type="button" aria-haspopup="dialog" aria-expanded={controller.showHints} onClick={() => controller.setShowHints(!controller.showHints)} className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-slate-600">
-                  <span className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />保存済みの画像ヒント</span>
-                  <span>{controller.showHints ? '閉じる' : '表示'}</span>
-                </button>
-              </div>
-            )}
+            {!controller.isEditing && <button type="button" className="study-details-button" onClick={event => { event.stopPropagation(); setShowDetails(true); }}>例文・補足</button>}
 
         </div>
       </div>
@@ -329,7 +347,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
   );
 
   return (
-    <div className="mx-auto max-w-3xl pb-20 md:pb-24">
+    <div className="study-session mx-auto max-w-3xl">
       <StudyReportDialogs
         mode={controller.reportDialogMode}
         showReportModal={controller.showReportModal}
@@ -342,6 +360,32 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         onSubmitReport={controller.submitReport}
         onCloseNotice={() => controller.setReportNotice(null)}
       />
+
+      {showDetails && <ModalOverlay ariaLabel="例文・補足" mobileBehavior="sheet" panelClassName="study-details-panel w-full max-w-xl rounded-2xl bg-white p-4" onClose={() => setShowDetails(false)}>
+        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{controller.currentWord.word}・例文と補足</h2><button type="button" className="study-details-button" onClick={() => setShowDetails(false)}>閉じる</button></div>
+            {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
+              <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
+              {controller.currentWord.exampleMeaning?.trim() && (controller.showTranslation
+                ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">{controller.currentWord.exampleMeaning}</p>
+                : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}
+            </section>}
+            {hiddenExampleReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenExampleReviewState.title}。{hiddenExampleReviewState.description}</p>}
+            {(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null))) && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
+              <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-600">{controller.currentWord.bookId === NARU_BOOK_ID ? '補足' : '補足・出典'}</summary>
+              <WordSourceDetails word={controller.currentWord} />
+            </details>}
+
+            {controller.currentWord.exampleImageUrl && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-3" onClick={event => event.stopPropagation()}>
+                <button type="button" aria-haspopup="dialog" aria-expanded={controller.showHints} onClick={() => { setShowDetails(false); controller.setShowHints(!controller.showHints); }} className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-slate-600">
+                  <span className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />保存済みの画像ヒント</span>
+                  <span>{controller.showHints ? '閉じる' : '表示'}</span>
+                </button>
+              </div>
+            )}
+
+      </ModalOverlay>}
 
       {controller.showHints && controller.currentWord.exampleImageUrl && <ModalOverlay
         ariaLabel="保存済みの画像ヒント"
@@ -362,7 +406,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           {[controller.bookTitle, taskIntent?.label || getSmartSessionConfig(bookId)?.badgeLabel].filter(Boolean).join(' / ')}
         </p>
       )}
-      <div className="mb-3 flex items-center justify-between gap-3 md:mb-6">
+      <div className="study-session-heading flex items-center justify-between gap-3">
         <button type="button" aria-label={`学習を中断して${backLabel}`} onClick={onBack} disabled={controller.isAdvancingCard || controller.isSavingEdit} className="flex items-center gap-1 font-medium text-slate-500 hover:text-slate-800 disabled:opacity-50">
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
@@ -395,8 +439,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         </div>
       </div>
 
-      <MobileStickyActionBar
-        className="safe-pad-bottom mt-3 rounded-[28px] border border-slate-200 bg-white/94 px-3 pb-3 pt-3 shadow-[0_16px_32px_rgba(15,23,42,0.08)] md:mt-4 md:px-0 md:pb-0 md:pt-4 [@media(max-height:500px)]:static"
+      <div
+        className="study-actions safe-pad-bottom"
       >
         {controller.saveError ? (
           <div ref={controller.actionBarRef} role="alert" data-testid="study-save-error" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -408,7 +452,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
             ref={controller.actionBarRef}
             data-testid="study-rating-actions"
             aria-busy={controller.isAdvancingCard}
-            className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 animate-in slide-in-from-bottom-4 fade-in duration-300"
+            className="study-rating-grid grid gap-2"
           >
             {RATING_OPTIONS.map((option) => (
               <button
@@ -421,13 +465,13 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
                   void controller.handleRating(option.id);
                 }}
                 disabled={controller.isAdvancingCard}
-                className={`study-rating-button flex min-h-12 flex-col items-center gap-1 rounded-2xl border p-3 text-xs font-bold transition-transform active:scale-95 ${option.className}`}
+                className={`study-rating-button flex min-h-11 items-center justify-center gap-1 rounded-xl border px-2 py-2 text-base font-bold transition-transform active:scale-95 ${option.className}`}
               >
                 <span>{option.label}</span>
-                {option.icon}
+
               </button>
             ))}
-            <p role="status" className="col-span-2 min-h-4 text-center text-xs text-slate-600 sm:col-span-4">{controller.isAdvancingCard ? `「${RATING_OPTIONS.find(option => option.id === controller.selectedRating)?.label || '回答'}」を保存中…` : ''}</p>
+            <p role="status" className="study-save-status text-center text-base text-slate-600">{controller.isAdvancingCard ? `「${RATING_OPTIONS.find(option => option.id === controller.selectedRating)?.label || '回答'}」を保存中…` : ''}</p>
           </div>
         ) : (
           <div ref={controller.actionBarRef} className="flex justify-center">
@@ -435,7 +479,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
               data-testid="study-flip-button"
               onClick={controller.openBack}
               disabled={controller.isEditing || controller.isAdvancingCard}
-              className={`flex min-h-12 items-center gap-2 rounded-full px-8 py-4 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
+              className={`flex min-h-11 items-center gap-2 rounded-xl px-6 py-2 font-bold shadow-lg transition-transform hover:scale-[1.01] ${
                 controller.isEditing || controller.isAdvancingCard ? 'cursor-not-allowed bg-medace-200 text-medace-700/70' : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'
               }`}
             >
@@ -443,7 +487,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
             </button>
           </div>
         )}
-      </MobileStickyActionBar>
+      </div>
     </div>
   );
 };

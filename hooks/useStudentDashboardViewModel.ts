@@ -286,8 +286,8 @@ export const useStudentDashboardViewModel = ({
       ? '配布教材を確認中'
       : canCreateBook ? '教材を1冊作る' : '単語帳を確認する'
     : remainingWords > 0
-      ? dueCount > 0 ? '単語の復習から始める' : hasStartedVocabulary ? '単語の続きを進める' : '単語学習から始める'
-      : dueCount > 0 ? '期限が来た単語を復習する' : '今日の単語学習は完了';
+      ? hasStartedVocabulary ? '単語の続きを進める' : '単語学習から始める'
+      : '今日の単語学習は完了';
 
   const heroCopy = !hasStudyBooks
     ? blockedOfficialBookCount > 0
@@ -298,20 +298,16 @@ export const useStudentDashboardViewModel = ({
         ? '校正した単語・語義を手入力するか、CSVから作成できます。'
         : '利用できる単語帳はまだありません。教材一覧で配布・利用条件を確認してください。'
     : remainingWords > 0
-      ? dueCount > 0
-        ? `1回${DEFAULT_SMART_SESSION_LIMIT}語まで、期限が来た復習を優先して進めます。`
-        : `1回${DEFAULT_SMART_SESSION_LIMIT}語まで進めます。終わったら、残りを続けられます。`
-      : dueCount > 0
-        ? `今日の目標は達成済みです。期限が来た${dueCount}語の復習を続けられます。`
-        : '今日の目標は達成済みです。必要なら単語学習を続けられます。文法や和訳は下から選べます。';
+      ? `1回${DEFAULT_SMART_SESSION_LIMIT}語まで。選択教材に期限語があれば優先します。`
+      : '今日の目標は達成済みです。必要なら単語学習を続けられます。選択教材に期限語があれば優先します。';
 
   const questButtonLabel = !hasStudyBooks
     ? !canCreateBook ? '単語帳を確認' : blockedOfficialBookCount > 0
       ? 'My単語帳を作る'
       : '教材を作る'
     : remainingWords > 0
-      ? dueCount > 0 ? '単語を復習する' : hasStartedVocabulary ? '単語学習を続ける' : '単語学習を始める'
-      : dueCount > 0 ? '単語を復習する' : '単語学習を続ける';
+      ? hasStartedVocabulary ? '単語学習を続ける' : '単語学習を始める'
+      : '単語学習を続ける';
 
   const aiBudgetPercent = accountOverview
     ? Math.min(100, Math.round((accountOverview.aiUsage.estimatedCostMilliYen / Math.max(accountOverview.aiUsage.budgetMilliYen, 1)) * 100))
@@ -394,10 +390,8 @@ export const useStudentDashboardViewModel = ({
       body: !hasStudyBooks
         ? canCreateBook ? 'My単語帳を1冊作ると、学習を始められます。' : '教材一覧で利用できる単語帳を確認します。'
         : remainingWords > 0
-          ? dueCount > 0
-            ? `復習から入り、残り${remainingWords}語へ進みます。`
-            : `残り${remainingWords}語を進めます。`
-          : dueCount > 0 ? '今日の目標は達成済みです。期限が来た単語を復習します。' : '今日の目標は達成済みです。必要なら単語学習を続けられます。',
+          ? `残り${remainingWords}語へ。選択教材に期限語があれば優先します。`
+          : '今日の目標は達成済みです。必要なら単語学習を続けられます。',
       ctaLabel: questButtonLabel,
       metricLabel: hasStudyBooks ? `${remainingWords}語` : '教材未作成',
       stateLabel: hasStudyBooks ? `${estimatedMinutes}分目安` : '準備',

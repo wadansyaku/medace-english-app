@@ -27,11 +27,17 @@ describe('vocabulary-first recommendation and rendered primary action',()=>{
  it('continues the learned book and due-first vocabulary after daily completion',()=>{
   const v=view({...completeToday,dueCount:12,progressMap:{other:{bookId:'other',learnedCount:40,totalCount:120,percentage:33}}});
   expect(v.primaryTask?.command).toMatchObject({type:'start_learning',task:{preferredBookIds:['other'],selectionPolicy:'DUE_FIRST'}});
-  expect(v.remainingWords).toBe(0);expect(v.heroTitle).toBe('期限が来た単語を復習する');expect(v.questButtonLabel).toBe('単語を復習する');
+  expect(v.remainingWords).toBe(0);expect(v.heroTitle).toBe('今日の単語学習は完了');expect(v.questButtonLabel).toBe('単語学習を続ける');expect(v.heroCopy).toContain('選択教材に期限語があれば優先');
  });
  it('honors explicit different material ahead of learned/default Naru without mutating the snapshot',()=>{
   const s=snapshot({learningPlan:plan,progressMap:{[NARU_BOOK_ID]:{bookId:NARU_BOOK_ID,learnedCount:5,totalCount:1531,percentage:1}}});const before=JSON.stringify(s);
   const v=useStudentDashboardViewModel({user,snapshot:s});expect(v.primaryTask?.command).toMatchObject({type:'start_learning',task:{preferredBookIds:['other']}});expect(JSON.stringify(s)).toBe(before);
+ });
+ it('does not promise global due words from a different explicitly selected material',()=>{
+  const v=view({learningPlan:plan,dueCount:12,progressMap:{[NARU_BOOK_ID]:{bookId:NARU_BOOK_ID,learnedCount:12,totalCount:1531,percentage:1},other:{bookId:'other',learnedCount:0,totalCount:120,percentage:0}}});
+  expect(v.heroTitle).not.toContain('復習');expect(v.questButtonLabel).not.toContain('復習');
+  expect(v.heroCopy).toContain('選択教材に期限語があれば優先');
+  expect(v.primaryTask?.command).toMatchObject({type:'start_learning',task:{preferredBookIds:['other'],selectionPolicy:'DUE_FIRST'}});
  });
  it('keeps vocabulary primary with no due words after completion, leaving practice optional',()=>{
   const v=view({...completeToday,dueCount:0,progressMap:{other:{bookId:'other',learnedCount:120,totalCount:120,percentage:100}}});

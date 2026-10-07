@@ -46,4 +46,14 @@ describe('Layout navigation', () => {
     expect(rendered).toContain('data-testid="layout-nav-home"');
     expect(rendered).not.toContain('data-testid="layout-nav-english-practice-current"');
   });
+
+  it.each(['study', 'quiz', 'guestLearning', 'guestTrial'])('keeps home and logout available without duplicate navigation or footer during %s', currentView => {
+    const rendered = renderToStaticMarkup(<Layout user={student} currentView={currentView}
+      onLogout={() => undefined} onChangeView={() => undefined}>question</Layout>);
+    expect(rendered).toContain('ホームへ戻る');
+    expect(rendered).toContain('aria-label="ログアウト"');
+    expect(rendered).not.toContain('data-testid="layout-nav-home"');
+    expect(rendered).not.toContain('<footer');
+    expect(rendered).toContain('question');
+  });
 });

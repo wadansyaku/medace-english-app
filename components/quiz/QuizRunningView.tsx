@@ -8,7 +8,6 @@ import {
   BookOpenCheck,
   CheckCircle,
   Eye,
-  HelpCircle,
   RotateCcw,
   SpellCheck,
 } from 'lucide-react';
@@ -102,6 +101,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   onRetrySave,
   onAdvanceAfterTranslationFeedback,
 }) => {
+  const isVocabularyQuestion = ['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(currentQuestion.mode);
   const isOrderMode = currentQuestion.interactionType === 'ORDERING';
   const isTextInputMode = currentQuestion.interactionType === 'TEXT_INPUT';
   const isTranslationInputMode = currentQuestion.mode === 'JA_TRANSLATION_INPUT';
@@ -150,8 +150,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   const questionQualityState = currentQuestion.qualityState;
 
   return (
-  <div data-testid="quiz-running-view" className="space-y-4">
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+  <div data-testid="quiz-running-view" className={isVocabularyQuestion ? "grid min-w-0 gap-2 [@media(min-width:640px)_and_(max-height:500px)]:grid-cols-2" : "space-y-4"}>
+    {isVocabularyQuestion ? <div data-testid="quiz-compact-progress" className="col-span-full flex items-center justify-between text-sm text-slate-600"><span>第 {currentQIndex + 1} 問 / {questionsLength}</span><span>正解 {score}</span></div> : <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="rounded-full border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-bold text-medace-700">
           {activeSummary}
@@ -170,11 +170,11 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           style={{ width: `${((currentQIndex + 1) / questionsLength) * 100}%` }}
         ></div>
       </div>
-    </section>
+    </section>}
 
     {questionSourceNotice && (
       <div
-        className="flex items-start gap-2 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold leading-relaxed text-medace-900"
+        className="col-span-full flex items-start gap-2 rounded-2xl border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold leading-relaxed text-medace-900"
         data-testid="quiz-question-source-notice"
       >
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-medace-700" />
@@ -182,7 +182,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
       </div>
     )}
 
-    <section data-testid="quiz-question-card" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+    <section data-testid="quiz-question-card" className={isVocabularyQuestion ? "min-w-0 self-start rounded-2xl border border-slate-200 bg-white p-3" : "rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
           {currentQuestion.promptLabel}
@@ -197,11 +197,11 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           </span>
         )}
       </div>
-      <h2 className="mt-3 text-3xl font-black leading-tight text-slate-800 sm:text-4xl">
+      <h2 className={isVocabularyQuestion ? "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl [@media(min-width:640px)_and_(max-height:500px)]:text-3xl" : "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl"}>
         {currentQuestion.promptText}
       </h2>
       {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(currentQuestion.mode) && <div className="mt-2"><WordExamBadge word={currentWord} /></div>}
-      {currentQuestion.instruction && (
+      {currentQuestion.instruction && !isVocabularyQuestion && (
         <p className="mt-3 text-sm leading-relaxed text-slate-500">{currentQuestion.instruction}</p>
       )}
 
@@ -273,7 +273,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
         </div>
       )}
 
-      {isTextInputMode ? (
+      {isVocabularyQuestion ? (showSpellingHint && <div data-testid="quiz-spelling-prefix" className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 p-2"><strong className="break-all text-2xl tracking-wide text-slate-950">{currentQuestion.maskedAnswer}</strong><span className="text-sm text-amber-900">全文または続きで答える</span></div>) : isTextInputMode ? (
         <div className={`mt-6 rounded-2xl px-4 py-4 ${showSpellingHint ? 'border border-amber-200 bg-amber-50' : 'border border-slate-200 bg-slate-50'}`}>
           {isHintMode ? (
             <>
@@ -324,13 +324,14 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     </section>
 
     {isTextInputMode ? (
-      <form onSubmit={onHintSubmit} className="space-y-4 animate-in slide-in-from-bottom-2 fade-in">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+      <form data-testid="quiz-response-pane" onSubmit={onHintSubmit} className={isVocabularyQuestion ? "min-w-0 space-y-2" : "space-y-4 animate-in slide-in-from-bottom-2 fade-in"}>
+        <section className={isVocabularyQuestion ? "rounded-2xl border border-slate-200 bg-white p-3" : "rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm"}>
+          <label htmlFor="quiz-answer-input" className="mb-1 block text-sm font-bold text-slate-600">
             {isTranslationInputMode ? '日本語訳を入力' : '英語を入力'}
           </label>
           {isTranslationInputMode ? (
             <textarea
+              id="quiz-answer-input"
               value={answerInput}
               onChange={(event) => onChangeAnswerInput(event.target.value)}
               disabled={!!inputResult || isInputBusy}
@@ -341,6 +342,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             />
           ) : (
             <input
+              id="quiz-answer-input"
               type="text"
               value={answerInput}
               onChange={(event) => onChangeAnswerInput(event.target.value)}
@@ -448,7 +450,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           )}
         </section>
 
-        <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
+        <MobileStickyActionBar className={isVocabularyQuestion ? "!static !m-0 !border-0 !bg-transparent !p-0 !shadow-none" : "-mx-4 px-4 sm:mx-0 sm:px-0"}>
           {showTranslationAdvanceAction ? (
             <button
               type="button"
@@ -460,19 +462,20 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               <ArrowRight className="h-5 w-5" /> {translationAdvanceLabel}
             </button>
           ) : (
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className={isVocabularyQuestion ? "flex gap-2" : "flex flex-col gap-3 sm:flex-row"}>
               <button
+                data-testid="quiz-answer-submit"
                 type="submit"
                 disabled={!answerInput.trim() || !!inputResult || isInputBusy}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
+                className={isVocabularyQuestion ? "flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-steady-action px-3 py-2 font-bold text-steady-on-action disabled:cursor-not-allowed disabled:bg-slate-300" : "flex w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-4 py-4 font-bold text-steady-on-action shadow-lg transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"}
               >
-                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : '入力して判定する'}
+                <CheckCircle className="h-5 w-5" /> {checkingTranslationFeedback ? '答案チェック中...' : persistingAttempt ? '保存中...' : isTranslationInputMode ? '和訳を判定する' : isVocabularyQuestion ? '判定する' : '入力して判定する'}
               </button>
               {isHintMode && !showSpellingHint && !inputResult && (
                 <button
                   type="button"
                   onClick={onRevealSpellingHint}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"
+                  className={isVocabularyQuestion ? "flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 font-bold text-amber-800 hover:bg-amber-100" : "flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 font-bold text-amber-800 transition-colors hover:bg-amber-100 sm:max-w-[200px]"}
                 >
                   <SpellCheck className="h-5 w-5" /> ヒントを見る
                 </button>
@@ -625,7 +628,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
         </MobileStickyActionBar>
       </div>
     ) : !showOptions ? (
-      <div className="animate-in slide-in-from-bottom-2 flex flex-col gap-4 fade-in">
+      <div className="min-w-0 self-start">
         <button
           type="button"
           onClick={onShowOptions}
@@ -634,13 +637,10 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
         >
           <Eye className="h-5 w-5" /> 選択肢を表示する
         </button>
-        <div className="flex items-center justify-center gap-1 text-center text-sm text-slate-400">
-          <HelpCircle className="h-4 w-4" />
-          <span>先に自力で思い出してから見るほうが記憶が定着します。</span>
-        </div>
+
       </div>
     ) : (
-      <div className="grid grid-cols-1 gap-3 animate-in zoom-in duration-200 fade-in">
+      <div data-testid="quiz-choice-options" className={isVocabularyQuestion ? "grid min-w-0 grid-cols-2 gap-2 self-start" : "grid grid-cols-1 gap-3 animate-in zoom-in duration-200 fade-in"}>
         {currentQuestion.options?.map((option, index) => {
           let buttonClass = 'bg-white border-2 border-slate-100 hover:border-medace-300 hover:bg-medace-50 text-slate-700 shadow-sm';
           let icon = null;
@@ -663,9 +663,9 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               type="button"
               onClick={() => void onOptionClick(option)}
               disabled={!!selectedOption || persistingAttempt}
-              className={`flex w-full items-center justify-between rounded-2xl p-5 text-left text-lg font-semibold transition-all duration-200 ${buttonClass}`}
+              className={`flex min-h-11 min-w-0 w-full items-center justify-between gap-2 rounded-2xl text-left text-base font-semibold transition-all duration-200 ${isVocabularyQuestion ? "p-3" : "p-5 text-lg"} ${buttonClass}`}
             >
-              <span>{option}</span>
+              <span className="min-w-0 break-words">{option}</span>
               {icon}
             </button>
           );
@@ -674,7 +674,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     )}
 
     {saveError && hasPendingAttempt && (
-      <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700" data-testid="quiz-save-error">
+      <div className="col-span-full rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" data-testid="quiz-save-error">
         <div>{saveError}</div>
         <button
           type="button"

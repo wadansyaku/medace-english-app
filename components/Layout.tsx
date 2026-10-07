@@ -61,7 +61,9 @@ const Layout: React.FC<LayoutProps> = ({
   const isDemoUser = isDemoEmail(user?.email);
   const isStandalone = useIsStandalone();
   const compactStudentShell = useIsStudentMobileShell(user);
-  const compactHeader = useIsMobileViewport('(max-width: 767px), (max-height: 500px)') || compactStudentShell;
+  const focusedLearning = ['study', 'quiz', 'guestLearning', 'guestTrial'].includes(currentView);
+  const smallHeaderViewport = useIsMobileViewport('(max-width: 767px), (max-height: 500px)');
+  const compactHeader = smallHeaderViewport || compactStudentShell || focusedLearning;
   const runtimeFlags = getClientRuntimeFlags();
   const isOnline = useNetworkStatus();
   const [showDemoBannerDetails, setShowDemoBannerDetails] = React.useState(!compactHeader);
@@ -156,12 +158,16 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Header */}
       {!immersiveContent && (
-      <header data-testid="app-sticky-header" className={`${compactStudentShell ? 'sticky top-0' : 'md:sticky md:top-0'} [@media(max-height:500px)]:static z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
+      <header data-testid="app-sticky-header" className={`${focusedLearning ? 'relative' : compactStudentShell ? 'sticky top-0' : 'md:sticky md:top-0'} [@media(max-height:500px)]:static z-50 border-b border-medace-100 bg-white/95 backdrop-blur shadow-[0_4px_16px_rgba(102,50,26,0.035)] ${
         compactStudentShell ? 'safe-pad-top' : ''
       }`}>
         {isDemoUser && (
           <div className="border-b border-[#f3b80a]/40 bg-[#fff9df]">
-            {compactHeader ? (
+            {focusedLearning ? (
+              <p data-testid="learning-demo-status" className="mx-auto max-w-7xl px-3 py-1 text-center text-sm font-semibold text-slate-800">
+                体験は{getDemoAccessWindowLabel()}限定です
+              </p>
+            ) : compactHeader ? (
               <div className="max-w-7xl mx-auto px-4 py-2.5 sm:px-6 lg:px-8">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -218,7 +224,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
         )}
         <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 ${
-          compactHeader ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
+          focusedLearning ? 'min-h-12 py-0' : compactHeader ? 'min-h-[66px] py-1' : 'min-h-[80px] py-2'
         }`}>
           <button
             type="button"
@@ -226,16 +232,16 @@ const Layout: React.FC<LayoutProps> = ({
             onClick={() => onChangeView(homeView)}
             aria-label={`${BRAND.officialName} ホームへ戻る`}
           >
-            <div className={`border border-medace-200 bg-medace-50 shadow-sm ${compactHeader ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
+            <div className={`${focusedLearning ? '' : 'border border-medace-200 bg-medace-50 shadow-sm'} ${focusedLearning ? 'p-0' : compactHeader ? 'rounded-xl p-2.5' : 'rounded-xl p-3'}`}>
               <BookOpen className={`text-medace-700 ${compactHeader ? 'h-5 w-5' : 'w-6 h-6'}`} />
             </div>
             <div className="block">
               <h1 className={`font-black tracking-tight text-medace-900 ${compactHeader ? 'text-[1.02rem]' : 'text-[1.35rem]'}`}>
                 {BRAND.officialName}
               </h1>
-              <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactHeader ? 'text-[10px]' : 'text-xs'}`}>
+              {!focusedLearning && <p className={`font-bold tracking-[0.14em] text-steady-muted ${compactHeader ? 'text-[10px]' : 'text-xs'}`}>
                 {BRAND.productLabel}
-              </p>
+              </p>}
             </div>
           </button>
 
@@ -277,7 +283,7 @@ const Layout: React.FC<LayoutProps> = ({
                   </div>
               )}
 
-              <nav className="hidden md:flex gap-1">
+              {!focusedLearning && <nav className="hidden md:flex gap-1">
                 <button 
                   onClick={() => onChangeView(homeView)}
                   data-testid="layout-nav-home"
@@ -299,7 +305,7 @@ const Layout: React.FC<LayoutProps> = ({
                     英語演習
                   </span>
                 )}
-              </nav>
+              </nav>}
 
               <div className="flex items-center gap-2">
                 <div className={`text-right ${compactHeader ? 'hidden' : 'hidden lg:block'}`}>
@@ -367,13 +373,14 @@ const Layout: React.FC<LayoutProps> = ({
       {/* Main Content */}
       <main id="study-main-content" tabIndex={-1} className={immersiveContent
         ? 'flex-grow'
+        : focusedLearning ? 'flex-grow w-full max-w-7xl mx-auto px-3 py-2 sm:px-4'
         : `flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-4 sm:py-8' : 'py-8 lg:py-10'}`
       }>
         {children}
       </main>
 
       {/* Footer */}
-      {!immersiveContent && (
+      {!immersiveContent && !focusedLearning && (
       <footer className={`mt-auto border-t border-medace-200 bg-white/85 backdrop-blur ${
         compactStudentShell ? 'safe-pad-bottom py-2' : 'py-6'
       }`}>

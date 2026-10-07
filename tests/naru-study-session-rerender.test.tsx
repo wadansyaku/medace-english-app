@@ -79,7 +79,7 @@ const load = async () => { render(); flushEffects(); await settle(); expect(rend
 beforeEach(() => {
   harness.slots.clear(); harness.effects.clear(); harness.cleanups.clear(); harness.controller = null;
   vi.clearAllMocks(); vi.useFakeTimers();
-  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }), speechSynthesis: { getVoices: () => [] } });
+  vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn(), matchMedia: () => ({ matches: false }), speechSynthesis: { getVoices: () => [] } });
   vi.stubGlobal('CSS', { supports: () => true });
   props = { user, bookId: NARU_BOOK_ID, taskIntent: createNaruChapterTask(NARU_RANGE_PRESETS[1], 'new', true),
     onBack: vi.fn(), onSessionComplete: vi.fn(), onStartTask: vi.fn() };

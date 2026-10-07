@@ -134,11 +134,6 @@ export const useStudyModeController = ({
   }, []);
 
   useLayoutEffect(() => {
-    if (!isMobileViewport) {
-      setMobileShellHeight(null);
-      return undefined;
-    }
-
     const calculate = () => {
       if (typeof window === 'undefined') return;
       const shell = shellRef.current;
@@ -147,7 +142,7 @@ export const useStudyModeController = ({
 
       const shellTop = shell.getBoundingClientRect().top;
       const actionHeight = actionBar.getBoundingClientRect().height;
-      const nextHeight = Math.max(320, Math.round(window.innerHeight - shellTop - actionHeight - 12));
+      const nextHeight = Math.max(96, Math.min(608, Math.round((window.visualViewport?.height ?? window.innerHeight) + (window.visualViewport?.offsetTop ?? 0) - shellTop - actionHeight - 20)));
       setMobileShellHeight(nextHeight);
     };
 
@@ -155,15 +150,19 @@ export const useStudyModeController = ({
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(calculate) : null;
     if (shellRef.current && observer) observer.observe(shellRef.current);
     if (actionBarRef.current && observer) observer.observe(actionBarRef.current);
+    window.visualViewport?.addEventListener('resize', calculate);
+    window.visualViewport?.addEventListener('scroll', calculate);
     window.addEventListener('resize', calculate);
     window.addEventListener('orientationchange', calculate);
 
     return () => {
       observer?.disconnect();
+      window.visualViewport?.removeEventListener('resize', calculate);
+      window.visualViewport?.removeEventListener('scroll', calculate);
       window.removeEventListener('resize', calculate);
       window.removeEventListener('orientationchange', calculate);
     };
-  }, [isAdvancingCard, isEditing, isFlipped, isMobileViewport, saveError, showHints]);
+  }, [currentIndex, loading, isAdvancingCard, isEditing, isFlipped, isMobileViewport, saveError, showHints]);
 
   useEffect(() => {
     const loadVoices = () => {

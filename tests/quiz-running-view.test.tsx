@@ -399,3 +399,55 @@ describe('QuizRunningView answer-bearing context', () => {
     expect(afterAnswer).toContain('stabilize の語形');
   });
 });
+
+describe('compact vocabulary question and response', () => {
+  const vocabulary: GeneratedWorksheetQuestion = {
+    id: 'vocabulary', mode: 'SPELLING_HINT', interactionType: 'TEXT_INPUT',
+    wordId: 'actually', bookId: 'naru-shisto-original-v1', promptLabel: '日本語の意味',
+    promptText: '実は、実際には（予想と違う事実・訂正）\n実際に、本当に（事実の強調）',
+    answer: 'actually', maskedAnswer: 'ac______', hintPrefix: 'ac',
+  };
+
+  it('keeps the complete meaning and named input while removing repeated pre-answer instructions', () => {
+    const html = renderQuiz({ currentQuestion: vocabulary, isHintMode: true, currentModeLabel: 'スペルチェック',
+      currentWord: { id: 'actually', bookId: vocabulary.bookId, number: 1361, word: 'actually', definition: vocabulary.promptText,
+        aichiExamAppeared: true, definitionSupplemented: true } });
+    expect(html).toContain(vocabulary.promptText);
+    expect(html).toContain('愛知県高校入試 出題済み');
+    expect(html).toContain('訳・例文訳：アプリ補完（辞書を参照）');
+    expect(html).toContain('for="quiz-answer-input"');
+    expect(html).toContain('id="quiz-answer-input"');
+    expect(html).toContain('data-testid="quiz-answer-submit"');
+    expect(html).toContain('判定する');
+    expect(html).toContain('ヒントを見る');
+    expect(html).not.toContain('まずはヒントなしで全文を入力');
+    expect(html).not.toContain('スペルチェック</div>');
+    expect(html).not.toContain(vocabulary.maskedAnswer!);
+    expect(html).toContain('!static');
+    expect(html).toContain('[@media(min-width:640px)_and_(max-height:500px)]:grid-cols-2');
+  });
+
+  it('shows the actual spelling prefix and preserves correction and failed-save recovery', () => {
+    const html = renderQuiz({ currentQuestion: vocabulary, isHintMode: true, showSpellingHint: true,
+      inputResult: 'incorrect', spellingFeedbackTone: 'incorrect', spellingFeedbackMessage: '不正解です。正解は actually です。',
+      saveError: '解答は未保存です。同じ解答を保存してください。', hasPendingAttempt: true });
+    expect(html).toContain(vocabulary.maskedAnswer!);
+    expect(html).toContain('全文または続きで答える');
+    expect(html).toContain('不正解です。正解は actually です。');
+    expect(html).toContain('解答は未保存です。同じ解答を保存してください。');
+    expect(html).toContain('data-testid="quiz-save-retry"');
+    expect(html).toContain('保存と進捗を再確認する');
+    expect(html).toMatch(/data-testid="quiz-answer-submit"[^>]*disabled/);
+  });
+
+  it('keeps every choice including distinct senses in the compact response grid', () => {
+    const choices = ['保つ、保持する', '続ける、継続する', '取っておく、保存する', '約束・規則を守る'];
+    const html = renderQuiz({ currentQuestion: { ...vocabulary, mode: 'EN_TO_JA', interactionType: 'CHOICE',
+      promptText: 'keep', answer: choices[0], options: choices }, isHintMode: false, showOptions: true });
+    expect(html).toContain('data-testid="quiz-choice-options"');
+    expect(html).toContain('grid-cols-2');
+    for (const option of choices) expect(html).toContain(option);
+    expect(html).not.toContain('まず頭の中で答えを思い出して');
+    expect(html).not.toContain('先に自力で思い出してから');
+  });
+});

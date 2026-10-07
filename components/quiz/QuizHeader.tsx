@@ -6,6 +6,7 @@ interface QuizHeaderProps {
   subtitle: string;
   bookLabel?: string;
   onBack: () => void;
+  compact?: boolean;
 }
 
 const QuizHeader: React.FC<QuizHeaderProps> = ({
@@ -13,10 +14,11 @@ const QuizHeader: React.FC<QuizHeaderProps> = ({
   subtitle,
   bookLabel,
   onBack,
+  compact = false,
 }) => (
   <div
-    className="-mx-4 border-b border-slate-200 bg-white/95 px-4 pb-3 sm:mx-0 sm:rounded-[28px] sm:border sm:px-5 sm:pb-4 sm:pt-4"
-    style={{ paddingTop: 'calc(0.85rem + var(--safe-top))' }}
+    className={compact ? 'rounded-2xl border border-slate-200 bg-white px-3 py-2' : '-mx-4 border-b border-slate-200 bg-white/95 px-4 pb-3 sm:mx-0 sm:rounded-[28px] sm:border sm:px-5 sm:pb-4 sm:pt-4'}
+    style={compact ? undefined : { paddingTop: 'calc(0.85rem + var(--safe-top))' }}
   >
     <div className="flex items-start gap-3">
       <button
@@ -29,10 +31,10 @@ const QuizHeader: React.FC<QuizHeaderProps> = ({
         <ArrowLeft className="h-5 w-5" />
       </button>
       <div className="min-w-0">
-        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Quiz Flow</div>
-        {bookLabel && <p data-testid="quiz-book-label" className="mt-1 break-words text-xs font-bold text-medace-800">{bookLabel}</p>}
-        <h1 className="mt-1 text-lg font-black tracking-tight text-slate-950 sm:text-[1.55rem]">{title}</h1>
-        <p className="mt-1 text-sm leading-relaxed text-slate-500">{subtitle}</p>
+        {!compact && <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Quiz Flow</div>}
+        {!compact && bookLabel && <p data-testid="quiz-book-label" className="mt-1 break-words text-xs font-bold text-medace-800">{bookLabel}</p>}
+        <h1 className={compact ? 'text-base font-bold text-slate-950' : 'mt-1 text-lg font-black tracking-tight text-slate-950 sm:text-[1.55rem]'}>{title}</h1>
+        <p className="text-sm leading-snug text-slate-500">{subtitle}</p>
       </div>
     </div>
   </div>

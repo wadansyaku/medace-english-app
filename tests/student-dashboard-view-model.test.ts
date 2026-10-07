@@ -146,7 +146,7 @@ describe('daily goal and session size', () => {
       }),
     });
     expect(viewModel.todayWordGoal).toBe(40);
-    expect(viewModel.heroTitle).toBe(dueCount > 0 ? '単語の復習から始める' : '単語学習から始める');
+    expect(viewModel.heroTitle).toBe('単語学習から始める');
     expect(viewModel.heroCopy).toContain('1回20語まで');
     expect(viewModel.primaryTask?.command).toMatchObject({ type: 'start_learning', task: { limit: 20 } });
   });

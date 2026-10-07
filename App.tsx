@@ -323,7 +323,7 @@ const App: React.FC = () => {
             <p>{logoutError}</p>
             <button type="button" onClick={handleLogout} className="mt-2 min-h-11 rounded-lg border border-red-300 px-3 font-bold">ログアウトを再試行</button>
           </div>}
-          {user && !authLoading && currentView !== 'guestTrial' && currentView !== 'guestLearning' && <>
+          {user && !authLoading && currentView === 'dashboard' && <>
             <GuestLearningImportNotice key={`naru:${user.uid}`} user={user} />
             <GuestTrialImportNotice key={user.uid} user={user} onContinueTrial={() => dispatchNavigation({ type: 'open-guest-trial' })} />
           </>}
