@@ -132,10 +132,15 @@ const StudyMeaning: React.FC<{ text: string }> = ({ text }) => {
     const update = () => {
       const box = region.current;
       if (!box) return;
-      // Conservative full-width glyph budget, including explicit line breaks.
-      const columns = Math.max(1, Math.floor(box.clientWidth / 22));
-      const lines = Math.max(1, Math.floor(box.clientHeight / 32));
-      setCapacity(Math.max(1, columns * Math.max(1, lines - 1)));
+      // Navigation already occupies its own space. Use the actual text lines
+      // and font metrics instead of reserving a second line for its controls.
+      const paragraph = box.firstElementChild;
+      const style = paragraph ? getComputedStyle(paragraph) : null;
+      const fontSize = Number.parseFloat(style?.fontSize || '') || 20;
+      const lineHeight = Number.parseFloat(style?.lineHeight || '') || fontSize * 1.6;
+      const columns = Math.max(1, Math.floor(box.clientWidth / (fontSize * 1.1)));
+      const lines = Math.max(1, Math.floor(box.clientHeight / lineHeight));
+      setCapacity(Math.max(1, columns * lines));
     };
     update();
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
