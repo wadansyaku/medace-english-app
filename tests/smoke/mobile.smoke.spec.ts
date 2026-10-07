@@ -1156,7 +1156,11 @@ test.describe('student mobile ux', () => {
     await openDashboardWriting(studentPage);
     await studentPage.getByTestId(`writing-open-submit-${generatedAssignment.id}`).click();
     await studentPage.getByRole('button', { name: 'ファイル選択へ進む' }).click();
-    await studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput).setInputFiles({
+    // File selection is disabled until the saved draft has been checked.
+    // setInputFiles can dispatch a synthetic change on a disabled control.
+    const feedbackFileInput = studentPage.getByTestId(MOBILE_FLOW_TEST_IDS.writingStudentFileInput);
+    await expect(feedbackFileInput).toBeEnabled();
+    await feedbackFileInput.setInputFiles({
       name: 'mobile-feedback.png',
       mimeType: 'image/png',
       buffer: toUploadBuffer('mobile-feedback-attempt'),

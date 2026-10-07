@@ -25,7 +25,7 @@ describe('focused auth experience', () => {
     expect(html).toContain('登録なしで生徒画面を体験する');
     expect(html).not.toContain('auth-email-input');
     expect(html).not.toContain('auth-edge-panel');
-    expect(html).toMatch(/<details(?=[^>]*data-testid="auth-product-explanation")(?![^>]*open)/);
+    expect(html).not.toContain('auth-product-explanation');
   });
   it('puts accessible login inputs directly after the concise identity guidance', () => {
     const html = form();

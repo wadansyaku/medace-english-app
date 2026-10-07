@@ -7,7 +7,7 @@ import ModalOverlay from '../ModalOverlay';
 import PublicInfoPage from '../PublicInfoPage';
 import PublicRolePage from '../public/PublicRolePage';
 import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../../types';
-import { PUBLIC_BUSINESS_ROLE_CONFIGS, type PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
+import type { PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 export interface AuthExperienceScreenProps {
   currentView: 'login' | 'guestLearning' | 'guestTrial' | 'publicInfo' | 'publicRole';
@@ -216,24 +216,6 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
           <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">思い出す練習と復習の仕組み</summary>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">答えを見る前に意味を思い出し、理解度を選びます。忘れた語は同じ回で再出題し、回答に合わせて次の復習日を調整します。収録済みの例文では使い方も確認できます。</p>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">他のアプリとの学習効果の比較は未検証です。継続率・再テストの正答率・時間を置いた後の定着率を確かめ、改善していきます。</p>
-        </details>
-      </section>
-      <section className="rounded-panel border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="role-entry-heading">
-        <h2 id="role-entry-heading" className="text-base font-black text-steady-ink">講師・教室の方へ</h2>
-        <p className="mt-1 text-sm text-slate-600">登録済みの講師は上のボタンからログインできます。こちらで画面を案内しています。</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {PUBLIC_BUSINESS_ROLE_CONFIGS.map((role) => (
-            <button key={role.key} type="button" data-testid={role.cardActionTestId} onClick={() => onOpenPublicRole(role.key)} disabled={busy}
-              className="flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-bold text-slate-700 hover:border-medace-200 hover:bg-medace-50 disabled:opacity-50"><span className="min-w-0 break-words">{role.title}</span><ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" /></button>
-          ))}
-        </div>
-        <details data-testid="auth-product-explanation" className="mt-4 border-t border-slate-100 pt-3">
-          <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">学習の流れを見る</summary>
-          <ol className="mt-2 list-inside list-decimal space-y-2 text-sm leading-relaxed text-slate-600">
-            <li>登録なしでNaruシストを学ぶ。小テスト・文法・自作単語帳も使える</li>
-            <li>記録を残したいときに登録し、Naruの単語回答を自分のアカウントへ保存する</li>
-            <li>教材ホームで学習や復習を選ぶ。レベル診断は後からでも受けられる</li>
-          </ol>
         </details>
       </section>
     </div>

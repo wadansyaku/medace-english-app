@@ -2,9 +2,11 @@ import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-import AuthExperienceScreen, { AuthForm } from '../components/auth/AuthExperienceScreen';
+import AuthExperienceScreen, { AuthForm, type AuthExperienceScreenProps } from '../components/auth/AuthExperienceScreen';
 import { getManagedRobotsContent } from '../components/Layout';
 import PublicInfoPage from '../components/PublicInfoPage';
+import PublicRolePage from '../components/public/PublicRolePage';
+import { getHomeViewForUser, getWorkspaceRoleLabel } from '../config/access';
 import {
   PUBLIC_BUSINESS_ROLE_CONFIGS,
   getPublicBusinessRoleConfig,
@@ -13,17 +15,18 @@ import {
 } from '../shared/publicBusinessRoles';
 import { resolveRuntimeFlags } from '../shared/runtimeFlags';
 import { createEphemeralDemoUser } from '../services/storage/mockData';
-import { UserRole } from '../types';
+import { OrganizationRole, ORGANIZATION_ROLE_LABELS, SubscriptionPlan, UserRole } from '../types';
 
 const noop = () => {};
 
 const buildAuthScreen = ({
   showPasswordRecovery = false,
   passwordRecoveryMessage = null,
+  ...overrides
 }: {
   showPasswordRecovery?: boolean;
   passwordRecoveryMessage?: string | null;
-} = {}) => {
+} & Partial<AuthExperienceScreenProps> = {}) => {
   // The recovery form now lives in a portal; its content contract is checked directly.
   const Surface = showPasswordRecovery ? AuthForm : AuthExperienceScreen;
   return renderToStaticMarkup(
@@ -44,6 +47,8 @@ const buildAuthScreen = ({
     motivationLoading={false}
     motivationError={null}
     onChangeAuthMode={noop}
+    onOpenAuth={noop}
+    onCloseAuth={noop}
     onDisplayNameChange={noop}
     onEmailChange={noop}
     onPasswordChange={noop}
@@ -57,6 +62,8 @@ const buildAuthScreen = ({
     onClosePublicInfo={noop}
     onOpenPublicRole={noop}
     onClosePublicRole={noop}
+    authSubmitting={false}
+    {...overrides}
   />,
   );
 };
@@ -105,13 +112,14 @@ describe('public business role entrypoints', () => {
     expect(demoStudent.englishLevel).toBeTruthy();
   });
 
-  it('renders role-specific direct entrypoints without consultation forms', () => {
+  it('keeps role cards on the separate public guide and out of the entire student entry', () => {
     const authMarkup = buildAuthScreen();
     const publicMarkup = buildPublicInfoPage();
 
     for (const role of PUBLIC_BUSINESS_ROLE_CONFIGS) {
-      expect(authMarkup).toContain(role.cardActionTestId);
-      expect(authMarkup).toContain(role.title);
+      expect(authMarkup).not.toContain(role.cardActionTestId);
+      expect(authMarkup).not.toContain(role.cardTestId);
+      expect(authMarkup).not.toContain(role.title);
       expect(publicMarkup).toContain(role.cardTestId);
       expect(publicMarkup).toContain(role.cardActionTestId);
     }
@@ -119,6 +127,54 @@ describe('public business role entrypoints', () => {
     expect(publicMarkup).not.toContain('学校・教室向け導入を相談する');
     expect(publicMarkup).not.toContain('Public Guide');
     expect(publicMarkup).not.toContain('相談フォーム');
+    expect(authMarkup).not.toContain('role-entry-heading');
+    expect(authMarkup).not.toContain('business-role-preview-section');
+    expect(publicMarkup).toContain('生徒の登録・ログインは共通です');
+    expect(publicMarkup).toContain('アカウントに付与された権限に応じた画面');
+  });
+
+  it.each(['LOGIN', 'SIGNUP'] as const)('keeps the %s form free of role choices', (authMode) => {
+    const markup = renderToStaticMarkup(<AuthForm
+      currentView="login" publicRole={null} authMode={authMode} authSubmitting={false}
+      displayName="" email="" password="" confirmPassword="" authError={null}
+      showPasswordRecovery={false} passwordRecoveryLoading={false} passwordRecoveryMessage={null}
+      showAlternateAccess={true} motivationSnapshot={null} motivationLoading={false} motivationError={null}
+      onChangeAuthMode={noop} onOpenAuth={noop} onCloseAuth={noop} onDisplayNameChange={noop}
+      onEmailChange={noop} onPasswordChange={noop} onConfirmPasswordChange={noop} onSubmitEmailAuth={noop}
+      onOpenPasswordRecovery={noop} onClosePasswordRecovery={noop} onRequestPasswordRecovery={noop}
+      onDemoLogin={noop} onToggleAlternateAccess={noop} onClosePublicInfo={noop} onOpenPublicRole={noop}
+      onClosePublicRole={noop}
+    />);
+    expect(markup).not.toContain('<select');
+    for (const role of PUBLIC_BUSINESS_ROLE_CONFIGS) expect(markup).not.toContain(role.cardActionTestId);
+    expect(markup).not.toContain('demo-login-admin');
+    if (authMode === 'SIGNUP') expect(markup).toContain('生徒用アカウントを作ります');
+  });
+
+  it.each(PUBLIC_BUSINESS_ROLE_CONFIGS)('preserves the separate $key page and real account login', (role) => {
+    const markup = renderToStaticMarkup(<PublicRolePage roleKey={role.key} onBack={noop} onLogin={noop} onDemoLogin={noop} />);
+    expect(markup).toContain(role.pageTestId);
+    expect(markup).toContain(role.title);
+    expect(markup).toContain('data-testid="public-role-login"');
+    expect(markup).toContain('登録済みのアカウントでログイン');
+  });
+
+  it('uses one student home for personal and affiliated accounts while keeping membership and plan', () => {
+    const personal = createEphemeralDemoUser(UserRole.STUDENT);
+    const affiliated = createEphemeralDemoUser(UserRole.STUDENT, OrganizationRole.STUDENT);
+    const before = { ...affiliated };
+    expect(getHomeViewForUser(personal)).toBe('dashboard');
+    expect(getHomeViewForUser(affiliated)).toBe('dashboard');
+    expect(getWorkspaceRoleLabel(personal)).toBe('個人学習');
+    expect(getWorkspaceRoleLabel(affiliated)).toBe('所属生徒');
+    expect(getWorkspaceRoleLabel({ ...affiliated, organizationRole: undefined })).toBe('所属生徒');
+    expect(getPublicBusinessRoleConfig('student').title).toBe(ORGANIZATION_ROLE_LABELS[OrganizationRole.STUDENT]);
+    expect(getPublicBusinessRoleConfig('student').demoRole).toBe(UserRole.STUDENT);
+    expect(affiliated.role).toBe(UserRole.STUDENT);
+    expect(affiliated.subscriptionPlan).toBe(SubscriptionPlan.TOB_PAID);
+    expect(affiliated.organizationRole).toBe(OrganizationRole.STUDENT);
+    expect(affiliated.organizationId).toBeTruthy();
+    expect(affiliated).toEqual(before);
   });
 
   it('treats service admin demo separately from the other public business demos', () => {

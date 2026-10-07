@@ -14,7 +14,7 @@ export enum OrganizationRole {
 export const ORGANIZATION_ROLE_LABELS: Record<OrganizationRole, string> = {
   [OrganizationRole.GROUP_ADMIN]: 'グループ管理者',
   [OrganizationRole.INSTRUCTOR]: 'グループ講師',
-  [OrganizationRole.STUDENT]: 'グループ生徒',
+  [OrganizationRole.STUDENT]: '所属生徒',
 };
 
 export enum CommercialWorkspaceRole {

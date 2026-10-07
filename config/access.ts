@@ -32,7 +32,7 @@ export const getWorkspaceRoleLabel = (user: UserProfile | null | undefined): str
   if (!user) return 'ゲスト';
   if (isServiceAdmin(user)) return 'サービス管理者';
   if (user.organizationRole) return ORGANIZATION_ROLE_LABELS[user.organizationRole];
-  if (isBusinessStudent(user)) return 'グループ生徒';
+  if (isBusinessStudent(user)) return ORGANIZATION_ROLE_LABELS[OrganizationRole.STUDENT];
   if (user.role === UserRole.INSTRUCTOR) return '講師';
   return '個人学習';
 };
