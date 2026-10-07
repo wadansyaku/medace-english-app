@@ -732,6 +732,152 @@ const main = async () => {
     assert(instructorUser.organizationRole === 'INSTRUCTOR', 'provisioned instructor should receive instructor organization role');
     assert(instructorUser.organizationId === groupAdminUser.organizationId, 'provisioned instructor should join the group admin organization');
 
+    console.log('Verifying student entry provisioning preserves identity, history and authorization...');
+    const entryStudent = new SessionClient(baseUrl, 'role-entry-student');
+    const entryEmail = 'role-entry-student@example.test';
+    const entryPassword = 'role-entry-integration-pass';
+    const entryUser = await entryStudent.emailAuth({
+      email: entryEmail, password: entryPassword, isSignUp: true,
+      displayName: 'Synthetic Role Entry Student',
+    });
+    assert(entryUser.role === 'STUDENT' && !entryUser.organizationId,
+      'ordinary signup must create a personal student without organization privileges');
+    const entryOldCookie = entryStudent.cookie;
+    const entryAttempt = {
+      word: { id: starterWord.id, bookId: starterHintBook.id },
+      rating: 3, responseTimeMs: 1200, clientAttemptId: 'api-role-entry-before-provision',
+    };
+    await entryStudent.storage('saveSRSHistory', entryAttempt);
+    const readEntryLearning = () => queryLocalSql(persistDir, `
+      SELECT 'history' AS snapshot_table, * FROM learning_histories
+       WHERE user_id = '${entryUser.uid}' ORDER BY word_id;
+      SELECT 'study_receipt' AS snapshot_table, * FROM study_attempt_receipts
+       WHERE user_id = '${entryUser.uid}' ORDER BY client_attempt_id;
+      SELECT 'quiz_receipt' AS snapshot_table, * FROM quiz_attempt_receipts
+       WHERE user_id = '${entryUser.uid}' ORDER BY client_attempt_id;
+      SELECT 'interaction' AS snapshot_table, * FROM learning_interaction_events
+       WHERE user_id = '${entryUser.uid}' ORDER BY id;
+    `);
+    const entryLearningBefore = await readEntryLearning();
+    assert(entryLearningBefore.filter((row) => row.snapshot_table === 'history').length === 1
+      && entryLearningBefore.filter((row) => row.snapshot_table === 'history')[0].attempt_count === 1
+      && entryLearningBefore.filter((row) => row.snapshot_table === 'study_receipt').length === 1
+      && entryLearningBefore.filter((row) => row.snapshot_table === 'interaction').length === 1,
+    'role entry fixture must have one real saved SRS answer, receipt and interaction before provisioning');
+    const entryRequest = await entryStudent.storage('submitCommercialRequest', {
+      kind: 'BUSINESS_ROLE_CONVERSION', contactName: entryUser.displayName,
+      contactEmail: entryEmail, organizationName: groupAdminUser.organizationName,
+      requestedWorkspaceRole: 'STUDENT', message: 'Synthetic affiliated student acceptance',
+      source: 'API_ROLE_ENTRY_ACCEPTANCE',
+    });
+    const entryProvision = {
+      id: entryRequest.id, status: 'PROVISIONED', linkedUserUid: entryUser.uid,
+      targetSubscriptionPlan: 'TOB_PAID', targetOrganizationId: groupAdminUser.organizationId,
+      targetOrganizationName: groupAdminUser.organizationName, targetOrganizationRole: 'STUDENT',
+      resolutionNote: 'Synthetic student affiliation; preserve saved work',
+    };
+    const protectedEntryUserIds = [entryUser.uid, instructorUser.uid, groupAdminUser.uid];
+    const protectedEntryUserSql = protectedEntryUserIds.map((uid) => `'${uid}'`).join(',');
+    const readEntryAuthorization = () => queryLocalSql(persistDir, `
+      SELECT 'user' AS snapshot_table, id, role, subscription_plan,
+             organization_id, organization_name, organization_role
+        FROM users WHERE id IN (${protectedEntryUserSql}) ORDER BY id;
+      SELECT 'membership' AS snapshot_table, user_id, organization_id, role, status, created_at
+        FROM organization_memberships
+        WHERE user_id IN (${protectedEntryUserSql}) ORDER BY user_id, organization_id;
+      SELECT 'request' AS snapshot_table, * FROM commercial_requests
+        WHERE id = ${entryRequest.id} ORDER BY id;
+      SELECT 'audit' AS snapshot_table, * FROM organization_audit_logs
+        WHERE target_id IN (${protectedEntryUserSql}) ORDER BY id;
+    `);
+    const entryAuthorizationBeforeRejections = await readEntryAuthorization();
+    for (const [client, caller] of [
+      [entryStudent, entryUser], [instructor, instructorUser], [groupAdmin, groupAdminUser],
+    ]) {
+      const rejected = await client.storageRaw('updateCommercialRequest', {
+        ...entryProvision, linkedUserUid: caller.uid, targetOrganizationRole: 'GROUP_ADMIN',
+      });
+      assert(rejected.status === 403,
+        `non-admin ${client.name} must not provision their own organization role`);
+    }
+    assert(JSON.stringify(await readEntryAuthorization()) === JSON.stringify(entryAuthorizationBeforeRejections),
+      'rejected student/instructor/group-admin promotion must not change users, memberships, request or audit');
+    assert(JSON.stringify(await readEntryLearning()) === JSON.stringify(entryLearningBefore),
+      'rejected self-promotion must preserve all saved history, receipts and interactions');
+    const entryProvisionedRequest = await admin.storage('updateCommercialRequest', entryProvision);
+    assert(entryProvisionedRequest.status === 'PROVISIONED'
+      && entryProvisionedRequest.linkedUserUid === entryUser.uid,
+    'admin must provision the existing student identity rather than create a replacement account');
+    const assertEntrySession = (session) => {
+      assert(session.uid === entryUser.uid && session.role === 'STUDENT'
+        && session.organizationId === groupAdminUser.organizationId
+        && session.organizationRole === 'STUDENT' && session.subscriptionPlan === 'TOB_PAID',
+      'affiliated student must keep the same uid and student role with canonical organization and plan');
+    };
+    assertEntrySession(await entryStudent.get('/api/session'));
+    assert(entryStudent.cookie === entryOldCookie,
+      'admin affiliation must preserve the student existing authenticated session');
+    assert(JSON.stringify(await readEntryLearning()) === JSON.stringify(entryLearningBefore),
+      'admin affiliation must preserve every history, receipt and interaction field');
+    const entryGrantRows = await queryLocalSql(persistDir, `
+      SELECT 'membership' AS snapshot_table, * FROM organization_memberships
+       WHERE user_id = '${entryUser.uid}' AND status = 'ACTIVE';
+      SELECT 'audit' AS snapshot_table, * FROM organization_audit_logs
+       WHERE target_id = '${entryUser.uid}' AND action_type = 'COMMERCIAL_PROVISIONED' ORDER BY id;
+    `);
+    const entryMemberships = entryGrantRows.filter((row) => row.snapshot_table === 'membership');
+    const entryGrantAudits = entryGrantRows.filter((row) => row.snapshot_table === 'audit');
+    assert(entryMemberships.length === 1 && entryMemberships[0].organization_id === groupAdminUser.organizationId
+      && entryMemberships[0].role === 'STUDENT',
+    'affiliation must create exactly one active student membership for the intended organization');
+    assert(entryGrantAudits.length === 1 && entryGrantAudits[0].actor_user_id === adminUser.uid
+      && entryGrantAudits[0].organization_id === groupAdminUser.organizationId
+      && entryGrantAudits[0].target_type === 'USER',
+    'affiliation must append one audit identifying the actual admin, target and organization');
+    const entryAuditPayload = JSON.parse(entryGrantAudits[0].payload_json);
+    assert(entryAuditPayload.organizationRole === 'STUDENT' && entryAuditPayload.subscriptionPlan === 'TOB_PAID',
+      'affiliation audit must retain the exact granted organization role and plan');
+    const entryAuthorizationBeforeInjection = await readEntryAuthorization();
+    const injectedEntryProfile = await entryStudent.post('/api/profile', { user: {
+      uid: entryUser.uid, role: 'ADMIN', subscriptionPlan: 'TOC_PAID',
+      organizationId: 'forged-other-organization', organizationName: 'Forged Organization',
+      organizationRole: 'GROUP_ADMIN',
+    } });
+    assertEntrySession(injectedEntryProfile);
+    assertEntrySession(await entryStudent.get('/api/session'));
+    assert(JSON.stringify(await readEntryAuthorization()) === JSON.stringify(entryAuthorizationBeforeInjection),
+      'profile role, plan and organization injection must not change canonical permissions, membership, request or audit');
+    const entryRelogin = new SessionClient(baseUrl, 'role-entry-real-relogin');
+    assertEntrySession(await entryRelogin.emailAuth({
+      email: entryEmail, password: entryPassword, isSignUp: false, role: 'ADMIN',
+    }));
+    assertEntrySession(await entryRelogin.get('/api/session'));
+    assertEntrySession(await entryStudent.get('/api/session'));
+    const entryReadableWords = await entryRelogin.storage('getWordsByBook', { bookId: starterHintBook.id });
+    assert(entryReadableWords.some((word) => word.id === starterWord.id && word.word === starterWord.word
+      && word.definition === starterWord.definition),
+    'the real affiliated student must retain access to the existing approved source word after login');
+    await entryRelogin.storage('saveSRSHistory', entryAttempt);
+    assert(JSON.stringify(await readEntryLearning()) === JSON.stringify(entryLearningBefore),
+      'old-session reads, real login and the same receipt retry after affiliation must preserve all learning rows');
+    const entryRejectedSignupEmails = [];
+    for (const requestedRole of ['ADMIN', 'INSTRUCTOR']) {
+      const email = `role-entry-rejected-${requestedRole.toLowerCase()}@example.test`;
+      entryRejectedSignupEmails.push(email);
+      const refusedSignup = await publicClient.request('/api/auth', {
+        method: 'POST', body: JSON.stringify({
+          action: 'email-auth', email, password: entryPassword, isSignUp: true,
+          role: requestedRole, displayName: 'Synthetic Forbidden Role Signup',
+        }),
+      });
+      assert(refusedSignup.status === 403, `signup must refuse requested ${requestedRole} role`);
+    }
+    const entryRejectedSignupRows = await queryLocalSql(persistDir, `
+      SELECT COUNT(*) AS n FROM users
+       WHERE email IN (${entryRejectedSignupEmails.map((email) => `'${email}'`).join(',')})
+    `);
+    assert(entryRejectedSignupRows[0].n === 0,
+      'rejected admin/instructor signup must not create any account');
     await runAnalyticsSnapshot(admin, internalJobSecret);
     const analyticsBefore = await admin.storage('getAdminDashboardSnapshot');
     assert(analyticsBefore.productKpis.updatedAt > 0, 'analytics snapshot should set updatedAt on admin KPI snapshot');
