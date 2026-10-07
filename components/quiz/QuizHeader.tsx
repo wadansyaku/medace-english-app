@@ -17,7 +17,7 @@ const QuizHeader: React.FC<QuizHeaderProps> = ({
   compact = false,
 }) => (
   <div
-    className={compact ? 'rounded-2xl border border-slate-200 bg-white px-3 py-2' : '-mx-4 border-b border-slate-200 bg-white/95 px-4 pb-3 sm:mx-0 sm:rounded-[28px] sm:border sm:px-5 sm:pb-4 sm:pt-4'}
+    className={compact ? 'rounded-2xl border border-slate-200 bg-white px-3 py-2' : 'min-w-0 border-b border-slate-200 bg-white/95 px-4 pb-3 sm:mx-0 sm:rounded-[28px] sm:border sm:px-5 sm:pb-4 sm:pt-4'}
     style={compact ? undefined : { paddingTop: 'calc(0.85rem + var(--safe-top))' }}
   >
     <div className="flex items-start gap-3">

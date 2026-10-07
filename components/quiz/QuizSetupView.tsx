@@ -311,7 +311,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
         </div>
       </details>
 
-      <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
+      <MobileStickyActionBar className="min-w-0 px-0">
         <button
           type="button"
           data-testid="quiz-setup-primary-cta"

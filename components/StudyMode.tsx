@@ -1,9 +1,7 @@
 import WordExamBadge from './WordExamBadge';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle,
   ArrowLeft,
-  Clock,
   Edit2,
   Flag,
   Image as ImageIcon,
@@ -12,7 +10,6 @@ import {
   Save,
   Volume2,
   X,
-  Zap,
 } from 'lucide-react';
 
 import {
@@ -43,21 +40,11 @@ interface StudyModeProps {
   backLabel?: string;
 }
 
-function HelpCircleIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"></circle>
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-      <path d="M12 17h.01"></path>
-    </svg>
-  );
-}
-
 const RATING_OPTIONS = [
-  { id: 0, label: 'もう一回', className: 'border-red-100 bg-red-50 text-red-700 hover:bg-red-100', icon: <AlertCircle className="h-5 w-5" /> },
-  { id: 1, label: 'あとで復習', className: 'border-amber-100 bg-amber-50 text-amber-800 hover:bg-amber-100', icon: <HelpCircleIcon /> },
-  { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100', icon: <Clock className="h-5 w-5" /> },
-  { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-700 hover:bg-green-100', icon: <Zap className="h-5 w-5" /> },
+  { id: 0, label: 'もう一回', className: 'border-red-100 bg-red-50 text-red-700 hover:bg-red-100' },
+  { id: 1, label: 'あとで復習', className: 'border-amber-100 bg-amber-50 text-amber-800 hover:bg-amber-100' },
+  { id: 2, label: 'だいたいOK', className: 'border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100' },
+  { id: 3, label: 'すぐ分かる', className: 'border-green-100 bg-green-50 text-green-700 hover:bg-green-100' },
 ];
 
 const getHiddenHintReviewState = (
@@ -134,8 +121,9 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
     taskIntent,
     onSessionComplete,
   });
-  const [showDetails, setShowDetails] = useState(false);
-  useEffect(() => setShowDetails(false), [controller.currentWord?.id, controller.currentIndex]);
+  const [detailsForWord, setDetailsForWord] = useState<string | null>(null);
+  const currentWordKey = `${controller.currentIndex}:${controller.currentWord?.id}`;
+  useEffect(() => setDetailsForWord(null), [currentWordKey]);
   const startedRef = useRef(false);
   const finishedRef = useRef(false);
 
@@ -245,6 +233,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
   }
 
   const hasCoreExample = Boolean(controller.currentWord.exampleSentence?.trim()) && !hiddenExampleReviewState;
+  const hasSourceDetails = Boolean(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null)));
+  const hasDetails = hasCoreExample || Boolean(hiddenExampleReviewState) || hasSourceDetails || Boolean(controller.currentWord.exampleImageUrl);
 
   const frontFace = (
     <section
@@ -339,7 +329,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           )}
         </div>
 
-            {!controller.isEditing && <button type="button" className="study-details-button" onClick={event => { event.stopPropagation(); setShowDetails(true); }}>例文・補足</button>}
+            {!controller.isEditing && hasDetails && <button type="button" data-testid="study-details-open" className="study-details-button" disabled={controller.isAdvancingCard} onClick={event => { event.stopPropagation(); setDetailsForWord(currentWordKey); }}>例文・補足</button>}
 
         </div>
       </div>
@@ -361,8 +351,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
         onCloseNotice={() => controller.setReportNotice(null)}
       />
 
-      {showDetails && <ModalOverlay ariaLabel="例文・補足" mobileBehavior="sheet" panelClassName="study-details-panel w-full max-w-xl rounded-2xl bg-white p-4" onClose={() => setShowDetails(false)}>
-        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{controller.currentWord.word}・例文と補足</h2><button type="button" className="study-details-button" onClick={() => setShowDetails(false)}>閉じる</button></div>
+      {detailsForWord === currentWordKey && controller.isFlipped && !controller.isAdvancingCard && <ModalOverlay ariaLabel="例文・補足" mobileBehavior="sheet" panelClassName="study-details-panel w-full max-w-xl rounded-2xl bg-white p-4" onClose={() => setDetailsForWord(null)}>
+        <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{controller.currentWord.word}・例文と補足</h2><button type="button" className="study-details-button" onClick={() => setDetailsForWord(null)}>閉じる</button></div>
             {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
               <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
               <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
@@ -371,14 +361,14 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
                 : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}
             </section>}
             {hiddenExampleReviewState && <p role="status" className="mb-3 text-sm text-slate-600">{hiddenExampleReviewState.title}。{hiddenExampleReviewState.description}</p>}
-            {(controller.currentWord.inflections || controller.currentWord.sourceNote || (controller.currentWord.bookId !== NARU_BOOK_ID && (controller.currentWord.sourceSheet || controller.currentWord.sourceEntryId != null))) && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
+            {hasSourceDetails && <details className="mb-2 rounded-lg border border-slate-200 bg-white px-3" onClick={event => event.stopPropagation()}>
               <summary className="min-h-11 cursor-pointer py-3 text-sm font-bold text-slate-600">{controller.currentWord.bookId === NARU_BOOK_ID ? '補足' : '補足・出典'}</summary>
               <WordSourceDetails word={controller.currentWord} />
             </details>}
 
             {controller.currentWord.exampleImageUrl && (
               <div className="rounded-2xl border border-slate-200 bg-white p-3" onClick={event => event.stopPropagation()}>
-                <button type="button" aria-haspopup="dialog" aria-expanded={controller.showHints} onClick={() => { setShowDetails(false); controller.setShowHints(!controller.showHints); }} className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-slate-600">
+                <button type="button" aria-haspopup="dialog" aria-expanded={controller.showHints} onClick={() => { setDetailsForWord(null); controller.setShowHints(!controller.showHints); }} className="flex min-h-11 w-full items-center justify-between gap-2 text-sm font-bold text-slate-600">
                   <span className="flex items-center gap-2"><ImageIcon className="h-4 w-4" />保存済みの画像ヒント</span>
                   <span>{controller.showHints ? '閉じる' : '表示'}</span>
                 </button>
@@ -389,6 +379,7 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
 
       {controller.showHints && controller.currentWord.exampleImageUrl && <ModalOverlay
         ariaLabel="保存済みの画像ヒント"
+        returnFocusSelector="[data-testid='study-details-open']"
         mobileBehavior="sheet"
         panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6"
         onClose={() => controller.setShowHints(false)}
@@ -468,10 +459,10 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
                 className={`study-rating-button flex min-h-11 items-center justify-center gap-1 rounded-xl border px-2 py-2 text-base font-bold transition-transform active:scale-95 ${option.className}`}
               >
                 <span>{option.label}</span>
-
+                {controller.isAdvancingCard && controller.selectedRating === option.id && <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
               </button>
             ))}
-            <p role="status" className="study-save-status text-center text-base text-slate-600">{controller.isAdvancingCard ? `「${RATING_OPTIONS.find(option => option.id === controller.selectedRating)?.label || '回答'}」を保存中…` : ''}</p>
+            <p role="status" className="study-save-status sr-only">{controller.isAdvancingCard ? `「${RATING_OPTIONS.find(option => option.id === controller.selectedRating)?.label || '回答'}」を保存中…` : ''}</p>
           </div>
         ) : (
           <div ref={controller.actionBarRef} className="flex justify-center">

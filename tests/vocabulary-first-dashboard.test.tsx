@@ -68,6 +68,13 @@ describe('vocabulary-first recommendation and rendered primary action',()=>{
   const v=view();const noop=()=>{};
   const markup=renderToStaticMarkup(<DashboardHeroSection grade={UserGrade.JHS3} heroTitle={v.heroTitle} heroCopy={v.heroCopy} heroMetrics={v.heroMetrics} preferenceSummary={v.preferenceSummary} hasStudyBooks={v.hasStudyBooks} questButtonLabel={v.questButtonLabel} learningPlan={null} generatingPlan={false} remainingWords={v.remainingWords} dueCount={v.dueCount} estimatedMinutes={v.estimatedMinutes} todayCount={v.todayCount} todayWordGoal={v.todayWordGoal} todayProgressPercent={v.todayProgressPercent} primaryLearningRouteId={v.primaryLearningRouteId} practiceRecommendation={v.practiceRecommendation} onOpenSettings={noop} onStartQuest={noop} onSelectPracticeLane={noop} onOpenPlan={noop} onGeneratePlan={noop}/>);
   expect(markup).toMatch(/student-hero-primary-cta[^]*?単語学習を始める/);expect(markup).toContain('dashboard-practice-lane-grammar');expect(markup).toContain('dashboard-practice-lane-translation');expect(markup).toContain('ほかの練習');
+  expect(markup.indexOf('student-hero-primary-cta')).toBeLessThan(markup.indexOf('dashboard-command-metrics'));
+  expect(markup).toContain('grid-cols-[minmax(0,1fr)_auto]');
+  expect(markup).toContain('max-height:500px');
+  expect(markup).toMatch(/student-hero-primary-cta[^>]*min-h-11[^>]*text-base/);
+  expect(markup).toContain(v.heroCopy);
+  expect(markup).toContain('今日の学習目標');
+  expect(markup).toContain('学習の設定を開く');
  });
  it('keeps server suggested missions on default Naru but honors an explicit selected book',()=>{
   const input={user:{id:user.uid,grade:UserGrade.JHS3,english_level:EnglishLevel.B1},books:[{id:'other',title:'Other',word_count:120,is_priority:1},{id:NARU_BOOK_ID,title:'Naruシスト',word_count:1531}],now:1};
