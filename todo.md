@@ -1,3 +1,12 @@
+2026-10-08追加: [A8 初回自動発音](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)
+
+- [x] 計画正本v2へ要件と受入を追加（Libraryは親担当、repoは本候補）。
+- [x] 共通音声管理・手動/音声オンオフ・対象カード/語彙設問へ接続。
+- [x] PC/mobile幅の実UI、表示ごとの1回・解答漏洩なし・取消/拒否/非対応・全回帰・独立review。2101unit、Cloud231＋IDB9（preview専用2skip）。
+- [x] 公開依頼用の候補と証拠を独立branch/deliveryへ保全。今回の依頼は実装まで。実iOS/Safari・物理スピーカーの聴感は未検証。
+
+前のUI改善はPR61/main `0736ae7` で本番受入済み。以下の過去候補の未公開記述は作成時点の履歴である。
+
 2026-10-07公開済み: [Naruの愛知県高校入試出題済み表示と欠訳補完](./docs/analysis/2026-10-07-naru-aichi-exam-annotations.md)。原本座標・語義/POSと黄色を照合した637語と別台帳のactually補完1語、1531語/638印をPR59/main `182ba3d3fd4a088e46c49acbace172588132fbc1` で本番反映し、原本436項目と公開API/実画面を照合済み。淡い修正色・同形語の全語義への展開は除外し、承認ゲート・履歴を保持。後続の[公開後レビュー修正](./docs/analysis/2026-10-07-naru-postrelease-review.md)は独立して検証・配備状態を記録する。
 
 # 実装・運用バックログ

@@ -30,7 +30,7 @@ test('guest six basic exercises stay local without AI or submission requests', a
   for (const mode of ['意味クイズ', 'スペル', '文法', '和訳', '読解', '英作文']) {
     await modes.getByRole('button', { name: mode, exact: true }).click();
     if (mode === '意味クイズ' || mode === '文法') {
-      await page.getByTestId('guest-practice-question').locator('button[type="button"]').first().click();
+      await page.getByTestId('guest-practice-question').getByTestId('guest-practice-choice').first().click();
       await page.getByRole('button', { name: '答えを確認する', exact: true }).click();
       await expect(page.getByTestId('guest-practice-feedback')).toBeVisible();
     } else if (mode === 'スペル') {

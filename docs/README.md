@@ -1,3 +1,5 @@
+2026-10-08 現行: PR61/main `0736ae7` のUI改善は本番受入済み。[A8 初回自動発音の候補](./analysis/2026-10-08-first-visible-word-pronunciation.md)は2101unit・Cloud231＋IDB9全回帰と独立reviewを完了。本番未反映。候補実装と公開を分け、公開依頼の都度その指示を確認する。
+
 # Documentation Index
 
 This directory keeps operational docs and historical design notes for Steady Study.

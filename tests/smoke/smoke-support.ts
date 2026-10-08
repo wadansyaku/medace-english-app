@@ -809,7 +809,7 @@ export const answerSeededQuizQuestion = async (page: Page, correct = true) => {
     return;
   }
 
-  const optionLabels = await runningView.locator('button').allTextContents();
+  const optionLabels = await runningView.getByTestId('quiz-choice-options').locator('button').allTextContents();
   const wrongAnswer = optionLabels
     .map((label) => label.trim())
     .find((label) => label && label !== correctAnswer);
@@ -818,7 +818,7 @@ export const answerSeededQuizQuestion = async (page: Page, correct = true) => {
     throw new Error('Could not find a wrong quiz answer option.');
   }
 
-  await page.getByRole('button', { name: wrongAnswer }).click();
+  await runningView.getByTestId('quiz-choice-options').getByRole('button', { name: wrongAnswer, exact: true }).click();
 };
 
 export const findUnexpectedHorizontalOverflow = async (page: Page) => page.evaluate(() => {

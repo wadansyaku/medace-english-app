@@ -9,6 +9,8 @@ import { STUDY_RATING_FEEDBACK_MIN_MS } from '../../shared/studyPresentation';
 import { getGuestLearningCatalog } from '../../services/guestLearning';
 import { createGuestLearningAttemptId, guestLearningProgressStore } from '../../services/guestLearningProgress';
 import { useGuestLearningProgress } from '../../hooks/useGuestLearningProgress';
+import { useWordPronunciation } from '../../hooks/useWordPronunciation';
+import WordPronunciationControls, { PronunciationMuteButton } from '../study/WordPronunciationControls';
 import type { GuestLocalBook } from '../../shared/guestLocalBooks';
 
 const GuestPractice = lazy(() => import('./GuestPractice'));
@@ -44,6 +46,7 @@ const GuestLearningScreen: React.FC<{
   const [page, setPage] = useState(0);
   const [localBook, setLocalBook] = useState<GuestLocalBook | null>(null);
   const [queue, setQueue] = useState<WordData[]>([]);
+  const [studyRound, setStudyRound] = useState(0);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [translation, setTranslation] = useState(false);
@@ -59,6 +62,7 @@ const GuestLearningScreen: React.FC<{
   const pendingAnswer = useRef<{ key: string; rating: number; attemptId: string; responseTimeMs: number; clickedAt: number } | null>(null);
   const heading = useRef<HTMLHeadingElement | null>(null);
   const frontHeading = useRef<HTMLHeadingElement | null>(null);
+  const backWord = useRef<HTMLElement | null>(null);
   const meaningHeading = useRef<HTMLHeadingElement | null>(null);
   const resultHeading = useRef<HTMLHeadingElement | null>(null);
   const request = useRef(0);
@@ -134,12 +138,20 @@ const GuestLearningScreen: React.FC<{
       if (!words.length) { setMessage('この範囲の新しい語は練習済みです。「もう一度学ぶ」か、別の範囲を選べます。'); return; }
       if (!localBook && !device.progress?.boundUserId) device.changed(await guestLearningProgressStore.start(catalogTimeOffsetMs.current));
       if (seq !== generation.current) return;
+      setStudyRound(value => value + 1);
       setQueue(words); setIndex(0); setFlipped(false); setTranslation(false); setSelectedRating(null); setSaveError(false); pendingAnswer.current = null; setSessionRatings([]); begunAt.current = Date.now();
       lock.current = false; go('study');
     } catch { setMessage('学習を開始できませんでした。もう一度お試しください。'); }
     finally { lock.current = false; setBusy(false); }
   };
   const current = queue[index];
+  const pronunciation = useWordPronunciation({
+    presentationKey: current ? `guest-study:${studyRound}:${index}:${current.bookId}:${current.id}` : null,
+    text: current?.word,
+    visible: view === 'study' && Boolean(current) && !flipped,
+    rate: 1,
+    targetRef: flipped ? backWord : frontHeading,
+  });
   const rate = async (rating: number) => {
     if (!current || !flipped || lock.current) return;
     const key = `${index}:${current.id}`;
@@ -162,12 +174,6 @@ const GuestLearningScreen: React.FC<{
       pendingAnswer.current = null; setFlipped(false); setTranslation(false); setSelectedRating(null); setIndex(i => i + 1); begunAt.current = Date.now();
     } catch { if (seq === generation.current) { setSaveError(true); setMessage('端末への記録を確認できませんでした。同じ回答でもう一度保存できます。'); } }
     finally { if (seq === generation.current) { lock.current = false; setBusy(false); } }
-  };
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) { setMessage('このブラウザーでは読み上げを利用できません。'); return; }
-    window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(text); utterance.lang = 'en-US';
-    utterance.onerror = () => setMessage('読み上げを開始できませんでした。もう一度お試しください。');
-    window.speechSynthesis.speak(utterance);
   };
   const backHome = () => { if (!busy) { setQueue([]); go('home'); } };
   const isNaru = !localBook;
@@ -198,13 +204,22 @@ const GuestLearningScreen: React.FC<{
             {(supports3D || !flipped) && <div data-testid="guest-card-front" aria-hidden={flipped} inert={flipped} className="study-card-face items-center border border-slate-200 bg-white px-5 py-6 shadow-sm">
               <p className="shrink-0 text-xs font-bold text-slate-500">No. {current.number}</p>
               <div data-testid="guest-word-scroll" className="min-h-0 w-full flex-1 overflow-y-auto"><div className="flex min-h-full flex-col items-center justify-center gap-3 py-2"><h2 ref={frontHeading} tabIndex={-1} lang="en" className="min-w-0 w-full break-words text-center text-4xl font-black text-steady-ink outline-none sm:text-5xl">{current.word}</h2><WordExamBadge word={current} /></div></div>
-              <button type="button" disabled={busy} onClick={() => speak(current.word)} className="ui-button-ghost mt-2 shrink-0"><Volume2 className="h-5 w-5" /><span className="text-sm">発音を聞く</span></button>
+              <WordPronunciationControls pronunciation={pronunciation} disabled={busy} className="mt-2 shrink-0" />
             </div>}
             {(supports3D || flipped) && <div data-testid="guest-card-back" aria-hidden={!flipped} inert={!flipped} className="study-card-face study-card-face-back border border-medace-200 bg-medace-50 p-4 shadow-sm sm:p-6">
-              <p className="text-xs font-bold text-medace-800">意味 / {current.word}</p>
+              <p className="text-xs font-bold text-medace-800">意味 / <span ref={backWord} lang="en">{current.word}</span></p>
               <div className="mt-2"><WordExamBadge word={current} /></div>
               <div className="mt-3 min-h-0 min-w-0 flex-1 overflow-y-auto"><h2 ref={meaningHeading} tabIndex={-1} className="break-words rounded-xl border border-medace-200 bg-white p-4 text-center text-xl font-black text-steady-ink outline-none sm:text-3xl">{current.definition}</h2>
-                {current.exampleSentence?.trim() ? <section data-testid="guest-saved-example" className="mt-3 rounded-xl border border-medace-200 bg-white p-3"><div className="flex items-center justify-between gap-2"><h3 className="text-xs font-bold text-slate-500">収録済みの例文</h3><button type="button" onClick={() => speak(current.exampleSentence!)} className="ui-button-ghost min-h-11 px-2" aria-label="例文を読み上げる"><Volume2 className="h-4 w-4" /></button></div><p lang="en" className="break-words text-base font-semibold leading-relaxed text-steady-ink">{current.exampleSentence}</p>
+                {current.exampleSentence?.trim() ? <section data-testid="guest-saved-example" className="mt-3 rounded-xl border border-medace-200 bg-white p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-slate-500">収録済みの例文</h3>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <PronunciationMuteButton pronunciation={pronunciation} />
+                      <button type="button" disabled={pronunciation.muted} onClick={event => pronunciation.speak(current.exampleSentence!, event.currentTarget)} className="ui-button-ghost min-h-11 px-2" aria-label="例文を読み上げる"><Volume2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                  <p lang="en" className="break-words text-base font-semibold leading-relaxed text-steady-ink">{current.exampleSentence}</p>
+                  {pronunciation.message && <p role="status" className="mt-1 text-xs leading-relaxed text-slate-600">{pronunciation.status === 'blocked' ? '例文の音声ボタンを押して再生してください。' : pronunciation.message}</p>}
                   {current.exampleMeaning?.trim() && (translation ? <p className="mt-2 break-words text-sm text-slate-600">{current.exampleMeaning}</p> : <button type="button" onClick={() => setTranslation(true)} className="ui-button-ghost mt-1 px-0 text-sm">例文の訳を表示</button>)}</section>
                   : <p className="mt-3 text-sm text-slate-600">例文は準備中です。意味で学習を続けられます。</p>}
               </div>

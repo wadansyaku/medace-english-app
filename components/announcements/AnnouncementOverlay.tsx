@@ -40,7 +40,7 @@ const AnnouncementOverlay: React.FC<AnnouncementOverlayProps> = ({
       )}
 
       {!suppressModal && feed.highestPriorityModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4" data-testid="announcement-modal">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-4" data-testid="announcement-modal" role="dialog" aria-modal="true" aria-label="重要なお知らせ">
           <div className="max-w-xl rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center gap-2 text-medace-700">
               <BellRing className="h-5 w-5" />

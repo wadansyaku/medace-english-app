@@ -15,10 +15,14 @@ import {
 import type { GeneratedWorksheetQuestion } from '../../utils/worksheet';
 import type { JapaneseTranslationFeedback } from '../../types';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
+import { useWordPronunciation } from '../../hooks/useWordPronunciation';
+import WordPronunciationControls from '../study/WordPronunciationControls';
 
 interface QuizRunningViewProps {
   currentWord?: WordData;
   currentQuestion: GeneratedWorksheetQuestion;
+  runId?: number | string;
+  pronunciationPaused?: boolean;
   currentModeLabel: string;
   activeSummary: string;
   currentQIndex: number;
@@ -65,6 +69,8 @@ const QUESTION_QUALITY_BADGE_CLASSES: Record<QuestionQualityTone, string> = {
 
 const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   currentQuestion,
+  runId = 0,
+  pronunciationPaused = false,
   currentWord,
   currentModeLabel,
   activeSummary,
@@ -102,6 +108,26 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   onAdvanceAfterTranslationFeedback,
 }) => {
   const isVocabularyQuestion = ['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(currentQuestion.mode);
+  const isEnglishPrompt = currentQuestion.mode === 'EN_TO_JA';
+  const showVocabularyAnswer = (currentQuestion.mode === 'JA_TO_EN' && selectedOption !== null)
+    || (currentQuestion.mode === 'SPELLING_HINT' && inputResult !== null);
+  const promptRef = React.useRef<HTMLHeadingElement | null>(null);
+  const answerRef = React.useRef<HTMLParagraphElement | null>(null);
+  const pronunciationText = isEnglishPrompt
+    ? currentQuestion.promptText
+    : showVocabularyAnswer
+      ? currentQuestion.answer
+      : undefined;
+  const pronunciationVisible = Boolean(pronunciationText) && !pronunciationPaused;
+  const pronunciation = useWordPronunciation({
+    presentationKey: isVocabularyQuestion
+      ? JSON.stringify(['quiz', runId, currentQIndex, currentQuestion.id])
+      : null,
+    text: pronunciationText,
+    visible: pronunciationVisible,
+    rate: 0.9,
+    targetRef: isEnglishPrompt ? promptRef : answerRef,
+  });
   const isOrderMode = currentQuestion.interactionType === 'ORDERING';
   const isTextInputMode = currentQuestion.interactionType === 'TEXT_INPUT';
   const isTranslationInputMode = currentQuestion.mode === 'JA_TRANSLATION_INPUT';
@@ -197,10 +223,21 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           </span>
         )}
       </div>
-      <h2 className={isVocabularyQuestion ? "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl [@media(min-width:640px)_and_(max-height:500px)]:text-3xl" : "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl"}>
+      <h2 ref={isEnglishPrompt ? promptRef : undefined} lang={isEnglishPrompt ? 'en' : undefined} className={isVocabularyQuestion ? "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl [@media(min-width:640px)_and_(max-height:500px)]:text-3xl" : "mt-2 break-words text-3xl font-black leading-tight text-slate-800 sm:text-4xl"}>
         {currentQuestion.promptText}
       </h2>
       {['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(currentQuestion.mode) && <div className="mt-2"><WordExamBadge word={currentWord} /></div>}
+      {showVocabularyAnswer && (
+        <div data-testid="quiz-visible-answer" className="mt-3 rounded-xl border border-medace-200 bg-medace-50 p-3">
+          <p className="text-xs font-bold text-medace-800">正解の英単語</p>
+          <p ref={answerRef} lang="en" data-testid="quiz-visible-answer-word" className="mt-1 break-words text-2xl font-black leading-tight text-slate-900">
+            {pronunciationText}
+          </p>
+        </div>
+      )}
+      {isVocabularyQuestion && (
+        <WordPronunciationControls pronunciation={pronunciation} disabled={!pronunciationVisible} className="mt-2" />
+      )}
       {currentQuestion.instruction && !isVocabularyQuestion && (
         <p className="mt-3 text-sm leading-relaxed text-slate-500">{currentQuestion.instruction}</p>
       )}

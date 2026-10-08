@@ -3,6 +3,8 @@ import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { GUEST_TRIAL_QUESTIONS, isGuestTrialAnswerCorrect } from '../../shared/guestTrial';
 import { guestTrialProgressStore } from '../../services/guestTrialProgress';
 import { useGuestTrialProgress } from '../../hooks/useGuestTrialProgress';
+import { useWordPronunciation } from '../../hooks/useWordPronunciation';
+import WordPronunciationControls from '../study/WordPronunciationControls';
 import ModalOverlay from '../ModalOverlay';
 
 export interface GuestTrialScreenProps {
@@ -18,10 +20,12 @@ const GuestTrialScreen: React.FC<GuestTrialScreenProps> = ({ onBack, onOpenAuth,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showClear, setShowClear] = useState(false);
+  const [initializedTrialId, setInitializedTrialId] = useState<string | null>(null);
   const initialized = useRef<string | null>(null);
   const starting = useRef(false);
   const saving = useRef(false);
   const heading = useRef<HTMLHeadingElement | null>(null);
+  const wordHeading = useRef<HTMLHeadingElement | null>(null);
   const feedback = useRef<HTMLDivElement | null>(null);
   const progress = device.progress;
 
@@ -37,11 +41,20 @@ const GuestTrialScreen: React.FC<GuestTrialScreenProps> = ({ onBack, onOpenAuth,
     const unanswered = GUEST_TRIAL_QUESTIONS.findIndex(q => !progress.answers.some(a => a.questionId === q.id));
     setIndex(unanswered < 0 ? GUEST_TRIAL_QUESTIONS.length : unanswered);
     setChoice(null);
+    setInitializedTrialId(progress.trialId);
   }, [progress]);
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [index]);
 
   const question = GUEST_TRIAL_QUESTIONS[index];
   const answer = progress?.answers.find(a => a.questionId === question?.id);
+  const trialReady = !device.loading && Boolean(progress) && initializedTrialId === progress?.trialId;
+  const pronunciation = useWordPronunciation({
+    presentationKey: trialReady && progress && question ? `guest-trial:${progress.trialId}:${index}:${question.id}` : null,
+    text: trialReady ? question?.word : undefined,
+    visible: trialReady && Boolean(question) && !showClear,
+    rate: 1,
+    targetRef: wordHeading,
+  });
   useEffect(() => {
     if (!answer) return;
     feedback.current?.focus({ preventScroll: true });
@@ -60,7 +73,7 @@ const GuestTrialScreen: React.FC<GuestTrialScreenProps> = ({ onBack, onOpenAuth,
     saving.current = true; setBusy(true);
     try {
       await guestTrialProgressStore.clear();
-      initialized.current = null; setIndex(0); setChoice(null); setShowClear(false);
+      initialized.current = null; setInitializedTrialId(null); setIndex(0); setChoice(null); setShowClear(false);
       device.changed(await guestTrialProgressStore.start());
     } catch { setError('端末の記録を消せませんでした。もう一度お試しください。'); }
     finally { saving.current = false; setBusy(false); }
@@ -80,10 +93,11 @@ const GuestTrialScreen: React.FC<GuestTrialScreenProps> = ({ onBack, onOpenAuth,
       {(device.notice || device.error || error) && <p role={error || device.error ? 'alert' : 'status'} className="mt-3 rounded-xl border border-medace-200 bg-medace-50 p-3 text-sm leading-relaxed text-medace-900">
         {error || device.error || device.notice}
       </p>}
-      {(device.loading || !progress) ? <p role="status" className="mt-6 flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> 体験を準備しています</p>
+      {!trialReady || !progress ? <p role="status" className="mt-6 flex items-center gap-2 text-sm text-slate-600"><Loader2 className="h-4 w-4 animate-spin" /> 体験を準備しています</p>
         : question ? <div className="mt-5" data-testid="guest-trial-question">
           <p className="text-xs font-bold text-slate-500">{index + 1} / {GUEST_TRIAL_QUESTIONS.length}語</p>
-          <h2 className="mt-2 break-words text-4xl font-black text-steady-ink">{question.word}</h2>
+          <h2 ref={wordHeading} lang="en" className="mt-2 break-words text-4xl font-black text-steady-ink">{question.word}</h2>
+          <WordPronunciationControls pronunciation={pronunciation} disabled={busy} className="mt-3" />
           <p className="mt-3 text-sm font-bold text-slate-700">意味を選んでください</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {question.choices.map((text, option) => <button key={text} type="button" disabled={Boolean(answer) || busy}

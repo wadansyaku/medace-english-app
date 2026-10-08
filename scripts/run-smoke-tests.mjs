@@ -298,6 +298,9 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/pronunciation.smoke.spec.ts',
+  'tests/smoke/guest-pronunciation.smoke.spec.ts',
+  'tests/smoke/quiz-pronunciation.smoke.spec.ts',
   'tests/smoke/aichi-exam-badge.smoke.spec.ts',
   'tests/smoke/product-feedback.smoke.spec.ts',
   'tests/smoke/admin-example-preparation.smoke.spec.ts',

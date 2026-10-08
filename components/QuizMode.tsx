@@ -172,6 +172,8 @@ const QuizMode: React.FC<QuizModeProps> = ({
         <QuizRunningView
           currentWord={controller.allWords.find(word => word.id === controller.currentQuestion?.wordId && word.bookId === controller.currentQuestion?.bookId)}
           currentQuestion={controller.currentQuestion}
+          runId={controller.runId}
+          pronunciationPaused={controller.showExitConfirm}
           currentModeLabel={controller.currentModeLabel}
           activeSummary={controller.activeSummary}
           currentQIndex={controller.currentQIndex}
