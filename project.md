@@ -1,3 +1,5 @@
+2026-10-08: 本人が本番反映と公開禁止の解除を直接指示。以降も旧禁止を再適用せず、通常PR/CI/preview/productionへ進む。[最終受入と公開状態](./docs/analysis/2026-10-08-integrated-ui-release.md): 無料作文の対象外/未取得/実際の0件を分離、2071unit・Cloud194＋IDB9成功、branch push済み。本番はまだ182ba3dで、配備前読み取り検証の具体的許可を確認中。
+
 2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。
 
 # Steady Study — プロダクト方針

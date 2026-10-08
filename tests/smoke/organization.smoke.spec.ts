@@ -626,6 +626,7 @@ const writingStateEvidence = async (page: import('@playwright/test').Page,
   expect(width.body).toBeLessThanOrEqual(width.viewport);
   await testInfo.attach(`${name}.json`, { body: JSON.stringify(width), contentType: 'application/json' });
   await testInfo.attach(`${name}.png`, { body: await page.screenshot(), contentType: 'image/png' });
+  await testInfo.attach(`${name}-full.png`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 };
 
 for (const viewport of [
