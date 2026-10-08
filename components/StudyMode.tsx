@@ -293,14 +293,14 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       className="study-card-face border border-slate-200 bg-white p-3 shadow-sm"
       onClick={controller.openBack}
     >
-      <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
+      <div className="study-front-layout flex h-full flex-col">
+        <div className="study-front-toolbar flex items-center justify-between gap-3">
+          <div className="study-front-label text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
           <WordPronunciationControls pronunciation={controller.pronunciation} disabled={controller.isAdvancingCard} />
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <h2 ref={controller.pronunciationTargetRef} lang="en" className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
+        <div className="study-front-word flex flex-1 flex-col items-center justify-center text-center">
+          <h2 ref={controller.pronunciationTargetRef} lang="en" className="study-front-heading break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
           <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>
           <WordSourceDetails word={controller.currentWord} compact />
         </div>

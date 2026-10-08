@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from '../../config/workspace';
 import { BRAND } from '../../config/brand';
 import { expect, test } from './diagnostics';
+import { installPronunciation, readPronunciation } from './pronunciation-support';
 import { loginAdminDemo, loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
 
 for (const role of ['student'] as const) {
@@ -255,6 +256,52 @@ for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }
   });
 }
 
+
+for (const viewport of [{ width: 667, height: 375 }, { width: 844, height: 390 }]) {
+  test(`short landscape study keeps pronunciation failures and the word readable at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await installPronunciation(page, { blocked: true });
+    await loginBusinessStudentDemo(page);
+    const title = `Synthetic pronunciation failure ${viewport.width}`;
+    await seedPhrasebook(page, title);
+    const books = await storageAction<Array<{ id: string; title: string }>>(page, 'getBooks');
+    const book = books.find(item => item.title === title)!;
+    await page.goto(`/study/${book.id}`);
+    const front = page.getByTestId('study-card-front');
+    const word = front.getByRole('heading');
+    await expect(word).toHaveText('triage');
+    await expect(front).toContainText('「発音を聞く」を押して再生してください。');
+    await expect.poll(async () => (await readPronunciation(page)).spoken.length).toBe(1);
+    const verifyReadable = async (state: string) => {
+      await page.screenshot({ path: testInfo.outputPath(`landscape-pronunciation-${state}.png`) });
+      await expect(word).toBeInViewport({ ratio: 1 });
+      await expect(front.getByRole('status')).toBeInViewport({ ratio: 1 });
+      await expect(page.getByTestId('study-flip-button')).toBeInViewport({ ratio: 1 });
+      for (const name of ['発音を聞く', '音声をオフにする']) {
+        const control = front.getByRole('button', { name, exact: true });
+        await expect(control).toBeInViewport({ ratio: 1 });
+        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+      const layout = await word.evaluate(element => {
+        const wordRect = element.getBoundingClientRect();
+        const cardRect = element.closest('[data-testid="study-card-front"]')!.getBoundingClientRect();
+        return { top: wordRect.top, bottom: wordRect.bottom, cardTop: cardRect.top, cardBottom: cardRect.bottom };
+      });
+      expect(layout.top).toBeGreaterThanOrEqual(layout.cardTop);
+      expect(layout.bottom).toBeLessThanOrEqual(layout.cardBottom);
+    };
+    await verifyReadable('blocked');
+    await page.evaluate(() => { (window as any).__pronunciationFixture.mode = 'error'; });
+    await front.getByRole('button', { name: '発音を聞く', exact: true }).click();
+    await expect(front).toContainText('発音を開始できませんでした');
+    await expect.poll(async () => (await readPronunciation(page)).spoken.length).toBe(2);
+    await verifyReadable('failed');
+    await page.setViewportSize({ width: viewport.width + 1, height: viewport.height });
+    expect((await readPronunciation(page)).spoken).toHaveLength(2);
+    await page.getByTestId('study-flip-button').click();
+    await expect(page.getByTestId('study-rate-3')).toBeInViewport({ ratio: 1 });
+  });
+}
 
 for (const viewport of [
   { width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 },

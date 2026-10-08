@@ -1,4 +1,4 @@
-2026-10-08: PR61/main `0736ae71597bfb512e800ca73a87a9b3ea900e76` の本番配備と受入を完了（production run 37733127312成功）。旧公開禁止は解除済み。公開は各公開依頼の指示を確認して進める。追加の[初回自動発音A8](./docs/analysis/2026-10-08-first-visible-word-pronunciation.md)は独立候補で実装し、2101unit・型/build/API・Cloud231＋IDB9の全回帰と独立reviewを完了。A8の本番反映はまだ行っていない。
+2026-10-08: PR61/main `0736ae71597bfb512e800ca73a87a9b3ea900e76` の本番配備と受入を完了（production run 37733127312成功）。旧公開禁止は解除済み。公開は各公開依頼の指示を確認して進める。追加の[初回自動発音A8](./docs/analysis/2026-10-08-first-visible-word-pronunciation.md)は独立候補で実装し、2101unit・型/build/API・Cloud231＋IDB9の全回帰と独立reviewを完了。本人の「本番にも反映してよい」「本番反映を完了させて、公開禁止は今後も取り除いてください」に基づき、A8は[PR62](https://github.com/wadansyaku/medace-english-app/pull/62)の通常CI/preview/production工程へ進める。旧公開禁止を今後の公開依頼へ再適用しない。配備前の記録であり、公開SHAと到達確認はPR62/workflowおよび独立deliveryのpublication受入を正本とする。
 
 2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。
 

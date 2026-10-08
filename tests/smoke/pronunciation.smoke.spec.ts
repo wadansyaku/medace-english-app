@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { useWordPronunciation } from './hooks/useWordPronunciation';
 import WordPronunciationControls from './components/study/WordPronunciationControls';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
+import StudyReportDialogs from './components/study/StudyReportDialogs';
 import { AnnouncementSeverity } from './types';
 function Harness() {
   const [index, setIndex] = useState(0);
@@ -18,12 +19,16 @@ function Harness() {
   const [revealed, setRevealed] = useState(true);
   const [modal, setModal] = useState(false);
   const [offscreen, setOffscreen] = useState(false);
-  const [announcement, setAnnouncement] = useState(false);
+  const [announcement, setAnnouncement] = useState(null);
+  const [acknowledged, setAcknowledged] = useState(0);
+  const [dismissed, setDismissed] = useState(0);
+  const [reportNotice, setReportNotice] = useState(null);
   const wordRef = useRef(null); const scopeRef = useRef(null);
   const word = ['learn', 'read'][index];
   const p = useWordPronunciation({ presentationKey: round + ':' + index + ':' + word,
     text: revealed ? word : undefined, visible: revealed, targetRef: wordRef, scopeRef });
   globalThis.__audioHarness = p;
+  globalThis.__finishPendingReport = () => Promise.resolve().then(() => setReportNotice('合成報告を保存しました。'));
   return <main>
     <nav><button onClick={() => setRenders(x => x + 1)}>再描画</button>
       <button onClick={() => setIndex(1)}>次の語</button><button onClick={() => setIndex(0)}>前の語</button>
@@ -31,16 +36,23 @@ function Harness() {
       <button onClick={() => setRevealed(x => !x)}>解答表示切替</button>
       <button onClick={() => setModal(x => !x)}>モーダル切替</button>
       <button onClick={() => setOffscreen(x => !x)}>画面外切替</button>
-      <button onClick={() => setAnnouncement(true)}>お知らせを表示</button></nav>
+      <button data-testid="announcement-opener" onClick={() => setAnnouncement(AnnouncementSeverity.MAJOR)}>お知らせを表示</button>
+      <button data-testid="critical-announcement-opener" onClick={() => setAnnouncement(AnnouncementSeverity.CRITICAL)}>緊急のお知らせを表示</button></nav>
     <span data-testid="render-count">{renders}</span>
+    <span data-testid="announcement-acknowledged">{acknowledged}</span>
+    <span data-testid="announcement-dismissed">{dismissed}</span>
     <section ref={scopeRef} inert={modal} style={{ marginTop: offscreen ? '200vh' : 0 }}>
       {revealed && <h2 ref={wordRef} lang="en">{word}</h2>}
       <WordPronunciationControls pronunciation={p} disabled={!revealed} />
     </section>
     {modal && <div role="dialog" aria-modal="true">確認中</div>}
-    <AnnouncementOverlay feed={{ highestPriorityModal: announcement ? { id: 'fixture', severity: AnnouncementSeverity.MAJOR,
+    <AnnouncementOverlay feed={{ highestPriorityModal: announcement ? { id: 'fixture', severity: announcement,
       title: '合成のお知らせ', body: '音声の停止境界を確認します。' } : null }}
-      onAcknowledge={() => setAnnouncement(false)} onDismissMajor={() => setAnnouncement(false)} />
+      onAcknowledge={() => { setAcknowledged(x => x + 1); setAnnouncement(null); }}
+      onDismissMajor={() => { setDismissed(x => x + 1); setAnnouncement(null); }} />
+    <StudyReportDialogs mode="sheet" showReportModal={false} reportReason="" reportNotice={reportNotice}
+      onChangeReportReason={() => {}} onCloseReportModal={() => {}} onSubmitReport={() => {}}
+      onCloseNotice={() => setReportNotice(null)} />
   </main>;
 }
 createRoot(document.getElementById('root')).render(<StrictMode><Harness /></StrictMode>);
@@ -156,13 +168,116 @@ test('pronunciation authenticated Study keeps rate and manual example, cancels o
 });
 
 
-test('pronunciation real announcement modal stops the background word and closing it does not repeat', async ({ page }) => {
+test('pronunciation real announcement traps focus, restores background state and stops speech without repeating', async ({ page }) => {
   await openHarness(page, { delayed: true }); await expect.poll(() => calls(page)).toEqual(['learn']);
-  await page.getByRole('button', { name: 'お知らせを表示', exact: true }).click();
-  await expect(page.getByTestId('announcement-modal')).toHaveAttribute('aria-modal', 'true');
+  await page.evaluate(() => {
+    const alreadyInert = document.createElement('div');
+    alreadyInert.id = 'already-inert'; alreadyInert.setAttribute('inert', '');
+    document.body.append(alreadyInert);
+  });
+  const opener = page.getByTestId('announcement-opener');
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: '合成のお知らせ', exact: true });
+  const acknowledge = dialog.getByRole('button', { name: '確認しました', exact: true });
+  const dismiss = dialog.getByRole('button', { name: '閉じる', exact: true });
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect(acknowledge).toBeFocused();
+  await expect(page.locator('#root')).toHaveAttribute('inert', '');
+  await expect(page.locator('#already-inert')).toHaveAttribute('inert', '');
+  await page.keyboard.press('Shift+Tab'); await expect(dismiss).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(dismiss).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(acknowledge).toBeFocused();
+  await page.evaluate(() => {
+    document.querySelector<HTMLButtonElement>('[data-testid="announcement-opener"]')!.focus();
+    const laterBackground = document.createElement('div');
+    laterBackground.id = 'later-background'; document.body.append(laterBackground);
+  });
+  await expect(acknowledge).toBeFocused();
+  await expect(page.locator('#later-background')).toHaveAttribute('inert', '');
   await expect.poll(() => readPronunciation(page).then(value => value.cancels)).toBe(1);
-  await page.evaluate(() => (window as any).__pronunciationFixture.emit(0, 'start'));
-  await page.getByTestId('announcement-modal').getByRole('button', { name: '閉じる', exact: true }).click();
+  await page.evaluate(() => {
+    const fixture = (window as any).__pronunciationFixture;
+    fixture.emit(0, 'start'); fixture.emit(0, 'error', 'not-allowed');
+  });
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+  await expect(page.locator('#root')).not.toHaveAttribute('inert');
+  await expect(page.locator('#later-background')).not.toHaveAttribute('inert');
+  await expect(page.locator('#already-inert')).toHaveAttribute('inert', '');
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('1');
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('0');
+  await page.getByRole('button', { name: '再描画', exact: true }).click();
+  expect(await calls(page)).toEqual(['learn']);
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await opener.click(); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0); await expect(opener).toBeFocused();
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('1');
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('1');
+  await expect(page.locator('#root')).not.toHaveAttribute('inert');
+  await expect(page.locator('#already-inert')).toHaveAttribute('inert', '');
+  expect(await calls(page)).toEqual(['learn']);
+});
+
+test('pronunciation critical announcement retains its acknowledgment gate through keyboard and backdrop dismissal', async ({ page }) => {
+  await openHarness(page, { delayed: true }); await expect.poll(() => calls(page)).toEqual(['learn']);
+  const opener = page.getByTestId('critical-announcement-opener');
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: '合成のお知らせ', exact: true });
+  const acknowledge = dialog.getByRole('button', { name: '確認しました', exact: true });
+  await expect(acknowledge).toBeFocused();
+  await expect(dialog.getByRole('button', { name: '閉じる', exact: true })).toHaveCount(0);
+  await expect(page.locator('#root')).toHaveAttribute('inert', '');
+  await page.keyboard.press('Tab'); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Escape');
+  await dialog.evaluate(element => (element.parentElement!.parentElement as HTMLElement).click());
+  await expect(dialog).toBeVisible(); await expect(acknowledge).toBeFocused();
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('0');
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('0');
+  await expect.poll(() => readPronunciation(page).then(value => value.cancels)).toBe(1);
+  await page.keyboard.press('Enter');
+  await expect(dialog).toHaveCount(0); await expect(opener).toBeFocused();
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('1');
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('0');
+  await expect(page.locator('#root')).not.toHaveAttribute('inert');
+  expect(await calls(page)).toEqual(['learn']);
+});
+
+test('pronunciation critical announcement keeps focus through an asynchronous real report dialog and releases it after acknowledgment', async ({ page }) => {
+  await openHarness(page, { delayed: true }); await expect.poll(() => calls(page)).toEqual(['learn']);
+  await page.getByTestId('critical-announcement-opener').click();
+  const announcement = page.getByRole('dialog', { name: '合成のお知らせ', exact: true });
+  const acknowledge = announcement.getByRole('button', { name: '確認しました', exact: true });
+  await expect(acknowledge).toBeFocused();
+  await page.evaluate(() => (window as any).__finishPendingReport());
+  const report = page.getByRole('dialog', { name: '報告受付完了', exact: true, includeHidden: true });
+  await expect(report).toHaveCount(1);
+  await expect.poll(() => report.evaluate(element => Boolean(element.closest('[inert]')))).toBe(true);
+  await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Shift+Tab'); await expect(acknowledge).toBeFocused();
+  await page.keyboard.press('Escape');
+  await announcement.evaluate(element => (element.parentElement!.parentElement as HTMLElement).click());
+  await expect(announcement).toBeVisible(); await expect(acknowledge).toBeFocused();
+  await expect(report).toHaveCount(1);
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('0');
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('0');
+  await expect.poll(() => readPronunciation(page).then(value => value.cancels)).toBe(1);
+  await page.keyboard.press('Enter');
+  await expect(announcement).toHaveCount(0);
+  await expect.poll(() => report.evaluate(element => Boolean(element.closest('[inert]')))).toBe(false);
+  await expect(report).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(report.getByRole('button', { name: '閉じる', exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(report.getByRole('button', { name: '閉じる', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter'); await expect(report).toHaveCount(0);
+  await expect(page.getByTestId('announcement-acknowledged')).toHaveText('1');
+  await expect(page.getByTestId('announcement-dismissed')).toHaveText('0');
+  await expect(page.locator('#root')).not.toHaveAttribute('inert');
   await page.getByRole('button', { name: '再描画', exact: true }).click();
   expect(await calls(page)).toEqual(['learn']);
   await expect(page.getByRole('status')).toHaveCount(0);
