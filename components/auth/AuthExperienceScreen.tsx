@@ -7,7 +7,7 @@ import ModalOverlay from '../ModalOverlay';
 import PublicInfoPage from '../PublicInfoPage';
 import PublicRolePage from '../public/PublicRolePage';
 import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../../types';
-import { PUBLIC_BUSINESS_ROLE_CONFIGS, type PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
+import type { PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 export interface AuthExperienceScreenProps {
   currentView: 'login' | 'guestLearning' | 'guestTrial' | 'publicInfo' | 'publicRole';
@@ -195,10 +195,10 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
       <section data-testid="start-first-home" className="rounded-panel border border-medace-200 bg-white p-5 shadow-sm sm:p-8 lg:p-10">
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-medace-200 bg-medace-50 text-xl font-black text-medace-700">{BRAND.mark}</div>
         <p className="mt-5 text-sm font-bold text-medace-700">英単語学習スペース</p>
-        <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の学習を、ここから</h1>
+        <h1 className="mt-2 text-2xl font-black leading-tight text-steady-ink sm:text-4xl">今日の単語学習</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">Naruシストの単語・小テスト・文法を、登録なしで学べます。記録の保存や振り返りはログイン後に使えます。</p>
-        {props.onStartGuestTrial && <button type="button" onClick={props.onStartGuestTrial} data-testid="start-first-guest" disabled={busy}
-          className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50 sm:max-w-xl"><BookOpen className="h-4 w-4" aria-hidden="true" /> 今すぐ学ぶ（登録不要） <ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}
+        {props.onStartGuestTrial && <button type="button" onClick={props.onStartGuestTrial} data-testid="start-first-guest" aria-label="今すぐ学ぶ（登録不要）" disabled={busy}
+          className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 text-base font-black text-steady-on-action hover:bg-steady-action-hover disabled:opacity-50 sm:max-w-xl"><BookOpen className="h-4 w-4 shrink-0" aria-hidden="true" /><span className="min-w-0"><span className="inline-block whitespace-nowrap">今すぐ学ぶ</span><span className="inline-block whitespace-nowrap">（登録不要）</span></span><ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" /></button>}
         <div className="mt-6 grid gap-3 sm:max-w-xl sm:grid-cols-2">
           <button type="button" onClick={() => onOpenAuth('LOGIN')} data-testid="start-first-login" disabled={busy}
             className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-black disabled:opacity-50 ${props.onStartGuestTrial ? 'border border-medace-200 bg-white text-medace-900 hover:bg-medace-50' : 'bg-steady-action text-steady-on-action hover:bg-steady-action-hover'}`}><LogIn className="h-4 w-4" aria-hidden="true" /> ログイン</button>
@@ -216,24 +216,6 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
           <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">思い出す練習と復習の仕組み</summary>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">答えを見る前に意味を思い出し、理解度を選びます。忘れた語は同じ回で再出題し、回答に合わせて次の復習日を調整します。収録済みの例文では使い方も確認できます。</p>
           <p className="mt-2 text-xs leading-relaxed text-slate-500">他のアプリとの学習効果の比較は未検証です。継続率・再テストの正答率・時間を置いた後の定着率を確かめ、改善していきます。</p>
-        </details>
-      </section>
-      <section className="rounded-panel border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="role-entry-heading">
-        <h2 id="role-entry-heading" className="text-base font-black text-steady-ink">講師・教室の方へ</h2>
-        <p className="mt-1 text-sm text-slate-600">登録済みの講師は上のボタンからログインできます。こちらで画面を案内しています。</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {PUBLIC_BUSINESS_ROLE_CONFIGS.map((role) => (
-            <button key={role.key} type="button" data-testid={role.cardActionTestId} onClick={() => onOpenPublicRole(role.key)} disabled={busy}
-              className="flex min-h-11 min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-bold text-slate-700 hover:border-medace-200 hover:bg-medace-50 disabled:opacity-50"><span className="min-w-0 break-words">{role.title}</span><ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" /></button>
-          ))}
-        </div>
-        <details data-testid="auth-product-explanation" className="mt-4 border-t border-slate-100 pt-3">
-          <summary className="cursor-pointer py-2 text-sm font-bold text-medace-800">学習の流れを見る</summary>
-          <ol className="mt-2 list-inside list-decimal space-y-2 text-sm leading-relaxed text-slate-600">
-            <li>登録なしでNaruシストを学ぶ。小テスト・文法・自作単語帳も使える</li>
-            <li>記録を残したいときに登録し、Naruの単語回答を自分のアカウントへ保存する</li>
-            <li>教材ホームで学習や復習を選ぶ。レベル診断は後からでも受けられる</li>
-          </ol>
         </details>
       </section>
     </div>

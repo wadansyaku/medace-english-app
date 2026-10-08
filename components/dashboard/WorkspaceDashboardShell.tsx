@@ -20,6 +20,7 @@ interface WorkspaceDashboardShellProps {
   context?: React.ReactNode;
   userBadge?: React.ReactNode;
   actions?: WorkspaceHeroAction[];
+  hideHero?: boolean;
   className?: string;
 }
 
@@ -40,13 +41,14 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
   context,
   userBadge,
   actions = [],
+  hideHero = false,
   className = '',
 }) => (
   <div data-testid={testId} className={`space-y-8 pb-12 ${className}`.trim()}>
     {notice}
     {banner}
 
-    <section className="relative overflow-hidden rounded-[32px] bg-medace-600 p-8 text-[#2F1609] shadow-[0_24px_60px_rgba(255,122,0,0.16)]">
+    {!hideHero && <section className="relative overflow-hidden rounded-[32px] bg-medace-600 p-8 text-[#2F1609] shadow-[0_24px_60px_rgba(255,122,0,0.16)]">
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -81,7 +83,7 @@ const WorkspaceDashboardShell: React.FC<WorkspaceDashboardShellProps> = ({
           </div>
         )}
       </div>
-    </section>
+    </section>}
 
     {children}
   </div>

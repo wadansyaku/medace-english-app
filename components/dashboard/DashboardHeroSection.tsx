@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Brain, Play, Settings } from 'lucide-react';
+import { ArrowRight, Brain, Languages, Play, Settings } from 'lucide-react';
 import type { LearningPlan, UserGrade } from '../../types';
 import type { StudentDashboardHeroMetric, StudentDashboardLearningRouteId, StudentDashboardPracticeRecommendation } from '../../hooks/useStudentDashboardViewModel';
 
@@ -52,28 +52,34 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   const importantMetrics = (heroMetrics || []).filter(metric => metric.icon === 'mission' || metric.icon === 'writing' || metric.id.endsWith('-due'));
   return (
     <section data-testid="dashboard-command-center" className="study-focus-panel min-w-0 rounded-panel border border-medace-200 bg-white p-5 shadow-sm sm:p-7">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-bold text-medace-900">{heroEyebrow}</p>
-        <button type="button" onClick={onOpenSettings} data-testid="student-hero-settings" aria-label="学習の設定を開く" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50"><Settings className="h-4 w-4" aria-hidden="true" /></button>
+      <div data-testid="dashboard-primary-layout" className="min-w-0 [@media(min-width:640px)_and_(max-height:500px)]:grid [@media(min-width:640px)_and_(max-height:500px)]:grid-cols-[minmax(0,1fr)_auto] [@media(min-width:640px)_and_(max-height:500px)]:items-start [@media(min-width:640px)_and_(max-height:500px)]:gap-5">
+        <div className="min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-base font-bold text-medace-900">{heroEyebrow}</p>
+            <button type="button" onClick={onOpenSettings} data-testid="student-hero-settings" aria-label="学習の設定を開く" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50"><Settings className="h-4 w-4" aria-hidden="true" /></button>
+          </div>
+          <h2 className="mt-2 text-2xl font-black leading-snug text-steady-ink sm:text-3xl">{heroTitle}</h2>
+          <p className="mt-2 max-w-2xl text-base leading-relaxed text-slate-600">{heroCopy}</p>
+        </div>
+        <button type="button" onClick={onStartQuest} data-testid="student-hero-primary-cta" className="study-primary-action mt-4 [@media(min-width:640px)_and_(max-height:500px)]:mt-0 [@media(min-width:640px)_and_(max-height:500px)]:self-start inline-flex min-h-11 w-full items-center justify-center gap-3 rounded-xl bg-steady-action px-5 py-3 text-base font-bold text-steady-on-action hover:bg-steady-action-hover sm:w-auto">
+          <Play className="h-4 w-4 fill-current" aria-hidden="true" /><span>{questButtonLabel}</span><ArrowRight className="h-4 w-4" aria-hidden="true" />
+        </button>
       </div>
-      <h2 className="mt-2 text-2xl font-black leading-snug text-steady-ink sm:text-3xl">{heroTitle}</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">{heroCopy}</p>
       {hasStudyBooks && (
-        <div data-testid="dashboard-command-metrics" className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-600">
+        <div data-testid="dashboard-command-metrics" className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-base text-slate-600">
           <span>今日 <strong className="text-steady-ink">{todayCount} / {todayWordGoal}語</strong></span>
           <span>期限が来た復習 <strong className="text-steady-ink">{dueCount}語</strong></span>
         </div>
       )}
-      {importantMetrics.length > 0 && <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+      {importantMetrics.length > 0 && <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-base">
         {importantMetrics.map(metric => <div key={metric.id} className="flex gap-2"><dt className="text-slate-600">{metric.label}</dt><dd className="font-bold text-steady-ink">{metric.value}{metric.id.endsWith('-due') && metric.helper === '期限超過' ? '（期限超過）' : ''}</dd></div>)}
       </dl>}
-      <button type="button" onClick={onStartQuest} data-testid="student-hero-primary-cta" className="study-primary-action mt-5 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl bg-steady-action px-5 py-3.5 text-base font-bold text-steady-on-action hover:bg-steady-action-hover sm:w-auto">
-        <Play className="h-4 w-4 fill-current" aria-hidden="true" /><span>{questButtonLabel}</span><ArrowRight className="h-4 w-4" aria-hidden="true" />
-      </button>
       {hasStudyBooks && <div role="progressbar" aria-label="今日の学習目標" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${todayWordGoal}語の目標に対して${todayCount}語、${progress}%`} className="mt-4 h-1.5 overflow-hidden rounded-full bg-medace-50"><div className="h-full rounded-full bg-medace-500" style={{width:`${progress}%`}} /></div>}
       <div ref={practiceAnchorRef} data-testid="dashboard-english-practice-entry" style={practiceAnchorStyle} className="mt-4">
         <div data-testid="dashboard-practice-dock">
-          {!isGrammarPrimary && <button type="button" data-testid="dashboard-practice-lane-grammar" onClick={() => onSelectPracticeLane('grammar')} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-steady-ink"><Brain className="h-4 w-4" aria-hidden="true" /> 文法を解く <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>}
+          <p className="mb-1 text-xs text-slate-500">ほかの練習</p>
+          {!isGrammarPrimary && <button type="button" data-testid="dashboard-practice-lane-grammar" onClick={() => onSelectPracticeLane('grammar')} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-base font-bold text-slate-600 hover:bg-slate-50 hover:text-steady-ink"><Brain className="h-4 w-4" aria-hidden="true" /> 文法を解く <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>}
+          {primaryPracticeLane !== 'translation' && <button type="button" data-testid="dashboard-practice-lane-translation" onClick={() => onSelectPracticeLane('translation')} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-base font-bold text-slate-600 hover:bg-slate-50 hover:text-steady-ink"><Languages className="h-4 w-4" aria-hidden="true" /> 和訳を練習 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" /></button>}
         </div>
       </div>
     </section>

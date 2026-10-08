@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { workspaceService } from '../services/workspace';
 import { listWritingAssignments, listWritingReviewQueue } from '../services/writing';
 import { resolveStorageMode } from '../shared/storageMode';
+import type { BusinessAdminWritingState } from '../shared/businessAdminWritingState';
+import { SubscriptionPlan, type UserProfile } from '../types';
 import type {
   BookMetadata,
   WeeklyMissionBoard,
@@ -17,19 +19,29 @@ const canUseWritingApi = storageMode.capabilities.writing.available;
 const canUseBusinessWorkspaceApi = storageMode.capabilities.organization.available
   && storageMode.capabilities.missions.available;
 
-export const useBusinessAdminDashboardData = () => {
+export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscriptionPlan'>) => {
+  const writingEnabled = canUseWritingApi && user.subscriptionPlan === SubscriptionPlan.TOB_PAID;
   const [snapshot, setSnapshot] = useState<OrganizationDashboardSnapshot | null>(null);
   const [settingsSnapshot, setSettingsSnapshot] = useState<OrganizationSettingsSnapshot | null>(null);
   const [missionBoard, setMissionBoard] = useState<WeeklyMissionBoard | null>(null);
   const [books, setBooks] = useState<BookMetadata[]>([]);
   const [writingAssignments, setWritingAssignments] = useState<WritingAssignment[]>([]);
   const [writingQueue, setWritingQueue] = useState<WritingQueueItem[]>([]);
+  const [writingRequest, setWritingRequest] = useState<{ enabled: boolean; state: 'LOADING' | 'READY' | 'ERROR' }>({ enabled: writingEnabled, state: 'LOADING' });
+  const requestSequence = useRef(0);
+  const writingState: BusinessAdminWritingState = !canUseWritingApi
+    ? 'UNAVAILABLE'
+    : !writingEnabled ? 'NOT_INCLUDED'
+      : writingRequest.enabled === writingEnabled ? writingRequest.state : 'LOADING';
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    const request = ++requestSequence.current;
+    const isCurrent = () => requestSequence.current === request;
     setLoading(true);
     setError(null);
+    setWritingRequest({ enabled: writingEnabled, state: 'LOADING' });
 
     if (!canUseBusinessWorkspaceApi) {
       setSnapshot(null);
@@ -49,30 +61,35 @@ export const useBusinessAdminDashboardData = () => {
         workspaceService.getOrganizationSettingsSnapshot(),
         workspaceService.getWeeklyMissionBoard(),
         workspaceService.getBooks(),
-        !canUseWritingApi
+        !writingEnabled
           ? Promise.resolve<WritingAssignment[]>([])
           : listWritingAssignments('organization').then((response) => response.assignments),
-        !canUseWritingApi
+        !writingEnabled
           ? Promise.resolve<WritingQueueItem[]>([])
           : listWritingReviewQueue('QUEUE').then((response) => response.items),
       ]);
 
+      if (!isCurrent()) return;
       setSnapshot(nextSnapshot);
       setSettingsSnapshot(nextSettingsSnapshot);
       setMissionBoard(nextMissionBoard);
       setBooks(nextBooks);
       setWritingAssignments(nextWritingAssignments);
       setWritingQueue(nextWritingQueue);
+      setWritingRequest({ enabled: writingEnabled, state: 'READY' });
     } catch (loadError) {
+      if (!isCurrent()) return;
       console.error(loadError);
+      setWritingRequest({ enabled: writingEnabled, state: 'ERROR' });
       setError((loadError as Error).message || '組織ダッシュボードの取得に失敗しました。');
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [writingEnabled]);
 
   useEffect(() => {
     void refresh();
+    return () => { requestSequence.current += 1; };
   }, [refresh]);
 
   return {
@@ -82,6 +99,7 @@ export const useBusinessAdminDashboardData = () => {
     books,
     writingAssignments,
     writingQueue,
+    writingState,
     loading,
     error,
     refresh,

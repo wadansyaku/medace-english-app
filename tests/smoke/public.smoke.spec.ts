@@ -18,12 +18,16 @@ test('public home offers clear account and learner trial actions before auth', a
   await page.goto('/');
 
   await expect(page.getByTestId('start-first-home')).toBeVisible();
-  await expect(page.getByRole('heading', { name: '今日の学習を、ここから', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '今日の単語学習', exact: true })).toBeVisible();
   await expect(page.getByTestId('start-first-guest')).toBeVisible();
   await expect(page.getByTestId('demo-login-student')).toBeHidden();
   await expect(page.getByTestId('start-first-login')).toBeVisible();
   await expect(page.getByTestId('start-first-signup')).toBeVisible();
-  await expect(page.getByTestId('auth-product-explanation')).not.toHaveAttribute('open', '');
+  await expect(page.getByTestId('auth-product-explanation')).toHaveCount(0);
+  await expect(page.getByTestId('business-role-preview-section')).toHaveCount(0);
+  for (const roleKey of PUBLIC_BUSINESS_ROLE_KEYS) {
+    await expect(page.getByTestId(getPublicBusinessRoleConfig(roleKey).cardActionTestId)).toHaveCount(0);
+  }
 });
 
 test('public readonly session endpoint is reachable before login', async ({ page }) => {
@@ -39,12 +43,17 @@ test('public readonly session endpoint is reachable before login', async ({ page
   }
 });
 
-test('public role card updates the URL and browser back returns to the start screen', async ({ page }) => {
+test('a dedicated staff URL opens its entry and browser back returns to the student start screen', async ({ page }) => {
   await page.goto('/');
 
-  await page.getByTestId('open-public-role-instructor').click();
+  await page.goto(getPublicBusinessRoleDirectPath('instructor'));
   await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRoleDirectPath('instructor')}$`));
   await expect(page.getByTestId('public-role-page-instructor')).toBeVisible();
+  await expect(page.getByTestId('public-role-login')).toBeVisible();
+  await expect(page.getByTestId('instructor-dashboard')).toHaveCount(0);
+  const sessionResponse = await page.request.get('/api/session');
+  expect([200, 204]).toContain(sessionResponse.status());
+  if (sessionResponse.status() === 200) await expect(sessionResponse.json()).resolves.toBeNull();
 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);

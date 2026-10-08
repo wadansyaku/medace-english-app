@@ -57,6 +57,7 @@ import QuizSetupView from '../components/quiz/QuizSetupView';
 import { useQuizModeController } from '../hooks/useQuizModeController';
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { NARU_BOOK_ID } from '../shared/naruBook';
+import { normalizeNaruChapterQuizTask } from '../shared/naruStudy';
 import { UserRole, type LearningTaskIntent, type UserProfile, type WordData } from '../types';
 
 const user: UserProfile = { uid: 'synthetic', email: 'synthetic@example.invalid', displayName: '架空生徒', role: UserRole.STUDENT };
@@ -263,5 +264,28 @@ describe('chapter spelling session preserves its actual range and return destina
     expect(onBack).not.toHaveBeenCalled();
     expect(controller(null).screen).toBe('SETUP');
     expect(findElement(view(onBack, null), QuizSetupView)).toBeDefined();
+  });
+});
+
+
+describe('restored Naru quiz chapter content through the real controller', () => {
+  const boundaryWords: WordData[] = [
+    { id: 'adverb-before', bookId: NARU_BOOK_ID, number: 1371, word: 'elsewhere', definition: '他の場所で', partOfSpeech: 'adverb' },
+    { id: 'adverb-last', bookId: NARU_BOOK_ID, number: 1372, word: 'away', definition: '離れて', partOfSpeech: 'adverb' },
+    { id: 'adjective-first', bookId: NARU_BOOK_ID, number: 1373, word: 'able', definition: 'できる', partOfSpeech: 'adjective' },
+    { id: 'adjective-last', bookId: NARU_BOOK_ID, number: 1531, word: 'young', definition: '若い', partOfSpeech: 'adjective' },
+  ];
+  it.each([
+    [{ start: 1286, end: 1371 }, ['adverb-before', 'adverb-last']],
+    [{ start: 1372, end: 1530 }, ['adjective-first', 'adjective-last']],
+  ] as const)('requests and quizzes complete same-POS content after restoring %j', async (oldRange, expectedIds) => {
+    const legacy = createFollowUpSpellingTaskIntent(NARU_BOOK_ID, oldRange);
+    const restored = normalizeNaruChapterQuizTask(NARU_BOOK_ID, legacy)!;
+    api.getBookSession.mockResolvedValue(boundaryWords);
+    await load(restored);
+    expect(api.getBookSession).toHaveBeenCalledWith(user.uid, NARU_BOOK_ID, 5, restored);
+    expect(controller(restored).allWords.map(word => word.id)).toEqual(expectedIds);
+    expect(controller(restored).questions.map(question => question.wordId).sort()).toEqual([...expectedIds].sort());
+    expect(controller(restored).screen).toBe('RUNNING');
   });
 });

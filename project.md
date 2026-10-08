@@ -1,6 +1,10 @@
+2026-10-08: 本人が本番反映と公開禁止の解除を直接指示。以降も旧禁止を再適用せず、通常PR/CI/preview/productionへ進む。[最終受入と公開状態](./docs/analysis/2026-10-08-integrated-ui-release.md): 無料作文の対象外/未取得/実際の0件を分離。本人の具体的許可後、構成・教材・権利台帳・参照整合性の読み取り検査、原本436項目と0058 beforeが成功。PR61の初回CI/previewは成功し、無料組織の導入完了が有料作文を要求するP1を追加修正。2083unit・型・関連7実browser成功、更新候補のCI/previewへ進む。本番はまだ182ba3d。
+
+2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。
+
 # Steady Study — プロダクト方針
 
-更新日: 2026-10-04。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
+更新日: 2026-10-07。実装状況は [todo](./todo.md)、技術判断は [architecture](./docs/architecture.md)、本番の観測値は日付付き分析を参照。画面整理＋Startの公開作業は [PR54と保存レビュー修正](./docs/analysis/2026-10-03-ui-start-release.md) を参照。
 
 ## 誰の何を解決するか
 
@@ -17,6 +21,8 @@
 この一周の信頼性と実利用を先に改善する。ランキング、外部通知、ネイティブ化、商用CRMの拡張は、この一周の改善への寄与を確認してから行う。
 
 ## 体験の原則
+
+2026-10-07の本人指示による[単語優先おすすめ候補](./docs/analysis/2026-10-07-vocabulary-first-candidate.md)では、初回は承認済みNaru、再訪は明示選択教材や既存単語の続き/期限復習を優先し、文法・和訳は任意に選べる副操作へ置く。[全体改善計画](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)は実装・公開・学習効果を分けて扱う。本候補の公開判断は別工程で、SRS/履歴/教材権限を変更しない。
 
 1. 最優先の行動は一つ。表示内容と押した結果を同じcommandから決める。
 2. 未取得、0件、更新失敗、保存済みを別の状態にする。未取得を0にしない。
@@ -47,7 +53,7 @@
 
 教材権利の実態はコード上のラベルだけでは証明できない。[台帳の運用](./docs/material-source-ledger-minimum-ops.md) と公開前の品質確認を必須にする。
 
-Naruシストは最新Excel四原本を一冊に収録し、元品詞・語義・英例文・分類・注記・出典を保持する。2026-10-03の公開版は1530語、欠訳一件を保留。 2026-10-07の本人依頼による[黄色セル注記・欠訳補完](./docs/analysis/2026-10-07-naru-aichi-exam-annotations.md)は原本記録を保持し、アプリ補完actuallyを別台帳で追加する1531語/638印の候補。配備の完了は本番SHAと集計の確認を要する。Notion企画に沿う例文和訳・収録語参照・用法別学習の拡充は、原本と追加生成を区別して段階的に進める。[公開と原本照合](./docs/analysis/2026-10-03-naru-one-book-release.md)、[後続計画](./docs/analysis/2026-10-03-medace-improvement-plan.md)を正本にする。
+Naruシストは最新Excel四原本を一冊に収録し、元品詞・語義・英例文・分類・注記・出典を保持する。2026-10-03の公開版は1530語、欠訳一件を保留。 2026-10-07の本人依頼による[黄色セル注記・欠訳補完](./docs/analysis/2026-10-07-naru-aichi-exam-annotations.md)は原本記録を保持し、アプリ補完actuallyを別台帳へ追加した。PR59/main `182ba3d3fd4a088e46c49acbace172588132fbc1` の通常本番配備と原本436項目・1531語/638印/補完1の公開後照合を完了。続く[公開後レビュー4件の追加修正](./docs/analysis/2026-10-07-naru-postrelease-review.md)は独立候補として配備状態を記録する。Notion企画に沿う例文和訳・収録語参照・用法別学習の拡充は、原本と追加生成を区別して段階的に進める。[公開と原本照合](./docs/analysis/2026-10-03-naru-one-book-release.md)、[後続計画](./docs/analysis/2026-10-03-medace-improvement-plan.md)を正本にする。
 
 ## 成功の測り方
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
+import QuizHeader from '../components/quiz/QuizHeader';
 import QuizSetupView from '../components/quiz/QuizSetupView';
 import { getDefaultGrammarScopeIdForMode } from '../config/quizFlow';
 import { NARU_BOOK_ID } from '../shared/naruBook';
@@ -37,6 +38,18 @@ const renderSetup = (overrides: Partial<React.ComponentProps<typeof QuizSetupVie
 );
 
 describe('QuizSetupView compact setup', () => {
+  it('keeps the setup header and start action inside their parent width', () => {
+    const header = renderToStaticMarkup(<QuizHeader title="4問クイズ" subtitle="必要なときだけ条件を変えて、すぐ始めます。" bookLabel="Synthetic overflow diagnostic" onBack={noop} />);
+    const setup = renderSetup();
+    expect(header).not.toContain('-mx-4');
+    expect(setup).not.toContain('-mx-4');
+    expect(header).toContain('min-w-0');
+    expect(header).toContain('h-11 w-11');
+    expect(setup).toContain('mobile-sticky-action-bar min-w-0 px-0');
+    expect(header).toContain('Synthetic overflow diagnostic');
+    expect(setup).toContain('5問はじめる');
+  });
+
   it('applies preset button clicks through the existing setup update callback', () => {
     const update = vi.fn();
     const view = QuizSetupView({

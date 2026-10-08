@@ -26,6 +26,18 @@ export const isNaruChapterStudyTask = (bookId: string, task?: LearningTaskIntent
   ))
 );
 
+export const normalizeNaruChapterQuizTask = (
+  bookId: string,
+  task?: LearningTaskIntent | null,
+): LearningTaskIntent | null | undefined => {
+  if (bookId !== NARU_BOOK_ID || task?.bookId !== bookId || task.mode !== 'quiz'
+    || task.intentType !== LearningTaskIntentType.BOOK_QUIZ || task.missionAssignmentId
+    || !task.wordRange) return task;
+  const chapter = resolveNaruStudyChapter(task.wordRange);
+  if (!chapter || (chapter.start === task.wordRange.start && chapter.end === task.wordRange.end)) return task;
+  return { ...task, wordRange: { start: chapter.start, end: chapter.end } };
+};
+
 export const createNaruChapterTask = (
   chapter: NaruRangePreset,
   kind: NaruStudyKind,

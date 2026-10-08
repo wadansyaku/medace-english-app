@@ -640,3 +640,26 @@ summary:focus-visible {
     transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
 }
+
+/* Study-only compact layout: actions stay in flow, separate from card content. */
+.study-session { font-size: 16px; }
+.study-session-heading { margin-bottom: 4px; min-height: 44px; }
+.study-session button { min-height: 44px; min-width: 44px; }
+.study-actions { margin-top: 8px; position: static; }
+.study-rating-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.study-save-status { grid-column: 1 / -1; min-height: 0; }
+.study-save-status:empty { display: none; }
+.study-back-content, .study-answer-content { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 4px; }
+.study-definition-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.study-meaning { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.study-meaning-text { flex: 1; min-height: 0; overflow: auto; display: grid; align-items: center; }
+.study-meaning-pages { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.study-meaning-pages button, .study-details-button { padding: 4px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; }
+.study-details-button { align-self: center; }
+.study-details-panel { max-height: 85dvh; overflow: auto; font-size: 16px; }
+.study-details-panel p, .study-details-panel summary { font-size: 16px; }
+.study-session button:focus-visible, .study-meaning-text:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+@media (max-width: 400px) and (min-height: 501px) { .study-rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-height: 500px) { .study-rating-button { font-size: 16px; } .study-card-face { border-radius: 12px; } }
+
+.study-definition-editing { overflow: auto; }

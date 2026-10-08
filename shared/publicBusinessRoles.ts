@@ -1,4 +1,4 @@
-import { OrganizationRole, UserRole } from '../types';
+import { OrganizationRole, ORGANIZATION_ROLE_LABELS, UserRole } from '../types';
 import type { RuntimeFlags } from './runtimeFlags';
 
 export type PublicBusinessRoleKey =
@@ -65,11 +65,11 @@ export const PUBLIC_BUSINESS_ROLE_CONFIGS: PublicBusinessRoleConfig[] = [
     cardActionTestId: 'open-public-role-student',
     pageTestId: 'public-role-page-student',
     primaryActionTestId: 'demo-login-business-student',
-    title: 'ビジネス版 生徒',
+    title: ORGANIZATION_ROLE_LABELS[OrganizationRole.STUDENT],
     audienceLabel: '生徒向け',
     cardDescription: '講師からのフォロー通知や教材の配信を受ける生徒の学習画面を確認します。',
     cardDetail: '授業での学習の流れ、配布教材、添削の返却物の受け取りを確認',
-    summary: '授業で配られた教材に取り組み、講師からのフォローや添削返却を受け取る役割です。',
+    summary: '個人学習と同じ生徒画面で学びます。所属する塾・教室などから配られた教材や課題に取り組み、講師からのフォローや添削返却を受け取ります。',
     primaryActionSummary: '学習開始から返却物の確認まで、授業で生徒が学ぶ流れをそのまま見られます。',
     highlights: [
       {

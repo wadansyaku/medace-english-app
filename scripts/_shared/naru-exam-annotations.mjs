@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { text } from './original-workbook-import.mjs';
 import { NARU_BOOK_ID } from './naru-workbook-import.mjs';
 
@@ -52,6 +53,25 @@ export const auditNaruExamAnnotations = workbooks => {
   }
   return { schemaVersion: 1, kind: AICHI_EXAM_KIND, attribution: 'User confirmed original bright-yellow cells mean Aichi entrance-exam appearances',
     sources: workbooks.map(w => ({ file: w.spec.file, sha256: w.sha256 })), marks, held, unresolved };
+};
+
+// Generated application artifacts must match the reviewed snapshot classification,
+// including the exact held missing definition; counts alone cannot detect a
+// misplaced mark or a different homograph with the same totals.
+export const validateNaruExamClassification = audit => {
+  const expected = JSON.parse(fs.readFileSync(new URL('../../data/naru-aichi-exam-annotations.json', import.meta.url), 'utf8'));
+  const canonical = value => JSON.stringify(value, (_key, item) => item && !Array.isArray(item) && typeof item === 'object'
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+  const classification = value => ({ kind: value.kind, sources: value.sources,
+    marks: value.marks, held: value.held, unresolved: value.unresolved });
+  if (audit.marks.length !== 637 || audit.held.length !== 1
+    || canonical(classification(audit)) !== canonical(classification(expected))) {
+    throw new Error('Reviewed exam classification changed; re-audit required before generating application SQL');
+  }
+  return { originalReadyMarks: audit.marks.length, originalMissingDefinitions: audit.held.length,
+    direct: audit.marks.filter(mark => mark.matchKind === 'word_cell').length,
+    uniqueIndex: audit.marks.filter(mark => mark.matchKind === 'unique_index').length,
+    unresolvedCells: audit.unresolved.length };
 };
 
 // Add metadata only to the exact Naru source link and unchanged playable entry.

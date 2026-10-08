@@ -78,6 +78,7 @@ const toStudentTarget = (
 
 const buildActivationContract = ({
   organizationId,
+  subscriptionPlan,
   cohortCount,
   studentAssignmentCount,
   missionAssignmentCount,
@@ -91,6 +92,7 @@ const buildActivationContract = ({
   missionAssignments,
 }: {
   organizationId: string;
+  subscriptionPlan: SubscriptionPlan;
   cohortCount: number;
   studentAssignmentCount: number;
   missionAssignmentCount: number;
@@ -239,13 +241,19 @@ const buildActivationContract = ({
       ),
     },
   ];
-  const nextStep = steps.find((step) => !step.done) || null;
+  const includesWriting = subscriptionPlan === SubscriptionPlan.TOB_PAID;
+  const applicableSteps = includesWriting
+    ? steps
+    : steps.filter((step) => step.target?.kind !== 'WRITING_ASSIGNMENT');
+  const nextStep = applicableSteps.find((step) => !step.done) || null;
 
   return {
     activationState: nextStep?.id as OrganizationActivationState || 'ACTIVE',
-    nextRequiredActionLabel: nextStep?.label || 'B2B価値ループ完了',
-    nextRequiredActionDescription: nextStep?.description || '初回の配布、提出、講師返却まで完了しています。次は継続率と再開率を見ながら運用を整えます。',
-    activationSteps: steps,
+    nextRequiredActionLabel: nextStep?.label || (includesWriting ? 'B2B価値ループ完了' : '基本の導入準備が完了しました'),
+    nextRequiredActionDescription: nextStep?.description || (includesWriting
+      ? '初回の配布、提出、講師返却まで完了しています。次は継続率と再開率を見ながら運用を整えます。'
+      : 'クラス、担当、初回の単語課題と通知を準備できました。学習状況を見ながら運用を整えます。'),
+    activationSteps: applicableSteps,
     nextRequiredActionTarget: nextStep?.target || null,
   };
 };
@@ -343,6 +351,7 @@ export const buildOrganizationDashboardSnapshot = ({
   ));
   const activationContract = buildActivationContract({
     organizationId,
+    subscriptionPlan,
     cohortCount,
     studentAssignmentCount,
     missionAssignmentCount,
@@ -357,6 +366,7 @@ export const buildOrganizationDashboardSnapshot = ({
   });
   const activationRunbook = buildOrganizationActivationRunbook({
     organizationId,
+    includeWriting: subscriptionPlan === SubscriptionPlan.TOB_PAID,
     totalStudents: students.length,
     activationSteps: activationContract.activationSteps,
     historyBasedWorksheetStudentCount: inferredHistoryBasedWorksheetStudentCount,

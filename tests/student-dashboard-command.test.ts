@@ -79,8 +79,8 @@ describe('student dashboard commands', () => {
     expect(resolveStudentDashboardCommand(taskId, input({ hasStudyBooks: false }))).toEqual({ type: 'create_book' });
   });
 
-  it.each(['today', 'weakness', 'coach'] as const)('opens available grammar instead of prohibited creation before %s', (taskId) => {
-    expect(resolveStudentDashboardCommand(taskId, input({ hasStudyBooks: false, canCreateBook: false }))).toEqual({ type: 'open_practice', lane: 'grammar' });
+  it.each(['today', 'weakness', 'coach'] as const)('opens the vocabulary library instead of prohibited creation before %s', (taskId) => {
+    expect(resolveStudentDashboardCommand(taskId, input({ hasStudyBooks: false, canCreateBook: false }))).toEqual({ type: 'open_section', sectionId: 'library' });
   });
 
   it('keeps an unavailable assigned material directed to the library', () => {

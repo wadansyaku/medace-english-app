@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 
-import type { StudentSummary, WritingPromptTemplate } from '../../../types';
+import { ORGANIZATION_ROLE_LABELS, OrganizationRole, type StudentSummary, type WritingPromptTemplate } from '../../../types';
 
 interface WritingOpsCreateSectionProps {
   templates: WritingPromptTemplate[];
@@ -64,7 +64,7 @@ const WritingOpsCreateSection: React.FC<WritingOpsCreateSectionProps> = ({
           </select>
           {students.length === 0 && (
             <div className="mt-2 text-sm font-bold text-amber-700">
-              対象になる有料ビジネス生徒がまだいません。
+              対象になる有料プランの{ORGANIZATION_ROLE_LABELS[OrganizationRole.STUDENT]}がまだいません。
             </div>
           )}
         </div>

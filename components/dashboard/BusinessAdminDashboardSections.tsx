@@ -15,6 +15,7 @@ import {
   type WritingQueueItem,
 } from '../../types';
 import type { BusinessAdminDashboardController } from './businessAdmin/shared';
+import type { BusinessAdminWritingState } from '../../shared/businessAdminWritingState';
 import BusinessAdminAssignmentsSection from './businessAdmin/BusinessAdminAssignmentsSection';
 import BusinessAdminCatalogSection from './businessAdmin/BusinessAdminCatalogSection';
 import BusinessAdminInstructorsSection from './businessAdmin/BusinessAdminInstructorsSection';
@@ -39,6 +40,7 @@ interface BusinessAdminDashboardSectionsProps {
   books: BookMetadata[];
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
+  writingState: BusinessAdminWritingState;
   isLocalMockData: boolean;
 }
 
@@ -223,6 +225,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   books,
   writingAssignments,
   writingQueue,
+  writingState,
   isLocalMockData,
 }) => {
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
@@ -231,6 +234,17 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   const gate = resolveViewGate(activeView, snapshot.activationState);
   const canBootstrap = !runtimeFlags.deployment.isProductionLike
     && !ACTIVATION_BOOTSTRAP_FINAL_STATES.includes(snapshot.activationState);
+
+  if (activeView === BusinessAdminWorkspaceView.WRITING && writingState !== 'READY') {
+    return (
+      <BusinessAdminWritingSection
+        user={user}
+        writingAssignments={writingAssignments}
+        writingQueue={writingQueue}
+        writingState={writingState}
+      />
+    );
+  }
 
   if (gate) {
     return (
@@ -250,6 +264,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         snapshot={snapshot}
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
+        writingState={writingState}
         isLocalMockData={isLocalMockData}
         nextActionView={nextActionView}
         onChangeView={onChangeView}
@@ -308,6 +323,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         user={user}
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
+        writingState={writingState}
       />
     );
   }

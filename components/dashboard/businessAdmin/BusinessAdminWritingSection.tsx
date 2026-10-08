@@ -4,18 +4,23 @@ import type { UserProfile, WritingAssignment, WritingQueueItem } from '../../../
 import { getBusinessAdminWritingCounts } from '../../../utils/businessAdminDashboard';
 import WorkspaceMetricCard from '../../workspace/WorkspaceMetricCard';
 import WritingOpsPanel from '../../WritingOpsPanel';
+import type { BusinessAdminWritingState } from '../../../shared/businessAdminWritingState';
+import BusinessAdminWritingNotice from './BusinessAdminWritingNotice';
 
 interface BusinessAdminWritingSectionProps {
   user: UserProfile;
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
+  writingState: BusinessAdminWritingState;
 }
 
 const BusinessAdminWritingSection: React.FC<BusinessAdminWritingSectionProps> = ({
   user,
   writingAssignments,
   writingQueue,
+  writingState,
 }) => {
+  if (writingState !== 'READY') return <BusinessAdminWritingNotice state={writingState} />;
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
 
   return (

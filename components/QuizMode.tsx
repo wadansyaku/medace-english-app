@@ -9,6 +9,7 @@ import QuizResultView from './quiz/QuizResultView';
 import QuizRunningView from './quiz/QuizRunningView';
 import QuizSetupView from './quiz/QuizSetupView';
 import { useQuizModeController } from '../hooks/useQuizModeController';
+import { normalizeNaruChapterQuizTask } from '../shared/naruStudy';
 
 interface QuizModeProps {
   user: UserProfile;
@@ -23,7 +24,12 @@ const QuizMode: React.FC<QuizModeProps> = ({
   taskIntent,
   onBack,
 }) => {
-  const controller = useQuizModeController({ user, bookId, taskIntent });
+  const normalizedTaskIntent = React.useMemo(
+    () => normalizeNaruChapterQuizTask(bookId, taskIntent),
+    [bookId, taskIntent],
+  );
+  const controller = useQuizModeController({ user, bookId, taskIntent: normalizedTaskIntent });
+  const compactRunning = controller.screen === 'RUNNING' && ['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT'].includes(controller.currentQuestion?.mode || '');
   const returnToConditions = () => {
     if (controller.isScopedSession) onBack();
     else controller.resetToSetup();
@@ -88,10 +94,11 @@ const QuizMode: React.FC<QuizModeProps> = ({
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-6">
+    <div className={compactRunning ? 'mx-auto max-w-3xl space-y-2 pb-2' : 'mx-auto max-w-3xl space-y-4 pb-6'}>
       <QuizHeader
-        title={headerTitle}
+        title={compactRunning ? controller.currentModeLabel : headerTitle}
         subtitle={headerSubtitle}
+        compact={compactRunning}
         bookLabel={taskIntent?.wordRange ? `${controller.bookTitle || '選択した教材'} / ${taskIntent.label}` : controller.bookTitle || taskIntent?.label}
         onBack={handleHeaderBack}
       />

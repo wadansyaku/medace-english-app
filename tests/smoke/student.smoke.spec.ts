@@ -29,16 +29,21 @@ test('demo student can start immediately without onboarding and reach the dashbo
   await expect(page.getByTestId('dashboard-learning-route-englishPractice')).toHaveCount(0);
   await expect(page.getByTestId('student-hero-primary-cta')).toBeVisible();
   const grammarEntry = page.getByTestId('dashboard-practice-lane-grammar');
-  if (await grammarEntry.count()) await expect(grammarEntry).toBeVisible();
-  else await expect(page.getByTestId('student-hero-primary-cta')).toContainText('文法');
-  await expect(page.getByTestId('dashboard-practice-lane-translation')).toHaveCount(0);
+  await expect(page.getByTestId('student-hero-primary-cta')).toContainText('単語');
+  await page.getByTestId('student-hero-primary-cta').click();
+  await expect(page).toHaveURL(/\/study\//);
+  await expect(page.getByTestId('study-card-front')).toBeVisible();
+  await page.getByRole('button', { name: '学習を中断してダッシュボードに戻る', exact: true }).click();
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  await expect(grammarEntry).toBeVisible();
+  await expect(page.getByTestId('dashboard-practice-lane-translation')).toBeVisible();
   await expect(page.getByTestId('dashboard-practice-lane-reading')).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-lane-writing')).toHaveCount(0);
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByText('今日の英語演習')).toHaveCount(0);
   await expect(page.getByText('英語演習のおすすめ')).toHaveCount(0);
 
-  await (await grammarEntry.count() ? grammarEntry : page.getByTestId('student-hero-primary-cta')).click();
+  await grammarEntry.click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);
   await expect(page.getByTestId('dashboard-practice-focus')).toHaveCount(0);
@@ -51,7 +56,7 @@ test('demo student can start immediately without onboarding and reach the dashbo
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByTestId('student-hero-primary-cta')).toBeVisible();
 
-  await (await grammarEntry.count() ? grammarEntry : page.getByTestId('student-hero-primary-cta')).click();
+  await grammarEntry.click();
   await expect(page).toHaveURL(/\/english-practice\/grammar$/);
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByTestId(MOBILE_FLOW_TEST_IDS.studentDashboard)).toHaveCount(0);

@@ -427,10 +427,10 @@ export const openBusinessRolePage = async (
   if (surface === 'public') {
     await page.goto('/public');
     await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
+    await page.getByTestId(role.cardActionTestId).click();
   } else {
-    await openBusinessPreview(page);
+    await page.goto(getPublicBusinessRoleDirectPath(roleKey));
   }
-  await page.getByTestId(role.cardActionTestId).click();
   await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRoleDirectPath(roleKey)}$`));
   await expect(page.getByTestId(role.pageTestId)).toBeVisible();
   return role;

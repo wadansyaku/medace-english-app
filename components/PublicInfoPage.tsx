@@ -91,7 +91,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
               専用リンク
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-[1.05rem]">
-              Steady Studyでは、生徒・講師・学校管理者・サービス管理者がそれぞれの作業画面を直接開けます。
+              生徒の登録・ログインは共通です。講師・学校管理者・サービス管理者は専用リンクから案内を確認し、登録済みのアカウントでログインします。ログイン後は、アカウントに付与された権限に応じた画面を開きます。
             </p>
           </div>
 

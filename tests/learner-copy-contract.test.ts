@@ -8,7 +8,8 @@ describe('learner-facing copy contract', () => {
 
     expect(studyModeSource).not.toContain('コストが高い');
     expect(studyModeSource).toContain('保存済みの画像ヒント');
-    expect(studyModeSource).toContain('例文は準備中です。意味で学習を続けられます。');
+    expect(studyModeSource).toContain('例文・補足');
+    expect(studyModeSource).not.toContain('例文は準備中です。意味で学習を続けられます。');
     expect(studyModeSource).not.toContain('例文を作る');
     expect(studyModeSource).not.toContain('画像を作る');
   });

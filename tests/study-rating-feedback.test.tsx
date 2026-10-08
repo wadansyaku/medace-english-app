@@ -15,6 +15,7 @@ vi.mock('react', async importOriginal => {
     }
   };
   const hooks = {
+    useMemo: (factory: () => unknown) => factory(),
     useState: (initial: any) => {
       const index = harness.cursor++;
       if (!(index in harness.slots)) harness.slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -66,7 +67,7 @@ const load = async () => {
 beforeEach(() => {
   harness.slots = []; harness.cursor = 0; harness.effects.clear(); harness.cleanups.clear();
   vi.clearAllMocks(); vi.useFakeTimers();
-  vi.stubGlobal('window', { matchMedia: () => ({ matches: false }), speechSynthesis: { getVoices: () => [] } });
+  vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn(), matchMedia: () => ({ matches: false }), speechSynthesis: { getVoices: () => [] } });
   vi.stubGlobal('CSS', { supports: () => true });
   api.getBookSession.mockResolvedValue(words); api.getBooks.mockResolvedValue([]);
   api.saveSRSHistory.mockResolvedValue(undefined); api.addXP.mockResolvedValue({ user, leveledUp: false });
@@ -92,7 +93,7 @@ describe('accepted study rating feedback', () => {
   });
 
   it.each([false, true])('shows the accepted button for at least 400ms, including reduced motion: %s', async reducedMotion => {
-    vi.stubGlobal('window', { matchMedia: () => ({ matches: reducedMotion }), speechSynthesis: { getVoices: () => [] } });
+    vi.stubGlobal('window', { addEventListener: vi.fn(), removeEventListener: vi.fn(), matchMedia: () => ({ matches: reducedMotion }), speechSynthesis: { getVoices: () => [] } });
     await load();
     find(view(), 'study-rate-2')!.props.onClick({ stopPropagation: vi.fn() });
     expect(controller().selectedRating).toBe(2);

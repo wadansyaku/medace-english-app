@@ -145,7 +145,8 @@ describe('daily goal and session size', () => {
         },
       }),
     });
-    expect(viewModel.heroTitle).toBe('今日の目標まであと40語');
+    expect(viewModel.todayWordGoal).toBe(40);
+    expect(viewModel.heroTitle).toBe('単語学習から始める');
     expect(viewModel.heroCopy).toContain('1回20語まで');
     expect(viewModel.primaryTask?.command).toMatchObject({ type: 'start_learning', task: { limit: 20 } });
   });
@@ -283,10 +284,10 @@ describe('useStudentDashboardViewModel', () => {
       primaryLearningRouteId: 'today',
     },
     {
-      label: 'english practice priority',
+      label: 'automatic practice remains secondary',
       input: { shouldPrioritizePractice: true, remainingWords: 8 },
-      primaryTaskId: 'englishPractice',
-      primaryLearningRouteId: 'englishPractice',
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
     },
     {
       label: 'remaining daily words',
@@ -295,16 +296,16 @@ describe('useStudentDashboardViewModel', () => {
       primaryLearningRouteId: 'today',
     },
     {
-      label: 'weakness signals after daily work',
+      label: 'weakness remains secondary after daily work',
       input: { hasWeaknessSignals: true },
-      primaryTaskId: 'weakness',
-      primaryLearningRouteId: 'weakness',
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
     },
     {
       label: 'B2B writing section without an urgent submission',
       input: { canShowWritingSection: true },
-      primaryTaskId: 'writing',
-      primaryLearningRouteId: 'writing',
+      primaryTaskId: 'today',
+      primaryLearningRouteId: 'today',
     },
     {
       label: 'fallback today',
@@ -412,21 +413,21 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.blockedOfficialBookCount).toBe(1);
     expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.heroTitle).toBe('配布教材を確認中');
-    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。今は教材なしの文法演習を試せます。');
-    expect(viewModel.questButtonLabel).toBe('文法演習を試す');
+    expect(viewModel.heroCopy).toBe('配布教材は確認が終わると使えます。教材一覧で利用できる単語帳を確認してください。');
+    expect(viewModel.questButtonLabel).toBe('単語帳を確認');
     expect(asCanonicalTasks(viewModel).primaryTask).toMatchObject({
       id: 'today',
       routeId: 'today',
-      ctaLabel: '文法演習を試す',
-      command: { type: 'open_practice', lane: 'grammar' },
+      ctaLabel: '単語帳を確認',
+      command: { type: 'open_section', sectionId: 'library' },
     });
   });
 
   it('keeps an empty free-plan home actionable without recommending a locked feature', () => {
     const viewModel = useStudentDashboardViewModel({ user: baseUser, snapshot: buildSnapshot({}) });
-    expect(viewModel.heroTitle).toBe('教材なしで文法を試す');
-    expect(viewModel.questButtonLabel).toBe('文法演習を試す');
-    expect(viewModel.primaryTask?.command).toEqual({ type: 'open_practice', lane: 'grammar' });
+    expect(viewModel.heroTitle).toBe('単語帳を確認する');
+    expect(viewModel.questButtonLabel).toBe('単語帳を確認');
+    expect(viewModel.primaryTask?.command).toEqual({ type: 'open_section', sectionId: 'library' });
     expect(viewModel.canCreateFromText).toBe(false);
     expect(viewModel.canCreateFromFile).toBe(false);
   });
@@ -634,7 +635,7 @@ describe('useStudentDashboardViewModel', () => {
     expect(viewModel.learningRouteCards.find((card) => card.id === 'weakness')?.ctaLabel).toBe('スペルを5問だけ確認');
   });
 
-  it('promotes English practice into the single next action when grammar weakness is strongest', () => {
+  it('keeps grammar weakness secondary to the vocabulary next action', () => {
     const snapshot = buildSnapshot({
       dueCount: 8,
       officialBooks: [makeBook('book-1', 'Core 1')],
@@ -661,7 +662,7 @@ describe('useStudentDashboardViewModel', () => {
       snapshot,
     });
 
-    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.practiceRecommendation).toMatchObject({
       lane: 'grammar',
       ctaLabel: '文法を5問',
@@ -669,7 +670,7 @@ describe('useStudentDashboardViewModel', () => {
       stateLabel: '文法',
     });
     expect(viewModel.learningRouteCards.find((card) => card.id === 'englishPractice')).toMatchObject({
-      isPrimary: true,
+      isPrimary: false,
       title: '英語演習',
       ctaLabel: '文法を5問',
     });
@@ -1001,7 +1002,7 @@ describe('useStudentDashboardViewModel', () => {
     expectCanonicalLanesAreExclusive(canonicalTasks);
   });
 
-  it('uses English practice as the follow-up when daily work is done and no stronger signal exists', () => {
+  it('keeps optional English practice secondary after the daily vocabulary goal', () => {
     const snapshot = buildSnapshot({
       dueCount: 0,
       officialBooks: [makeBook('book-1', 'Core 1')],
@@ -1026,11 +1027,11 @@ describe('useStudentDashboardViewModel', () => {
       snapshot,
     });
 
-    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.practiceRecommendation.lane).toBe('grammar');
     expect(viewModel.learningRouteCards.map((card) => card.id)).toEqual(['today', 'weakness', 'englishPractice']);
     const canonicalTasks = asCanonicalTasks(viewModel);
-    expect(canonicalTasks.primaryTask).toMatchObject({ id: 'englishPractice' });
+    expect(canonicalTasks.primaryTask).toMatchObject({ id: 'today' });
     expect(taskIds(canonicalTasks.urgentTasks)).not.toContain('weakness');
     expect([
       ...taskIds(canonicalTasks.supportingTasks),
@@ -1038,7 +1039,7 @@ describe('useStudentDashboardViewModel', () => {
     ]).toContain('weakness');
   });
 
-  it('uses the English practice progress recommendation when it is available', () => {
+  it('keeps the English practice progress recommendation available as a secondary task', () => {
     const snapshot = buildSnapshot({
       dueCount: 0,
       officialBooks: [makeBook('book-1', 'Core 1')],
@@ -1071,25 +1072,25 @@ describe('useStudentDashboardViewModel', () => {
       },
     });
 
-    expect(viewModel.primaryLearningRouteId).toBe('englishPractice');
+    expect(viewModel.primaryLearningRouteId).toBe('today');
     expect(viewModel.practiceRecommendation).toMatchObject({
       lane: 'translation',
       title: '和訳を1セット',
       ctaLabel: '全文和訳を2問書く',
       body: '文法の型を受験答案へ戻す練習が少なめです。',
     });
-    expect(viewModel.heroTitle).toBe('和訳を1セット');
-    expect(viewModel.heroCopy).toBe('文法の型を受験答案へ戻す練習が少なめです。');
-    expect(viewModel.questButtonLabel).toBe('全文和訳を2問書く');
+    expect(viewModel.heroTitle).toBe('今日の単語学習は完了');
+    expect(viewModel.heroCopy).toContain('単語学習を続け');
+    expect(viewModel.questButtonLabel).toBe('単語学習を続ける');
     const canonicalTasks = asCanonicalTasks(viewModel);
-    expect(canonicalTasks.primaryTask).toMatchObject({
+    expect(canonicalTasks.supportingTasks.find(task => task.id === 'englishPractice')).toMatchObject({
       id: 'englishPractice',
       routeId: 'englishPractice',
       title: '和訳を1セット',
       body: '文法の型を受験答案へ戻す練習が少なめです。',
       ctaLabel: '全文和訳を2問書く',
-      group: 'primary',
-      isPrimary: true,
+      group: 'supporting',
+      isPrimary: false,
       mobileLabel: '演習',
     });
   });

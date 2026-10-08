@@ -2,15 +2,24 @@ import { exposeStudentDemo } from './smoke-support';
 import type { Page } from '@playwright/test';
 import type { WordData } from '../../types';
 import { expect, test } from './diagnostics';
-import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook } from './smoke-support';
+import { MOBILE_FLOW_TEST_IDS, maybeCompleteOnboarding, openDashboardReference, seedPhrasebook, storageAction } from './smoke-support';
 
-const prepareStudy = async (page: Page) => {
+const prepareStudy = async (page: Page, includeDetails = false) => {
   await page.goto('/');
   await exposeStudentDemo(page);
   await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
   await maybeCompleteOnboarding(page);
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
-  const imported = await seedPhrasebook(page, 'Study Reliability Fixture');
+  const title = 'Study Reliability Fixture';
+  const imported = includeDetails
+    ? await storageAction<{ importedBookIds: string[] }>(page, 'batchImportWords', {
+      defaultBookName: title,
+      source: { kind: 'rows', rows: [
+        { bookName: title, number: 1, word: 'triage', definition: 'トリアージ', exampleSentence: 'Triage patients carefully.' },
+        { bookName: title, number: 2, word: 'stabilize', definition: '安定させる', exampleSentence: 'Stabilize the patient first.' },
+      ] },
+    })
+    : await seedPhrasebook(page, title);
   const bookId = imported.importedBookIds[0] as string;
   await page.reload();
   await expect(page.getByTestId('student-dashboard')).toBeVisible();
@@ -193,8 +202,9 @@ test.describe('study reliability', () => {
   test(`next card hides its answer through delayed save at ${viewport.width}x${viewport.height}, motion ${reducedMotion}`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.emulateMedia({ reducedMotion });
-    const bookId = await prepareStudy(page);
+    const bookId = await prepareStudy(page, true);
     const words = await loadFixtureWords(page, bookId);
+    expect(words[0].exampleSentence).toBe('Triage patients carefully.');
     let release!: () => void;
     const pending = new Promise<void>(resolve => { release = resolve; });
     await page.route('**/api/storage', async route => {
@@ -221,7 +231,8 @@ test.describe('study reliability', () => {
       const saving = await bar.boundingBox();
       expect(before).not.toBeNull(); expect(saving).not.toBeNull();
       expect(Math.abs(saving!.height - before!.height)).toBeLessThan(1);
-      await expect(page.getByTestId('study-card-back')).toContainText(words[0].word);
+      await expect(page.getByTestId('study-card-back')).toContainText(words[0].definition);
+      await expect(page.getByTestId('study-details-open')).toBeDisabled();
     } finally {
       release();
     }
@@ -263,12 +274,16 @@ test.describe('study reliability', () => {
     });
     await page.getByTestId(`book-study-${bookId}`).click();
     await page.getByTestId('study-flip-button').click();
-    await expect(page.getByTestId('study-example-missing')).toBeVisible();
+    await expect(page.getByTestId('study-card-back')).toBeVisible();
+    await expect(page.getByTestId('study-example-missing')).toHaveCount(0);
+    await expect(page.getByTestId('study-details-open')).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath('study-missing-example-mobile.png'), fullPage: true });
     await expect(page.getByRole('button', { name: /例文を作る|別の例文|画像を作る|新しく作る|追加のヒント/ })).toHaveCount(0);
     await page.getByTestId('study-rate-3').click();
     await page.getByTestId('study-flip-button').click();
-    await expect(page.getByTestId('study-example-missing')).toBeVisible();
+    await expect(page.getByTestId('study-card-back')).toBeVisible();
+    await expect(page.getByTestId('study-example-missing')).toHaveCount(0);
+    await expect(page.getByTestId('study-details-open')).toHaveCount(0);
     expect(paidRequests).toEqual([]);
   });
 
@@ -298,6 +313,7 @@ test.describe('study reliability', () => {
     });
     await page.getByTestId(`book-study-${bookId}`).click();
     await page.getByTestId('study-flip-button').click();
+    await page.getByTestId('study-details-open').click();
     await expect(page.getByTestId('study-original-example')).toContainText('Saved example card 1.');
     await page.getByRole('button', { name: '例文の訳を表示', exact: true }).click();
     await expect(page.getByTestId('study-original-example')).toContainText('保存済みの訳1。');
@@ -310,19 +326,22 @@ test.describe('study reliability', () => {
     await page.screenshot({ path: testInfo.outputPath(`study-saved-example-image-${viewport.width}x${viewport.height}.png`) });
     await page.keyboard.press('Escape');
     await expect(imageDialog).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /保存済みの画像ヒント/ })).toBeFocused();
+    await expect(page.getByTestId('study-details-open')).toBeFocused();
     await expect(page.getByRole('button', { name: /例文を作る|別の例文|画像を作る|新しく作る/ })).toHaveCount(0);
     await page.getByTestId('study-rate-3').click();
     await page.getByTestId('study-flip-button').click();
+    await page.getByTestId('study-details-open').click();
     await expect(page.getByTestId('study-original-example')).toContainText('Saved example card 2.');
     await expect(page.getByText('Saved example card 1.', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '例文の訳を表示', exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: /保存済み画像ヒント/ })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '定義を編集', exact: true }).click();
     await page.getByLabel('単語の意味', { exact: true }).fill('語義が変わった合成fixture');
     await page.getByRole('button', { name: '定義の変更を保存', exact: true }).click();
+    await page.getByTestId('study-details-open').click();
     await expect(page.getByTestId('study-original-example')).toHaveCount(0);
-    await expect(page.getByTestId('study-card-back').getByRole('status')).toContainText('例文を見直し中');
+    await expect(page.getByRole('dialog', { name: '例文・補足', exact: true }).getByRole('status')).toContainText('例文を見直し中');
     await expect(page.getByRole('button', { name: /保存済みの画像ヒント/ })).toHaveCount(0);
     expect(paidRequests).toEqual([]);
   });
