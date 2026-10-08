@@ -16,6 +16,8 @@ import { useOrganizationSettingsForm } from './businessAdmin/useOrganizationSett
 import { useWeeklyMissionComposer } from './businessAdmin/useWeeklyMissionComposer';
 import { buildBusinessAdminDecisionModel } from '../utils/businessAdminDashboard';
 
+import type { BusinessAdminWritingState } from '../shared/businessAdminWritingState';
+
 interface NoticeState {
   tone: 'success' | 'error';
   message: string;
@@ -28,6 +30,7 @@ interface UseBusinessAdminDashboardControllerParams {
   books: BookMetadata[];
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
+  writingState: BusinessAdminWritingState;
   activeView: BusinessAdminWorkspaceView;
   refresh: () => Promise<void>;
 }
@@ -39,6 +42,7 @@ export const useBusinessAdminDashboardController = ({
   books,
   writingAssignments,
   writingQueue,
+  writingState,
   activeView,
   refresh,
 }: UseBusinessAdminDashboardControllerParams) => {
@@ -79,9 +83,10 @@ export const useBusinessAdminDashboardController = ({
         activeView,
         writingAssignments,
         writingQueue,
+        writingState,
       })
       : null
-  ), [activeView, snapshot, writingAssignments, writingQueue]);
+  ), [activeView, snapshot, writingAssignments, writingQueue, writingState]);
 
   return {
     notice: firstNotificationAction.firstNotificationNotice || notice,

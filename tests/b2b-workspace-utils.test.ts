@@ -420,10 +420,27 @@ describe('b2b workspace helpers', () => {
     expect(progress.progressPercent).toBe(80);
   });
 
+  it.each(['NOT_INCLUDED', 'UNAVAILABLE', 'LOADING', 'ERROR'] as const)('never turns %s writing data into a success zero metric', writingState => {
+    for (const activeView of [BusinessAdminWorkspaceView.OVERVIEW, BusinessAdminWorkspaceView.ASSIGNMENTS, BusinessAdminWorkspaceView.INSTRUCTORS]) {
+      const decision = buildBusinessAdminDecisionModel({ snapshot: makeDashboardSnapshot(), activeView,
+        writingState, writingAssignments: [], writingQueue: [{ submissionId: 'stale-row' }] as WritingQueueItem[] });
+      const metric = decision.metrics.find(item => item.label === '作文滞留');
+      expect(metric?.value).toBe({ NOT_INCLUDED: '対象外', UNAVAILABLE: '利用不可', LOADING: '取得中', ERROR: '未取得' }[writingState]);
+      expect(metric?.tone).not.toBe('success');
+      expect(metric?.detail).not.toMatch(/添削待ち 0|再提出待ち 0/);
+    }
+  });
+  it('reports a confirmed paid empty queue as a genuine zero', () => {
+    const decision = buildBusinessAdminDecisionModel({ snapshot: makeDashboardSnapshot(), activeView: BusinessAdminWorkspaceView.OVERVIEW,
+      writingState: 'READY', writingAssignments: [], writingQueue: [] });
+    expect(decision.metrics.find(item => item.label === '作文滞留')).toMatchObject({ value: '0件', tone: 'success' });
+  });
+
   it('builds an overview decision brief from the activation contract', () => {
     const decision = buildBusinessAdminDecisionModel({
       snapshot: makeDashboardSnapshot(),
       activeView: BusinessAdminWorkspaceView.OVERVIEW,
+      writingState: 'READY',
       writingAssignments: [],
       writingQueue: [{ submissionId: 'submission-1' }] as WritingQueueItem[],
     });
@@ -506,6 +523,7 @@ describe('b2b workspace helpers', () => {
     const decision = buildBusinessAdminDecisionModel({
       snapshot,
       activeView: BusinessAdminWorkspaceView.OVERVIEW,
+      writingState: 'READY',
       writingAssignments: [],
       writingQueue: [],
     });
@@ -536,6 +554,7 @@ describe('b2b workspace helpers', () => {
     const decision = buildBusinessAdminDecisionModel({
       snapshot: makeDashboardSnapshot(),
       activeView: BusinessAdminWorkspaceView.ASSIGNMENTS,
+      writingState: 'READY',
       writingAssignments: [],
       writingQueue: [],
     });
@@ -571,6 +590,7 @@ describe('b2b workspace helpers', () => {
         },
       }),
       activeView: BusinessAdminWorkspaceView.INSTRUCTORS,
+      writingState: 'READY',
       writingAssignments: [],
       writingQueue: [],
     });

@@ -9,6 +9,7 @@ import {
   type WritingAssignment,
   type WritingQueueItem,
 } from '../types';
+import { getBusinessAdminWritingNotice, type BusinessAdminWritingState } from '../shared/businessAdminWritingState';
 import { getInstructorQueueSegment } from '../shared/retention';
 
 export type AssignmentFilter = 'ALL' | 'IMMEDIATE' | 'UNASSIGNED_AT_RISK';
@@ -278,7 +279,10 @@ const getTopInstructorLoad = (
 const getWritingDecisionMetric = (
   writingAssignments: WritingAssignment[],
   writingQueue: WritingQueueItem[],
+  writingState: BusinessAdminWritingState,
 ): BusinessAdminDecisionMetric => {
+  const notice = getBusinessAdminWritingNotice(writingState);
+  if (notice) return { label: '作文滞留', value: notice.value, detail: notice.description, tone: writingState === 'ERROR' ? 'warning' : 'default' };
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
   const pendingCount = writingCounts.reviewReadyCount + writingCounts.revisionRequestedCount;
 
@@ -294,6 +298,7 @@ const buildBaseMetrics = (
   snapshot: OrganizationDashboardSnapshot,
   writingAssignments: WritingAssignment[],
   writingQueue: WritingQueueItem[],
+  writingState: BusinessAdminWritingState,
 ): BusinessAdminDecisionMetric[] => [
   getActivationProgressMetric(snapshot),
   {
@@ -308,13 +313,14 @@ const buildBaseMetrics = (
     detail: '48時間以内に介入順を決めたい生徒',
     tone: snapshot.interventionBacklogCount > 0 ? 'danger' : 'success',
   },
-  getWritingDecisionMetric(writingAssignments, writingQueue),
+  getWritingDecisionMetric(writingAssignments, writingQueue, writingState),
 ];
 
 const buildOverviewDecision = (
   snapshot: OrganizationDashboardSnapshot,
   writingAssignments: WritingAssignment[],
   writingQueue: WritingQueueItem[],
+  writingState: BusinessAdminWritingState,
 ): BusinessAdminDecisionModel => {
   const nextActionView = resolveNextRequiredActionView(snapshot);
   const topInstructor = getTopInstructorLoad(snapshot);
@@ -360,7 +366,7 @@ const buildOverviewDecision = (
       targetView: BusinessAdminWorkspaceView.ASSIGNMENTS,
       assignmentFilter: resolveAssignmentPriorityFilter(snapshot),
     },
-    metrics: buildBaseMetrics(snapshot, writingAssignments, writingQueue),
+    metrics: buildBaseMetrics(snapshot, writingAssignments, writingQueue, writingState),
     focusItems: [
       {
         label: '導入ランブック',
@@ -396,6 +402,7 @@ const buildAssignmentsDecision = (
   snapshot: OrganizationDashboardSnapshot,
   writingAssignments: WritingAssignment[],
   writingQueue: WritingQueueItem[],
+  writingState: BusinessAdminWritingState,
 ): BusinessAdminDecisionModel => {
   const priorityFilter = resolveAssignmentPriorityFilter(snapshot);
   const priorityStudent = getPriorityStudent(snapshot);
@@ -440,7 +447,7 @@ const buildAssignmentsDecision = (
         detail: `${snapshot.totalStudents - snapshot.unassignedStudents}/${snapshot.totalStudents}名に担当あり`,
         tone: snapshot.assignmentCoverageRate >= 90 ? 'success' : snapshot.assignmentCoverageRate >= 60 ? 'accent' : 'warning',
       },
-      ...buildBaseMetrics(snapshot, writingAssignments, writingQueue).slice(1, 4),
+      ...buildBaseMetrics(snapshot, writingAssignments, writingQueue, writingState).slice(1, 4),
     ],
     focusItems: [
       {
@@ -475,6 +482,7 @@ const buildInstructorsDecision = (
   snapshot: OrganizationDashboardSnapshot,
   writingAssignments: WritingAssignment[],
   writingQueue: WritingQueueItem[],
+  writingState: BusinessAdminWritingState,
 ): BusinessAdminDecisionModel => {
   const topInstructor = getTopInstructorLoad(snapshot);
   const priorityStudent = getPriorityStudent(snapshot);
@@ -540,7 +548,7 @@ const buildInstructorsDecision = (
         detail: '要フォロー生徒へのフォロー進行',
         tone: snapshot.followUpCoverageRate48h >= 80 ? 'success' : snapshot.followUpCoverageRate48h >= 50 ? 'accent' : 'warning',
       },
-      getWritingDecisionMetric(writingAssignments, writingQueue),
+      getWritingDecisionMetric(writingAssignments, writingQueue, writingState),
     ],
     focusItems: [
       {
@@ -574,19 +582,21 @@ export const buildBusinessAdminDecisionModel = ({
   activeView,
   writingAssignments,
   writingQueue,
+  writingState,
 }: {
   snapshot: OrganizationDashboardSnapshot;
   activeView: BusinessAdminWorkspaceView;
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
+  writingState: BusinessAdminWritingState;
 }): BusinessAdminDecisionModel => {
   if (activeView === BusinessAdminWorkspaceView.ASSIGNMENTS) {
-    return buildAssignmentsDecision(snapshot, writingAssignments, writingQueue);
+    return buildAssignmentsDecision(snapshot, writingAssignments, writingQueue, writingState);
   }
 
   if (activeView === BusinessAdminWorkspaceView.INSTRUCTORS) {
-    return buildInstructorsDecision(snapshot, writingAssignments, writingQueue);
+    return buildInstructorsDecision(snapshot, writingAssignments, writingQueue, writingState);
   }
 
-  return buildOverviewDecision(snapshot, writingAssignments, writingQueue);
+  return buildOverviewDecision(snapshot, writingAssignments, writingQueue, writingState);
 };

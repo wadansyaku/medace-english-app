@@ -29,6 +29,11 @@ import {
 } from '../../../utils/businessAdminDashboard';
 import WorkspaceMetricCard from '../../workspace/WorkspaceMetricCard';
 import {
+  getBusinessAdminWritingNotice,
+  type BusinessAdminWritingState,
+} from '../../../shared/businessAdminWritingState';
+import BusinessAdminWritingNotice from './BusinessAdminWritingNotice';
+import {
   cohortLabel,
   cohortTone,
   formatTrendDate,
@@ -40,6 +45,7 @@ interface BusinessAdminOverviewSectionProps {
   snapshot: OrganizationDashboardSnapshot;
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
+  writingState: BusinessAdminWritingState;
   isLocalMockData: boolean;
   nextActionView: BusinessAdminWorkspaceView;
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
@@ -59,6 +65,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
   snapshot,
   writingAssignments,
   writingQueue,
+  writingState,
   isLocalMockData,
   nextActionView,
   onChangeView,
@@ -72,6 +79,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
 }) => {
   const instructorLoad = sortInstructorBacklogByLoad(snapshot.instructorBacklog);
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
+  const writingNotice = getBusinessAdminWritingNotice(writingState);
   const runbookSummary = getBusinessAdminRunbookSummary(snapshot);
   const runbookStages = snapshot.activationRunbook?.stages || [];
   const activationProgress = buildBusinessActivationProgress({
@@ -253,7 +261,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
         <WorkspaceMetricCard label="期限超過ミッション" value={`${snapshot.overdueMissionCount}件`} detail="未介入で止まっている週次課題" tone={snapshot.overdueMissionCount > 0 ? 'danger' : 'success'} />
         <WorkspaceMetricCard label="配布後着手率" value={`${snapshot.missionStartedRate}%`} detail="配布済みミッションの着手率" tone="accent" />
         <WorkspaceMetricCard label="期限超過からの再開率" value={`${snapshot.overdueMissionRecoveryRate}%`} detail="締切後に再び動き出した割合" tone={snapshot.overdueMissionRecoveryRate >= 50 ? 'success' : 'warning'} />
-        <WorkspaceMetricCard label="作文返却率" value={`${Math.max(0, ...snapshot.writingReturnRateByTrack.map((track) => track.returnRate))}%`} detail="ミッション紐づき作文の返却率" tone="success" />
+        <WorkspaceMetricCard label="作文返却率" value={writingNotice ? writingNotice.value : `${Math.max(0, ...snapshot.writingReturnRateByTrack.map((track) => track.returnRate))}%`} detail={writingNotice ? writingNotice.title : 'ミッション紐づき作文の返却率'} tone={writingNotice ? 'default' : 'success'} />
         <WorkspaceMetricCard label="主力トラック完了率" value={`${Math.max(0, ...snapshot.trackCompletion.map((track) => track.completionRate))}%`} detail="トラック別で最も進んでいる完了率" tone="default" />
       </div>
 
@@ -471,7 +479,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           </div>
         </section>
 
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        {writingState === 'READY' ? <section data-testid="business-admin-writing-queue" className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">
             <BellRing className="h-5 w-5 text-medace-600" />
             <div>
@@ -500,7 +508,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           >
             作文ワークスペースへ <ArrowRight className="h-4 w-4" />
           </button>
-        </section>
+        </section> : <BusinessAdminWritingNotice state={writingState} />}
 
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">

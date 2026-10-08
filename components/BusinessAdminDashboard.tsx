@@ -29,6 +29,7 @@ import type {
 } from '../utils/businessAdminDashboard';
 import { resolveBusinessAdminActivationNavigationIntent } from '../utils/businessAdminDashboard';
 import { resolveStorageMode } from '../shared/storageMode';
+import { getBusinessAdminWritingNotice } from '../shared/businessAdminWritingState';
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import BusinessAdminDashboardSections from './dashboard/BusinessAdminDashboardSections';
 import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
@@ -201,6 +202,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
     books,
     writingAssignments,
     writingQueue,
+    writingState,
     loading,
     error,
     refresh,
@@ -212,6 +214,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
     books,
     writingAssignments,
     writingQueue,
+    writingState,
     activeView,
     refresh,
   });
@@ -229,7 +232,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
               <p className="text-xs font-bold text-slate-400">組織管理</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">組織データを集計中</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                次アクション、割当、講師負荷、作文キューをまとめて読み込んでいます。
+                {writingState === 'LOADING' ? '次アクション、割当、講師負荷、作文キューをまとめて読み込んでいます。' : '次アクション、割当、講師負荷を読み込んでいます。'}
               </p>
             </div>
           </div>
@@ -267,7 +270,10 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
     );
   }
 
-  const viewCopy = VIEW_COPY[activeView];
+  const writingNotice = getBusinessAdminWritingNotice(writingState);
+  const viewCopy = activeView === BusinessAdminWorkspaceView.WRITING && writingNotice
+    ? { eyebrow: '作文機能', title: writingNotice.title, body: writingNotice.description }
+    : VIEW_COPY[activeView];
   const isLocalMockData = storageMode.capabilities.organization.usesMockData;
   const decisionModel = controller.decisionModel;
   const handleActivationTargetNavigation = (
@@ -343,7 +349,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
           variant: 'secondary',
         },
         {
-          label: '作文進捗を見る',
+          label: writingState === 'READY' ? '作文進捗を見る' : '作文機能の利用範囲を見る',
           icon: CheckCircle2,
           onClick: () => onChangeView(BusinessAdminWorkspaceView.WRITING),
           variant: 'secondary',
@@ -356,7 +362,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
         },
       ]}
     >
-      {decisionModel && (
+      {decisionModel && !(activeView === BusinessAdminWorkspaceView.WRITING && writingState !== 'READY') && (
         <BusinessAdminDecisionPanel
           model={decisionModel}
           actionPending={controller.activationNotificationPending}
@@ -375,6 +381,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
         books={books}
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
+        writingState={writingState}
         isLocalMockData={isLocalMockData}
       />
     </WorkspaceDashboardShell>

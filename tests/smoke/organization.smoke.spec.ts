@@ -167,6 +167,7 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await page.getByTestId('workspace-tab-writing').click();
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-decision-panel')).toHaveCount(0);
   } else if ([
     'ISSUE_FIRST_WRITING_ASSIGNMENT',
     'WAIT_FOR_FIRST_WRITING_SUBMISSION',
@@ -586,4 +587,115 @@ test('group admin can issue a weekly mission and student can restart it from the
     await adminContext.close();
     await studentContext.close();
   }
+});
+
+
+// These accounts belong only to the standard ephemeral local D1 runtime. Never
+// create or provision an account when this suite points at a deployed origin.
+const provisionWritingStateManager = async (page: import('@playwright/test').Page,
+  browser: import('@playwright/test').Browser, plan: 'TOB_FREE' | 'TOB_PAID', suffix: string) => {
+  const stamp = `${Date.now()}-${suffix}`;
+  const email = `writing-state-${stamp}@example.test`;
+  const password = 'synthetic-writing-state-password';
+  await page.goto('/');
+  const user = await emailAuth(page, { email, password, isSignUp: true, displayName: '確認用の教室管理者' });
+  const request = await storageAction<{ id: number }>(page, 'submitCommercialRequest', {
+    kind: 'BUSINESS_ROLE_CONVERSION', contactName: user.displayName, contactEmail: email,
+    organizationName: `確認用教室 ${stamp}`, requestedWorkspaceRole: 'GROUP_ADMIN',
+    message: 'Local synthetic writing state acceptance', source: 'LOCAL_WRITING_STATE_ACCEPTANCE',
+  });
+  const adminPage = await browser.newPage({ baseURL: new URL(page.url()).origin });
+  try {
+    await loginAdminDemo(adminPage);
+    await expect(adminPage.getByTestId('admin-dashboard')).toBeVisible();
+    await storageAction(adminPage, 'updateCommercialRequest', {
+      id: request.id, status: 'PROVISIONED', linkedUserUid: user.uid,
+      targetSubscriptionPlan: plan, targetOrganizationName: `確認用教室 ${stamp}`,
+      targetOrganizationRole: 'GROUP_ADMIN', resolutionNote: 'Isolated local UI verification',
+    });
+  } finally { await adminPage.close(); }
+  const provisioned = await getCurrentSessionUser(page);
+  expect(provisioned.subscriptionPlan).toBe(plan);
+  expect(provisioned.organizationRole).toBe('GROUP_ADMIN');
+};
+
+const writingStateEvidence = async (page: import('@playwright/test').Page,
+  testInfo: import('@playwright/test').TestInfo, name: string) => {
+  const width = await page.evaluate(() => ({ viewport: innerWidth,
+    document: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
+  expect(width.document).toBeLessThanOrEqual(width.viewport);
+  expect(width.body).toBeLessThanOrEqual(width.viewport);
+  await testInfo.attach(`${name}.json`, { body: JSON.stringify(width), contentType: 'application/json' });
+  await testInfo.attach(`${name}.png`, { body: await page.screenshot(), contentType: 'image/png' });
+};
+
+for (const viewport of [
+  { width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 },
+  { width: 768, height: 1024 }, { width: 1366, height: 900 },
+]) {
+  test(`free school writing state shows out of plan without zero claims or extra requests at ${viewport.width}`, async ({ page, browser }, testInfo) => {
+    test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), 'Local synthetic provisioning only');
+    await page.setViewportSize(viewport);
+    await provisionWritingStateManager(page, browser, 'TOB_FREE', String(viewport.width));
+    const writingRequests: string[] = [];
+    page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/writing/')) writingRequests.push(request.url()); });
+    await page.reload();
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
+    await expect(page.getByTestId('business-admin-decision-panel')).toContainText('対象外');
+    await expect(page.getByTestId('business-admin-writing-queue')).toHaveCount(0);
+    await writingStateEvidence(page, testInfo, `free-overview-${viewport.width}`);
+    await page.getByRole('button', { name: '作文機能の利用範囲を見る', exact: true }).click();
+    const notice = page.getByTestId('business-admin-writing-state');
+    await expect(notice).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
+    await expect(notice).toContainText('このプランでは作文機能を利用できません');
+    await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('完了済み', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+    await writingStateEvidence(page, testInfo, `free-writing-${viewport.width}`);
+    await page.reload();
+    await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
+    expect(writingRequests).toEqual([]);
+    // The client skip does not authorize Writing: an explicit forbidden request
+    // still receives the unchanged server 403 in this local synthetic account.
+    const forbidden = await page.evaluate(async () => (await fetch('/api/writing/assignments?scope=organization')).status);
+    expect(forbidden).toBe(403);
+  });
+}
+
+test('paid school writing state distinguishes pending and failed fetches from confirmed zero and retry', async ({ page, browser }, testInfo) => {
+  test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), 'Local synthetic provisioning only');
+  await provisionWritingStateManager(page, browser, 'TOB_PAID', 'paid-states');
+  let releaseQueue!: () => void; let markQueueStarted!: () => void;
+  const queuePaused = new Promise<void>(resolve => { releaseQueue = resolve; });
+  const queueStarted = new Promise<void>(resolve => { markQueueStarted = resolve; });
+  const queuePattern = '**/api/writing/review-queue?scope=QUEUE';
+  await page.route(queuePattern, async route => { markQueueStarted(); await queuePaused; await route.continue(); });
+  const navigation = page.reload();
+  try {
+    await queueStarted;
+    await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-writing-queue')).toHaveCount(0);
+    await writingStateEvidence(page, testInfo, 'paid-pending-no-zero');
+  } finally { releaseQueue(); }
+  await navigation;
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('business-admin-decision-panel')).toContainText('0件');
+  await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
+  await expect(page.getByTestId('business-admin-writing-state')).toHaveCount(0);
+  await writingStateEvidence(page, testInfo, 'paid-confirmed-zero');
+  await page.unroute(queuePattern);
+  await page.route(queuePattern, route => route.fulfill({ status: 503, contentType: 'application/json',
+    body: JSON.stringify({ error: '検証用：作文キューの取得失敗' }) }));
+  await page.reload();
+  await expect(page.getByRole('button', { name: '再読み込み', exact: true })).toBeVisible();
+  await expect(page.getByText('検証用：作文キューの取得失敗')).toBeVisible();
+  await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('business-admin-writing-queue')).toHaveCount(0);
+  await writingStateEvidence(page, testInfo, 'paid-fetch-error-no-zero');
+  await page.unroute(queuePattern);
+  await page.getByRole('button', { name: '再読み込み', exact: true }).click();
+  await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
+  await expect(page.getByTestId('business-admin-writing-state')).toHaveCount(0);
+  await writingStateEvidence(page, testInfo, 'paid-retry-confirmed-zero');
 });
