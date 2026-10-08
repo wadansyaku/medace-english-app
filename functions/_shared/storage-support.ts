@@ -76,6 +76,7 @@ export interface DbWordRow {
   source_note?: string | null;
   aichi_exam_appeared?: number;
   definition_supplemented?: number;
+  example_meaning_supplemented?: number;
   example_sentence: string | null;
   example_meaning: string | null;
   example_generated_at: number | null;
@@ -251,6 +252,7 @@ export const toWordData = (row: DbWordRow): WordData => {
     ...(row.source_note ? { sourceNote: row.source_note } : {}),
     ...(row.aichi_exam_appeared === 1 ? { aichiExamAppeared: true } : {}),
     ...(row.definition_supplemented === 1 ? { definitionSupplemented: true } : {}),
+    ...(row.example_meaning_supplemented === 1 ? { exampleMeaningSupplemented: true } : {}),
     exampleSentence: row.example_sentence,
     exampleMeaning: row.example_meaning,
     exampleGeneratedAt: row.example_generated_at,

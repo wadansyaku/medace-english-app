@@ -6,28 +6,31 @@ import XLSX from 'xlsx';
 import { archiveWorkbook, digest, ORIGINAL_WORKBOOKS, parseOriginalWorkbook } from './_shared/original-workbook-import.mjs';
 import { buildNaruApprovalSql, buildNaruStageSql, createNaruWorkbookImport, naruImportQueries, verifyNaruImportRows } from './_shared/naru-workbook-import.mjs';
 import { auditNaruExamAnnotations, buildNaruExamAnnotationSql, validateNaruExamClassification } from './_shared/naru-exam-annotations.mjs';
+import { createNaruAdverbSourceCorrection, buildNaruSourceCorrectionStageSql, buildNaruSourceCorrectionSql, buildNaruSourceCorrectionPreflightSql, NARU_SOURCE_CORRECTIONS } from './_shared/naru-source-corrections.mjs';
 import { buildNaruDefinitionSupplementSql, NARU_DEFINITION_SUPPLEMENTS } from './_shared/naru-definition-supplements.mjs';
 
 // This command generates private files and optionally performs read-only D1
 // verification. Applying each SQL file is an explicit separate operation.
 // Verify/approve the original 1530-word snapshot before applying the separately
 // reviewed app supplement. Its SQL cannot approve a pending original book.
-const options = { inputDir: null, outputDir: 'tmp/naru-import', database: null, mode: null, persistTo: null, approval: null, expectApproved: false };
-const fields = { '--input-dir': 'inputDir', '--output-dir': 'outputDir', '--database': 'database', '--persist-to': 'persistTo', '--approval-basis': 'approval' };
+const options = { inputDir: null, outputDir: 'tmp/naru-import', database: null, mode: null, persistTo: null, approval: null, expectApproved: false, correctedAdverb: null };
+const fields = { '--input-dir': 'inputDir', '--output-dir': 'outputDir', '--database': 'database', '--persist-to': 'persistTo', '--approval-basis': 'approval', '--corrected-adverb': 'correctedAdverb' };
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (fields[args[i]]) { if (!args[i + 1]) throw new Error('Argument value required'); options[fields[args[i]]] = args[++i]; }
   else if (args[i] === '--remote' || args[i] === '--local') { if (options.mode) throw new Error('Choose one verification mode'); options.mode = args[i]; }
   else if (args[i] === '--expect-approved') options.expectApproved = true;
-  else if (args[i] === '--help') { console.log('Generate: --input-dir PATH --output-dir PRIVATE_PATH. Read-back: add --database NAME --local|--remote [--persist-to PATH]. Generate approval only after read-back: --approval-basis TEXT. This command never writes D1.'); process.exit(0); }
+  else if (args[i] === '--help') { console.log('Generate: --input-dir PATH --output-dir PRIVATE_PATH. Read-back: add --database NAME --local|--remote [--persist-to PATH]. Generate approval only after read-back: --approval-basis TEXT. Two-cell correction: add --corrected-adverb FILE (generation only). This command never writes D1.'); process.exit(0); }
   else throw new Error('Unknown argument');
 }
 if (!options.inputDir || Boolean(options.mode) !== Boolean(options.database) || (options.persistTo && options.mode !== '--local') || ((options.approval || options.expectApproved) && !options.database)) throw new Error('Explicit source directory and valid read-back mode required');
+if (options.correctedAdverb && options.database) throw new Error('Correction generation is local only; use its explicit read-only preflight separately');
 const outputDir = path.resolve(options.outputDir);
 await fs.mkdir(outputDir, { recursive: true, mode: 0o700 });
 // A failed run must never leave a previous successful authorization artifact.
 await fs.rm(path.join(outputDir, 'naru-workbooks.approval.sql'), { force: true });
 await fs.rm(path.join(outputDir, 'naru-readback-proof.json'), { force: true });
+if(options.correctedAdverb)await fs.rm(path.join(outputDir,'naru-source-correction.apply.sql'),{force:true});
 let generatedManifest;
 if (options.database) generatedManifest = JSON.parse(await fs.readFile(path.join(outputDir, 'naru-workbook-manifest.json'), 'utf8'));
 const workbooks = [];
@@ -40,6 +43,22 @@ if (JSON.stringify(model.chapters.map(c => c.count)) !== JSON.stringify([353, 93
 // Validate all additive artifacts before writing any stage or metadata file.
 const annotations = auditNaruExamAnnotations(workbooks);
 const annotationCounts = validateNaruExamClassification(annotations);
+if (options.correctedAdverb) {
+  const bytes = await fs.readFile(options.correctedAdverb);
+  const spec = ORIGINAL_WORKBOOKS.find(spec => spec.key === 'adverb');
+  const corrected = parseOriginalWorkbook({ spec,sha256:digest(bytes),sheets:archiveWorkbook(XLSX.read(bytes,{type:'buffer',cellStyles:true,cellFormula:true,cellHTML:false}),XLSX) });
+  const correction = createNaruAdverbSourceCorrection(workbooks.find(workbook => workbook.spec.key==='adverb'),corrected,NARU_SOURCE_CORRECTIONS.corrections[0]?.approval);
+  // The fixed manifest gate and every SQL size check run before any artifact.
+  const sourceSql=buildNaruSourceCorrectionStageSql(correction), applySql=buildNaruSourceCorrectionSql(correction), preflightSql=buildNaruSourceCorrectionPreflightSql();
+  await fs.writeFile(path.join(outputDir,'naru-source-correction.source.sql'),sourceSql,{mode:0o600});
+  await fs.writeFile(path.join(outputDir,'naru-source-correction.apply.sql'),applySql,{mode:0o600});
+  await fs.writeFile(path.join(outputDir,'naru-source-correction.preflight.sql'),preflightSql,{mode:0o600});
+  await fs.writeFile(path.join(outputDir,'naru-source-correction.manifest.json'),JSON.stringify({ ...correction,sourceSqlSha256:digest(sourceSql),applySqlSha256:digest(applySql) },null,2)+'\n',{mode:0o600});
+  console.log(JSON.stringify({ outputDir,wordCount:1531,sourceEntriesAfterAppend:1532,existingWordIdsPreserved:true,wordNumber:1361,definition:correction.definition,exampleMeaningOrigin:'app-supplement',sourceSha256:correction.correctedSha256,approvalUnchanged:true,examMarks:638,databaseWrite:false },null,2));
+  process.exit(0);
+}
+const orphanDefinitions=workbooks.flatMap(w=>w.issues||[]).filter(i=>i.code==='ORPHAN_DEFINITION_ON_SECTION');
+if(orphanDefinitions.length)throw new Error('Row correspondence requires review before generating application supplements: '+JSON.stringify(orphanDefinitions));
 const annotationSql = buildNaruExamAnnotationSql(annotations);
 const supplementSql = buildNaruDefinitionSupplementSql();
 const stageSql = buildNaruStageSql(model);

@@ -1,10 +1,12 @@
-2026-10-08 現行: PR61/main `0736ae7` のUI改善は本番受入済み。[A8 初回自動発音の候補](./analysis/2026-10-08-first-visible-word-pronunciation.md)は2101unit・Cloud231＋IDB9全回帰と独立reviewを完了。本人の公開指示を受け[PR62](https://github.com/wadansyaku/medace-english-app/pull/62)の通常公開工程へ進行中。旧公開禁止は今後も再適用しない。公開SHA/受入結果はPR62/workflowと独立deliveryのpublication記録を参照する。
+2026-10-08 現行: PR61のUIと[A8 初回自動発音](./analysis/2026-10-08-first-visible-word-pronunciation.md)は本番受入済み。PR62/main `1425152`、production37753211999成功、配備先244 browser回帰成功。旧公開禁止は今後も再適用しない。[actuallyの原本行対応訂正](./analysis/2026-10-08-naru-actually-original-row-correction.md)は修正版Excel納品済み・アプリはローカル候補。旧出典・ID・履歴を保持し、後続公開時のstage/配備/apply順序を文書化した。
 
 # Documentation Index
 
 This directory keeps operational docs and historical design notes for Steady Study.
 
 ## Current
+
+- [Naru actuallyの訳の行ずれと原本対応訂正](./analysis/2026-10-08-naru-actually-original-row-correction.md): 修正版Excelの二セル限定編集、出典追加・既存ID/1,531語/638印/履歴保持、限定parser検出、実D1受入と後続公開の段階適用。今回アプリ候補は未公開。
 
 - [統合UI・無料作文表示の最終受入と公開工程](./analysis/2026-10-08-integrated-ui-release.md): 本人許可後のremote-readonly/原本436/0058 beforeとPR61初回CI/preview成功。無料組織の導入完了P1を追加修正し2083unit・型・関連7browser成功、更新版配備へ進行中。公開禁止は解除済み。
 

@@ -1,3 +1,5 @@
+import { naruSourceCorrectionExpectation, matchesReviewedNaruCorrectedWord } from '../../../shared/naruSourceCorrection';
+import { naruSourceCorrectionGuard } from '../../../shared/naruSourceCorrectionSql.mjs';
 import definitionSupplements from '../../../data/naru-app-definition-supplements.json';
 import type { GuestLearningCatalogResponse, GuestLearningImportRequest, GuestLearningImportResponse, GuestLearningSummary } from '../../../contracts/guestLearning';
 import { NARU_BOOK_ID } from '../../../shared/naruBook';
@@ -90,6 +92,12 @@ const isReviewedGuestSupplement = async (env: AppEnv): Promise<boolean> => {
   return verified?.valid===1;
 };
 
+const isReviewedGuestSourceCorrection = async (env:AppEnv):Promise<boolean> => {
+  const verified = await env.DB.prepare(`WITH expected(payload) AS(SELECT ?) SELECT 1 AS valid FROM expected x WHERE (${naruSourceCorrectionGuard({phase:'after'})})`)
+    .bind(naruSourceCorrectionExpectation).first<{valid:number}>();
+  return verified?.valid===1;
+};
+
 // This fixed route never accepts a caller-selected book or account scope.
 export const readGuestLearningCatalog = async (env: AppEnv): Promise<GuestLearningCatalogResponse> => {
   const row = assertPublicNaru(await getBookRow(env, NARU_BOOK_ID));
@@ -118,8 +126,10 @@ export const readGuestLearningCatalog = async (env: AppEnv): Promise<GuestLearni
     && supplementWord.search_key === 'actually' && supplementWord.subcategory === '' && supplementWord.section === ''
     && supplementWord.inflections === '' && supplementWord.pronunciation === '' && supplementWord.source_note === '';
   const validSupplement = supplementContentMatches && await isReviewedGuestSupplement(env);
+  const correctionContentMatches = !!supplementWord && matchesReviewedNaruCorrectedWord(supplementWord);
+  const validCorrection = correctionContentMatches && await isReviewedGuestSourceCorrection(env);
   const hasVerifiedSource = (word: DbWordRow & { source_ready:number; source_blocked:number }) => word.id === reviewedSupplement.wordId
-    ? validSupplement && word.source_ready === 0 && word.source_blocked === 1
+    ? (validSupplement || validCorrection) && word.source_ready === 0 && word.source_blocked === 1
     : word.source_ready === 1 && word.source_blocked === 0;
   if (words.length !== row.word_count || words.some((word) => !word.word?.trim() || !word.definition?.trim()
     || !word.source_sheet?.trim()
