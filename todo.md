@@ -1,7 +1,7 @@
 2026-10-08追加: [actuallyの原本訳の行ずれ](./docs/analysis/2026-10-08-naru-actually-original-row-correction.md)
 
 - [x] 画像/同一SHAを照合し、G81→G82の修正版Excelを限定編集・納品。既存ID1361/1531語/638印/履歴を保持する訂正台帳と例文訳だけの補完表示をローカル候補へ実装。実workerd/D1・全2130unit・型/build/API、標準249browser（配備専用2skip）と実修正版の5幅UIで確認。
-- [ ] 後続公開依頼時、0059stage→対応Pages到達→review済みActionsのpreflight/明示apply→after受入を完了する。今回の新しいpush/PR/merge/deployは行っていない。apply後に旧1425152へコード単独rollbackしない。
+- [ ] 本人の本番アプリ・教材適用承認を受け、0059stage→対応Pages到達→review済みActionsのpreflight/明示apply→after受入を完了する。公開工程を開始。apply後に旧1425152へコード単独rollbackしない。
 
 2026-10-08追加: [A8 初回自動発音](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)
 

@@ -192,6 +192,22 @@ jobs:
             test-results
           if-no-files-found: ignore
 
+      - name: Apply reviewed Naru correction after compatible production code arrives
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CORRECTION_URL: ${{ steps.deploy.outputs['project-url'] }}
+          CORRECTION_SHA: ${{ github.sha }}
+        run: node scripts/apply-naru-source-correction.mjs --database "$CLOUDFLARE_D1_DATABASE" --remote --url "$CORRECTION_URL" --expected-sha "$CORRECTION_SHA" --output tmp/release-gates/production-naru-source-correction.json
+
+      - name: Upload production Naru correction receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: production-naru-source-correction
+          path: tmp/release-gates/production-naru-source-correction.json
+          if-no-files-found: ignore
+
       - name: Inspect production Pages secrets
         id: production-secrets
         env:
@@ -253,4 +269,5 @@ jobs:
             echo "- Missing Required Production Secrets: \`${{ steps.production-secrets.outputs['missing-required'] }}\`"
             echo "- Missing Optional Production Secrets: \`${{ steps.production-secrets.outputs['missing-optional'] }}\`"
             echo "- Schema: remote D1 migrations applied before deploy"
+            echo "- Naru correction: verified after compatible code and matching build assets arrived"
           } >> "$GITHUB_STEP_SUMMARY"

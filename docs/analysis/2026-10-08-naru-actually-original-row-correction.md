@@ -63,3 +63,9 @@ stageのみなら旧コードへrollback可能。apply後は訂正対応コー�
 副詞一覧のactuallyの訳「実際には」が、一行上の見出し行に入っていました。actuallyと同じ行へ訳を移し、英単語・例文・黄色の出題印はそのままにしました。語数は1,531語のままです。こちらの以前の「訳がなかったため補った」という説明は、訳の行位置を正しく捉えていませんでした。アプリも原本の訳と出典へ整合する候補を準備しています。
 
 説明文案のみで、LINEなどへの送信はしていない。
+
+## 本人承認後の公開工程
+
+後続の本人指示「本番アプリと教材データにも適用してよい」により、保存候補18767dfの通常公開を開始した。上の未公開記述は初回保存時点の状態である。訂正以外の機能、権限、AI設定へ範囲を広げない。0059のstageを維持し、Pages配備と既存deployed smokeの後で固定canonical helperをActionsから実行する。
+
+helperはruntime SHAだけに依存せず、当該buildのHTML entry asset集合・各JS/CSS byte SHA256と、訂正対応guest route固有のX-Naru-Source-Correctionを照合する。その後before guardと集計を読み、適用直前にも到達を再確認する。新規applyはSQLのRETURNINGで当該実行が固定訂正IDを1件挿入したことを要求し、0件・失効・after不一致・件数減少は失敗とする。検証済み既適用は書込みせず再検証する。preview/prodのreceiptは個人情報を含めず別artifactへ保存する。

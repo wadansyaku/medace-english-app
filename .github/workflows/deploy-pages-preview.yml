@@ -74,6 +74,15 @@ jobs:
       - name: Build deploy artifact
         run: npm run build
 
+      - name: Capture preview D1 recovery bookmark
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          mkdir -p tmp/release-gates
+          node node_modules/wrangler/bin/wrangler.js d1 time-travel info "$CLOUDFLARE_D1_DATABASE" --json > tmp/release-gates/preview-recovery-bookmark.json
+          node -e 'const p=JSON.parse(require("fs").readFileSync("tmp/release-gates/preview-recovery-bookmark.json","utf8")); if (!p.bookmark) process.exit(1);'
+
       - name: Apply remote preview D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -110,6 +119,7 @@ jobs:
             tmp/content-qa/preview-content-qa.json
             tmp/release-gates/preview-source-ledger.json
             tmp/release-gates/preview-b2b-activation.json
+            tmp/release-gates/preview-recovery-bookmark.json
           if-no-files-found: ignore
 
       - name: Summarize preview release gate evidence
@@ -188,6 +198,22 @@ jobs:
             test-results
           if-no-files-found: ignore
 
+      - name: Apply reviewed Naru correction after compatible preview code arrives
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CORRECTION_URL: ${{ steps.deploy.outputs['branch-alias-url'] }}
+          CORRECTION_SHA: ${{ github.sha }}
+        run: node scripts/apply-naru-source-correction.mjs --database "$CLOUDFLARE_D1_DATABASE" --remote --url "$CORRECTION_URL" --expected-sha "$CORRECTION_SHA" --output tmp/release-gates/preview-naru-source-correction.json
+
+      - name: Upload preview Naru correction receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: preview-naru-source-correction
+          path: tmp/release-gates/preview-naru-source-correction.json
+          if-no-files-found: ignore
+
       - name: Inspect preview Pages secrets
         id: preview-secrets
         env:
@@ -247,6 +273,7 @@ jobs:
             echo "- Missing Required Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-required'] }}\`"
             echo "- Missing Optional Preview Secrets: \`${{ steps.preview-secrets.outputs['missing-optional'] }}\`"
             echo "- Schema: remote preview D1 migrations applied before deploy"
+            echo "- Naru correction: verified after compatible code and matching build assets arrived"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Update PR with preview URL

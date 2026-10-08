@@ -1,4 +1,4 @@
-import { naruSourceCorrectionExpectation, matchesReviewedNaruCorrectedWord } from '../../../shared/naruSourceCorrection';
+import { naruSourceCorrectionExpectation, matchesReviewedNaruCorrectedWord, reviewedNaruSourceCorrection } from '../../../shared/naruSourceCorrection';
 import { naruSourceCorrectionGuard } from '../../../shared/naruSourceCorrectionSql.mjs';
 import definitionSupplements from '../../../data/naru-app-definition-supplements.json';
 import type { GuestLearningCatalogResponse, GuestLearningImportRequest, GuestLearningImportResponse, GuestLearningSummary } from '../../../contracts/guestLearning';
@@ -234,7 +234,9 @@ export const guestLearningRoutes: ApiRouteDefinition[] = [
   { matches: ({ pathname, request }) => pathname === 'guest-learning/naru' && request.method === 'GET',
     handle: async ({ env, request }) => {
       if (new URL(request.url).search) throw new HttpError(400, '教材の取得条件が正しくありません。');
-      return { response: createJsonResponse(await readGuestLearningCatalog(env)) };
+      return { response: createJsonResponse(await readGuestLearningCatalog(env), {
+        headers: { 'X-Naru-Source-Correction': reviewedNaruSourceCorrection.id },
+      }) };
     } },
   { matches: ({ pathname, request }) => pathname === 'guest-learning/import' && request.method === 'POST',
     handle: async ({ env, request }) => {
