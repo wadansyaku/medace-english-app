@@ -109,5 +109,5 @@ PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで�
 - [ ] B1の長期復習再参加は未接続。公平性・日cap・Cloud/IDB/due/home/missionの統一を次段階で実装・限定受入。
 - [ ] 実Safari/iOS、物理IME、実200%/400%zoomと限定利用/7・28日評価は未検証。
 - [x] 2026-10-08本人の直接指示で公開禁止を解除。以降も旧禁止を再適用しない。本人所有の既存repoへ統合branch push済み。
-- [x] 無料学校管理者の作文対象外/未取得/0件混同・追加403・クラス作成誘導を修正。200files2071unit、58migration/API/build/security、Cloud194＋IDB9・5幅・遅延/失敗/retry成功。
+- [x] 無料学校管理者の作文対象外/未取得/0件混同・追加403・クラス作成誘導を修正。200files2072unit、58migration/API/build/security、Cloud194＋IDB9・5幅・遅延/失敗/retry成功。
 - [ ] 必須remote-readonlyの個別読み取り許可、最新原本436/0058 before、PR/CI/preview、main/productionと0058 afterを完了する。正本は[10-08公開工程](./docs/analysis/2026-10-08-integrated-ui-release.md)。
