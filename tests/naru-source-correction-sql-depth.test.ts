@@ -13,7 +13,7 @@ describe('source correction real workerd D1 expression-depth regression',()=>{
   const mf=new Miniflare(convertV4MiniflareOptions({name:'depth-test',modules:true,script:'export default {fetch(){return new Response("local test");}}',d1Databases:{DB:'naru-correction-depth-test'}}));
   try{
    const db=await mf.getD1Database('DB');
-   for(const file of fs.readdirSync('migrations').filter(name=>name.endsWith('.sql')&&Number(name.slice(0,4))<=59).sort()){
+   for(const file of fs.readdirSync('migrations').filter(name=>name.endsWith('.sql')&&Number(name.slice(0,4))<=60).sort()){
     for(const statement of unstable_splitSqlQuery(fs.readFileSync(`migrations/${file}`,'utf8')))await db.prepare(statement).run();
    }
    const proof=JSON.stringify(naruCorrectionProof(NARU_SOURCE_CORRECTIONS.corrections[0]));

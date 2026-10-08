@@ -14,7 +14,7 @@ const databases: DatabaseSync[] = [];
 afterEach(() => databases.splice(0).forEach(db => db.close()));
 const modelFixture = createNaruSupplementFixtureModel;
 const applySchema = (db:DatabaseSync, includeSupplement = false) => {
-  for (const name of fs.readdirSync('migrations').filter(n => n.endsWith('.sql') && (includeSupplement || (!n.startsWith('0057') && !n.startsWith('0059')))).sort()) db.exec(fs.readFileSync(`migrations/${name}`,'utf8'));
+  for (const name of fs.readdirSync('migrations').filter(n => n.endsWith('.sql') && (includeSupplement || (!n.startsWith('0057') && !n.startsWith('0059') && !n.startsWith('0060')))).sort()) db.exec(fs.readFileSync(`migrations/${name}`,'utf8'));
   db.exec('PRAGMA foreign_keys=ON');
 };
 const seedModel = (db:DatabaseSync, model:ReturnType<typeof modelFixture>) => {

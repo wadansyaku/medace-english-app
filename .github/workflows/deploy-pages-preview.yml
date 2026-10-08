@@ -11,8 +11,9 @@ on:
       - reopened
 
 concurrency:
-  group: pages-preview-${{ github.event.pull_request.head.ref || github.ref_name }}
-  cancel-in-progress: true
+  # Every branch writes the same preview D1 and runtime metadata.
+  group: pages-preview-shared-d1
+  cancel-in-progress: false
 
 jobs:
   deploy:

@@ -153,3 +153,34 @@ export const buildNaruSourceCorrectionMigrationSql = (manifest = NARU_SOURCE_COR
   // the compatible backend has been deployed; never change the old guest word.
   return statementLimit(statements)+buildNaruSourceCorrectionStageSql(m);
 };
+
+/** Additive repair for 0059. Preserve the historical generator above byte-for-
+ * byte: validity invalidation and saved example-translation provenance differ. */
+export const buildNaruSourceCorrectionMaintenanceMigrationSql = (manifest = NARU_SOURCE_CORRECTIONS.corrections[0]) => {
+  const m=reviewedCorrection(manifest),proof=JSON.stringify(naruCorrectionProof(m));
+  const statements=['-- Repair correction UPDATE no-ops and retain saved application-example provenance. No source/archive/ledger/history deletion.'];
+  const materialUpdates=[
+    ['entry','catalog_source_entries',['id','source_id','source_key','content_hash','payload_json','ready'],"OLD.id IN(c.original_source_entry_id,c.corrected_source_entry_id) OR NEW.id IN(c.original_source_entry_id,c.corrected_source_entry_id)"],
+    ['source','catalog_workbook_sources',['id','series_key','source_file','sha256','archive_json'],"OLD.id IN(json_extract(c.proof_json,'$.originalSourceId'),json_extract(c.proof_json,'$.correctedSourceId')) OR NEW.id IN(json_extract(c.proof_json,'$.originalSourceId'),json_extract(c.proof_json,'$.correctedSourceId'))"],
+    ['archive','catalog_workbook_sheet_rows',['source_id','sheet_name','row_number','payload_json'],"OLD.source_id IN(json_extract(c.proof_json,'$.originalSourceId'),json_extract(c.proof_json,'$.correctedSourceId')) OR NEW.source_id IN(json_extract(c.proof_json,'$.originalSourceId'),json_extract(c.proof_json,'$.correctedSourceId'))"],
+    ['link','catalog_word_source_links',['source_entry_id','word_id','match_kind'],'OLD.word_id=c.word_id OR NEW.word_id=c.word_id'],
+  ];
+  for(const [suffix,table,columns,match] of materialUpdates){
+    const name=`invalidate_naru_correction_${suffix}_update`;
+    statements.push(`DROP TRIGGER ${name};`);
+    statements.push(`CREATE TRIGGER ${name} AFTER UPDATE OF ${columns.join(',')} ON ${table} WHEN ${columns.map(column=>`OLD.${column} IS NOT NEW.${column}`).join(' OR ')} BEGIN INSERT OR IGNORE INTO catalog_word_source_correction_invalidations SELECT c.id,${sql(name)},CAST(strftime('%s','now') AS INTEGER)*1000 FROM catalog_word_source_corrections c WHERE c.applied_at>0 AND (${match}); END;`);
+  }
+  statements.push('DROP TRIGGER clear_naru_correction_flags;');
+  statements.push('CREATE TRIGGER clear_naru_correction_flags AFTER INSERT ON catalog_word_source_correction_invalidations BEGIN UPDATE words SET aichi_exam_appeared=0 WHERE id=(SELECT word_id FROM catalog_word_source_corrections WHERE id=NEW.correction_id); END;');
+  statements.push('DROP TRIGGER refuse_invalidated_naru_correction_flags;');
+  statements.push('CREATE TRIGGER refuse_invalidated_naru_correction_flags AFTER UPDATE OF aichi_exam_appeared ON words WHEN NEW.aichi_exam_appeared<>0 AND EXISTS(SELECT 1 FROM catalog_word_source_corrections c JOIN catalog_word_source_correction_invalidations i ON i.correction_id=c.id WHERE c.word_id=NEW.id) BEGIN UPDATE words SET aichi_exam_appeared=0 WHERE id=NEW.id; END;');
+  // Only the fixed, previously applied, exact historical ledger may establish
+  // provenance. This never changes validity, source proof or exam appearance.
+  const origin=`EXISTS(SELECT 1 FROM catalog_word_source_corrections c WHERE c.id=${sql(m.id)} AND c.word_id=${sql(m.originalWordId)} AND c.original_source_entry_id=${sql(m.originalSourceEntryId)} AND c.corrected_source_entry_id=${sql(m.correctedSourceEntryId)} AND c.proof_json=${sql(proof)} AND c.applied_at>0)`;
+  statements.push(`CREATE TRIGGER preserve_naru_correction_example_origin AFTER UPDATE OF example_meaning,example_meaning_supplemented ON words WHEN NEW.id=${sql(m.originalWordId)} AND NEW.example_meaning=${sql(m.exampleMeaning)} AND NEW.example_meaning_supplemented<>1 AND ${origin} BEGIN UPDATE words SET example_meaning_supplemented=1 WHERE id=NEW.id; END;`);
+  statements.push(`CREATE TRIGGER clear_changed_naru_correction_example_origin AFTER UPDATE OF example_meaning,example_meaning_supplemented ON words WHEN NEW.id=${sql(m.originalWordId)} AND NEW.example_meaning IS NOT ${sql(m.exampleMeaning)} AND NEW.example_meaning_supplemented<>0 AND ${origin} BEGIN UPDATE words SET example_meaning_supplemented=0 WHERE id=NEW.id; END;`);
+  // Repair only the lost label for the same saved canonical translation; an
+  // edited/mismatching ledger or changed example is deliberately not healed.
+  statements.push(`UPDATE words SET example_meaning_supplemented=1 WHERE id=${sql(m.originalWordId)} AND example_meaning=${sql(m.exampleMeaning)} AND example_meaning_supplemented=0 AND ${origin};`);
+  return statementLimit(statements);
+};

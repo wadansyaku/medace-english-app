@@ -69,3 +69,7 @@ stageのみなら旧コードへrollback可能。apply後は訂正対応コー�
 後続の本人指示「本番アプリと教材データにも適用してよい」により、保存候補18767dfの通常公開を開始した。上の未公開記述は初回保存時点の状態である。訂正以外の機能、権限、AI設定へ範囲を広げない。0059のstageを維持し、Pages配備と既存deployed smokeの後で固定canonical helperをActionsから実行する。
 
 helperはruntime SHAだけに依存せず、当該buildのHTML entry asset集合・各JS/CSS byte SHA256と、訂正対応guest route固有のX-Naru-Source-Correctionを照合する。その後before guardと集計を読み、適用直前にも到達を再確認する。新規applyはSQLのRETURNINGで当該実行が固定訂正IDを1件挿入したことを要求し、0件・失効・after不一致・件数減少は失敗とする。検証済み既適用は書込みせず再検証する。preview/prodのreceiptは個人情報を含めず別artifactへ保存する。
+
+## 公開前レビュー3件の追加受入
+
+PR63のレビューで、失効時の補完訳由来ラベル消失、4出典表のno-op UPDATEによる永久失効、共有preview D1の並行applyを確認した。0059を変更せず追加0060で由来と失効を分け、実変更だけを失効させる。guestの失効gate、訂正履歴、承認境界は維持する。preview workflowは共有D1の固定concurrency group・cancel-in-progress:falseへ変更し、異なるbranchの適用を直列化する。0件applyをAPPLIED扱いするhelper契約は維持し、切替前の旧branch group実行が終了したことを確認してから新workflowを実行する。

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { unstable_splitSqlQuery } from 'wrangler';
 import { createSqliteD1 } from './helpers/sqlite-d1';
 import { createNaruSupplementFixtureModel } from './helpers/naru-definition-supplement-fixture';
-import { NARU_SOURCE_CORRECTIONS, buildNaruSourceCorrectionMigrationSql, buildNaruSourceCorrectionSql, buildNaruSourceCorrectionStageSql, buildNaruSourceCorrectionPreflightSql } from '../scripts/_shared/naru-source-corrections.mjs';
+import { NARU_SOURCE_CORRECTIONS, buildNaruSourceCorrectionMigrationSql, buildNaruSourceCorrectionMaintenanceMigrationSql, buildNaruSourceCorrectionSql, buildNaruSourceCorrectionStageSql, buildNaruSourceCorrectionPreflightSql } from '../scripts/_shared/naru-source-corrections.mjs';
 import { buildNaruDefinitionSupplementSql } from '../scripts/_shared/naru-definition-supplements.mjs';
 import { readGuestLearningCatalog, commitGuestLearningImport } from '../functions/_shared/api-routes/guest-learning';
 import WordExamBadge from '../components/WordExamBadge';
@@ -17,9 +17,10 @@ import { toWordData } from '../functions/_shared/storage-support';
 const m=NARU_SOURCE_CORRECTIONS.corrections[0];
 const sql=buildNaruSourceCorrectionSql();
 const migration=fs.readFileSync('migrations/0059_naru_actually_source_correction.sql','utf8');
+const maintenance=fs.readFileSync('migrations/0060_naru_correction_provenance_and_noop_updates.sql','utf8');
 const fixtures:ReturnType<typeof createSqliteD1>[]=[];
 afterEach(()=>fixtures.splice(0).forEach(f=>f.sqlite.close()));
-const setup=({approved=true,correct=true}={})=>{
+const setup=({approved=true,correct=true,repair=true}={})=>{
  const f=createSqliteD1();fixtures.push(f);
  for(const name of fs.readdirSync('migrations').filter(n=>n.endsWith('.sql')&&Number(n.slice(0,4))<=58).sort()) f.sqlite.exec(fs.readFileSync(`migrations/${name}`,'utf8'));
  const model=process.env.NARU_ORIGINAL_MODEL_FILE?JSON.parse(fs.readFileSync(process.env.NARU_ORIGINAL_MODEL_FILE,'utf8')):createNaruSupplementFixtureModel();
@@ -50,7 +51,7 @@ const setup=({approved=true,correct=true}={})=>{
  }
 
  if(!approved)f.sqlite.exec("UPDATE material_source_ledger SET review_status='needs_review'");
- if(correct){f.sqlite.exec(migration);f.sqlite.exec(sql);}
+ if(correct){f.sqlite.exec(migration);if(repair)f.sqlite.exec(maintenance);f.sqlite.exec(sql);}
  return Object.assign(f,{env:{DB:f.DB}});
 };
 const snap=(f:ReturnType<typeof setup>)=>({
@@ -142,8 +143,48 @@ describe('strict original row correction, native SQLite',()=>{
   expect(f.sqlite.prepare('SELECT COUNT(*) n FROM catalog_word_source_correction_invalidations').get()?.n).toBe(1);
   f.sqlite.prepare('UPDATE words SET definition=?,aichi_exam_appeared=1,example_meaning_supplemented=1 WHERE id=?').run('実際には',m.originalWordId);
   f.sqlite.exec(sql);
-  expect(f.sqlite.prepare('SELECT aichi_exam_appeared,example_meaning_supplemented FROM words WHERE id=?').get(m.originalWordId)).toEqual({aichi_exam_appeared:0,example_meaning_supplemented:0});
+  expect(f.sqlite.prepare('SELECT aichi_exam_appeared,example_meaning_supplemented FROM words WHERE id=?').get(m.originalWordId)).toEqual({aichi_exam_appeared:0,example_meaning_supplemented:1});
   await expect(readGuestLearningCatalog(f.env)).rejects.toMatchObject({status:503});
+ });
+ it('reproduces immutable 0059 and pins the additive repair statements',()=>{
+  expect(migration).toBe(buildNaruSourceCorrectionMigrationSql());
+  expect(maintenance).toBe(buildNaruSourceCorrectionMaintenanceMigrationSql());
+  for(const statement of unstable_splitSqlQuery(maintenance))expect(new TextEncoder().encode(statement).length).toBeLessThan(100000);
+ });
+ it.each(['entry','workbook','archive','link'])('keeps no-op %s updates valid and guest-readable',async kind=>{
+  const f=setup();const before=await readGuestLearningCatalog(f.env);
+  if(kind==='entry')f.sqlite.prepare('UPDATE catalog_source_entries SET id=id,source_id=source_id,source_key=source_key,content_hash=content_hash,payload_json=payload_json,ready=ready WHERE id IN(?,?)').run(m.originalSourceEntryId,m.correctedSourceEntryId);
+  if(kind==='workbook')f.sqlite.prepare('UPDATE catalog_workbook_sources SET id=id,series_key=series_key,source_file=source_file,sha256=sha256,archive_json=archive_json,created_at=created_at+1 WHERE id IN(?,?)').run(m.originalSourceId,m.correctedSourceId);
+  if(kind==='archive')f.sqlite.prepare('UPDATE catalog_workbook_sheet_rows SET source_id=source_id,sheet_name=sheet_name,row_number=row_number,payload_json=payload_json WHERE source_id IN(?,?)').run(m.originalSourceId,m.correctedSourceId);
+  if(kind==='link')f.sqlite.prepare('UPDATE catalog_word_source_links SET source_entry_id=source_entry_id,word_id=word_id,match_kind=match_kind WHERE word_id=?').run(m.originalWordId);
+  expect(f.sqlite.prepare('SELECT COUNT(*) n FROM catalog_word_source_correction_invalidations').get()?.n).toBe(0);
+  expect((await readGuestLearningCatalog(f.env)).words).toEqual(before.words);
+ });
+ it('material workbook change stays permanently invalid; saved example provenance remains visible to authenticated users',async()=>{
+  const f=setup();f.sqlite.prepare("UPDATE catalog_workbook_sources SET sha256='edited' WHERE id=?").run(m.correctedSourceId);
+  f.sqlite.exec("INSERT INTO users(id,email,display_name,role,subscription_plan,created_at,updated_at) VALUES('owner','owner@test.invalid','Synthetic','STUDENT','TOC_FREE',1,1)");
+  const user=f.sqlite.prepare("SELECT * FROM users WHERE id='owner'").get() as unknown as DbUserRow;
+  const words=await handleGetWordsByBook(f.env,user,m.bookId);
+  expect(words.find(w=>w.id===m.originalWordId)).toMatchObject({exampleMeaning:m.exampleMeaning,exampleMeaningSupplemented:true});
+  f.sqlite.prepare('UPDATE words SET example_meaning_supplemented=0,aichi_exam_appeared=1 WHERE id=?').run(m.originalWordId);
+  expect(f.sqlite.prepare('SELECT example_meaning_supplemented,aichi_exam_appeared FROM words WHERE id=?').get(m.originalWordId)).toEqual({example_meaning_supplemented:1,aichi_exam_appeared:0});
+  await expect(readGuestLearningCatalog(f.env)).rejects.toMatchObject({status:503});
+ });
+ it('repairs a lost canonical provenance label without healing an existing invalidation or exam flag',async()=>{
+  const f=setup({repair:false});f.sqlite.prepare("UPDATE catalog_source_entries SET ready=0 WHERE id=?").run(m.correctedSourceEntryId);
+  expect(f.sqlite.prepare('SELECT example_meaning_supplemented FROM words WHERE id=?').get(m.originalWordId)?.example_meaning_supplemented).toBe(0);
+  const history=snap(f);f.sqlite.exec(maintenance);
+  expect(f.sqlite.prepare('SELECT example_meaning_supplemented,aichi_exam_appeared FROM words WHERE id=?').get(m.originalWordId)).toEqual({example_meaning_supplemented:1,aichi_exam_appeared:0});
+  expect(snap(f).entries).toEqual(history.entries);expect(snap(f).links).toEqual(history.links);expect(snap(f).supplement).toEqual(history.supplement);
+  expect(f.sqlite.prepare('SELECT COUNT(*) n FROM catalog_word_source_correction_invalidations').get()?.n).toBe(1);
+  await expect(readGuestLearningCatalog(f.env)).rejects.toMatchObject({status:503});
+ });
+ it('does not label an edited example or a mismatching ledger as canonical app supplementation',async()=>{
+  const f=setup();f.sqlite.prepare("UPDATE words SET example_meaning='different',example_meaning_supplemented=1 WHERE id=?").run(m.originalWordId);
+  expect(f.sqlite.prepare('SELECT example_meaning_supplemented FROM words WHERE id=?').get(m.originalWordId)?.example_meaning_supplemented).toBe(0);
+  await expect(readGuestLearningCatalog(f.env)).rejects.toMatchObject({status:503});
+  const old=setup({repair:false});old.sqlite.prepare("UPDATE catalog_word_source_corrections SET proof_json='{}' WHERE id=?").run(m.id);old.sqlite.exec(maintenance);
+  expect(old.sqlite.prepare('SELECT example_meaning_supplemented,aichi_exam_appeared FROM words WHERE id=?').get(m.originalWordId)).toEqual({example_meaning_supplemented:0,aichi_exam_appeared:0});
  });
  it('rejects missing/wrong archive staging and keeps word content intact',()=>{
   const f=setup({correct:false});const before=snap(f).words;

@@ -45,7 +45,7 @@ describe('official import approval boundary with the complete local schema', () 
     const fixture = createFixture();
     const result = await handleBatchImportWords(fixture.env, admin, request(), localImportFlags);
     const bookId = result.importedBookIds[0];
-    expect(migrations).toHaveLength(59);
+    expect(migrations).toHaveLength(60);
     expect(migrations).toContain('0056_naru_aichi_exam_annotations.sql');
     expect(migrations).toContain('0057_naru_actually_definition_supplement.sql');
     expect(migrations).toContain('0059_naru_actually_source_correction.sql');
