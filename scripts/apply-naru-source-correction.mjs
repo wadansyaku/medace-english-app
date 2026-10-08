@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -84,16 +83,14 @@ const safeRow=row=>{
 };
 const consistent=row=>row.wordCount===1531&&row.marks===638&&row.sourceEntries===1532&&row.links===1531&&row.target===1&&row.invalid===0&&row.originalReady===0&&row.correctedReady===1&&row.foreignKeyErrors===0;
 const defaultExecute=async(options,sql)=>{
- const folder=await fs.mkdtemp(path.join(os.tmpdir(),'naru-correction-apply-'));
- try{
-  const file=path.join(folder,'fixed.sql');await fs.writeFile(file,sql,{mode:0o600});
-  const args=[path.resolve('node_modules/wrangler/bin/wrangler.js'),'d1','execute',options.database,options.mode,'--json','--file',file];
+  // Remote --file uses D1's bulk import API, omits SELECT/RETURNING rows and
+  // pauses queries. Fixed single-statement --command uses the query API.
+  const args=[path.resolve('node_modules/wrangler/bin/wrangler.js'),'d1','execute',options.database,options.mode,'--json','--command',sql];
   if(options.persistTo)args.push('--persist-to',options.persistTo);
   let stdout;try{({stdout}=await promisify(execFile)(process.execPath,args,{cwd:process.cwd(),encoding:'utf8',maxBuffer:16*1024*1024,env:{...process.env,CI:'1',FORCE_COLOR:'0'}}));}catch{throw failure('D1_EXECUTION_FAILED');}
   let results;try{results=JSON.parse(stdout);}catch{throw failure('D1_RESULT_INVALID');}
   if(!Array.isArray(results)||results.length!==1||results.some(result=>result.success!==true))throw failure('D1_RESULT_INVALID');
   return results[0];
- }finally{await fs.rm(folder,{recursive:true,force:true});}
 };
 const defaultGuest=async options=>{
  let response;try{response=await fetch(`${options.url}/api/guest-learning/naru`,{cache:'no-store',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(30000)});}catch{throw failure('GUEST_FETCH_FAILED');}
