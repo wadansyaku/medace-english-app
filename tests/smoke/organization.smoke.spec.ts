@@ -606,7 +606,7 @@ const provisionWritingStateManager = async (page: import('@playwright/test').Pag
   const adminPage = await browser.newPage({ baseURL: new URL(page.url()).origin });
   try {
     await loginAdminDemo(adminPage);
-    await expect(adminPage.getByTestId('admin-dashboard')).toBeVisible();
+    await expect(adminPage.getByRole('button', { name: '受付・お知らせ', exact: true })).toBeVisible();
     await storageAction(adminPage, 'updateCommercialRequest', {
       id: request.id, status: 'PROVISIONED', linkedUserUid: user.uid,
       targetSubscriptionPlan: plan, targetOrganizationName: `確認用教室 ${stamp}`,
