@@ -452,6 +452,7 @@ for (const suite of suites) {
       {
         ...suiteEnv,
         PLAYWRIGHT_BASE_URL: baseUrl,
+        PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME: !isExternalTarget && suite.name === 'cloudflare' ? '1' : '0',
         PLAYWRIGHT_SKIP_WEBSERVER: '1',
         PLAYWRIGHT_SMOKE_PORT: String(port),
         PLAYWRIGHT_OUTPUT_DIR: outputDir,

@@ -167,7 +167,6 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     await page.getByTestId('workspace-tab-writing').click();
     await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
-    await expect(page.getByTestId('business-admin-decision-panel')).toHaveCount(0);
   } else if ([
     'ISSUE_FIRST_WRITING_ASSIGNMENT',
     'WAIT_FOR_FIRST_WRITING_SUBMISSION',
@@ -634,7 +633,7 @@ for (const viewport of [
   { width: 768, height: 1024 }, { width: 1366, height: 900 },
 ]) {
   test(`free school writing state shows out of plan without zero claims or extra requests at ${viewport.width}`, async ({ page, browser }, testInfo) => {
-    test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), 'Local synthetic provisioning only');
+    test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic provisioning only');
     await page.setViewportSize(viewport);
     await provisionWritingStateManager(page, browser, 'TOB_FREE', String(viewport.width));
     const writingRequests: string[] = [];
@@ -652,6 +651,7 @@ for (const viewport of [
     await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
     await expect(page.getByText('完了済み', { exact: true })).toHaveCount(0);
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-decision-panel')).toHaveCount(0);
     await writingStateEvidence(page, testInfo, `free-writing-${viewport.width}`);
     await page.reload();
     await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
@@ -664,7 +664,7 @@ for (const viewport of [
 }
 
 test('paid school writing state distinguishes pending and failed fetches from confirmed zero and retry', async ({ page, browser }, testInfo) => {
-  test.skip(Boolean(process.env.PLAYWRIGHT_BASE_URL), 'Local synthetic provisioning only');
+  test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic provisioning only');
   await provisionWritingStateManager(page, browser, 'TOB_PAID', 'paid-states');
   let releaseQueue!: () => void; let markQueueStarted!: () => void;
   const queuePaused = new Promise<void>(resolve => { releaseQueue = resolve; });
