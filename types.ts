@@ -486,6 +486,8 @@ export interface WordData {
   aichiExamAppeared?: boolean;
   /** A reviewed app translation supplements a blank original definition. */
   definitionSupplemented?: boolean;
+  /** Original definition retained; only the example translation is app supplied. */
+  exampleMeaningSupplemented?: boolean;
   searchKey?: string;
   category?: string;
   subcategory?: string;

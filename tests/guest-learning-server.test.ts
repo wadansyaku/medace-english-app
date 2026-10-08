@@ -104,6 +104,7 @@ describe('fixed anonymous Naru catalogue', () => {
     const f = setup(); const route = guestLearningRoutes[0];
     const result = await route.handle({ env: f.env, pathname: 'guest-learning/naru', request: new Request('https://app.test/api/guest-learning/naru') });
     expect(result.response.status).toBe(200); expect(result.response.headers.get('Cache-Control')).toBe('no-store');
+    expect(result.response.headers.get('X-Naru-Source-Correction')).toBe('naru-actually-source-row-correction-v1');
     await expect(route.handle({ env: f.env, pathname: 'guest-learning/naru', request: new Request('https://app.test/api/guest-learning/naru?bookId=private-book') })).rejects.toMatchObject({ status: 400 });
   });
 });

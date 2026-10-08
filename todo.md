@@ -1,3 +1,8 @@
+2026-10-08追加: [actuallyの原本訳の行ずれ](./docs/analysis/2026-10-08-naru-actually-original-row-correction.md)
+
+- [x] 画像/同一SHAを照合し、G81→G82の修正版Excelを限定編集・納品。既存ID1361/1531語/638印/履歴を保持する訂正台帳と例文訳だけの補完表示をローカル候補へ実装。実workerd/D1・全2130unit・型/build/API、標準249browser（配備専用2skip）と実修正版の5幅UIで確認。
+- [ ] 本人の本番アプリ・教材適用承認を受け、0059stage→対応Pages到達→review済みActionsのpreflight/明示apply→after受入を完了する。公開工程を開始。apply後に旧1425152へコード単独rollbackしない。
+
 2026-10-08追加: [A8 初回自動発音](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)
 
 - [x] 計画正本v2へ要件と受入を追加（Libraryは親担当、repoは本候補）。
@@ -7,7 +12,7 @@
 
 - [x] 本人の追加指示による公開許可と旧公開禁止の継続解除を確認。PR62を作成。
 - [x] 公開前reviewの重要お知らせfocus/inertと後発報告modalへのfocus移動、CIで再現した短い横向き画面の発音案内による単語欠けを修正し、回帰を追加。
-- [ ] 更新候補のCI/preview、main/production、公開版のonce/手動/ミュート/隠れた正答/停止、D1保持の確認を完了する。配備実績はPR62と独立deliveryのpublication受入へ記録する。
+- [x] PR62/main1425152、CI/preview/production37753211999成功。公開版244browser、native Mac Chromeのonce/手動/ミュート/隠れた正答/停止、D1保持を確認。配備実績は独立deliveryのpublication受入へ記録済み。
 
 前のUI改善はPR61/main `0736ae7` で本番受入済み。以下の過去候補の未公開記述は作成時点の履歴である。
 

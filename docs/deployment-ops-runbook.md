@@ -109,3 +109,12 @@ npx wrangler d1 time-travel restore medace-db --bookmark=<bookmark>
 Wranglerの内部ログはローカル検証用の一時ディレクトリへ保存し、異常終了時に末尾最大256KiBから固定の分類だけを出力する。分類は `PROXY_CONNECTION_LOST`、`RUNTIME_CRASH`、`SQLITE_BUSY`、`UNKNOWN`。不明・読取不能を成功や0件に変えない。秘密値・本文・生の例外を公開artifactへコピーせず、一時ログは終了処理で削除する。利用者が要求した正常停止には障害診断を出さない。
 
 初回停止・単発再実行・実本番配備・独立live受入を分けた証拠は[本番リリース記録](./analysis/production-rebuild-release-2026-09-07.md)を参照する。
+
+
+## Naru原本行対応訂正の配備と復旧
+
+2026-10-08の本人承認で、本番アプリと教材のactually原本訂正を通常PR/CI/preview/productionから反映する。0059は出典stageのみ。配備先のdeployed smoke後、scripts/apply-naru-source-correction.mjsが期待SHA、build assetのbyte一致、訂正対応route marker、固定原本proofを確認してから明示applyし、after guard/1531語/638印/ID1361/学習集計とguest表示を再検証する。既適用は検証済みskipとし、0件applyや失効を成功に変えない。preview/prod receiptはActions artifactとして保存する。
+
+両環境でmigration前にD1 Time Travel bookmarkを取得する。stageのみなら旧1425152へコードrollback可能。apply後のコードrollback下限は訂正対応コードであり、旧APIへ単独rollbackしない。まず同じ訂正契約を保つforward fixまたは訂正対応配備へ戻す。出典・訂正台帳・旧補完を削除して復旧しない。DB bookmark restoreはその後の正当な学習保存も戻すため、影響を確認した障害復旧として判断し、通常のコードrollbackに混ぜない。
+
+公開前review対応の0060は、0059の記録を残して補完由来保持と出典no-op更新を修復する。preview全workflowは共有D1単位で直列化し、進行中のapplyをcancelしない。切替時は旧branch単位groupの実行終了を先に確認する。新規applyの0件RETURNINGは引き続きFAIL、適用前から有効な既適用状態だけをwriteなしで受け入れる。

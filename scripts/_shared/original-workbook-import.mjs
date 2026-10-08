@@ -168,6 +168,16 @@ export const parseOriginalWorkbook = ({ spec, sha256, sheets }) => {
     let category = '';
     sheet.rows.forEach((row, i) => {
       addIndex(sheet, i, 0);
+      // Report only the observed row-correspondence risk; never move a translation.
+      const previous = sheet.rows[i - 1];
+      if (lexical(text(row[5])) && !text(row[6]) && previous
+        && text(previous[5]) && !lexical(text(previous[5])) && japanese(text(previous[6]))) {
+        issues.push({ severity: 'blocking', code: 'ORPHAN_DEFINITION_ON_SECTION',
+          sourceSheet: sheet.name, sourceRow: sourceRowAt(sheet, i), sourceKey: `adverb:${sheet.name}:R${sourceRowAt(sheet, i)}C6`, word: text(row[5]),
+          wordCell: `F${sourceRowAt(sheet, i)}`, definitionCell: `G${sourceRowAt(sheet, i)}`,
+          sectionCell: `F${sourceRowAt(sheet, i - 1)}`, orphanDefinitionCell: `G${sourceRowAt(sheet, i - 1)}`,
+          section: text(previous[5]), orphanDefinition: text(previous[6]) });
+      }
       if (lexical(text(row[5]))) add(sheet, i, 5, {
         word: row[5], definition: row[6], exampleSentence: row[7], category, rawCells: row.slice(5),
       });
