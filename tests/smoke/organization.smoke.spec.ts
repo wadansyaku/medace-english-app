@@ -649,6 +649,8 @@ for (const viewport of [
     const notice = page.getByTestId('business-admin-writing-state');
     await expect(notice).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
     await expect(notice).toContainText('このプランでは作文機能を利用できません');
+    await expect(page.getByRole('heading', { name: 'このプランでは作文機能を利用できません', exact: true })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '作文機能の利用範囲を見る', exact: true })).toHaveCount(0);
     await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
     await expect(page.getByText('完了済み', { exact: true })).toHaveCount(0);
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);

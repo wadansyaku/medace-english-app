@@ -307,6 +307,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
   return (
     <WorkspaceDashboardShell
       testId="business-admin-dashboard"
+      hideHero={activeView === BusinessAdminWorkspaceView.WRITING && writingState !== 'READY'}
       notice={controller.notice && (
         <div className={`rounded-[24px] border px-5 py-4 text-sm font-medium ${
           controller.notice.tone === 'success'

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BusinessAdminDashboardSections from '../components/dashboard/BusinessAdminDashboardSections';
+import WorkspaceDashboardShell from '../components/dashboard/WorkspaceDashboardShell';
 import BusinessAdminOverviewSection from '../components/dashboard/businessAdmin/BusinessAdminOverviewSection';
 import BusinessAdminWritingSection from '../components/dashboard/businessAdmin/BusinessAdminWritingSection';
 import type { BusinessAdminDashboardController } from '../components/dashboard/businessAdmin/shared';
@@ -117,6 +118,17 @@ const renderWritingRoute = (writingState: BusinessAdminWritingState, activationS
 beforeEach(() => vi.clearAllMocks());
 
 describe('business admin writing availability in rendered views', () => {
+  it('shows the unavailable notice once without repeating hero information or navigation actions', () => {
+    const notice = getBusinessAdminWritingNotice('NOT_INCLUDED')!;
+    const html = renderToStaticMarkup(<WorkspaceDashboardShell
+      testId="business-admin-dashboard" eyebrow="作文機能" title={notice.title} body={notice.description}
+      hideHero actions={[{ label: 'Repeated writing action', onClick: noop }]}
+    ><BusinessAdminWritingSection user={user} writingAssignments={[]} writingQueue={[]} writingState="NOT_INCLUDED" /></WorkspaceDashboardShell>);
+    expect(html.split(notice.title)).toHaveLength(2);
+    expect(html.split(notice.description)).toHaveLength(2);
+    expect(html).not.toContain('Repeated writing action');
+    expect(html).toContain('business-admin-writing-state');
+  });
   it.each(nonReadyStates)('does not display empty or stale counts or mount writing operations when %s', writingState => {
     const html = renderToStaticMarkup(<BusinessAdminWritingSection
       user={user} writingAssignments={assignments} writingQueue={queue} writingState={writingState}
