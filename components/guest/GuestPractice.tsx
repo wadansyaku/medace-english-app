@@ -7,6 +7,8 @@ import { buildCuratedGrammarPracticeItems } from '../../utils/grammarQuestionBan
 import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import type { GrammarClozePracticeItem } from '../../utils/grammarPractice';
 import { buildGuestMeaningQuestions, isGuestSpellingCorrect } from '../../shared/guestPractice';
+import { useWordPronunciation } from '../../hooks/useWordPronunciation';
+import WordPronunciationControls from '../study/WordPronunciationControls';
 import GuestLanguagePractice, { type GuestLanguagePracticeMode } from './GuestLanguagePractice';
 
 export interface GuestPracticeProps { words: WordData[]; onBack: () => void }
@@ -25,6 +27,7 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const heading = useRef<HTMLHeadingElement>(null);
   const questionHeading = useRef<HTMLHeadingElement>(null);
+  const answerWord = useRef<HTMLElement | null>(null);
   const feedback = useRef<HTMLDivElement>(null);
   const answerLock = useRef(false);
   const nextLock = useRef(false);
@@ -43,6 +46,14 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
   const choices = grammar?.options ?? wordQuestion?.choices ?? [];
   const explanation = grammar ? buildGrammarScopeExplanation(grammar.grammarScope) : undefined;
   const complete = total > 0 && index >= total;
+  const isWordPractice = mode === 'meaning' || mode === 'spelling';
+  const pronunciation = useWordPronunciation({
+    presentationKey: isWordPractice && wordQuestion ? `guest-practice:${round}:${mode}:${index}:${wordQuestion.word.bookId}:${wordQuestion.id}` : null,
+    text: isWordPractice && (mode === 'meaning' || currentAnswer) ? wordQuestion?.word.word : undefined,
+    visible: isWordPractice && Boolean(wordQuestion) && !complete && (mode === 'meaning' || Boolean(currentAnswer)),
+    rate: 1,
+    targetRef: mode === 'meaning' ? questionHeading : answerWord,
+  });
 
   useEffect(() => { (questionHeading.current ?? heading.current)?.focus({ preventScroll: true }); }, [index, mode, scopeId, count, round]);
   useEffect(() => { if (currentAnswer) feedback.current?.focus({ preventScroll: true }); }, [currentAnswer]);
@@ -108,6 +119,7 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
             <h2 ref={questionHeading} tabIndex={-1} aria-label={`${index + 1}問目。${mode === 'spelling' ? wordQuestion?.answer : wordQuestion?.word.word}`} className="mt-3 break-words text-3xl font-black leading-relaxed text-steady-ink outline-none" lang={mode === 'meaning' ? 'en' : 'ja'}>{mode === 'spelling' ? wordQuestion?.answer : wordQuestion?.word.word}</h2>
             {mode === 'meaning' && <div className="mt-2"><WordExamBadge word={wordQuestion?.word} /></div>}
             <p className="mt-3 text-sm font-bold text-slate-700">{mode === 'spelling' ? 'この意味の英単語を入力してください' : '意味を選んでください'}</p>
+            {mode === 'meaning' && <WordPronunciationControls pronunciation={pronunciation} className="mt-3" />}
           </>}
           {mode === 'spelling' ? <label className="mt-4 block text-sm font-bold text-slate-700">英単語
             <input value={response} onChange={event => setResponse(event.target.value)} disabled={Boolean(currentAnswer)} maxLength={120} autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false}
@@ -116,7 +128,7 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
           </label> : <>
             {choices.length < 4 && <p className="mt-3 text-xs text-slate-500">この単語帳にある異なる意味から、{choices.length}択で出題します。</p>}
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {choices.map(choice => <button key={choice} type="button" disabled={Boolean(currentAnswer)} aria-pressed={response === choice}
+              {choices.map(choice => <button key={choice} type="button" data-testid="guest-practice-choice" disabled={Boolean(currentAnswer)} aria-pressed={response === choice}
                 onClick={() => setResponse(choice)} className={`min-h-12 break-words rounded-xl border px-4 py-3 text-left text-sm font-bold disabled:opacity-100 ${response === choice ? 'border-medace-500 bg-medace-50 text-medace-950' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
                 {choice}
               </button>)}
@@ -131,7 +143,8 @@ const GuestPractice: React.FC<GuestPracticeProps> = ({ words, onBack }) => {
                 <p className="mt-2">{grammar.feedback?.explanationJa}</p>
                 {!currentAnswer.correct && <p className="mt-2">{grammar.feedback?.distractorReasons[currentAnswer.response]}</p>}
               </> : <>
-                <p className="mt-2"><strong lang="en">{wordQuestion?.word.word}</strong> — {wordQuestion?.answer}</p>
+                <p className="mt-2"><strong ref={answerWord} lang="en">{wordQuestion?.word.word}</strong> — {wordQuestion?.answer}</p>
+                {mode === 'spelling' && <WordPronunciationControls pronunciation={pronunciation} className="mt-3" />}
                 <div className="mt-2"><WordExamBadge word={wordQuestion?.word} /></div>
                 {wordQuestion?.word.exampleSentence && <p className="mt-2" lang="en">{wordQuestion.word.exampleSentence}</p>}
                 {wordQuestion?.word.exampleMeaning && <p className="mt-2">{wordQuestion.word.exampleMeaning}</p>}

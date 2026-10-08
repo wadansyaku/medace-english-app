@@ -24,6 +24,7 @@ import ModalOverlay from './ModalOverlay';
 import { useStudyModeController } from '../hooks/useStudyModeController';
 import { recordClientProductEvent } from '../services/productEvents';
 import StudyFinishedView from './study/StudyFinishedView';
+import WordPronunciationControls, { PronunciationMuteButton } from './study/WordPronunciationControls';
 import StudyReportDialogs from './study/StudyReportDialogs';
 import WordSourceDetails from './study/WordSourceDetails';
 import NaruStudySetup from './study/NaruStudySetup';
@@ -292,21 +293,14 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       className="study-card-face border border-slate-200 bg-white p-3 shadow-sm"
       onClick={controller.openBack}
     >
-      <div className="flex h-full flex-col">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
-          <button
-            type="button"
-            aria-label="単語を読み上げる"
-            onClick={(event) => controller.speakText(event, controller.currentWord.word)}
-            className="rounded-full bg-medace-50 p-3 text-medace-500 transition-colors hover:bg-medace-100"
-          >
-            <Volume2 className="h-5 w-5 sm:h-6 sm:w-6" />
-          </button>
+      <div className="study-front-layout flex h-full flex-col">
+        <div className="study-front-toolbar flex items-center justify-between gap-3">
+          <div className="study-front-label text-xs font-bold uppercase tracking-[0.18em] text-slate-400">単語</div>
+          <WordPronunciationControls pronunciation={controller.pronunciation} disabled={controller.isAdvancingCard} />
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <h2 className="break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
+        <div className="study-front-word flex flex-1 flex-col items-center justify-center text-center">
+          <h2 ref={controller.pronunciationTargetRef} lang="en" className="study-front-heading break-words text-3xl font-black tracking-tight text-slate-800 sm:text-5xl">{controller.currentWord.word}</h2>
           <div className="mt-2"><WordExamBadge word={controller.currentWord} /></div>
           <WordSourceDetails word={controller.currentWord} compact />
         </div>
@@ -402,8 +396,9 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
       {detailsForWord === currentWordKey && controller.isFlipped && !controller.isAdvancingCard && <ModalOverlay ariaLabel="例文・補足" mobileBehavior="sheet" panelClassName="study-details-panel w-full max-w-xl rounded-2xl bg-white p-4" onClose={() => setDetailsForWord(null)}>
         <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{controller.currentWord.word}・例文と補足</h2><button type="button" className="study-details-button" onClick={() => setDetailsForWord(null)}>閉じる</button></div>
             {hasCoreExample && <section data-testid="study-original-example" className="mb-3 rounded-2xl border border-medace-200 bg-white p-4" onClick={event => event.stopPropagation()}>
-              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><button type="button" aria-label="例文を読み上げる" onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div>
+              <div className="flex items-center justify-between gap-3"><div className="flex items-center gap-2"><h3 className="text-xs font-bold text-slate-500">例文</h3>{exampleAuditTone && <span className={`rounded-full border px-2 py-1 text-[10px] ${exampleAuditTone.className}`}>{exampleAuditTone.label}</span>}</div><div className="flex shrink-0 items-center gap-1"><PronunciationMuteButton pronunciation={controller.pronunciation} /><button type="button" aria-label="例文を読み上げる" disabled={controller.pronunciation.muted} onClick={event => controller.speakText(event, controller.currentWord.exampleSentence!)} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-50"><Volume2 className="h-4 w-4" /></button></div></div>
               <p className="text-base font-semibold leading-relaxed text-steady-ink sm:text-lg">{controller.currentWord.exampleSentence}</p>
+              {controller.pronunciation.message && <p role="status" className="mt-2 text-xs leading-relaxed text-slate-600">{controller.pronunciation.status === 'blocked' ? '例文の音声ボタンを押して再生してください。' : controller.pronunciation.message}</p>}
               {controller.currentWord.exampleMeaning?.trim() && (controller.showTranslation
                 ? <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-600">{controller.currentWord.exampleMeaning}</p>
                 : <button type="button" onClick={() => controller.setShowTranslation(true)} className="mt-2 min-h-11 text-sm font-bold text-slate-600">例文の訳を表示</button>)}

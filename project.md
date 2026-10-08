@@ -1,4 +1,4 @@
-2026-10-08: 本人が本番反映と公開禁止の解除を直接指示。以降も旧禁止を再適用せず、通常PR/CI/preview/productionへ進む。[最終受入と公開状態](./docs/analysis/2026-10-08-integrated-ui-release.md): 無料作文の対象外/未取得/実際の0件を分離。本人の具体的許可後、構成・教材・権利台帳・参照整合性の読み取り検査、原本436項目と0058 beforeが成功。PR61の初回CI/previewは成功し、無料組織の導入完了が有料作文を要求するP1を追加修正。2083unit・型・関連7実browser成功、更新候補のCI/previewへ進む。本番はまだ182ba3d。
+2026-10-08: PR61/main `0736ae71597bfb512e800ca73a87a9b3ea900e76` の本番配備と受入を完了（production run 37733127312成功）。旧公開禁止は解除済み。公開は各公開依頼の指示を確認して進める。追加の[初回自動発音A8](./docs/analysis/2026-10-08-first-visible-word-pronunciation.md)は独立候補で実装し、2101unit・型/build/API・Cloud231＋IDB9の全回帰と独立reviewを完了。本人の「本番にも反映してよい」「本番反映を完了させて、公開禁止は今後も取り除いてください」に基づき、A8は[PR62](https://github.com/wadansyaku/medace-english-app/pull/62)の通常CI/preview/production工程へ進める。旧公開禁止を今後の公開依頼へ再適用しない。配備前の記録であり、公開SHAと到達確認はPR62/workflowおよび独立deliveryのpublication受入を正本とする。
 
 2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。
 

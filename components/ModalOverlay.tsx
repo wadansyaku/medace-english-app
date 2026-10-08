@@ -16,7 +16,24 @@ const getFocusableControls = (panel: HTMLElement): HTMLElement[] => Array.from(p
     return true;
   });
 
-const openPanels: HTMLDivElement[] = [];
+interface OpenPanel {
+  panel: HTMLDivElement;
+  focusPriority: number;
+}
+
+const openPanels: OpenPanel[] = [];
+const getTopPanel = (): HTMLDivElement | undefined => {
+  let top: OpenPanel | undefined;
+  for (const entry of openPanels) {
+    const { panel } = entry;
+    if (!panel.isConnected || panel.closest('[inert], [hidden], [aria-hidden="true"]') || panel.getClientRects().length === 0) continue;
+    const visibility = window.getComputedStyle(panel).visibility;
+    if (visibility === 'hidden' || visibility === 'collapse') continue;
+    // Equal priorities keep the existing last-opened-modal ordering.
+    if (!top || entry.focusPriority >= top.focusPriority) top = entry;
+  }
+  return top?.panel;
+};
 let scrollStyleBeforeModals: { bodyOverflow: string; htmlOverflow: string; bodyPaddingRight: string } | null = null;
 
 interface ModalOverlayProps {
@@ -31,6 +48,7 @@ interface ModalOverlayProps {
   ariaLabelledBy?: string;
   initialFocusSelector?: string;
   returnFocusSelector?: string;
+  focusPriority?: number;
 }
 
 const ModalOverlay: React.FC<ModalOverlayProps> = ({
@@ -45,6 +63,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   ariaLabelledBy,
   initialFocusSelector,
   returnFocusSelector,
+  focusPriority = 0,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -74,8 +93,9 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
       document.documentElement.style.overflow = 'hidden';
       if (scrollbarWidth > 0) document.body.style.paddingRight = `${currentPadding + scrollbarWidth}px`;
     }
-    openPanels.push(panel);
-    const isTopPanel = () => openPanels[openPanels.length - 1] === panel;
+    const entry = { panel, focusPriority };
+    openPanels.push(entry);
+    const isTopPanel = () => getTopPanel() === panel;
 
     // Focus before the first paint. A delayed frame can move focus back to
     // the first field after someone has already started the next one.
@@ -83,7 +103,9 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
         ? panel?.querySelector<HTMLElement>(initialFocusSelector)
         : null;
     const fallbackFocusTarget = getFocusableControls(panel)[0];
-    (initialFocusTarget || fallbackFocusTarget || panel)?.focus();
+    // A deferred background dialog must not steal focus from a higher-priority
+    // notice, even before that notice's observer makes its portal inert.
+    if (isTopPanel()) (initialFocusTarget || fallbackFocusTarget || panel).focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!isTopPanel()) return;
@@ -129,7 +151,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       const wasTopPanel = isTopPanel();
-      const panelIndex = openPanels.indexOf(panel);
+      const panelIndex = openPanels.indexOf(entry);
       if (panelIndex >= 0) openPanels.splice(panelIndex, 1);
       if (openPanels.length === 0 && scrollStyleBeforeModals) {
         document.body.style.overflow = scrollStyleBeforeModals.bodyOverflow;
@@ -143,11 +165,11 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
       const fallback = returnFocusSelectorRef.current
         ? document.querySelector<HTMLElement>(returnFocusSelectorRef.current)
         : null;
-      const nextPanel = openPanels[openPanels.length - 1];
+      const nextPanel = getTopPanel();
       const focusTarget = canRestorePrevious ? previousFocus : fallback;
       (nextPanel && (!focusTarget || !nextPanel.contains(focusTarget)) ? nextPanel : focusTarget)?.focus({ preventScroll: true });
     };
-  }, [initialFocusSelector]);
+  }, [initialFocusSelector, focusPriority]);
 
   if (typeof document === 'undefined') {
     return null;

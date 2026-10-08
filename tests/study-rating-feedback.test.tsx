@@ -34,6 +34,10 @@ const api = vi.hoisted(() => ({ getBookSession: vi.fn(), getBooks: vi.fn(), save
 vi.mock('../services/learning', () => ({ learningService: api }));
 vi.mock('../services/productEvents', () => ({ recordClientProductEvent: api.recordClientProductEvent }));
 vi.mock('../hooks/useIsMobileViewport', () => ({ default: () => false }));
+// Audio has its own real-browser acceptance; this controller harness has no DOM.
+vi.mock('../hooks/useWordPronunciation', () => ({ useWordPronunciation: () => ({
+  muted: false, status: 'idle', message: null, speak: vi.fn(), stop: vi.fn(), toggleMuted: vi.fn(),
+}) }));
 
 import StudyMode from '../components/StudyMode';
 import { useStudyModeController } from '../hooks/useStudyModeController';

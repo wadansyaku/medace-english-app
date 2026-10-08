@@ -13,6 +13,7 @@ import { calculateStudySessionXp } from '../shared/xp';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
 import useIsMobileViewport from './useIsMobileViewport';
+import { useWordPronunciation } from './useWordPronunciation';
 
 interface UseStudyModeControllerParams {
   user: UserProfile;
@@ -68,7 +69,6 @@ export const useStudyModeController = ({
   const [updatedUser, setUpdatedUser] = useState<UserProfile | null>(null);
   const [reviewWords, setReviewWords] = useState<WordData[]>([]);
   const [weaknessSummary, setWeaknessSummary] = useState(buildWeaknessSessionSummary(null));
-  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
   const [supports3D, setSupports3D] = useState(true);
   const [mobileShellHeight, setMobileShellHeight] = useState<number | null>(null);
   const [isAdvancingCard, setIsAdvancingCard] = useState(false);
@@ -89,6 +89,16 @@ export const useStudyModeController = ({
   const backFaceScrollRef = useRef<HTMLDivElement | null>(null);
 
   const currentWord = queue[currentIndex];
+  const pronunciationTargetRef = useRef<HTMLHeadingElement | null>(null);
+  const pronunciation = useWordPronunciation({
+    presentationKey: currentWord ? `${sessionGenerationRef.current}:${currentIndex}:${currentWord.id}` : null,
+    text: currentWord?.word,
+    visible: !loading && !loadError && !isFinished && !isFlipped && !isEditing && !showReportModal,
+    rate: 0.9,
+    preferStudyVoice: true,
+    targetRef: pronunciationTargetRef,
+    scopeRef: shellRef,
+  });
   const reviewPreview = reviewWords.slice(0, 3);
   const nextReviewMessage = reviewPreview.length > 0
     ? '今夜か明日の最初に、この単語だけ先に見直すと流れを戻しやすいです。'
@@ -164,21 +174,6 @@ export const useStudyModeController = ({
     };
   }, [currentIndex, loading, isAdvancingCard, isEditing, isFlipped, isMobileViewport, saveError, showHints]);
 
-  useEffect(() => {
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) return;
-      let bestVoice = voices.find((voice) => voice.name === 'Google US English');
-      if (!bestVoice) bestVoice = voices.find((voice) => voice.name === 'Samantha');
-      if (!bestVoice) bestVoice = voices.find((voice) => voice.lang === 'en-US');
-      setSelectedVoice(bestVoice || null);
-    };
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
-  }, []);
 
   useEffect(() => {
     const generation = ++sessionGenerationRef.current;
@@ -445,12 +440,7 @@ export const useStudyModeController = ({
 
   const speakText = (event: MouseEvent, text: string) => {
     event.stopPropagation();
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
+    pronunciation.speak(text, event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined);
   };
 
   const openBack = () => {
@@ -513,6 +503,8 @@ export const useStudyModeController = ({
     showReportModal,
     showTranslation,
     speakText,
+    pronunciation,
+    pronunciationTargetRef,
     startEditing,
     streakBonusXP,
     submitReport,

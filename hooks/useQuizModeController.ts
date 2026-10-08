@@ -354,6 +354,7 @@ export const useQuizModeController = ({
   const [bookTitle, setBookTitle] = useState<string | null>(null);
   const [studiedWordIds, setStudiedWordIds] = useState<string[]>([]);
   const [questions, setQuestions] = useState<GeneratedWorksheetQuestion[]>([]);
+  const [runId, setRunId] = useState(0);
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [attemptState, dispatchAttempt] = useReducer(
     quizAttemptReducer,
@@ -602,6 +603,7 @@ export const useQuizModeController = ({
       setActiveConfig(config);
       setShowExitConfirm(false);
       resetAttemptState();
+      setRunId((previous) => previous + 1);
       setQuestions(nextQuestions);
       setQuestionSourceNotice(nextQuestionSourceNotice);
       failedStartRef.current = null;
@@ -1135,6 +1137,7 @@ export const useQuizModeController = ({
     allWords,
     bookTitle,
     questions,
+    runId,
     currentQIndex,
     showOptions,
     selectedOption,

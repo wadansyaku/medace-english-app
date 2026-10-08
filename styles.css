@@ -662,4 +662,14 @@ summary:focus-visible {
 @media (max-width: 400px) and (min-height: 501px) { .study-rating-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-height: 500px) { .study-rating-button { font-size: 16px; } .study-card-face { border-radius: 12px; } }
 
+/* Keep the full word and pronunciation recovery visible in a short card.
+   Audio controls retain their 44px targets and failure messages stay readable. */
+@media (orientation: landscape) and (max-height: 500px) and (min-width: 540px) {
+  .study-front-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.85fr); align-items: center; gap: 12px; min-height: 0; }
+  .study-front-toolbar { grid-column: 2; grid-row: 1; min-width: 0; }
+  .study-front-label { display: none; }
+  .study-front-word { grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; }
+  .study-front-heading { max-width: 100%; font-size: clamp(1.75rem, 9dvh, 2.25rem); line-height: 1.1; }
+}
+
 .study-definition-editing { overflow: auto; }
