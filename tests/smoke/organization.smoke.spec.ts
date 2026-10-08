@@ -616,6 +616,7 @@ const provisionWritingStateManager = async (page: import('@playwright/test').Pag
   const provisioned = await getCurrentSessionUser(page);
   expect(provisioned.subscriptionPlan).toBe(plan);
   expect(provisioned.organizationRole).toBe('GROUP_ADMIN');
+  return provisioned;
 };
 
 const writingStateEvidence = async (page: import('@playwright/test').Page,
@@ -665,6 +666,97 @@ for (const viewport of [
     expect(forbidden).toBe(403);
   });
 }
+
+test('free school activation completes available steps without requiring forbidden Writing', async ({ page, browser }, testInfo) => {
+  test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic provisioning only');
+  const manager = await provisionWritingStateManager(page, browser, 'TOB_FREE', 'activation');
+  const origin = new URL(page.url()).origin;
+  const adminPage = await browser.newPage({ baseURL: origin });
+  const instructorPage = await browser.newPage({ baseURL: origin });
+  const studentPage = await browser.newPage({ baseURL: origin });
+  const writingRequests: string[] = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/writing/')) writingRequests.push(request.url()); });
+  try {
+    await loginAdminDemo(adminPage);
+    const provisionMember = async (memberPage: import('@playwright/test').Page, role: 'INSTRUCTOR' | 'STUDENT') => {
+      const email = `free-activation-${role.toLowerCase()}-${Date.now()}@example.test`;
+      await memberPage.goto('/');
+      const user = await emailAuth(memberPage, { email, password: 'synthetic-free-activation-password', isSignUp: true, displayName: `無料導入確認 ${role}` });
+      const request = await storageAction<{ id: number }>(memberPage, 'submitCommercialRequest', {
+        kind: 'BUSINESS_ROLE_CONVERSION', contactName: user.displayName, contactEmail: email,
+        organizationName: manager.organizationName, requestedWorkspaceRole: role,
+        message: 'Isolated free activation acceptance', source: 'LOCAL_FREE_ACTIVATION',
+      });
+      await storageAction(adminPage, 'updateCommercialRequest', {
+        id: request.id, status: 'PROVISIONED', linkedUserUid: user.uid,
+        targetSubscriptionPlan: 'TOB_FREE', targetOrganizationId: manager.organizationId,
+        targetOrganizationName: manager.organizationName, targetOrganizationRole: role,
+        resolutionNote: 'Isolated local free activation test',
+      });
+      const provisioned = await getCurrentSessionUser(memberPage);
+      expect(provisioned.organizationId).toBe(manager.organizationId);
+      expect(provisioned.subscriptionPlan).toBe('TOB_FREE');
+      return provisioned;
+    };
+    const instructor = await provisionMember(instructorPage, 'INSTRUCTOR');
+    const student = await provisionMember(studentPage, 'STUDENT');
+    await page.reload();
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await page.getByTestId('workspace-tab-settings').click();
+    await page.getByTestId('cohort-create-input').fill('無料導入確認クラス');
+    await page.getByTestId('cohort-create-submit').click();
+    await expect(page.getByText('クラス/担当グループを追加しました。')).toBeVisible();
+    await storageAction(page, 'assignStudentInstructor', { studentUid: student.uid, instructorUid: instructor.uid });
+    const books = await storageAction<Array<{ id: string; title: string }>>(page, 'getBooks');
+    const book = books.find(book => book.id === 'naru-shisto-original-v1');
+    expect(book).toBeTruthy();
+    const mission = await storageAction<{ id: string }>(page, 'createWeeklyMission', {
+      learningTrack: 'EIKEN_2', title: '無料導入確認の単語課題', rationale: 'Local free activation acceptance',
+      bookId: book!.id, bookTitle: book!.title, newWordsTarget: 3, reviewWordsTarget: 1, quizTargetCount: 1,
+    });
+    await storageAction(page, 'assignWeeklyMission', { missionId: mission.id, studentUid: student.uid });
+    const beforeNotification = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
+    expect(beforeNotification.activationState).toBe('SEND_FIRST_NOTIFICATION');
+    await page.reload();
+    await page.getByTestId('workspace-tab-instructors').click();
+    await expect(page.getByTestId('business-admin-first-notification-send')).toBeVisible();
+    await page.getByTestId('business-admin-first-notification-send').click();
+    await expect(page.getByTestId('first-notification-status')).toContainText('初回フォロー通知を保存しました');
+    const complete = await storageAction<any>(page, 'getOrganizationDashboardSnapshot');
+    await testInfo.attach('free-activation-contract.json', { body: JSON.stringify({
+      activationState: complete.activationState, nextTargetView: complete.nextRequiredActionTarget?.targetView || null,
+      steps: complete.activationSteps.map((step: { id: string; done: boolean }) => ({ id: step.id, done: step.done })),
+      runbookStageIds: complete.activationRunbook.stages.map((stage: { id: string }) => stage.id),
+    }), contentType: 'application/json' });
+    expect(complete.activationState).toBe('ACTIVE');
+    expect(complete.nextRequiredActionTarget).toBeNull();
+    expect(complete.activationSteps).toHaveLength(4);
+    expect(complete.activationSteps.every((step: { done: boolean }) => step.done)).toBe(true);
+    expect(complete.nextRequiredActionDescription).not.toMatch(/作文|返却/);
+    expect(complete.activationRunbook.stages.map((stage: { id: string }) => stage.id)).toEqual([
+      'cohort', 'assignment', 'mission', 'notification', 'worksheet',
+    ]);
+    await page.getByTestId('workspace-tab-overview').click();
+    const runbook = page.getByTestId('business-admin-runbook-summary');
+    await expect(runbook).toBeVisible();
+    await expect(runbook).not.toContainText('初回作文');
+    await expect(runbook).not.toContainText('作文を返却');
+    for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 },
+      { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
+      await page.setViewportSize(viewport);
+      await writingStateEvidence(page, testInfo, `free-activation-complete-${viewport.width}`);
+    }
+    await page.getByTestId('workspace-tab-writing').click();
+    await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
+    await page.reload();
+    await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
+    expect((await storageAction<any>(page, 'getOrganizationDashboardSnapshot')).activationState).toBe('ACTIVE');
+    expect(writingRequests).toEqual([]);
+    expect(await page.evaluate(async () => (await fetch('/api/writing/assignments?scope=organization')).status)).toBe(403);
+  } finally {
+    await adminPage.close(); await instructorPage.close(); await studentPage.close();
+  }
+});
 
 test('paid school writing state distinguishes pending and failed fetches from confirmed zero and retry', async ({ page, browser }, testInfo) => {
   test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic provisioning only');

@@ -110,4 +110,6 @@ PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで�
 - [ ] 実Safari/iOS、物理IME、実200%/400%zoomと限定利用/7・28日評価は未検証。
 - [x] 2026-10-08本人の直接指示で公開禁止を解除。以降も旧禁止を再適用しない。本人所有の既存repoへ統合branch push済み。
 - [x] 無料学校管理者の作文対象外/未取得/0件混同・追加403・クラス作成誘導を修正。200files2072unit、58migration/API/build/security、Cloud194＋IDB9・5幅・遅延/失敗/retry成功。
-- [ ] 必須remote-readonlyの個別読み取り許可、最新原本436/0058 before、PR/CI/preview、main/productionと0058 afterを完了する。正本は[10-08公開工程](./docs/analysis/2026-10-08-integrated-ui-release.md)。
+- [x] 本人の具体的読み取り許可後、remote-readonly構成ok53/warn1/error0・教材/権利/参照整合性、原本436項目、0058 beforeを確認。PR61初回CI/previewとpreview after原本436/0058成功。
+- [x] PR61のP1を実API/UIで再現し、無料組織の導入契約を利用可能な基本4段階・runbook5段階へ修正。有料7/8段階と403境界を維持。201files2083unit/型・関連7browser成功。
+- [ ] 更新候補の全browser/CI/preview、main/productionと0058 afterを完了する。正本は[10-08公開工程](./docs/analysis/2026-10-08-integrated-ui-release.md)。

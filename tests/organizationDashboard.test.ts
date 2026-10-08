@@ -286,6 +286,60 @@ describe('buildOrganizationDashboardSnapshot', () => {
     });
   });
 
+  it('completes free organization activation using only available steps and requires Writing again after upgrade', () => {
+    const base = {
+      organizationId: 'org_free',
+      organizationName: 'Free organization',
+      subscriptionPlan: SubscriptionPlan.TOB_FREE,
+      totalMembers: 5,
+      totalInstructors: 1,
+      learningPlanCount: 2,
+      cohortCount: 1,
+      studentAssignmentCount: 3,
+      missionAssignmentCount: 2,
+      notifications7d: 1,
+      totalNotificationCount: 1,
+      instructors,
+      students,
+      missionAssignments,
+      assignmentEvents,
+      reactivatedStudents7d: 0,
+      notifiedStudents7d: 0,
+      trend: [],
+      now: 2_000_000,
+    };
+    const free = buildOrganizationDashboardSnapshot(base);
+    expect(free.activationSteps.map(step => step.id)).toEqual([
+      'CREATE_COHORT', 'ASSIGN_STUDENTS', 'CREATE_FIRST_MISSION', 'SEND_FIRST_NOTIFICATION',
+    ]);
+    expect(free.activationSteps.every(step => step.done)).toBe(true);
+    expect(free.activationState).toBe('ACTIVE');
+    expect(free.nextRequiredActionTarget).toBeNull();
+    expect(free.nextRequiredActionDescription).not.toMatch(/作文|返却/);
+    expect(free.activationRunbook?.stages.map(stage => stage.id)).toEqual([
+      'cohort', 'assignment', 'mission', 'notification', 'worksheet',
+    ]);
+    for (const [changes, expected] of [
+      [{ cohortCount: 0 }, 'CREATE_COHORT'],
+      [{ studentAssignmentCount: 0 }, 'ASSIGN_STUDENTS'],
+      [{ missionAssignments: [] as MissionAssignment[] }, 'CREATE_FIRST_MISSION'],
+      [{ totalNotificationCount: 0 }, 'SEND_FIRST_NOTIFICATION'],
+    ] as const) {
+      const incomplete = buildOrganizationDashboardSnapshot({ ...base, ...changes });
+      expect(incomplete.activationState).toBe(expected);
+      expect(incomplete.activationSteps).toHaveLength(4);
+      expect(incomplete.nextRequiredActionTarget?.targetView).not.toBe(BusinessAdminWorkspaceView.WRITING);
+    }
+    const paid = buildOrganizationDashboardSnapshot({ ...base, subscriptionPlan: SubscriptionPlan.TOB_PAID });
+    expect(paid.activationState).toBe('ISSUE_FIRST_WRITING_ASSIGNMENT');
+    expect(paid.activationSteps).toHaveLength(7);
+    expect(paid.activationRunbook?.stages).toHaveLength(8);
+    expect(paid.nextRequiredActionTarget?.targetView).toBe(BusinessAdminWorkspaceView.WRITING);
+    const downgraded = buildOrganizationDashboardSnapshot({ ...base, writingAssignmentCount: 4, issuedWritingAssignmentCount: 4 });
+    expect(downgraded.activationState).toBe('ACTIVE');
+    expect(downgraded.activationRunbook?.stages).toEqual(free.activationRunbook?.stages);
+  });
+
   it('keeps notification and Writing targets in the server activation contract', () => {
     const notificationSnapshot = buildOrganizationDashboardSnapshot({
       organizationId: 'org_demo_academy',

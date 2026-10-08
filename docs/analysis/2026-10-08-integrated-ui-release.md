@@ -22,6 +22,10 @@
 
 独立frontend/backend reviewでblockerなし。サーバー・サービス・課金/AI設定・既存migrationの追加変更なし。main182から0058のみ追加し、原本変更後の注記失効を保証する。適用前の不整合をbackfillしないため、新しい436原本照合と0058 before/afterが必要。
 
-公開先照合後のbranch pushは成功。PR作成/preview/main/productionは未実行。必須remote-readonly構成/教材/台帳/参照整合性の検査が自動承認レビューの具体的許可不足により拒否され、ユーザーへの確認を保留中。CI経由での間接再試行も行わない。本番は182ba3dのまま。旧記録の「未公開」「公開禁止」は当時の状態であり、現在の公開禁止を意味しない。
+公開先照合後のbranch pushと[PR61](https://github.com/wadansyaku/medace-english-app/pull/61)作成は成功。構成・secretの名前・教材/権利台帳/参照整合性の個別読み取り許可を本人から受け、同じremote-readonly gateを直接再試行し成功した（ok53/warn1/error0）。キー値の取得、設定変更、間接迂回は行わない。本番原本436項目と0058 before、初回CI37727710448/preview37727710442、preview after原本436/0058は成功。previewは98bb9ed6.medace-english-app.pages.dev、head24340a1に紐づく正規deploymentである。
+
+PRのP1で、無料組織がクラス・担当・単語課題・通知を準備しても有料作文の配布を要求されることを実API/UIで再現した。現在の追加修正では組織プランに合わせて導入契約を無料の基本4段階、runbookをPDF準備を含む5段階へ限定する。有料の7/8段階、アップグレード時の作文要求、ダウングレード時の古い作文件数の扱い、サーバー403と組織/担当の認可は維持する。無料の完了文も作文返却の完了を誤認させない。
+
+修正後201files2083unit、型、API統合、build、到達性/依存境界、無料導入完了＋作文状態の実browser7件が成功。browserは隔離された合成組織で4基本操作を実行しACTIVE/null target、無料runbook5、全5幅の横溢れなし、再訪後ACTIVE、追加作文要求0と明示要求403を確認した。原本・既存migration・依存lock・課金/AI設定の変更はない。更新版の全browserとCI/previewを確認してから通常merge/productionへ進む。現時点の本番は182ba3d。旧記録の「未公開」「公開禁止」は当時の状態であり、現在の公開禁止を意味しない。
 
 Safari/iOS・物理IME・400%は未検証。長期復習の未接続契約0ae54239と7/28日評価は今回の配備範囲外。ローカル受入を本番配備成功や学習効果の証拠として扱わない。

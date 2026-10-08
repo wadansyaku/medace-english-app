@@ -12,6 +12,7 @@ interface BuildOrganizationActivationRunbookInput {
   organizationId: string;
   totalStudents: number;
   activationSteps: OrganizationActivationStep[];
+  includeWriting?: boolean;
   historyBasedWorksheetStudentCount?: number;
   fallbackWorksheetStudentCount?: number;
   issuedWritingAssignmentCount?: number;
@@ -137,6 +138,7 @@ export const buildOrganizationActivationRunbook = ({
   organizationId,
   totalStudents,
   activationSteps,
+  includeWriting = true,
   historyBasedWorksheetStudentCount = 0,
   fallbackWorksheetStudentCount = 0,
   issuedWritingAssignmentCount = 0,
@@ -224,8 +226,11 @@ export const buildOrganizationActivationRunbook = ({
     },
   ];
 
-  const firstIncompleteIndex = rawStages.findIndex((stage) => !stage.done);
-  const stages = rawStages.map((stage, index): OrganizationActivationRunbookStage => {
+  const enabledStages = includeWriting ? rawStages : rawStages.filter((stage) => (
+    stage.id !== 'writing' && stage.id !== 'submission' && stage.id !== 'review'
+  ));
+  const firstIncompleteIndex = enabledStages.findIndex((stage) => !stage.done);
+  const stages = enabledStages.map((stage, index): OrganizationActivationRunbookStage => {
     const status: OrganizationActivationRunbookStageStatus = stage.done
       ? 'complete'
       : index === firstIncompleteIndex

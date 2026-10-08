@@ -4,7 +4,7 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 ## Current
 
-- [統合UI・無料作文表示の最終受入と公開工程](./analysis/2026-10-08-integrated-ui-release.md): 2072unit・203browser成功、公開禁止解除・本人repoへのbranch push済み、remote-readonlyの具体的許可確認が保留。
+- [統合UI・無料作文表示の最終受入と公開工程](./analysis/2026-10-08-integrated-ui-release.md): 本人許可後のremote-readonly/原本436/0058 beforeとPR61初回CI/preview成功。無料組織の導入完了P1を追加修正し2083unit・型・関連7browser成功、更新版配備へ進行中。公開禁止は解除済み。
 
 - [統合UIの確認問題と最終ローカル受入](./analysis/2026-10-07-integrated-ui-acceptance.md): 単語/生徒共通入口/同uid/RBAC/無料学校管理者/5幅、検証sourceと未公開・未検証を区別。
 - [単語学習を優先するおすすめ候補](./analysis/2026-10-07-vocabulary-first-candidate.md): 通常ホームの単語/続き/復習を優先し、文法・和訳を副操作へ。明示教材・配布課題・保存を保持。公開判断は別工程。
