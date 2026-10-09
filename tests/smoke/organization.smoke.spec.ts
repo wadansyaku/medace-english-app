@@ -873,3 +873,52 @@ test('group admin basic settings stay usable while optional writing is delayed',
     await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
   } finally { release(); }
 });
+
+test('delayed writing assignments preserve the weekly mission draft in the real workspace', async ({ page }, testInfo) => {
+  test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic draft acceptance only');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginGroupAdminDemo(page);
+  await runtimeAdminPost(page, 'runtime-admin/bootstrap-demo-organization');
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/writing/assignments?scope=organization', async route => {
+    await delayed;
+    // Only a local read fixture; this assignment is never submitted to an API.
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      assignments: [{ id: 'synthetic-delayed-draft-assignment', promptTitle: '確認用作文' }],
+    }) });
+  });
+  try {
+    await page.reload();
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await page.getByTestId('workspace-tab-assignments').click();
+    await page.locator('[data-testid^="assignment-row-"]').first().click();
+    const form = page.getByTestId('weekly-mission-form');
+    await expect(form).toBeVisible();
+    const targets = form.locator('input[type="number"]');
+    await targets.nth(0).fill('7');
+    await targets.nth(1).fill('5');
+    await targets.nth(2).fill('2');
+    await form.locator('input[type="date"]').fill('2030-02-20');
+    await page.getByTestId('weekly-mission-track-select').selectOption('COMMON_TEST');
+    const bookSelect = page.getByTestId('weekly-mission-book-select');
+    const draftBookId = await bookSelect.evaluate(element => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).find(option => !option.disabled && option.value !== select.value)?.value ?? '';
+    });
+    await bookSelect.selectOption(draftBookId);
+    const writingSelect = page.getByTestId('weekly-mission-writing-assignment');
+    await expect(writingSelect).toBeDisabled();
+    const savedLink = await writingSelect.inputValue();
+    release();
+    await expect(writingSelect).toBeEnabled();
+    await expect(targets.nth(0)).toHaveValue('7');
+    await expect(targets.nth(1)).toHaveValue('5');
+    await expect(targets.nth(2)).toHaveValue('2');
+    await expect(form.locator('input[type="date"]')).toHaveValue('2030-02-20');
+    await expect(page.getByTestId('weekly-mission-track-select')).toHaveValue('COMMON_TEST');
+    await expect(bookSelect).toHaveValue(draftBookId);
+    await expect(writingSelect).toHaveValue(savedLink);
+    await page.screenshot({ path: testInfo.outputPath('weekly-mission-draft-after-writing-response.png') });
+  } finally { release(); }
+});

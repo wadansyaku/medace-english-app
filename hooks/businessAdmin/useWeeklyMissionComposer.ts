@@ -30,7 +30,6 @@ export const useWeeklyMissionComposer = ({
   refresh,
   selectedAssignmentStudent,
   setNotice,
-  writingAssignments,
 }: UseWeeklyMissionComposerParams) => {
   const [missionSavingUid, setMissionSavingUid] = useState<string | null>(null);
   const [missionTrack, setMissionTrack] = useState<LearningTrack>(LearningTrack.SCHOOL_TERM);
@@ -76,7 +75,6 @@ export const useWeeklyMissionComposer = ({
     selectedStudentMission?.mission.dueAt,
     selectedStudentMission?.mission.learningTrack,
     selectedStudentMission?.mission.writingAssignmentId,
-    writingAssignments.length,
   ]);
 
   const handleIssueMission = useCallback(async () => {
