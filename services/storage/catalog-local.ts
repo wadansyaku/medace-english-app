@@ -1,3 +1,4 @@
+import { PersonalCatalogImportError, preparePersonalCatalogImport } from '../../shared/personalCatalogImport';
 import {
   BookAccessScope,
   BookCatalogSource,
@@ -74,11 +75,82 @@ export const normalizeLocalCatalogBook = (
   };
 };
 
+interface PersonalCatalogImportReceipt {
+  uid: string;
+  clientImportId: string;
+  fingerprint: string;
+  bookId: string;
+  result: CatalogImportResult;
+  committedAt: number;
+}
+
+const importPersonalCatalogLocal = async (
+  context: LocalCatalogStorageContext,
+  request: CatalogImportRequest,
+  onProgress?: (progress: number) => void,
+): Promise<CatalogImportResult> => {
+  const session = await context.getSession();
+  if (!session?.uid) throw new PersonalCatalogImportError(403, '個人単語帳の保存にはログインが必要です。');
+  // Hashing and normalization finish before opening a native transaction.
+  const prepared = await preparePersonalCatalogImport(request, session.uid);
+  const { clientImportId, fingerprint, bookId, title, words, result } = prepared;
+  onProgress?.(5);
+  const db = await context.getDb();
+  const tx = db.transaction([STORES.BOOKS, STORES.WORDS, STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS], 'readwrite');
+  const complete = waitForTransaction(tx);
+  let confirmed: CatalogImportResult | undefined;
+  const queued = new Promise<void>((resolve, reject) => {
+    const fail = (error: unknown) => {
+      try { tx.abort(); } catch { /* An error event may already have aborted the transaction. */ }
+      reject(error);
+    };
+    const receiptStore = tx.objectStore(STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS);
+    const lookup = receiptStore.get([session.uid, clientImportId]);
+    lookup.onerror = () => fail(lookup.error || new Error('作成結果を確認できませんでした。'));
+    lookup.onsuccess = () => {
+      try {
+        const receipt = lookup.result as PersonalCatalogImportReceipt | undefined;
+        if (receipt) {
+          if (receipt.fingerprint !== fingerprint) throw new PersonalCatalogImportError(409, 'この作成IDは別の内容で使用済みです。同じ内容で再送してください。');
+          const bookLookup = tx.objectStore(STORES.BOOKS).get(receipt.bookId);
+          bookLookup.onerror = () => fail(bookLookup.error || new Error('保存した単語帳を確認できませんでした。'));
+          bookLookup.onsuccess = () => {
+            if (!bookLookup.result || !isBookOwnedByUser(bookLookup.result as BookMetadata, session.uid)) {
+              fail(new PersonalCatalogImportError(409, '保存した単語帳は削除済み、または所有者を確認できません。新しく作成してください。'));
+              return;
+            }
+            confirmed = structuredClone(receipt.result);
+            resolve();
+          };
+          return;
+        }
+        const meta: BookMetadata = {
+          id: bookId, title, wordCount: words.length, isPriority: false,
+          description: JSON.stringify({ createdBy: session.uid, type: 'USER_GENERATED' }),
+          sourceContext: request.contextSummary,
+          catalogSource: BookCatalogSource.USER_GENERATED, accessScope: BookAccessScope.ALL_PLANS,
+        };
+        tx.objectStore(STORES.BOOKS).add(meta);
+        const wordStore = tx.objectStore(STORES.WORDS);
+        words.forEach(word => wordStore.add(word));
+        receiptStore.add({ uid: session.uid, clientImportId, fingerprint, bookId, result, committedAt: Date.now() } satisfies PersonalCatalogImportReceipt);
+        confirmed = result;
+        resolve();
+      } catch (error) { fail(error); }
+    };
+  });
+  await Promise.all([queued, complete]);
+  if (!confirmed) throw new Error('単語帳の保存完了を確認できませんでした。');
+  onProgress?.(100);
+  return confirmed;
+};
+
 export const batchImportWordsLocal = async (
   context: LocalCatalogStorageContext,
   request: CatalogImportRequest,
   onProgress?: (progress: number) => void,
 ): Promise<CatalogImportResult> => {
+  if (request.clientImportId !== undefined) return importPersonalCatalogLocal(context, request, onProgress);
   const db = await context.getDb();
   const bookGroups = new Map<string, { meta: BookMetadata; words: WordData[] }>();
   const { rows, warnings } = normalizeCatalogImportRows(request);

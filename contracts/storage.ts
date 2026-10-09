@@ -100,6 +100,8 @@ export interface CatalogImportRowsSource {
 export type CatalogImportSource = CatalogImportCsvSource | CatalogImportRowsSource;
 
 export interface CatalogImportRequest {
+  /** Immutable, per-user ID for atomic direct-entry personal imports and retries. */
+  clientImportId?: string;
   source: CatalogImportSource;
   defaultBookName: string;
   createdByUid?: string;

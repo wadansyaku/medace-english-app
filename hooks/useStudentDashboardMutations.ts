@@ -1,6 +1,7 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 
 import { dashboardService } from '../services/dashboard';
+import type { CatalogImportRequest } from '../contracts/storage';
 import { buildPreparedPersonalCatalogImport, readPreparedCatalogCsvFile } from '../shared/preparedPersonalCatalog';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import {
@@ -171,18 +172,18 @@ export const useStudentDashboardMutations = ({
   ]);
 
   const createPending = useRef(false);
-  const handleCreatePhrasebook = useCallback(async () => {
+  const handleCreatePhrasebook = useCallback(async (preparedRequest?: CatalogImportRequest) => {
     if (createPending.current) return;
     const normalizedTitle = newBookTitle.trim();
-    if (!normalizedTitle) {
+    if (!preparedRequest && !normalizedTitle) {
       setErrorMsg('タイトルを入力してください。');
       return;
     }
-    if (createMode === 'TEXT' && !rawText.trim()) {
+    if (!preparedRequest && createMode === 'TEXT' && !rawText.trim()) {
       setErrorMsg('単語・語義をCSV形式で入力してください。');
       return;
     }
-    if (createMode === 'FILE' && !uploadFile) {
+    if (!preparedRequest && createMode === 'FILE' && !uploadFile) {
       setErrorMsg('内容を確認したCSVを選択してください。');
       return;
     }
@@ -190,23 +191,35 @@ export const useStudentDashboardMutations = ({
     createPending.current = true;
     setCreating(true);
     setErrorMsg(null);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      const csvText = createMode === 'TEXT' ? rawText : await readPreparedCatalogCsvFile(uploadFile!);
-      const request = buildPreparedPersonalCatalogImport(normalizedTitle, csvText, user.uid);
-      const importResult = await dashboardService.batchImportWords(request);
-      setRawText('');
-      setNewBookTitle('');
-      setUploadFile(null);
-      setShowCreateModal(false);
-      setPageNotice({ tone: 'success', message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。` });
-      try {
-        await refreshDashboard();
-      } catch {
-        setPageNotice({ tone: 'error', message: '単語帳は保存されましたが、一覧を更新できませんでした。ページを再読み込みして保存済みの教材を確認してください。' });
+      const request = preparedRequest ?? buildPreparedPersonalCatalogImport(normalizedTitle,
+        createMode === 'TEXT' ? rawText : await readPreparedCatalogCsvFile(uploadFile!), user.uid);
+      const saving = dashboardService.batchImportWords(request);
+      const importResult = await (preparedRequest ? Promise.race([saving, new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error('保存の応答を確認できませんでした。同じ内容で「保存を再確認」を押してください。')), 20_000);
+      })]) : saving);
+      if (timeout) clearTimeout(timeout);
+      if (!preparedRequest) {
+        setRawText('');
+        setNewBookTitle('');
+        setUploadFile(null);
+        setShowCreateModal(false);
+        setPageNotice({ tone: 'success', message: `単語帳を作成しました。${importResult.importedWordCount}語を登録しました。` });
       }
+      const refreshSavedBook = async () => {
+        try { await refreshDashboard(); }
+        catch { setPageNotice({ tone: 'error', message: '単語帳は保存されましたが、一覧を更新できませんでした。ページを再読み込みして保存済みの教材を確認してください。' }); }
+      };
+      // A slow list read cannot hold back a confirmed save or its learning CTA.
+      if (preparedRequest) void refreshSavedBook();
+      else await refreshSavedBook();
+      return importResult;
     } catch (error: unknown) {
+      if (preparedRequest) throw error;
       setErrorMsg(error instanceof Error ? error.message : '作成に失敗しました。入力を保持しています。');
     } finally {
+      if (timeout) clearTimeout(timeout);
       createPending.current = false;
       setCreating(false);
     }

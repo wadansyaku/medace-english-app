@@ -1,238 +1,176 @@
 import React from 'react';
-import { BookOpen, FileText, Loader2, UploadCloud, X } from 'lucide-react';
-
-import { isPreparedCatalogCsvFile, PERSONAL_CATALOG_OCR_UNAVAILABLE } from '../../shared/preparedPersonalCatalog';
-
+import { BookOpen, Loader2, X } from 'lucide-react';
+import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
+import { ApiError } from '../../services/apiClient';
+import { PersonalCatalogImportError } from '../../shared/personalCatalogImport';
+import { usePersonalWordbookDraft, type PersonalWordbookDraftRevision } from '../../hooks/usePersonalWordbookDraft';
+import { buildPreparedPersonalCatalogImport, readPreparedCatalogCsvFile } from '../../shared/preparedPersonalCatalog';
+import { createPersonalDraftRow, emptyPersonalWordbookDraft, hasPersonalDraftContent, preparePersonalDraftRequest, previewPersonalDraftRequest } from '../../shared/personalWordbookDraft';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
 import MobileStickyActionBar from '../mobile/MobileStickyActionBar';
+import PersonalWordbookEditor from './PersonalWordbookEditor';
 
 interface PhrasebookCreateModalProps {
   open: boolean;
-  createMode: 'TEXT' | 'FILE';
-  rawText: string;
-  uploadFile: File | null;
-  newBookTitle: string;
+  ownerUid: string;
   creating: boolean;
-  errorMsg: string | null;
   canUseSelectedCreateMode: boolean;
   currentPlanLabel: string;
   onClose: () => void;
-  onChangeMode: (mode: 'TEXT' | 'FILE') => void;
-  onChangeRawText: (value: string) => void;
-  onChangeTitle: (value: string) => void;
-  onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onCreate: () => void | Promise<void>;
+  onCreate: (request: CatalogImportRequest) => Promise<CatalogImportResult | undefined>;
+  onStartStudy: (bookId: string) => void;
 }
+const inputClass = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-base text-steady-ink outline-none focus:ring-2 focus:ring-medace-500';
+const secondaryClass = 'min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50';
 
-const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({
-  open,
-  createMode,
-  rawText,
-  uploadFile,
-  newBookTitle,
-  creating,
-  errorMsg,
-  canUseSelectedCreateMode,
-  currentPlanLabel,
-  onClose,
-  onChangeMode,
-  onChangeRawText,
-  onChangeTitle,
-  onFileChange,
-  onCreate,
-}) => {
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-  const errorRef = React.useRef<HTMLDivElement | null>(null);
-  const submittingRef = React.useRef(false);
-  const [submitting, setSubmitting] = React.useState(false);
-  const [submissionError, setSubmissionError] = React.useState<string | null>(null);
-  const visibleError = errorMsg || submissionError;
-  const pending = creating || submitting;
-  const isPending = () => creating || submittingRef.current;
-
+const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, ownerUid, creating, canUseSelectedCreateMode, currentPlanLabel, onClose, onCreate, onStartStudy }) => {
+  const { draft, updateDraft, persisted, changedElsewhere, syncCurrentRequest, captureDraftRevision } = usePersonalWordbookDraft(ownerUid);
+  const [preview, setPreview] = React.useState<CatalogImportRequest | null>(null);
+  const [error, setError] = React.useState('');
+  const [message, setMessage] = React.useState('');
+  const csvText = draft.csvText ?? '';
+  const setCsvText = (value: string) => updateDraft(previous => ({ ...previous, csvText: value }));
+  const [busy, setBusy] = React.useState(false);
+  const [previewPage, setPreviewPage] = React.useState(0);
+  const busyRef = React.useRef(false);
+  const readingCsv = React.useRef(false);
+  const csvLifetime = React.useRef(0);
+  const errorRef = React.useRef<HTMLDivElement>(null);
+  const resultRef = React.useRef<HTMLHeadingElement>(null);
+  const confirmationRef = React.useRef<HTMLHeadingElement>(null);
+  const pending = busy || creating;
+  const immutableRequest = draft.pendingRequest ?? preview;
+  const frozen = Boolean(draft.pendingRequest);
+  const saved = draft.saved;
+  const isPending = () => creating || busyRef.current;
   React.useEffect(() => {
-    if (!open) setSubmissionError(null);
-  }, [open]);
+    csvLifetime.current += 1;
+    if (readingCsv.current) { readingCsv.current = false; busyRef.current = false; setBusy(false); }
+    return () => { csvLifetime.current += 1; };
+  }, [open, ownerUid]);
+  // An external save/new draft supersedes this tab's unsent confirmation.
+  React.useEffect(() => { if (!draft.pendingRequest) setPreview(null); }, [draft]);
   React.useEffect(() => {
-    if (open && visibleError) errorRef.current?.focus();
-  }, [open, visibleError]);
-
+    if (open && error) { errorRef.current?.focus(); errorRef.current?.scrollIntoView({ block: 'nearest' }); }
+  }, [open, error]);
+  React.useEffect(() => { if (open && saved) resultRef.current?.focus(); }, [open, saved]);
+  React.useEffect(() => { if (open && immutableRequest && !frozen && !saved && !error) confirmationRef.current?.focus(); }, [open, immutableRequest, frozen, saved, error]);
   if (!open) return null;
-
-  const trimmedTitle = newBookTitle.trim();
-  const hasSource = createMode === 'TEXT' ? rawText.trim().length > 0 : Boolean(uploadFile);
-  const createDisabledReason = !trimmedTitle
-    ? 'タイトルを入力してください。'
-    : !hasSource
-      ? createMode === 'TEXT'
-        ? '単語・語義をCSV形式で入力してください。'
-        : '内容を確認したCSVを選択してください。'
-      : createMode === 'FILE' && uploadFile && !isPreparedCatalogCsvFile(uploadFile)
-        ? PERSONAL_CATALOG_OCR_UNAVAILABLE
-      : !canUseSelectedCreateMode
-        ? `${currentPlanLabel} ではこの作成方法を使えません。`
-        : null;
-	  const createDisabled = pending || Boolean(createDisabledReason);
-	  const titleInputId = 'phrasebook-create-book-title';
-	  const sourceTextInputId = 'phrasebook-create-source-text';
-	  const fileInputId = 'phrasebook-create-file-upload';
-
-  const close = () => {
-    if (!isPending()) onClose();
+  const close = () => { if (!isPending()) onClose(); };
+  const check = () => {
+    if (isPending() || !canUseSelectedCreateMode) return;
+    setError(''); setMessage('');
+    try { setPreviewPage(0); setPreview(preparePersonalDraftRequest(draft)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '入力内容を確認してください。'); }
   };
-  const create = async () => {
-    if (isPending() || createDisabledReason) return;
-    // React's next render can lag a second event in the same tick.
-    submittingRef.current = true;
-    setSubmitting(true);
-    setSubmissionError(null);
+  const importCsv = async (text: string, expectedRevision = captureDraftRevision()) => {
+    let importedRows: typeof draft.rows | undefined;
+    let importedCount = 0;
+    const accepted = updateDraft(previous => {
+      const request = buildPreparedPersonalCatalogImport(previous.title.trim() || '自分の単語帳', text, ownerUid);
+      if (request.source.kind !== 'rows') return previous;
+      const existing = previous.rows.filter(hasPersonalDraftContent);
+      if (existing.length + request.source.rows.length > 500) throw new Error('入力済みの単語とCSVの合計は500語以内にしてください。');
+      importedCount = request.source.rows.length;
+      importedRows = [...existing, ...request.source.rows.map(createPersonalDraftRow)];
+      return { ...previous, csvText: '', rows: importedRows };
+    }, undefined, expectedRevision);
+    if (!importedRows || accepted.rows !== importedRows) throw new Error('下書きが別のタブで更新されたため、CSVは取り込んでいません。現在の内容を確認して、CSVをもう一度選んでください。');
+    setMessage(`${importedCount}語を取り込みました。単語を選ぶと編集できます。`);
+  };
+  const readCsv = async (file: File | undefined) => {
+    if (!file || isPending() || frozen) return;
+    const lifetime = csvLifetime.current;
+    const expectedRevision: PersonalWordbookDraftRevision = captureDraftRevision();
+    busyRef.current = true; readingCsv.current = true; setBusy(true); setError(''); setMessage('');
     try {
-      await onCreate();
-    } catch (error: unknown) {
-      setSubmissionError(error instanceof Error ? error.message : '作成に失敗しました。もう一度お試しください。');
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
+      const text = await readPreparedCatalogCsvFile(file);
+      if (lifetime !== csvLifetime.current) return;
+      await importCsv(text, expectedRevision);
     }
+    catch (cause) { if (lifetime === csvLifetime.current) setError(cause instanceof Error ? cause.message : 'CSVを読み込めませんでした。入力を保持しています。'); }
+    finally { if (lifetime === csvLifetime.current) { busyRef.current = false; readingCsv.current = false; setBusy(false); } }
   };
-
-	  return (
-    <MobileSheetDialog
-      onClose={close}
-      closeOnOverlayClick={!pending}
-      mode="fullscreen"
-      ariaLabelledBy="phrasebook-create-title"
-      initialFocusSelector="button[aria-label='閉じる']"
-      panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-lg sm:rounded-[32px] sm:border sm:border-slate-200 sm:shadow-2xl"
-    >
-      <div data-testid="phrasebook-create-modal" className="safe-pad-top sticky top-0 z-10 border-b border-slate-100 bg-white/96 px-4 pb-4 pt-4 backdrop-blur sm:rounded-t-[32px] sm:px-6">
-        <button type="button" onClick={close} disabled={pending} aria-label="閉じる" className="absolute right-4 top-4 rounded-lg p-2 font-bold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50">
-          <X className="h-5 w-5" />
-        </button>
-        <div className="pr-12 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-medace-100 text-medace-600">
-            <BookOpen className="w-6 h-6" />
-          </div>
-          <h3 id="phrasebook-create-title" className="text-xl font-bold text-slate-800">My単語帳 作成</h3>
-          <p className="text-sm text-slate-500">内容を確認した単語・語義・例文から作成します。</p>
-        </div>
+  const save = async () => {
+    if (isPending() || !immutableRequest || !canUseSelectedCreateMode) return;
+    busyRef.current = true; setBusy(true); setError('');
+    // Persist before sending. Lost replies and reloads retry the same ID/content.
+    const request = draft.pendingRequest ?? immutableRequest;
+    const acceptedDraft = updateDraft({ ...draft, pendingRequest: request });
+    if (JSON.stringify(acceptedDraft.pendingRequest) !== JSON.stringify(request)) {
+      setPreview(null); setError('別のタブで保存を確認しています。表示された同じ内容で保存を再確認してください。');
+      busyRef.current = false; setBusy(false); return;
+    }
+    try {
+      const result = await onCreate(request);
+      if (!result || result.importedBookIds.length !== 1 || result.importedBookCount !== 1 || result.importedWordCount < 1) throw new Error('保存結果を確認できません。同じ内容で保存を再確認してください。');
+      updateDraft({ ...emptyPersonalWordbookDraft(ownerUid), saved: { title: request.defaultBookName!, result } }, request.clientImportId);
+      setPreview(null);
+    } catch (cause) {
+      if (!syncCurrentRequest(request.clientImportId)) { setPreview(null); setError(''); return; }
+      // A definite server rejection permits correction. An ambiguous failure
+      // keeps the immutable request until its receipt can be recovered.
+      if ((cause instanceof ApiError || cause instanceof PersonalCatalogImportError) && [400, 401, 403, 409].includes(cause.status)) {
+        updateDraft(previous => ({ ...previous, pendingRequest: undefined }), request.clientImportId); setPreview(null);
+      }
+      setError(cause instanceof Error ? cause.message : '保存を確認できませんでした。入力を保持しています。');
+    } finally { busyRef.current = false; setBusy(false); }
+  };
+  const content = immutableRequest ? previewPersonalDraftRequest(immutableRequest) : null;
+  const count = draft.rows.filter(hasPersonalDraftContent).length;
+  return <MobileSheetDialog onClose={close} closeOnOverlayClick={!pending} mode="fullscreen" ariaLabelledBy="phrasebook-create-title"
+    initialFocusSelector={saved ? '[data-testid="personal-wordbook-start-study"]' : frozen ? '[data-testid="phrasebook-create-submit"]' : '#personal-wordbook-word'}
+    panelClassName="flex h-full max-h-[100dvh] min-h-[100dvh] flex-col bg-white sm:max-h-[calc(100dvh-3rem)] sm:min-h-0 sm:max-w-xl sm:rounded-[24px] sm:border sm:border-slate-200 sm:shadow-2xl">
+    <div data-testid="phrasebook-create-modal" className="safe-pad-top shrink-0 border-b border-slate-100 px-4 py-3 sm:px-6">
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0">
+        <h3 id="phrasebook-create-title" className="text-lg font-bold text-steady-ink">My単語帳 作成</h3>
+        <p className="mt-1 text-sm text-slate-600">単語と意味を入力して、その単語帳で学べます。</p>
+      </div><button type="button" onClick={close} disabled={pending} aria-label="閉じる" className="min-h-11 min-w-11 shrink-0 rounded-lg p-2 text-slate-600 disabled:opacity-50"><X className="h-5 w-5" /></button></div>
+    </div>
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6" data-testid="personal-wordbook-scroll-area">
+      {!persisted && <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">下書きをこのブラウザーに保存できません。入力は画面を開いている間だけ保持します。保存の確認中は再読み込みせず、この画面で再試行してください。</p>}
+      {changedElsewhere && <p role="status" className="mb-3 rounded-lg bg-medace-50 p-3 text-sm text-medace-900">別のタブで更新された下書きを表示しています。保存前に内容を確認してください。</p>}
+      {error && <div ref={errorRef} tabIndex={-1} role="alert" className="mb-3 break-words rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+      {saved ? <div className="space-y-4" data-testid="personal-wordbook-saved">
+        <h4 ref={resultRef} tabIndex={-1} className="text-xl font-bold text-steady-ink outline-none">単語帳を保存しました</h4>
+        <p className="break-words font-bold text-slate-800">{saved.title}</p>
+        <p className="text-sm text-slate-600">My単語帳に {saved.result.importedWordCount}語を保存しました。</p>
+        {saved.result.skippedRowCount > 0 && <p role="status" className="text-sm text-amber-900">重複した {saved.result.skippedRowCount}行を除きました。同じ単語でも意味が違う行は保存しています。</p>}
+        {saved.result.warnings.length > 0 && <details><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-700">保存時の確認事項（{saved.result.warnings.length}件）</summary><ul className="list-inside list-disc space-y-2 text-sm text-slate-600">{saved.result.warnings.map((warning, index) => <li key={index}>{warning.rowNumber ? `${warning.rowNumber}行目: ` : ''}{warning.message}</li>)}</ul></details>}
+        <button type="button" onClick={() => { updateDraft(emptyPersonalWordbookDraft(ownerUid)); setPreview(null); setError(''); }} className={secondaryClass}>もう1冊作る</button>
+      </div> : content ? <div className="space-y-3" data-testid="personal-wordbook-confirmation">
+        <h4 ref={confirmationRef} tabIndex={-1} className="text-lg font-bold text-steady-ink outline-none">保存する内容を確認</h4>
+        <p className="break-words font-bold text-slate-800">{immutableRequest!.defaultBookName}</p>
+        <p className="text-sm text-slate-600">{content.rows.length}語をMy単語帳に保存します。</p>
+        {content.duplicateRowNumbers.length > 0 && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{content.duplicateRowNumbers.slice(0, 10).join('、')}行目{content.duplicateRowNumbers.length > 10 ? `ほか${content.duplicateRowNumbers.length - 10}行` : ''}は同じ内容の重複です。{content.duplicateRowNumbers.length}行を除いて保存します。同じ単語でも意味が違う行は残します。</p>}
+        <ol className="space-y-2" start={previewPage * 10 + 1}>{content.rows.slice(previewPage * 10, previewPage * 10 + 10).map((row, index) => <li key={previewPage * 10 + index} className="min-w-0 whitespace-pre-wrap break-words rounded-lg border border-slate-200 p-3 text-sm"><strong lang="en">{row.word}</strong><p className="mt-1">{row.definition}</p>{row.exampleSentence && <p lang="en" className="mt-2 text-slate-600">{row.exampleSentence}</p>}{row.exampleMeaning && <p className="mt-1 text-slate-600">{row.exampleMeaning}</p>}{row.sourceNote && <p className="mt-1 text-slate-600">出典: {row.sourceNote}</p>}</li>)}</ol>
+        {content.rows.length > 10 && <div className="flex items-center justify-between gap-2 text-sm"><button type="button" disabled={pending || previewPage === 0} onClick={() => setPreviewPage(previous => previous - 1)} className={secondaryClass}>前の10語</button><span>{previewPage + 1} / {Math.ceil(content.rows.length / 10)}</span><button type="button" disabled={pending || (previewPage + 1) * 10 >= content.rows.length} onClick={() => setPreviewPage(previous => previous + 1)} className={secondaryClass}>次の10語</button></div>}
+        {frozen ? <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm leading-relaxed text-amber-900">保存をまだ確認できていません。「保存を再確認」で同じ内容を再送します。重複作成を避けるため、確認が終わるまで編集を保持しています。</p>
+          : <button type="button" disabled={pending} onClick={() => { setPreview(null); requestAnimationFrame(() => document.getElementById('personal-wordbook-word')?.focus()); }} className={secondaryClass}>入力へ戻る</button>}
+      </div> : <div className="min-w-0 space-y-4">
+        <label className="block text-sm font-bold text-slate-700">単語帳名（変更は任意）<input id="phrasebook-create-book-title" value={draft.title} maxLength={120} readOnly={pending} onChange={event => { if (!isPending()) updateDraft({ ...draft, title: event.target.value }); }} className={inputClass} /></label>
+        <PersonalWordbookEditor rows={draft.rows} disabled={pending} onChange={rows => { if (!isPending()) updateDraft({ ...draft, rows }); }} />
+        <details className="rounded-lg border border-slate-200 p-3"><summary className="min-h-11 cursor-pointer py-2 text-sm font-bold text-slate-700">CSVから取り込む</summary>
+          <p className="mb-3 text-xs leading-relaxed text-slate-600">UTF-8・1MB以内・合計500語まで。先頭行はWord,Meaning。任意の例文と訳はExampleSentence,ExampleMeaning。取り込んでから編集できます。</p>
+          <label className="block text-sm font-bold text-slate-700">CSVファイル<input type="file" id="phrasebook-create-file-upload" accept=".csv,text/csv" disabled={pending} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void readCsv(file); }} className="mt-2 block min-h-11 w-full min-w-0 text-sm" /></label>
+          <label className="mt-3 block text-sm font-bold text-slate-700">CSVを貼り付ける<textarea id="phrasebook-create-source-text" rows={3} value={csvText} readOnly={pending} onChange={event => { if (!isPending()) setCsvText(event.target.value); }} placeholder={'Word,Meaning\napple,りんご'} className={inputClass} /></label>
+          <button type="button" disabled={pending || !csvText.trim()} onClick={() => { if (isPending()) return; setError(''); setMessage(''); void importCsv(csvText).catch(cause => setError(cause instanceof Error ? cause.message : 'CSVを確認してください。')); }} className={`${secondaryClass} mt-2`}>CSVを入力欄へ取り込む</button>
+        </details>
+        {message && <p role="status" className="text-sm text-medace-900">{message}</p>}
+        <p className="text-xs leading-relaxed text-slate-600">{persisted ? '下書きはこのブラウザーに、このアカウント用として最大7日間保存します。' : 'このブラウザーに下書きを保存できません。画面を開いている間は入力を保持します。再読み込みすると失われます。'} 作成した単語帳はログイン後のMy単語帳で使えます。</p>
+      </div>}
+      {!canUseSelectedCreateMode && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{currentPlanLabel}ではMy単語帳の作成を使えません。</p>}
+      {pending && <p role="status" className="mt-3 text-sm text-slate-600">{readingCsv.current ? 'CSVを読み込んでいます…' : '保存を確認しています…'}</p>}
+    </div>
+    <MobileStickyActionBar className="safe-pad-bottom shrink-0 border-t border-slate-100 bg-white px-4 py-3 sm:px-6">
+      <div className="flex items-center gap-2">
+        <button type="button" disabled={pending} onClick={close} className={`${secondaryClass} shrink-0`}>{saved ? '一覧へ' : '閉じる'}</button>
+        {saved ? <button type="button" data-testid="personal-wordbook-start-study" onClick={() => { close(); onStartStudy(saved.result.importedBookIds[0]); }} className="min-h-11 min-w-0 flex-1 rounded-lg bg-steady-action px-3 py-3 text-sm font-bold text-steady-on-action">この単語帳で学ぶ</button>
+          : <button type="button" data-testid="phrasebook-create-submit" onClick={() => { if (immutableRequest) void save(); else check(); }} disabled={pending || !canUseSelectedCreateMode || (!immutableRequest && count === 0)} className="flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-steady-action px-3 py-3 text-sm font-bold text-steady-on-action disabled:bg-slate-300">
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookOpen className="h-4 w-4" />}{pending ? '確認中…' : frozen ? '保存を再確認' : immutableRequest ? 'この内容で保存' : '内容を確認'}
+          </button>}
       </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-        {visibleError && (
-          <div ref={errorRef} tabIndex={-1} role="alert" className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-3 text-sm text-red-600">
-            <span className="mt-0.5">⚠️</span>
-            <span>{visibleError}</span>
-          </div>
-        )}
-
-      <div className="space-y-4">
-	        <div>
-	          <label htmlFor={titleInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">タイトル</label>
-	          <input
-	            id={titleInputId}
-	            type="text"
-	            className="w-full rounded-lg border border-slate-300 px-3 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
-            placeholder="例: 今週覚えたい単語"
-            value={newBookTitle}
-            readOnly={pending}
-            onChange={(event) => { if (!isPending()) onChangeTitle(event.target.value); }}
-          />
-        </div>
-
-        <div className="flex rounded-lg bg-slate-100 p-1">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => { if (!isPending()) onChangeMode('TEXT'); }}
-            className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'TEXT' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <FileText className="w-4 h-4" /> 手入力
-            </div>
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => { if (!isPending()) onChangeMode('FILE'); }}
-            className={`min-h-11 flex-1 rounded-md py-2 text-sm font-bold transition-all ${createMode === 'FILE' ? 'bg-white text-medace-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <FileText className="w-4 h-4" /> CSV取込
-            </div>
-          </button>
-        </div>
-
-	        {createMode === 'TEXT' ? (
-	          <div>
-	            <label htmlFor={sourceTextInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">単語・語義（CSV形式）</label>
-	            <textarea
-	              id={sourceTextInputId}
-	              className="h-40 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-medace-500"
-              placeholder={'Word,Meaning,ExampleSentence,ExampleMeaning\nsource,出典,Please check the source.,出典を確認してください。'}
-              value={rawText}
-              readOnly={pending}
-              onChange={(event) => { if (!isPending()) onChangeRawText(event.target.value); }}
-            />
-          </div>
-	        ) : (
-	          <div>
-	            <label htmlFor={fileInputId} className="mb-1 block text-xs font-bold uppercase text-slate-500">ファイルをアップロード</label>
-	            <div className="rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition-colors hover:border-medace-500">
-	              <input ref={fileInputRef} type="file" id={fileInputId} accept=".csv,text/csv" className="hidden" disabled={pending} onChange={(event) => { if (!isPending()) onFileChange(event); }} />
-	              <button type="button" data-testid="phrasebook-create-file-picker" disabled={pending} onClick={() => { if (!isPending()) fileInputRef.current?.click(); }} className="flex min-h-11 w-full cursor-pointer flex-col items-center gap-2 rounded-lg disabled:cursor-not-allowed disabled:opacity-60">
-                <UploadCloud className="w-8 h-8 text-slate-400" />
-                <span className="text-sm font-bold text-slate-600">
-                  {uploadFile ? uploadFile.name : '校正したCSVを選択'}
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        <p className="text-xs leading-relaxed text-slate-600">先頭行は Word,Meaning。例文と和訳は ExampleSentence,ExampleMeaning 列を追加できます。1回500語まで。外部AIへ送信せず、入力した内容をそのまま保存します。</p>
-        <p className="text-xs leading-relaxed text-slate-600">画像・PDFの自動抽出は現在停止しています。原本の内容と利用権利を確認してから入力してください。</p>
-
-        {!canUseSelectedCreateMode && (
-          <div data-testid="phrasebook-create-plan-warning" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
-            {`${currentPlanLabel} ではこの単語帳の作成は使えません。`}
-          </div>
-        )}
-        {pending && (
-          <p role="status" className="text-sm leading-relaxed text-slate-600">保存しています。完了するまでこの内容を保持します。</p>
-        )}
-        {createDisabledReason && canUseSelectedCreateMode && !pending && (
-          <div data-testid="phrasebook-create-validation-message" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-bold text-amber-800">
-            {createDisabledReason}
-          </div>
-        )}
-      </div>
-      </div>
-
-      <MobileStickyActionBar className="safe-pad-bottom border-t border-slate-100 bg-white/96 px-4 py-4 backdrop-blur sm:px-6 sm:rounded-b-[32px]">
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={close}
-            disabled={pending}
-            className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-50"
-          >
-            キャンセル
-          </button>
-          <button
-            type="button"
-            data-testid="phrasebook-create-submit"
-            onClick={create}
-            disabled={createDisabled}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-steady-action px-5 py-3 font-bold text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <BookOpen className="h-5 w-5" />}
-            {pending ? '保存しています...' : '作成する'}
-          </button>
-        </div>
-      </MobileStickyActionBar>
-    </MobileSheetDialog>
-  );
+    </MobileStickyActionBar>
+  </MobileSheetDialog>;
 };
-
 export default PhrasebookCreateModal;

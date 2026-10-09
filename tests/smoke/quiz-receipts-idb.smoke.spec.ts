@@ -351,7 +351,7 @@ test('actual IDB reset clears quiz receipts so the previous attempt id can save 
   expect(result.afterRetry).toEqual(result.afterFreshSave);
 });
 
-test('v8 upgrade adds quiz receipts while retaining synthetic v7 history and SRS receipts', async ({ page }) => {
+test('v9 upgrade adds quiz and personal receipts while retaining synthetic v7 history and SRS receipts', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const fixture = (window as QuizIdbWindow).quizIdb;
     const { support } = fixture;
@@ -373,14 +373,18 @@ test('v8 upgrade adds quiz receipts while retaining synthetic v7 history and SRS
     oldDb.close();
     fixture.db = await support.initStorageDb();
     const restoredTx = fixture.db.transaction([support.STORES.HISTORY, support.STORES.STUDY_ATTEMPT_RECEIPTS]);
+    const restoredComplete = support.waitForTransaction(restoredTx);
     const [restoredHistory, restoredReceipt] = await Promise.all([
       support.requestToPromise(restoredTx.objectStore(support.STORES.HISTORY).get(history.id)),
       support.requestToPromise(restoredTx.objectStore(support.STORES.STUDY_ATTEMPT_RECEIPTS).get(receipt.id)),
     ]);
-    return { version: fixture.db.version, hasQuizReceipts: fixture.db.objectStoreNames.contains(support.STORES.QUIZ_ATTEMPT_RECEIPTS), history, receipt, restoredHistory, restoredReceipt };
+    await restoredComplete;
+    const personalReceiptKeyPath = fixture.db.transaction(support.STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS).objectStore(support.STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS).keyPath;
+    return { personalReceiptKeyPath, version: fixture.db.version, hasQuizReceipts: fixture.db.objectStoreNames.contains(support.STORES.QUIZ_ATTEMPT_RECEIPTS), history, receipt, restoredHistory, restoredReceipt };
   });
 
-  expect(result.version).toBe(8);
+  expect(result.version).toBe(9);
+  expect(result.personalReceiptKeyPath).toEqual(['uid', 'clientImportId']);
   expect(result.hasQuizReceipts).toBe(true);
   expect(result.restoredHistory).toEqual(result.history);
   expect(result.restoredReceipt).toEqual(result.receipt);

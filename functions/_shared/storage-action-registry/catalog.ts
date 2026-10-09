@@ -1,3 +1,4 @@
+import { validatePersonalClientImportId } from '../personal-catalog-import';
 import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
 import { expectEmptyPayload, expectNumber, expectObject, expectOptionalObject, expectString, expectTrimmedString } from '../request-validation';
@@ -24,6 +25,7 @@ export const catalogStorageActionDefinitions = {
       const record = expectObject(payload);
       expectTrimmedString(record, 'defaultBookName');
       expectObject(record.source, 'source');
+      if (record.clientImportId !== undefined) validatePersonalClientImportId(record.clientImportId);
       return record as never;
     },
     execute: ({ env, user, runtimeFlags }, payload) => handleBatchImportWords(env, user, payload, runtimeFlags),

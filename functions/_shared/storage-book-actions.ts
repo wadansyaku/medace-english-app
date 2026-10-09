@@ -1,3 +1,4 @@
+import { handlePersonalCatalogImport } from './personal-catalog-import';
 import type {
   CatalogImportRequest,
   CatalogImportResult,
@@ -291,6 +292,7 @@ export const handleBatchImportWords = async (
   payload: CatalogImportRequest,
   runtimeFlags?: RuntimeFlags,
 ): Promise<CatalogImportResult> => {
+  if (payload?.clientImportId !== undefined) return handlePersonalCatalogImport(env, user, payload);
   const defaultBookName = String(payload?.defaultBookName || '').trim();
   const contextSummary = typeof payload?.contextSummary === 'string' ? payload.contextSummary : undefined;
   const bookDescription = typeof payload?.bookDescription === 'string' ? payload.bookDescription.trim() : undefined;

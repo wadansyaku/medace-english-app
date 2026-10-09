@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createGuestLocalBook, parseGuestLocalBookCsv, GUEST_LOCAL_BOOK_LIMITS } from '../shared/guestLocalBooks';
+import { createGuestLocalBook, parseGuestLocalBookCsv, GUEST_LOCAL_BOOK_LIMITS, createGuestDraftRow,
+  emptyGuestWordbookDraft, prepareGuestWordbookDraft } from '../shared/guestLocalBooks';
 import { buildGuestMeaningQuestions, isGuestSpellingCorrect } from '../shared/guestPractice';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
@@ -58,6 +59,39 @@ describe('guest CSV and manual entry', () => {
     expect(book.words[0].bookId).toBe(book.id);
     expect(book.id).toMatch(/^guest-local-/);
   });
+  it('saves the current single word with a default title and stable preview IDs', () => {
+    const draft = { ...emptyGuestWordbookDraft(), title: '', rows: [createGuestDraftRow({ word: 'ice cream', definition: 'アイスクリーム' }), createGuestDraftRow()] };
+    const preview = prepareGuestWordbookDraft(draft);
+    expect(preview.book.title).toBe('自分の単語帳');
+    expect(preview.book.words).toHaveLength(1);
+    expect(preview.book.words[0]).toMatchObject({ word: 'ice cream', definition: 'アイスクリーム', bookId: preview.book.id, id: `${preview.book.id}:word:1` });
+    expect(preview.duplicateRowNumbers).toEqual([]);
+  });
+  it('rejects an incomplete current row without modifying or silently dropping it', () => {
+    const draft = { ...emptyGuestWordbookDraft(), rows: [createGuestDraftRow({ word: 'apple', definition: 'りんご' }), createGuestDraftRow({ word: 'book', definition: '' })] };
+    const before = structuredClone(draft);
+    expect(() => prepareGuestWordbookDraft(draft)).toThrow('2行目の意味');
+    expect(draft).toEqual(before);
+  });
+  it('reports exact duplicate rows and preserves different meanings and examples', () => {
+    const draft = { ...emptyGuestWordbookDraft(), rows: [
+      createGuestDraftRow({ word: 'bank', definition: '銀行' }),
+      createGuestDraftRow({ word: 'bank', definition: ' 銀行 ' }),
+      createGuestDraftRow({ word: 'bank', definition: '岸' }),
+      createGuestDraftRow({ word: 'bank', definition: '銀行', exampleSentence: 'Go to the bank.' }),
+    ] };
+    const result = prepareGuestWordbookDraft(draft);
+    expect(result.duplicateRowNumbers).toEqual([2]);
+    expect(result.book.words.map(row => row.definition)).toEqual(['銀行', '岸', '銀行']);
+    expect(result.book.words.map(row => row.number)).toEqual([1, 2, 3]);
+    expect(new Set(result.book.words.map(row => row.id)).size).toBe(3);
+  });
+  it('retains source text as inert text and validates its length in direct entry and CSV', () => {
+    const book = createGuestLocalBook('教材', [{ word: 'book', definition: '本', sourceNote: '<script>source</script>' }]);
+    expect(book.words[0].sourceNote).toBe('<script>source</script>');
+    expect(parseGuestLocalBookCsv('Word,Meaning,SourceNote\nbook,本,授業ノート', '教材')[0].sourceNote).toBe('授業ノート');
+    expect(() => createGuestLocalBook('教材', [{ word: 'book', definition: '本', sourceNote: 'a'.repeat(1001) }])).toThrow('出典は1000');
+  });
 });
 
 describe('temporary device storage', () => {
@@ -91,5 +125,45 @@ describe('temporary device storage', () => {
     const store = await import('../shared/guestLocalBooks');
     expect(store.readGuestLocalBooks().books).toEqual([]);
     expect(store.readGuestLocalBooks().notice).toContain('読み込めない');
+  });
+  it('retains a partially entered draft across reopening only in the guest namespace and expires it', async () => {
+    const local = storage(); vi.stubGlobal('localStorage', local);
+    local.setItem('steady-study:personal-wordbook-draft:v1:student-A', JSON.stringify({ title: '個人教材', rows: [{ word: 'private', definition: '個人' }] }));
+    const store = await import('../shared/guestLocalBooks');
+    const draft = { ...store.emptyGuestWordbookDraft(100), rows: [store.createGuestDraftRow({ word: 'apple', definition: '' })] };
+    expect(store.writeGuestWordbookDraft(draft, 100).persisted).toBe(true);
+    const restored = store.readGuestWordbookDraft(101).draft;
+    expect(restored.rows).toEqual(draft.rows);
+    expect(local.setItem.mock.calls.at(-1)?.[0]).toBe('steady-study:guest-wordbook-draft:v1');
+    expect(local.getItem('steady-study:personal-wordbook-draft:v1:student-A')).toContain('private');
+    expect(store.readGuestWordbookDraft(100 + GUEST_LOCAL_BOOK_LIMITS.lifetimeMs).draft.rows[0].word).toBe('');
+  });
+  it('keeps the guest draft in memory across reopening and warns when browser persistence fails', async () => {
+    vi.stubGlobal('localStorage', { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('quota'); } });
+    const store = await import('../shared/guestLocalBooks');
+    const draft = { ...store.emptyGuestWordbookDraft(), rows: [store.createGuestDraftRow({ word: 'book', definition: '本' })] };
+    expect(store.writeGuestWordbookDraft(draft).persisted).toBe(false);
+    const restored = store.readGuestWordbookDraft();
+    expect(restored.persisted).toBe(false);
+    expect(restored.draft.rows[0].word).toBe('book');
+  });
+  it('does not create another book when the same confirmed book is saved twice', async () => {
+    const local = storage(); vi.stubGlobal('localStorage', local);
+    const store = await import('../shared/guestLocalBooks');
+    const preview = store.prepareGuestWordbookDraft({ ...store.emptyGuestWordbookDraft(), rows: [store.createGuestDraftRow({ word: 'book', definition: '本', sourceNote: '授業' })] });
+    store.saveGuestLocalBook(preview.book);
+    const saved = store.saveGuestLocalBook(preview.book);
+    expect(saved.books).toHaveLength(1);
+    expect(saved.books[0].id).toBe(preview.book.id);
+    expect(saved.books[0].words[0].sourceNote).toBe('授業');
+  });
+  it('discards malformed draft row IDs or source fields rather than restoring unvalidated data', async () => {
+    const local = storage(); vi.stubGlobal('localStorage', local);
+    const store = await import('../shared/guestLocalBooks');
+    const draft = store.emptyGuestWordbookDraft();
+    local.setItem('steady-study:guest-wordbook-draft:v1', JSON.stringify({ ...draft, rows: [{ draftId: 'same', word: 'private', definition: '本', sourceNote: 42 }] }));
+    expect(store.readGuestWordbookDraft().draft.rows[0].word).toBe('');
+    local.setItem('steady-study:guest-wordbook-draft:v1', JSON.stringify({ ...draft, rows: [store.createGuestDraftRow({ word: 'book', definition: '本' }), { ...store.createGuestDraftRow(), draftId: '' }] }));
+    expect(store.readGuestWordbookDraft().draft.rows[0].word).toBe('');
   });
 });

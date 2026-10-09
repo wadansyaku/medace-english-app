@@ -15,6 +15,8 @@
 
 ## Release Flow
 
+2026-10-09 17:44 UTCの親側本人承認で、今回My単語帳候補の公開を通常gateから進める。残る独立再確認が通るまでmain統合しない。恒久ルールの保存は親が扱い、ここでは今回の配備範囲だけを記録する。保存/復旧条件は [My単語帳の公開工程](./analysis/2026-10-09-personal-wordbook-production-release.md) を参照する。
+
 Gate naming:
 
 - `local-only`: local files、一時 D1、local build output、local test server だけで完結する確認。migration filename check、local D1 migration replay、production source reachability、typecheck、unit tests、API integration tests、local smoke suites が該当します。

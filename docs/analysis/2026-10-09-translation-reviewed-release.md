@@ -31,3 +31,18 @@ PR65のP2指摘を再現。例文欠落、訳欠落、対象語不在、複数�
 
 
 画面全体の追加確認で、和訳候補0の上部QuizHeaderだけ希望出題数を表示する箇所を確認。SETUPのJA0候補は上部も「和訳の練習」とし、内側の理由/開始無効化と一致させる。実hook unitと既存4browserで全画面に架空の問数見出しが残らないことを確認する。先行fb979bcの全11工程2356unit/Cloud267+IDB9成功は保持し、見出し修正後SHAを最終公開gateで確認する。先行cacde36は共通の旧fixtureに由来する5件失敗であり、合成3語の例文追加後の対象5件はassertionを維持して成功した。
+
+
+## 2026-10-09 最終候補の本番受入完了
+
+本人の本番反映・旧公開禁止の継続解除指示に従い、PR65を通常squash mergeした。source `fefe1e5c7d319819f22fe616e8a2504140a82a20` とmain `4955b54d370ef62fb14502031a405e83acc4d677` は同一tree。最終候補にP2の出題候補と実生成の一致、JA0件の画面全体の見出し修正を含む。
+
+- 全11工程:212files/2356unit、Cloud267＋IDB9＝276browser、retry/flaky0、preview専用2skip、全API統合/型/architecture/migration/security/build成功。
+- 正式CI:[37929027043](https://github.com/wadansyaku/medace-english-app/actions/runs/37929027043)。正式preview:[37929026017](https://github.com/wadansyaku/medace-english-app/actions/runs/37929026017)、追加native15ケース成功。preview metadata SHAはPR merge ref `6651f0b1e5cc9c8915825c9b7a32efdf2af61f01`。
+- main CI:[37932941462](https://github.com/wadansyaku/medace-english-app/actions/runs/37932941462)、production:[37932941548](https://github.com/wadansyaku/medace-english-app/actions/runs/37932941548)成功。公開URL:https://medace-english-app.pages.dev 。immutable:https://4db1c4df.medace-english-app.pages.dev 。既適用Naru helperはALREADY_APPLIED_VERIFIED。
+- 公開導線5件はGET/HEADだけ、認証5幅10画像は送信せずfocus/閉じる/入力の可視性を確認。和訳の実本番static assetを5幅25画像で確認し、全APIはlocalhost42930合成D1へ隔離。未知0保存・登録済み1保存ずつ・save200・overflow/pageerror0を確認。本番backend保存の検証と混同しない。
+- 本番のNaru1531語/638印、catalog全内容とID/番号hash、既存265履歴・84study receipt・1quiz receiptのキーをread-onlyで保持照合。原本/語義/出典/履歴・認可・教材承認gate・停止中provider/課金設定を維持。回答本文は読まず、raw catalog/キーはMac内のみで、Git/Libraryへ転送しない。
+
+旧公開禁止は通常の公開依頼へ再適用しない。未登録の自然な訳は有限bank比較では未採点。実Safari/iPhone、外部講師承認、CEFR実測校正、過去誤採点影響と実教室効果は未検証。以前のローカル限定/未配備記録は作成時点の履歴。
+
+公開後のこの文書記録は独立local receipt branchに保全し、配備済みアプリsourceを変更しない。実配備の判定正本は独立evidenceのpublication/published-acceptance.json。

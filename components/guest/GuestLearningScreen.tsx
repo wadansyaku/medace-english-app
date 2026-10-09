@@ -200,7 +200,7 @@ const GuestLearningScreen: React.FC<{
       : view === 'study' && current ? <>
         <div className="mb-2 flex justify-between text-xs font-bold text-slate-500"><span>意味を思い出してから答えを確認</span><span>{index + 1} / {queue.length}</span></div>
         <div className="study-card-shell" style={{ height: 'min(46dvh, 24rem)', minHeight: '15rem' }}>
-          <div className="study-card-3d"><div key={`${index}:${current.id}`} data-testid="guest-study-card" className={`study-card-inner ${flipped ? 'is-flipped' : ''} ${supports3D ? '' : 'instant-swap'}`}>
+          <div className="study-card-3d"><div key={`${index}:${current.id}`} data-testid="guest-study-card" data-word-id={current.id} data-book-id={current.bookId} className={`study-card-inner ${flipped ? 'is-flipped' : ''} ${supports3D ? '' : 'instant-swap'}`}>
             {(supports3D || !flipped) && <div data-testid="guest-card-front" aria-hidden={flipped} inert={flipped} className="study-card-face items-center border border-slate-200 bg-white px-5 py-6 shadow-sm">
               <p className="shrink-0 text-xs font-bold text-slate-500">No. {current.number}</p>
               <div data-testid="guest-word-scroll" className="min-h-0 w-full flex-1 overflow-y-auto"><div className="flex min-h-full flex-col items-center justify-center gap-3 py-2"><h2 ref={frontHeading} tabIndex={-1} lang="en" className="min-w-0 w-full break-words text-center text-4xl font-black text-steady-ink outline-none sm:text-5xl">{current.word}</h2><WordExamBadge word={current} /></div></div>

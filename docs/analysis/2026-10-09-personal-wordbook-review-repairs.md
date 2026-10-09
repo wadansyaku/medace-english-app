@@ -1,0 +1,27 @@
+# My単語帳 独立レビュー指摘の限定修正 2026-10-09
+
+最新状態：17:44 UTCの親側本人承認で今回候補の本番公開工程を再開。最終local11工程/2426unit/303browser成功。残る独立再確認2件と通常公開gateを通過してからmain統合する。恒久ルールの保存は親が扱う。[今回の公開工程](./2026-10-09-personal-wordbook-production-release.md)。以下の未公開/承認待ち記述はそれ以前の時点の履歴。
+
+先行候補59032c5を独立レビューへ提出後、親がCSV下書き競合と既知拒否後の端末保存失敗の2件に限り修正・再検証を許可した。新しい機能は増やさない。以前の公開許可は前回版PR65のみで、今回の新たな本番公開の本人承認は未取得。独立レビュー確認と本人承認の両方を待ち、新push/PR/preview/productionは保留する。
+
+## 再現と修正
+
+1. File.textを合成的に保留し、Bタブがtitle/rowsを更新した後にAのCSVを解放。実Mac Chromeで題名がnewer draftからoriginal draftへ戻ることを確認した。hook内のownerと単調revisionをCSV開始時に固定し、完了時はfresh storage rawを読み直す。storage event配達後も未配送時も別下書きへのCSV適用を拒否し、最新draftを保持して再選択を案内する。CSV内容はguard通過後のcurrentから組み立て、実適用時だけ成功件数を表示する。
+2. pendingの端末保存成功を確認した後、API400を返し、pending解除以降のsetItemをthrowさせる。実Chromeで最初の訂正入力時に古いdisk pendingが復活し、確認表示へ戻ることを再現した。最後に確認したrawとfailed write基準が変わらない間は解除済みのmemoryを保持する。別タブのrawが変化すれば外部を採用する。update/storage event/syncCurrentRequestで同じ同期判断を使い、read失敗を空draftの採用に変えない。
+3. CSV待機中のSPA logoutによるunmount後にも旧UID下書きへCSVが追記されることを実Chromeで確認した。同じCSV修正でopen/owner/cleanupの生存世代を検査し、破棄した画面の完了を捨てる。通常のCSV読込中の閉じるロックは維持する。
+
+## 検証と境界
+
+新4ブラウザーケース：CSV競合のstorage event配達済み/未配送、400拒否後のpending解除write失敗、CSV読込中unmount。既存の結果不明/遅い二タブ応答/未知失敗quota再送/UID分離も同じsuiteで実行する。先行失敗は修正後成功と混ぜず、最終全gateの結果・正確なSHA・差分・画面は独立deliveryと同じLibraryレビュー資料へ反映する。ソース側の本記録は最終gate実行前のsnapshotで、完了結果は外部handoff/verificationとplan/を正本とする。
+
+backend D1/IDB receipt、原子batch/transaction、owner/RBAC、公式承認、原本/語ID/履歴、料金、AI送信の実装は変更しない。曖昧な応答/503/timeoutはpendingを解除せず同ID・同内容を再送し、既知400/401/403/409の編集復帰を維持する。localStorage read→setItemはCAS transactionではなく、全ての並行編集の原子的保証とは記録しない。
+
+実Safari/iPhone・実IME/ソフトキーボード・支援技術・一般教室の受入は引き続き未検証。全試験は合成データのみで、本番の実生徒保存や障害注入は行わない。
+
+## 独立再監査で見つかった読取・書込停止の派生
+
+独立再監査の13合成ケースでは基本2件が解消し12PASS、読取と書込の両方が停止してから復帰した場合の旧pending復活が残った。pendingを実保存→getItem/setItemを拒否→API400→画面内訂正→復帰→最初の編集で旧pendingに戻ることを旧b5実Chromeでも再現した。
+
+読取不能時のsnapshot.raw=nullをキー不存在としてbaselineへ記録しない。最後に実際に観測したrawをfailedWriteBase/observedRawへ維持する。追加の実二タブ検証ではgetItemだけ失敗・setItemは可能な時にBの新pendingをAが上書きすることも再現したため、snapshot.available=falseの間はdiskへ書かずmemory-onlyで訂正を保持する。復帰時に実rawが未変化なら訂正memoryを保持し、Bの新pendingへ変化していれば採用して同ID・同内容を再確認する。未知応答のpendingを解除しない。
+
+新3ブラウザーケースは両方停止後の旧拒否保持、両方停止中のB新pending、読取だけ停止中のB新pending。二タブの実localStorageに保存された要求の不変と復帰後の実D1保存値を検証する。最終対象・全gateの件数/SHA/画像はdeliveryと同じレビュー資料へ記録する。D1/IDB/backend・課金・認可・migrationの追加変更はない。localStorage全編集のCASや端末間共有を保証しない。
