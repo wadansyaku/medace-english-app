@@ -3,7 +3,7 @@ import { BookOpen, Loader2, X } from 'lucide-react';
 import type { CatalogImportRequest, CatalogImportResult } from '../../contracts/storage';
 import { ApiError } from '../../services/apiClient';
 import { PersonalCatalogImportError } from '../../shared/personalCatalogImport';
-import { usePersonalWordbookDraft } from '../../hooks/usePersonalWordbookDraft';
+import { usePersonalWordbookDraft, type PersonalWordbookDraftRevision } from '../../hooks/usePersonalWordbookDraft';
 import { buildPreparedPersonalCatalogImport, readPreparedCatalogCsvFile } from '../../shared/preparedPersonalCatalog';
 import { createPersonalDraftRow, emptyPersonalWordbookDraft, hasPersonalDraftContent, preparePersonalDraftRequest, previewPersonalDraftRequest } from '../../shared/personalWordbookDraft';
 import MobileSheetDialog from '../mobile/MobileSheetDialog';
@@ -24,7 +24,7 @@ const inputClass = 'mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-
 const secondaryClass = 'min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50';
 
 const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, ownerUid, creating, canUseSelectedCreateMode, currentPlanLabel, onClose, onCreate, onStartStudy }) => {
-  const { draft, updateDraft, persisted, changedElsewhere, syncCurrentRequest } = usePersonalWordbookDraft(ownerUid);
+  const { draft, updateDraft, persisted, changedElsewhere, syncCurrentRequest, captureDraftRevision } = usePersonalWordbookDraft(ownerUid);
   const [preview, setPreview] = React.useState<CatalogImportRequest | null>(null);
   const [error, setError] = React.useState('');
   const [message, setMessage] = React.useState('');
@@ -34,6 +34,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, own
   const [previewPage, setPreviewPage] = React.useState(0);
   const busyRef = React.useRef(false);
   const readingCsv = React.useRef(false);
+  const csvLifetime = React.useRef(0);
   const errorRef = React.useRef<HTMLDivElement>(null);
   const resultRef = React.useRef<HTMLHeadingElement>(null);
   const confirmationRef = React.useRef<HTMLHeadingElement>(null);
@@ -42,6 +43,11 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, own
   const frozen = Boolean(draft.pendingRequest);
   const saved = draft.saved;
   const isPending = () => creating || busyRef.current;
+  React.useEffect(() => {
+    csvLifetime.current += 1;
+    if (readingCsv.current) { readingCsv.current = false; busyRef.current = false; setBusy(false); }
+    return () => { csvLifetime.current += 1; };
+  }, [open, ownerUid]);
   // An external save/new draft supersedes this tab's unsent confirmation.
   React.useEffect(() => { if (!draft.pendingRequest) setPreview(null); }, [draft]);
   React.useEffect(() => {
@@ -57,20 +63,33 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, own
     try { setPreviewPage(0); setPreview(preparePersonalDraftRequest(draft)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : '入力内容を確認してください。'); }
   };
-  const importCsv = async (text: string) => {
-    const request = buildPreparedPersonalCatalogImport(draft.title.trim() || '自分の単語帳', text, ownerUid);
-    if (request.source.kind !== 'rows') return;
-    const existing = draft.rows.filter(hasPersonalDraftContent);
-    if (existing.length + request.source.rows.length > 500) throw new Error('入力済みの単語とCSVの合計は500語以内にしてください。');
-    updateDraft({ ...draft, csvText: '', rows: [...existing, ...request.source.rows.map(createPersonalDraftRow)] });
-    setMessage(`${request.source.rows.length}語を取り込みました。単語を選ぶと編集できます。`);
+  const importCsv = async (text: string, expectedRevision = captureDraftRevision()) => {
+    let importedRows: typeof draft.rows | undefined;
+    let importedCount = 0;
+    const accepted = updateDraft(previous => {
+      const request = buildPreparedPersonalCatalogImport(previous.title.trim() || '自分の単語帳', text, ownerUid);
+      if (request.source.kind !== 'rows') return previous;
+      const existing = previous.rows.filter(hasPersonalDraftContent);
+      if (existing.length + request.source.rows.length > 500) throw new Error('入力済みの単語とCSVの合計は500語以内にしてください。');
+      importedCount = request.source.rows.length;
+      importedRows = [...existing, ...request.source.rows.map(createPersonalDraftRow)];
+      return { ...previous, csvText: '', rows: importedRows };
+    }, undefined, expectedRevision);
+    if (!importedRows || accepted.rows !== importedRows) throw new Error('下書きが別のタブで更新されたため、CSVは取り込んでいません。現在の内容を確認して、CSVをもう一度選んでください。');
+    setMessage(`${importedCount}語を取り込みました。単語を選ぶと編集できます。`);
   };
   const readCsv = async (file: File | undefined) => {
     if (!file || isPending() || frozen) return;
-    busyRef.current = true; readingCsv.current = true; setBusy(true); setError('');
-    try { await importCsv(await readPreparedCatalogCsvFile(file)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'CSVを読み込めませんでした。入力を保持しています。'); }
-    finally { busyRef.current = false; readingCsv.current = false; setBusy(false); }
+    const lifetime = csvLifetime.current;
+    const expectedRevision: PersonalWordbookDraftRevision = captureDraftRevision();
+    busyRef.current = true; readingCsv.current = true; setBusy(true); setError(''); setMessage('');
+    try {
+      const text = await readPreparedCatalogCsvFile(file);
+      if (lifetime !== csvLifetime.current) return;
+      await importCsv(text, expectedRevision);
+    }
+    catch (cause) { if (lifetime === csvLifetime.current) setError(cause instanceof Error ? cause.message : 'CSVを読み込めませんでした。入力を保持しています。'); }
+    finally { if (lifetime === csvLifetime.current) { busyRef.current = false; readingCsv.current = false; setBusy(false); } }
   };
   const save = async () => {
     if (isPending() || !immutableRequest || !canUseSelectedCreateMode) return;
@@ -135,7 +154,7 @@ const PhrasebookCreateModal: React.FC<PhrasebookCreateModalProps> = ({ open, own
           <p className="mb-3 text-xs leading-relaxed text-slate-600">UTF-8・1MB以内・合計500語まで。先頭行はWord,Meaning。任意の例文と訳はExampleSentence,ExampleMeaning。取り込んでから編集できます。</p>
           <label className="block text-sm font-bold text-slate-700">CSVファイル<input type="file" id="phrasebook-create-file-upload" accept=".csv,text/csv" disabled={pending} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void readCsv(file); }} className="mt-2 block min-h-11 w-full min-w-0 text-sm" /></label>
           <label className="mt-3 block text-sm font-bold text-slate-700">CSVを貼り付ける<textarea id="phrasebook-create-source-text" rows={3} value={csvText} readOnly={pending} onChange={event => { if (!isPending()) setCsvText(event.target.value); }} placeholder={'Word,Meaning\napple,りんご'} className={inputClass} /></label>
-          <button type="button" disabled={pending || !csvText.trim()} onClick={() => { if (isPending()) return; setError(''); void importCsv(csvText).catch(cause => setError(cause instanceof Error ? cause.message : 'CSVを確認してください。')); }} className={`${secondaryClass} mt-2`}>CSVを入力欄へ取り込む</button>
+          <button type="button" disabled={pending || !csvText.trim()} onClick={() => { if (isPending()) return; setError(''); setMessage(''); void importCsv(csvText).catch(cause => setError(cause instanceof Error ? cause.message : 'CSVを確認してください。')); }} className={`${secondaryClass} mt-2`}>CSVを入力欄へ取り込む</button>
         </details>
         {message && <p role="status" className="text-sm text-medace-900">{message}</p>}
         <p className="text-xs leading-relaxed text-slate-600">{persisted ? '下書きはこのブラウザーに、このアカウント用として最大7日間保存します。' : 'このブラウザーに下書きを保存できません。画面を開いている間は入力を保持します。再読み込みすると失われます。'} 作成した単語帳はログイン後のMy単語帳で使えます。</p>

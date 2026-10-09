@@ -385,6 +385,115 @@ test('personal definite rejection unlocks correction while retaining the entered
   expect(words[0].definition).toBe('訂正後');
 });
 
+const holdPersonalCsv = async (page: Page) => {
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    Object.assign(window, { personalCsvStarted: false });
+    File.prototype.text = function () {
+      if (this.name !== 'held-personal.csv') return original.call(this);
+      Object.assign(window, { personalCsvStarted: true });
+      return new Promise<string>(resolve => {
+        Object.assign(window, { releasePersonalCsv: () => resolve('Word,Meaning\ncsv-word,取り込む予定だった語') });
+      });
+    };
+  });
+  const modal = page.getByRole('dialog', { name: 'My単語帳 作成', exact: true });
+  await modal.getByText('CSVから取り込む', { exact: true }).click();
+  await modal.getByLabel('CSVファイル', { exact: true }).setInputFiles({ name: 'held-personal.csv', mimeType: 'text/csv', buffer: Buffer.from('Word,Meaning\ncsv-word,取り込む予定だった語') });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { personalCsvStarted: boolean }).personalCsvStarted)).toBe(true);
+};
+
+const releasePersonalCsv = (page: Page) => page.evaluate(() => (window as unknown as { releasePersonalCsv: () => void }).releasePersonalCsv());
+
+for (const storageDelivery of ['delivered', 'held'] as const) {
+test(`personal delayed CSV never replaces a newer draft from another tab (${storageDelivery} storage event)`, async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (storageDelivery === 'held') await page.addInitScript(() => {
+    // Install before the app registers listeners; window is itself the event
+    // target, so a later capture listener cannot reliably precede old handlers.
+    window.addEventListener('storage', event => {
+      if (event.key?.startsWith('steady-study:personal-wordbook-draft:')) event.stopImmediatePropagation();
+    }, true);
+  });
+  const user = await login(page); const modalA = await openCreate(page);
+  await modalA.getByLabel('単語帳名（変更は任意）', { exact: true }).fill('original draft');
+  await fillWord(page, 'original', '元の下書き');
+  await holdPersonalCsv(page);
+  const pageB = await page.context().newPage(); await pageB.goto('/');
+  await expect(pageB.getByTestId('student-dashboard')).toBeVisible(); const modalB = await openCreate(pageB);
+  await modalB.getByLabel('単語帳名（変更は任意）', { exact: true }).fill('newer draft');
+  await fillWord(pageB, 'newer-tab-word', '別タブの新しい下書き');
+  await expect(modalA.getByLabel('単語', { exact: true })).toHaveValue(storageDelivery === 'held' ? 'original' : 'newer-tab-word');
+  await screenshot(page, info, 'csv-pending-newer-draft-visible');
+  await releasePersonalCsv(page);
+  await expect(modalA.getByTestId('phrasebook-create-submit')).toBeEnabled();
+  await expect(modalA.getByLabel('単語帳名（変更は任意）', { exact: true })).toHaveValue('newer draft');
+  await expect(modalA.getByLabel('単語', { exact: true })).toHaveValue('newer-tab-word');
+  await expect(modalA.getByRole('alert')).toContainText('CSVは取り込んでいません');
+  await expect(modalA.getByText('1語を取り込みました。単語を選ぶと編集できます。', { exact: true })).toHaveCount(0);
+  const stored = await page.evaluate(uid => JSON.parse(localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`)!), user!.uid);
+  expect(stored.title).toBe('newer draft'); expect(stored.rows.map((row: { word: string }) => row.word)).toEqual(['newer-tab-word']);
+  await screenshot(page, info, 'csv-late-completion-newer-draft-retained');
+  await pageB.reload(); await expect(pageB.getByTestId('student-dashboard')).toBeVisible();
+  const reopened = await openCreate(pageB); await expect(reopened.getByLabel('単語', { exact: true })).toHaveValue('newer-tab-word');
+  await confirm(pageB); const result = await save(pageB);
+  expect(await storageAction<any[]>(pageB, 'getWordsByBook', { bookId: result.importedBookIds[0] })).toEqual([expect.objectContaining({ word: 'newer-tab-word', definition: '別タブの新しい下書き' })]);
+});
+}
+
+test('personal definite rejection remains editable when clearing its persisted request fails', async ({ page }, info) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const user = await login(page); const modal = await openCreate(page);
+  await fillWord(page, 'before-rejected-write', '訂正前'); await confirm(page);
+  const requests: CatalogImportRequest[] = [];
+  await page.route('**/api/storage', async route => {
+    if (route.request().postDataJSON()?.action !== 'batchImportWords') return route.continue();
+    requests.push(route.request().postDataJSON().payload);
+    if (requests.length !== 1) return route.continue();
+    const stored = await page.evaluate(uid => JSON.parse(localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`)!), user!.uid);
+    expect(stored.pendingRequest).toEqual(requests[0]);
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Object.assign(window, { restorePersonalDraftWrites: () => { Storage.prototype.setItem = original; } });
+      Storage.prototype.setItem = function (key, value) {
+        if (key.startsWith('steady-study:personal-wordbook-draft:')) throw new DOMException('Synthetic rejected-request quota', 'QuotaExceededError');
+        return original.call(this, key, value);
+      };
+    });
+    return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic definite 400 rejection' }) });
+  });
+  await modal.getByTestId('phrasebook-create-submit').click();
+  await expect(modal.getByRole('alert')).toContainText('Synthetic definite 400 rejection');
+  await expect(modal.getByText(/下書きをこのブラウザーに保存できません/)).toBeVisible();
+  await modal.getByLabel('単語', { exact: true }).fill('corrected-after-rejected-write');
+  await expect(modal.getByTestId('personal-wordbook-confirmation')).toHaveCount(0);
+  await expect(modal.getByLabel('単語', { exact: true })).toHaveValue('corrected-after-rejected-write');
+  await modal.getByRole('textbox', { name: '意味', exact: true }).fill('訂正後も編集を保持');
+  await screenshot(page, info, 'rejected-pending-clear-quota-remains-editable');
+  await page.evaluate(() => (window as unknown as { restorePersonalDraftWrites: () => void }).restorePersonalDraftWrites());
+  await confirm(page); const result = await save(page);
+  expect(requests).toHaveLength(2); expect(requests[1].clientImportId).not.toBe(requests[0].clientImportId);
+  expect(await storageAction<any[]>(page, 'getWordsByBook', { bookId: result.importedBookIds[0] })).toEqual([expect.objectContaining({ word: 'corrected-after-rejected-write', definition: '訂正後も編集を保持' })]);
+});
+
+test('personal delayed CSV after modal unmount cannot update the old owner draft', async ({ page }) => {
+  const user = await login(page); const modal = await openCreate(page); await fillWord(page, 'before-unmount', '閉じた下書きを保持');
+  const before = await page.evaluate(uid => localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`), user!.uid);
+  await holdPersonalCsv(page);
+  // Emulate an auth-driven SPA unmount while File.text is unresolved. A normal
+  // modal close remains locked during the read; the underlying logout handler
+  // exercises teardown without replacing the browser document or its promise.
+  await page.evaluate(() => {
+    const logout = document.querySelector<HTMLButtonElement>('button[aria-label="ログアウト"]');
+    if (!logout) throw new Error('Synthetic logout control missing');
+    logout.click();
+  });
+  await expect(page.getByTestId('start-first-home')).toBeVisible();
+  await releasePersonalCsv(page);
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(await page.evaluate(uid => localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`), user!.uid)).toBe(before);
+});
+
 test('personal slow committed response becomes recoverable and a late reply cannot duplicate or clear the saved result', async ({ page }, info) => {
   await login(page); const modal = await openCreate(page); await fillWord(page, 'slow-committed-reply', '遅い応答も1冊だけ'); await confirm(page);
   const requests: CatalogImportRequest[] = [];

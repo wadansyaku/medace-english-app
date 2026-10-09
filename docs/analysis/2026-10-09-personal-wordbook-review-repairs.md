@@ -1,0 +1,17 @@
+# My単語帳 独立レビュー指摘の限定修正 2026-10-09
+
+先行候補59032c5を独立レビューへ提出後、親がCSV下書き競合と既知拒否後の端末保存失敗の2件に限り修正・再検証を許可した。新しい機能は増やさない。以前の公開許可は前回版PR65のみで、今回の新たな本番公開の本人承認は未取得。独立レビュー確認と本人承認の両方を待ち、新push/PR/preview/productionは保留する。
+
+## 再現と修正
+
+1. File.textを合成的に保留し、Bタブがtitle/rowsを更新した後にAのCSVを解放。実Mac Chromeで題名がnewer draftからoriginal draftへ戻ることを確認した。hook内のownerと単調revisionをCSV開始時に固定し、完了時はfresh storage rawを読み直す。storage event配達後も未配送時も別下書きへのCSV適用を拒否し、最新draftを保持して再選択を案内する。CSV内容はguard通過後のcurrentから組み立て、実適用時だけ成功件数を表示する。
+2. pendingの端末保存成功を確認した後、API400を返し、pending解除以降のsetItemをthrowさせる。実Chromeで最初の訂正入力時に古いdisk pendingが復活し、確認表示へ戻ることを再現した。最後に確認したrawとfailed write基準が変わらない間は解除済みのmemoryを保持する。別タブのrawが変化すれば外部を採用する。update/storage event/syncCurrentRequestで同じ同期判断を使い、read失敗を空draftの採用に変えない。
+3. CSV待機中のSPA logoutによるunmount後にも旧UID下書きへCSVが追記されることを実Chromeで確認した。同じCSV修正でopen/owner/cleanupの生存世代を検査し、破棄した画面の完了を捨てる。通常のCSV読込中の閉じるロックは維持する。
+
+## 検証と境界
+
+新4ブラウザーケース：CSV競合のstorage event配達済み/未配送、400拒否後のpending解除write失敗、CSV読込中unmount。既存の結果不明/遅い二タブ応答/未知失敗quota再送/UID分離も同じsuiteで実行する。先行失敗は修正後成功と混ぜず、最終全gateの結果・正確なSHA・差分・画面は独立deliveryと同じLibraryレビュー資料へ反映する。ソース側の本記録は最終gate実行前のsnapshotで、完了結果は外部handoff/verificationとplan/を正本とする。
+
+backend D1/IDB receipt、原子batch/transaction、owner/RBAC、公式承認、原本/語ID/履歴、料金、AI送信の実装は変更しない。曖昧な応答/503/timeoutはpendingを解除せず同ID・同内容を再送し、既知400/401/403/409の編集復帰を維持する。localStorage read→setItemはCAS transactionではなく、全ての並行編集の原子的保証とは記録しない。
+
+実Safari/iPhone・実IME/ソフトキーボード・支援技術・一般教室の受入は引き続き未検証。全試験は合成データのみで、本番の実生徒保存や障害注入は行わない。
