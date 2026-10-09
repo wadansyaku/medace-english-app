@@ -15,6 +15,8 @@
 
 ## Release Flow
 
+2026-10-09の最新本人指示で、My単語帳改善の本番反映と過去の包括公開禁止の継続解除を承認済み。旧禁止や今回候補の保留を再適用せず、以下の必須gateを守って進める。最新の実施範囲・保存/復旧条件は [My単語帳の公開工程](./analysis/2026-10-09-personal-wordbook-production-release.md) を参照する。
+
 Gate naming:
 
 - `local-only`: local files、一時 D1、local build output、local test server だけで完結する確認。migration filename check、local D1 migration replay、production source reachability、typecheck、unit tests、API integration tests、local smoke suites が該当します。
