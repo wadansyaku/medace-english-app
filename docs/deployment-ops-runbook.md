@@ -15,7 +15,7 @@
 
 ## Release Flow
 
-2026-10-09の最新本人指示で、My単語帳改善の本番反映と過去の包括公開禁止の継続解除を承認済み。旧禁止や今回候補の保留を再適用せず、以下の必須gateを守って進める。最新の実施範囲・保存/復旧条件は [My単語帳の公開工程](./analysis/2026-10-09-personal-wordbook-production-release.md) を参照する。
+2026-10-09 17:44 UTCの親側本人承認で、今回My単語帳候補の公開を通常gateから進める。残る独立再確認が通るまでmain統合しない。恒久ルールの保存は親が扱い、ここでは今回の配備範囲だけを記録する。保存/復旧条件は [My単語帳の公開工程](./analysis/2026-10-09-personal-wordbook-production-release.md) を参照する。
 
 Gate naming:
 
