@@ -739,20 +739,20 @@ const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               </div>
 
               <div data-testid="admin-trend-scroll" role="region" aria-label="直近14日間の推移グラフ（横スクロール）" tabIndex={0} className="mt-6 min-w-0 max-w-full overflow-x-auto rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-medace-500">
-                <div data-testid="admin-trend-plot" className="grid min-w-[720px] grid-cols-14 gap-3">
+                <div data-testid="admin-trend-plot" className="grid min-w-max auto-cols-max grid-flow-col gap-3">
                   {snapshot.trend.map((point) => {
                     const activeHeight = point.activeStudents > 0 ? Math.max(10, (point.activeStudents / maxTrendValue) * 120) : 0;
                     const studiedHeight = point.studiedWords > 0 ? Math.max(10, (point.studiedWords / maxTrendValue) * 120) : 0;
                     const notificationHeight = point.notifications > 0 ? Math.max(6, (point.notifications / maxTrendValue) * 120) : 0;
                     return (
-                      <div key={point.date} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-4">
+                      <div key={point.date} className="min-w-[6rem] rounded-2xl border border-slate-100 bg-slate-50 px-3 py-4">
                         <div className="flex h-36 items-end justify-center gap-1.5">
                           <div className="w-3 rounded-full bg-medace-300" style={{ height: `${activeHeight}px` }} title={`アクティブ ${point.activeStudents}`} />
                           <div className="w-3 rounded-full bg-medace-600" style={{ height: `${studiedHeight}px` }} title={`学習 ${point.studiedWords}`} />
                           <div className="w-3 rounded-full bg-slate-300" style={{ height: `${notificationHeight}px` }} title={`通知 ${point.notifications}`} />
                         </div>
-                        <div className="mt-4 text-center text-[11px] font-bold text-slate-500">{formatDateLabel(point.date)}</div>
-                        <div className="mt-2 space-y-1 text-[11px] text-slate-500">
+                        <div className="mt-4 whitespace-nowrap text-center text-[11px] font-bold text-slate-500">{formatDateLabel(point.date)}</div>
+                        <div className="mt-2 space-y-1 whitespace-nowrap text-[11px] text-slate-500">
                           <div>学習 {point.studiedWords}</div>
                           <div>人 {point.activeStudents}</div>
                           <div>通知 {point.notifications}</div>

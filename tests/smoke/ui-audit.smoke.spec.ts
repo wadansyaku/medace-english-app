@@ -71,6 +71,23 @@ for (const role of ['instructor', 'group-admin'] as const) {
       await expect(appHeader).toContainText(BRAND.productLabel);
       await expect(appHeader).not.toContainText(/MedAse|メッドエース/);
       const sections = role === 'instructor' ? INSTRUCTOR_WORKSPACE_SECTIONS : BUSINESS_ADMIN_WORKSPACE_SECTIONS;
+      const expectReadableInstructorHeader = async () => {
+        if (role !== 'instructor') return;
+        const header = page.getByTestId('instructor-dashboard').locator(':scope > header');
+        const heading = header.getByRole('heading', { level: 2 });
+        const bounds = await heading.evaluate(element => {
+          const title = element.getBoundingClientRect();
+          const frame = element.closest('header')!.getBoundingClientRect();
+          const actions = element.closest('header')!.children[1].getBoundingClientRect();
+          return { title: title.toJSON(), frame: frame.toJSON(), actions: actions.toJSON(), lineHeight: parseFloat(getComputedStyle(element).lineHeight) };
+        });
+        // Title and context must retain readable lines after changing tabs,
+        // while the refresh/FAQ controls remain separately reachable.
+        expect(bounds.title.width).toBeGreaterThanOrEqual(Math.min(260, bounds.frame.width - 8));
+        expect(bounds.title.height).toBeLessThanOrEqual(bounds.lineHeight * 3);
+        if (viewport.width < 640) expect(bounds.actions.top).toBeGreaterThanOrEqual(bounds.title.bottom);
+      };
+      await expectReadableInstructorHeader();
       const buttons = page.locator('[data-testid^="workspace-tab-"]');
       await expect(buttons).toHaveCount(sections.length);
       await expect(page.getByTestId('workspace-tab-overview')).toHaveAttribute('aria-current', 'page');
@@ -111,6 +128,7 @@ for (const role of ['instructor', 'group-admin'] as const) {
       await expect(buttons.last()).toHaveAttribute('aria-current', 'page');
       await expect(buttons.last()).toBeFocused();
       await expect(page.getByTestId('workspace-tab-overview')).not.toHaveAttribute('aria-current', 'page');
+      await expectReadableInstructorHeader();
       await page.screenshot({ path: testInfo.outputPath('workspace-last-item-active.png'), animations: 'disabled' });
       await page.keyboard.press('Shift+Tab');
       await expect(buttons.nth(sections.length - 2)).toBeFocused();
@@ -323,6 +341,9 @@ for (const viewport of [
       expect(Array.isArray(snapshot.aiActions)).toBe(true);
       fixtureResponses += 1;
       await route.fulfill({ response, json: { ...snapshot,
+        trend: snapshot.trend.map((point, index) => index === 0
+          ? { ...point, studiedWords: 123456789, activeStudents: 12345678, notifications: 1234567 }
+          : point),
         topBooks: [...snapshot.topBooks, { bookId: 'synthetic-layout-only', title: syntheticTitle,
           wordCount: 1531, learnerCount: 123, learnedEntries: 123456, averageProgress: 54, isOfficial: false }],
         aiActions: [...snapshot.aiActions, { action: 'evaluateWritingSubmissionLayoutFixture',
@@ -340,6 +361,19 @@ for (const viewport of [
     await expect(scroller).toHaveAttribute('tabindex', '0');
     const originalText = await plot.textContent();
     expect(originalText).toMatch(/学習.*人.*通知/s);
+    expect(originalText).toContain('123456789');
+    const labelRows = plot.locator(':scope > div > div:last-child > div');
+    await expect(labelRows).toHaveCount(42);
+    const labelGeometry = await labelRows.evaluateAll(elements => elements.map(element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const bounds = element.getBoundingClientRect();
+      const rects = Array.from(range.getClientRects()).filter(rect => rect.width > 0);
+      return { text: element.textContent, lines: new Set(rects.map(rect => Math.round(rect.y))).size,
+        contained: rects.every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1) };
+    }));
+    expect(labelGeometry.every(row => row.lines === 1), JSON.stringify(labelGeometry)).toBe(true);
+    expect(labelGeometry.every(row => row.contained), JSON.stringify(labelGeometry)).toBe(true);
     const measure = () => scroller.evaluate(element => {
       const rect = element.getBoundingClientRect();
       return { documentWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth,

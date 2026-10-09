@@ -104,13 +104,13 @@ const InstructorDashboard: React.FC<InstructorDashboardProps> = ({
     <div data-testid="instructor-dashboard" className="space-y-6 pb-12">
       <ProductFeedbackPanel key={user.uid} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
       {storageMode.capabilities.organization.usesMockData && <B2BStorageModeBanner />}
-      <header className="flex flex-wrap items-start justify-between gap-3 px-1">
-        <div className="min-w-0 flex-1">
+      <header className="flex flex-col items-start justify-between gap-3 px-1 sm:flex-row sm:flex-wrap">
+        <div className="w-full min-w-0 flex-1 sm:w-auto">
           <h2 className="text-xl font-black leading-snug text-medace-900">{viewCopy.title}</h2>
           {user.organizationName && <p className="content-safe mt-1 text-xs text-slate-500">{user.organizationName}</p>}
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{viewCopy.body}</p>
         </div>
-        <div className="shrink-0 sm:text-right">
+        <div className="max-w-full shrink-0 sm:text-right">
           <button type="button" onClick={() => setFeedbackOpen(true)} className="mb-2 mr-2 min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-3 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
           <button
             type="button"
