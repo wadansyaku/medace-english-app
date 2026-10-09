@@ -90,6 +90,7 @@ describe('BusinessAdminAssignmentsSection material gate', () => {
         settingsSnapshot={null}
         books={[blockedBook]}
         writingAssignments={[]}
+        writingState="READY"
       />,
     );
 
@@ -97,4 +98,15 @@ describe('BusinessAdminAssignmentsSection material gate', () => {
     expect(rendered).toContain('選択中の教材は確認中です。承認済み教材を選ぶか、smart-session に任せてください。');
     expect(rendered).toMatch(/data-testid="weekly-mission-issue-submit"[^>]*disabled=""/);
   });
+});
+
+it('preserves an existing writing link and disables its editing while writing is unconfirmed', () => {
+  const rendered = renderToStaticMarkup(<BusinessAdminAssignmentsSection
+    controller={{ ...controller, missionWritingAssignmentId: 'existing-writing-link' }}
+    snapshot={snapshot} settingsSnapshot={null} books={[blockedBook]}
+    writingAssignments={[]} writingState="ERROR"
+  />);
+  expect(rendered).toMatch(/data-testid="weekly-mission-writing-assignment"[^>]*disabled=""/);
+  expect(rendered).toMatch(/<option value="existing-writing-link" selected="">保存済みの作文紐づけを保持<\/option>/);
+  expect(rendered).toContain('保存済みの紐づけは変更しません');
 });

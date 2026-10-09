@@ -1,3 +1,8 @@
+2026-10-09再開: 本番74530de/原本訳/全1531語・638印をGETで保持確認。
+
+- [x] O1の作文取得だけの503/遅延で組織管理全停止を合成D1・実Chromeで再現し、基幹4資源と作文2資源を分離。作文だけretry・未取得/0件区別・保存済みリンク/無料境界を保持。独立ローカル候補で60migration/境界/型/build/2160unit・関連20browser retry0成功。
+- [ ] このO1候補の通常PR/CI/preview/full release gateと公開受入は未実施。10/9の指示範囲はローカルまでで、push/merge/deployなし。基幹4資源の各部分回復、実教室の一周、実Safari/iPhoneも未完。正本は[全体改善計画の10/9追記](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)。動画/Excelの再作成なし。
+
 2026-10-08追加: [actuallyの原本訳の行ずれ](./docs/analysis/2026-10-08-naru-actually-original-row-correction.md)
 
 - [x] 画像/同一SHAを照合し、G81→G82の修正版Excelを限定編集・納品。既存ID1361/1531語/638印/履歴を保持する訂正台帳と例文訳だけの補完表示をローカル候補へ実装。実workerd/D1・全2130unit・型/build/API、標準249browser（配備専用2skip）と実修正版の5幅UIで確認。

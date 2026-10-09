@@ -12,6 +12,7 @@ interface BusinessAdminWritingSectionProps {
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
   writingState: BusinessAdminWritingState;
+  onRetryWriting?: () => Promise<void>;
 }
 
 const BusinessAdminWritingSection: React.FC<BusinessAdminWritingSectionProps> = ({
@@ -19,8 +20,9 @@ const BusinessAdminWritingSection: React.FC<BusinessAdminWritingSectionProps> = 
   writingAssignments,
   writingQueue,
   writingState,
+  onRetryWriting,
 }) => {
-  if (writingState !== 'READY') return <BusinessAdminWritingNotice state={writingState} />;
+  if (writingState !== 'READY') return <BusinessAdminWritingNotice state={writingState} onRetry={onRetryWriting} />;
   const writingCounts = getBusinessAdminWritingCounts(writingAssignments, writingQueue);
 
   return (

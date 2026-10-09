@@ -29,6 +29,7 @@ export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscript
   const [writingQueue, setWritingQueue] = useState<WritingQueueItem[]>([]);
   const [writingRequest, setWritingRequest] = useState<{ enabled: boolean; state: 'LOADING' | 'READY' | 'ERROR' }>({ enabled: writingEnabled, state: 'LOADING' });
   const requestSequence = useRef(0);
+  const writingRequestSequence = useRef(0);
   const writingState: BusinessAdminWritingState = !canUseWritingApi
     ? 'UNAVAILABLE'
     : !writingEnabled ? 'NOT_INCLUDED'
@@ -36,14 +37,40 @@ export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscript
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshWriting = useCallback(async () => {
+    const request = ++writingRequestSequence.current;
+    const isCurrent = () => writingRequestSequence.current === request;
+    setWritingRequest({ enabled: writingEnabled, state: 'LOADING' });
+    if (!writingEnabled) {
+      setWritingAssignments([]);
+      setWritingQueue([]);
+      setWritingRequest({ enabled: writingEnabled, state: 'READY' });
+      return;
+    }
+    try {
+      const [nextAssignments, nextQueue] = await Promise.all([
+        listWritingAssignments('organization').then((response) => response.assignments),
+        listWritingReviewQueue('QUEUE').then((response) => response.items),
+      ]);
+      if (!isCurrent()) return;
+      setWritingAssignments(nextAssignments);
+      setWritingQueue(nextQueue);
+      setWritingRequest({ enabled: writingEnabled, state: 'READY' });
+    } catch (loadError) {
+      if (!isCurrent()) return;
+      console.error(loadError);
+      setWritingRequest({ enabled: writingEnabled, state: 'ERROR' });
+    }
+  }, [writingEnabled]);
+
   const refresh = useCallback(async () => {
     const request = ++requestSequence.current;
     const isCurrent = () => requestSequence.current === request;
     setLoading(true);
     setError(null);
-    setWritingRequest({ enabled: writingEnabled, state: 'LOADING' });
 
     if (!canUseBusinessWorkspaceApi) {
+      writingRequestSequence.current += 1;
       setSnapshot(null);
       setSettingsSnapshot(null);
       setMissionBoard(null);
@@ -55,18 +82,14 @@ export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscript
       return;
     }
 
+    // Optional writing must not delay confirmed base resources or their refresh.
+    void refreshWriting();
     try {
-      const [nextSnapshot, nextSettingsSnapshot, nextMissionBoard, nextBooks, nextWritingAssignments, nextWritingQueue] = await Promise.all([
+      const [nextSnapshot, nextSettingsSnapshot, nextMissionBoard, nextBooks] = await Promise.all([
         workspaceService.getOrganizationDashboardSnapshot(),
         workspaceService.getOrganizationSettingsSnapshot(),
         workspaceService.getWeeklyMissionBoard(),
         workspaceService.getBooks(),
-        !writingEnabled
-          ? Promise.resolve<WritingAssignment[]>([])
-          : listWritingAssignments('organization').then((response) => response.assignments),
-        !writingEnabled
-          ? Promise.resolve<WritingQueueItem[]>([])
-          : listWritingReviewQueue('QUEUE').then((response) => response.items),
       ]);
 
       if (!isCurrent()) return;
@@ -74,22 +97,21 @@ export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscript
       setSettingsSnapshot(nextSettingsSnapshot);
       setMissionBoard(nextMissionBoard);
       setBooks(nextBooks);
-      setWritingAssignments(nextWritingAssignments);
-      setWritingQueue(nextWritingQueue);
-      setWritingRequest({ enabled: writingEnabled, state: 'READY' });
     } catch (loadError) {
       if (!isCurrent()) return;
       console.error(loadError);
-      setWritingRequest({ enabled: writingEnabled, state: 'ERROR' });
       setError((loadError as Error).message || '組織ダッシュボードの取得に失敗しました。');
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [writingEnabled]);
+  }, [refreshWriting]);
 
   useEffect(() => {
     void refresh();
-    return () => { requestSequence.current += 1; };
+    return () => {
+      requestSequence.current += 1;
+      writingRequestSequence.current += 1;
+    };
   }, [refresh]);
 
   return {
@@ -103,6 +125,7 @@ export const useBusinessAdminDashboardData = (user: Pick<UserProfile, 'subscript
     loading,
     error,
     refresh,
+    refreshWriting,
   };
 };
 
