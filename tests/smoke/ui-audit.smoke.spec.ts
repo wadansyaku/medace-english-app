@@ -341,6 +341,9 @@ for (const viewport of [
       expect(Array.isArray(snapshot.aiActions)).toBe(true);
       fixtureResponses += 1;
       await route.fulfill({ response, json: { ...snapshot,
+        trend: snapshot.trend.map((point, index) => index === 0
+          ? { ...point, studiedWords: 123456789, activeStudents: 12345678, notifications: 1234567 }
+          : point),
         topBooks: [...snapshot.topBooks, { bookId: 'synthetic-layout-only', title: syntheticTitle,
           wordCount: 1531, learnerCount: 123, learnedEntries: 123456, averageProgress: 54, isOfficial: false }],
         aiActions: [...snapshot.aiActions, { action: 'evaluateWritingSubmissionLayoutFixture',
@@ -358,6 +361,19 @@ for (const viewport of [
     await expect(scroller).toHaveAttribute('tabindex', '0');
     const originalText = await plot.textContent();
     expect(originalText).toMatch(/学習.*人.*通知/s);
+    expect(originalText).toContain('123456789');
+    const labelRows = plot.locator(':scope > div > div:last-child > div');
+    await expect(labelRows).toHaveCount(42);
+    const labelGeometry = await labelRows.evaluateAll(elements => elements.map(element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const bounds = element.getBoundingClientRect();
+      const rects = Array.from(range.getClientRects()).filter(rect => rect.width > 0);
+      return { text: element.textContent, lines: new Set(rects.map(rect => Math.round(rect.y))).size,
+        contained: rects.every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1) };
+    }));
+    expect(labelGeometry.every(row => row.lines === 1), JSON.stringify(labelGeometry)).toBe(true);
+    expect(labelGeometry.every(row => row.contained), JSON.stringify(labelGeometry)).toBe(true);
     const measure = () => scroller.evaluate(element => {
       const rect = element.getBoundingClientRect();
       return { documentWidth: document.documentElement.scrollWidth, bodyWidth: document.body.scrollWidth,
