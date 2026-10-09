@@ -79,7 +79,18 @@ describe('generateWorksheetQuestions', () => {
     expect(resolveJapaneseTranslationAttempt({
       input: '生徒は授業前にノートを確認する',
       answer: '生徒は 授業前に ノートを 整理する。',
-    })).toBe('incorrect');
+    })).toBe('unassessed');
+  });
+
+  it('preserves internal decimal and time punctuation when matching translation meaning', () => {
+    for (const [answer, input] of [
+      ['水を2.5リットル使いました。', '水を25リットル使いました。'],
+      ['7.30時に到着します。', '730時に到着します。'],
+    ]) {
+      expect(resolveJapaneseTranslationAttempt({ answer, input })).toBe('unassessed');
+      expect(buildDeterministicTranslationFeedback({ answer, input })).toBeNull();
+    }
+    expect(resolveJapaneseTranslationAttempt({ answer: '水を2.5リットル使いました。', input: '水を２．５リットル使いました' })).toBe('correct');
   });
 
   it('builds deterministic translation feedback when AI is bypassed or unavailable', () => {
@@ -94,6 +105,10 @@ describe('generateWorksheetQuestions', () => {
       maxScore: 10,
       usedAi: false,
     });
+  });
+
+  it('does not invent an incorrect score for a wording outside the reviewed reference', () => {
+    expect(buildDeterministicTranslationFeedback({ input: '授業が始まる前に生徒がノートを整理する。', answer: '生徒は 授業前に ノートを 整理する。' })).toBeNull();
   });
 
   it('generates grammar cloze questions from studied vocabulary examples', () => {
@@ -149,24 +164,9 @@ describe('generateWorksheetQuestions', () => {
     ]);
   });
 
-  it('falls back instead of generating Japanese order questions with duplicate visible chips', () => {
-    const questions = generateWorksheetQuestions([
-      {
-        id: 'w-dup',
-        word: 'repeat',
-        definition: '繰り返す',
-        bookId: 'book-1',
-        bookTitle: 'Book',
-        exampleSentence: 'Students repeat the drill after the class.',
-        exampleMeaning: '生徒は 生徒は 授業後に 語を 繰り返す。',
-      },
-    ], 'JA_TRANSLATION_ORDER', 1, {
-      grammarScopeId: 'basic-svo',
-    });
-
-    expect(questions[0]?.answer).toContain('繰り返す');
-    expect(questions[0]?.answer).not.toContain('という語');
-    expect(questions[0]?.tokens?.map((token) => token.text)).not.toContain('生徒は 生徒は');
+  it('excludes unverified scoped translations instead of inventing fallback Japanese chips', () => {
+    const questions = generateWorksheetQuestions([{ id: 'w-dup', word: 'repeat', definition: '繰り返す', bookId: 'book-1', bookTitle: 'Book', exampleSentence: 'Students repeat the drill after the class.', exampleMeaning: '生徒は 生徒は 授業後に 語を 繰り返す。' }], 'JA_TRANSLATION_ORDER', 1, { grammarScopeId: 'basic-svo' });
+    expect(questions).toEqual([]);
   });
 
   it('generates Japanese full-translation text input questions', () => {
@@ -182,23 +182,7 @@ describe('generateWorksheetQuestions', () => {
     });
   });
 
-  it('resolves Japanese full-translation scopes with the input mode, not ordering mode', () => {
-    const questions = generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_INPUT', 2, {
-      grammarScopeId: 'be-verb',
-    });
-    const organizeQuestion = questions.find((question) => question.wordId === 'w1');
-
-    expect(organizeQuestion).toMatchObject({
-      interactionType: 'TEXT_INPUT',
-      grammarScope: {
-        scopeId: 'be-verb',
-        labelJa: 'be動詞を使った文',
-        source: 'EXPLICIT',
-      },
-    });
-    expect(organizeQuestion?.promptText).toMatch(/\b(?:is|are|was|were)\b/i);
-    expect(organizeQuestion?.promptText).toMatch(/\borganize(?:s|d|ing)?\b/i);
-    expect(organizeQuestion?.answer).toContain('整理する');
-    expect(organizeQuestion?.answer).not.toMatch(/整理する\s+を/);
+  it('does not pair a generated be-verb sentence with an unrelated example translation', () => {
+    expect(generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_INPUT', 2, { grammarScopeId: 'be-verb' })).toEqual([]);
   });
 });

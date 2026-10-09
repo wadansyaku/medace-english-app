@@ -74,7 +74,8 @@ const mount = async (page: Page, oneWord = false) => {
   await page.addScriptTag({ content: bundle });
   await expect(page.getByTestId('english-practice-hub')).toBeVisible();
   await expect(page.getByTestId('grammar-practice-question')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => (globalThis as any).__grammarFixture.returnedWordCount)).toBe(oneWord ? 1 : 0);
+  // Authored drills no longer fetch unrelated vocabulary, including empty books.
+  expect(await page.evaluate(() => (globalThis as any).__grammarFixture.returnedWordCount)).toBeNull();
   return errors;
 };
 

@@ -102,12 +102,6 @@ const normalizeJapanese = (value: string): string => (
     .replace(/\s+/g, ' ')
 );
 
-const normalizeJapaneseOrderToken = (value: string): string => (
-  normalizeJapanese(value)
-    .replace(/^[「『（(【［\["'“‘]+/g, '')
-    .replace(/[」』）)】］\]"'”’、，,。．.!?！？]+$/g, '')
-);
-
 const hasUniqueOrderingTokens = (tokens: string[]): boolean => {
   const normalizedTokens = tokens.map((token) => normalizeWhitespace(token).toLowerCase());
   return normalizedTokens.length === new Set(normalizedTokens).size;
@@ -773,7 +767,7 @@ const createChips = (texts: string[], seed: string, idPrefix: string): {
 
 const splitJapaneseBySeparators = (value: string): string[] => (
   value
-    .split(/[\s、，,／/・（）()「」『』]+/)
+    .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean)
 );
@@ -786,22 +780,10 @@ const splitJapaneseByParticles = (value: string): string[] => (
     .filter(Boolean)
 );
 
-const splitJapaneseDefinition = (value: string): string[] => {
-  const text = normalizeJapanese(value);
-  const suffixMatch = text.match(/^(.+?)(する|させる|される|できる|した|された)$/);
-  if (suffixMatch) return [suffixMatch[1], suffixMatch[2]];
-
-  const adjectiveMatch = text.match(/^(.+?[いな])(.{1,6})$/);
-  if (adjectiveMatch && text.length <= 10) return [adjectiveMatch[1], adjectiveMatch[2]];
-
-  if (text.length > 8) return [text.slice(0, Math.ceil(text.length / 2)), text.slice(Math.ceil(text.length / 2))];
-  return text ? [text] : [];
-};
-
 const compactJapaneseChips = (tokens: string[]): string[] => {
   const compacted: string[] = [];
   tokens.forEach((token) => {
-    const normalized = normalizeJapaneseOrderToken(token);
+    const normalized = normalizeWhitespace(token).normalize('NFKC');
     if (!normalized) return;
     if (normalized.length <= 9) {
       compacted.push(normalized);
@@ -810,41 +792,25 @@ const compactJapaneseChips = (tokens: string[]): string[] => {
     const middle = Math.ceil(normalized.length / 2);
     compacted.push(normalized.slice(0, middle), normalized.slice(middle));
   });
-  return compacted.slice(0, JAPANESE_CHIP_MAX);
+  // Keep every part of the translation; the chip limit controls grouping only.
+  while (compacted.length > JAPANESE_CHIP_MAX) {
+    let pairIndex = 0;
+    for (let index = 1; index < compacted.length - 1; index += 1) {
+      if (compacted[index].length + compacted[index + 1].length
+        < compacted[pairIndex].length + compacted[pairIndex + 1].length) pairIndex = index;
+    }
+    compacted.splice(pairIndex, 2, compacted[pairIndex] + compacted[pairIndex + 1]);
+  }
+  return compacted;
 };
 
-const tokenizeJapaneseAnswer = (answer: string, definition: string): string[] => {
+const tokenizeJapaneseAnswer = (answer: string): string[] => {
   const normalized = normalizeJapanese(answer);
   const separated = splitJapaneseBySeparators(normalized);
   const roughTokens = separated.length >= JAPANESE_CHIP_MIN
     ? separated
     : splitJapaneseByParticles(normalized);
-  const chips = compactJapaneseChips(roughTokens);
-  if (chips.length >= JAPANESE_CHIP_MIN) return chips;
-  return compactJapaneseChips(splitJapaneseDefinition(definition));
-};
-
-const createFallbackJapaneseAnswer = (word: WordData, scopedAnswerText?: string): string => (
-  scopedAnswerText || `意味は ${normalizeJapanese(word.definition)} です。`
-);
-
-const resolveJapaneseAnswer = (
-  word: WordData,
-  scopedAnswerText?: string,
-): { answerText: string; source: GrammarPracticeSource } => {
-  if (scopedAnswerText) {
-    const chips = tokenizeJapaneseAnswer(scopedAnswerText, word.definition);
-    if (chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX && hasUniqueOrderingTokens(chips)) {
-      return { answerText: scopedAnswerText, source: 'fallback' };
-    }
-  }
-
-  const candidate = normalizeJapanese(word.exampleMeaning || '');
-  const chips = tokenizeJapaneseAnswer(candidate, word.definition);
-  if (candidate && chips.length >= JAPANESE_CHIP_MIN && chips.length <= JAPANESE_CHIP_MAX && hasUniqueOrderingTokens(chips)) {
-    return { answerText: candidate, source: 'example' };
-  }
-  return { answerText: createFallbackJapaneseAnswer(word, scopedAnswerText), source: 'fallback' };
+  return compactJapaneseChips(roughTokens);
 };
 
 const createEnglishWordOrderItem = (
@@ -875,14 +841,18 @@ const createEnglishWordOrderItem = (
 const createJapaneseWordOrderItem = (
   word: WordData,
   sourceSentence: string,
-  scopedAnswerText: string | undefined,
+  source: GrammarPracticeSource,
   grammarScope: GrammarScopeSelection,
   seed: string,
 ): JapaneseWordOrderPracticeItem | null => {
-  const resolved = resolveJapaneseAnswer(word, scopedAnswerText);
-  const tokens = tokenizeJapaneseAnswer(resolved.answerText, word.definition);
+  // Vocabulary definitions and inferred sentence templates are not translations.
+  if (source !== 'example' || normalizeWhitespace(word.exampleSentence || '') !== sourceSentence) return null;
+  const answerText = normalizeJapanese(word.exampleMeaning || '');
+  if (!answerText) return null;
+  const tokens = tokenizeJapaneseAnswer(answerText);
   if (tokens.length < JAPANESE_CHIP_MIN || tokens.length > JAPANESE_CHIP_MAX) return null;
   if (!hasUniqueOrderingTokens(tokens)) return null;
+  if (tokens.join('').replace(/\s+/g, '') !== answerText.replace(/\s+/g, '')) return null;
 
   const id = `${word.id}:japanese-word-order`;
   return {
@@ -891,11 +861,11 @@ const createJapaneseWordOrderItem = (
     wordId: word.id,
     bookId: word.bookId,
     word: normalizeWhitespace(word.word),
-    source: resolved.source,
+    source: 'example',
     prompt: '英文に合う日本語を正しい順番に並べ替えましょう。',
     grammarScope,
     sourceSentence,
-    answerText: resolved.answerText,
+    answerText,
     ...createChips(tokens, `${seed}:${id}`, id),
   };
 };
@@ -1170,14 +1140,12 @@ export const buildGrammarPracticeItemsForWord = (
   const canBuildJapaneseItem = !options.requestedScopeId
     || isGrammarScopeCompatibleWithMode(options.requestedScopeId, japaneseQuestionMode);
   const english = resolveEnglishSentence(word, options.requestedScopeId, seed, options.userLevel);
-  const hasScopedJapaneseAnswer = !options.requestedScopeId
-    || english.japaneseAnswerText !== undefined;
   const englishGrammarScope = resolveGrammarScopeSelection({
     mode: 'EN_WORD_ORDER',
     requestedScopeId: options.requestedScopeId,
     sentence: english.sentence,
   });
-  const japaneseGrammarScope = canBuildJapaneseItem && hasScopedJapaneseAnswer
+  const japaneseGrammarScope = canBuildJapaneseItem && english.source === 'example'
     ? resolveGrammarScopeSelection({
       mode: japaneseQuestionMode,
       requestedScopeId: options.requestedScopeId,
@@ -1192,7 +1160,7 @@ export const buildGrammarPracticeItemsForWord = (
   const items = [
     createEnglishWordOrderItem(word, english.sentence, english.source, englishGrammarScope, seed),
     japaneseGrammarScope
-      ? createJapaneseWordOrderItem(word, english.sentence, english.japaneseAnswerText, japaneseGrammarScope, seed)
+      ? createJapaneseWordOrderItem(word, english.sentence, english.source, japaneseGrammarScope, seed)
       : null,
     createGrammarClozeItem(word, english.sentence, english.source, clozeGrammarScope, seed),
   ].filter((item): item is GrammarPracticeItem => Boolean(item));

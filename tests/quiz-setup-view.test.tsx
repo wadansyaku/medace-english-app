@@ -150,3 +150,13 @@ describe('QuizSetupView compact setup', () => {
     expect(rendered).toContain('data-testid="quiz-grammar-scope-');
   });
 });
+
+
+describe('translation uses its actual bilingual example', () => {
+  it.each(['JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'] as const)('does not force a fictional grammar sentence for %s', questionMode => {
+    expect(getDefaultGrammarScopeIdForMode(questionMode)).toBeUndefined();
+    const rendered = renderSetup({ setupConfig: { ...baseConfig, questionMode } });
+    expect(rendered).toContain('英文と日本語訳がそろった例文');
+    expect(rendered).not.toContain('quiz-grammar-scope-basic-svo');
+  });
+});

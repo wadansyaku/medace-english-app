@@ -1,4 +1,8 @@
-2026-10-09 後続公開指示: 本人が本番反映の完了と旧公開禁止の継続解除を明示。O1はPR64で通常CI/正式preview/productionへ進める。作文遅延後の課題draft初期化と、無料変更後の旧作文リンク解除不可を公開レビューで追加修正。作成/配布APIは組織の現行プランを確認し、対象外Writing付き課題を既存記録への書込前に拒否する。保存済みID・教材・履歴・課金/AI設定は保持。公開完了は独立deliveryの配備SHA/URL/after保持結果で判断する。
+2026-10-09 和訳改善版の公開承認: 本人が検証済み3e5cae11397b41ccff29a0d582204b863cd7a918のGitHub/preview/本番公開を承認。20問・別訳40・自然な別順20、未知訳の未採点/保存除外、保存retry確認、D1管理集計の上限修正が対象。正式CI・preview専用検証・本番配備・公開後の教材/履歴保持を通常gateで確認する。課金AI、secret、認可、新たな教材追加の範囲拡張は行わない。[公開受入と検証範囲](./analysis/2026-10-09-translation-reviewed-release.md)。
+
+2026-10-09 O1公開完了: 本人が本番反映の完了と旧公開禁止の継続解除を明示。PR64を通常gateでmain 1b59c484686e363815afecd824e6541424747d06へ反映し、production37902893690・main CI37902893650成功、本番URL到達と配備SHAを確認。単語/教材/既存履歴とNaru1531語・638印のbefore/after保持をread-onlyで確認した。旧公開禁止は今後も再適用しない。後続和訳候補のローカル限定指示と必須公開gateは維持する。
+
+2026-10-09: [和訳の品質監査と限定ローカル候補](./analysis/2026-10-09-translation-quality-local-candidate.md)。20問/別訳40/意味誤り21と未採点・全文chip・矛盾評価遮断。[後続の自然な別順・未登録答案の修正](./analysis/2026-10-09-translation-order-repair.md)はHub/教材quizを共通の3状態にし、20別順と編集後の再確認、320px表示を受け入れる。和訳はローカルのみ。
 
 2026-10-08 現行: PR61のUIと[A8 初回自動発音](./analysis/2026-10-08-first-visible-word-pronunciation.md)は本番受入済み。PR62/main `1425152`、production37753211999成功、配備先244 browser回帰成功。旧公開禁止は今後も再適用しない。[actuallyの原本行対応訂正](./analysis/2026-10-08-naru-actually-original-row-correction.md)は修正版Excel納品済み・アプリはローカル候補。旧出典・ID・履歴を保持し、後続公開時のstage/配備/apply順序を文書化した。
 

@@ -41,6 +41,7 @@ vi.mock('../services/gemini', () => ({ evaluateJapaneseTranslationAnswer: vi.fn(
 
 import EnglishPracticeHub from '../components/practice/EnglishPracticeHub';
 import { ORIGINAL_GRAMMAR_QUESTIONS } from '../config/grammarQuestionBank';
+import { ORIGINAL_TRANSLATION_QUESTIONS } from '../config/translationQuestionBank';
 import { EnglishLevel, UserRole, type GrammarCurriculumScopeId, type UserProfile } from '../types';
 import { getGrammarScopesForPracticeSelection } from '../utils/grammarScope';
 
@@ -56,7 +57,7 @@ const elements = (tree: unknown): ReactElement<any>[] => {
 const text = (tree: unknown): string => Array.isArray(tree) ? tree.map(text).join('')
   : React.isValidElement(tree) ? text((tree as ReactElement<any>).props.children)
     : typeof tree === 'string' || typeof tree === 'number' ? String(tree) : '';
-const button = (tree: ReactElement, label: string) => elements(tree).find(e => e.type === 'button' && text(e) === label)!;
+const button = (tree: ReactElement, label: string) => elements(tree).find(e => e.type === 'button' && text(e).trim() === label)!;
 const question = (tree: ReactElement) => elements(tree).find(e => e.props['data-testid'] === 'grammar-practice-question')!;
 const authoredQuestion = (tree: ReactElement) => ORIGINAL_GRAMMAR_QUESTIONS.find(q => q.id === question(tree).props['data-question-id'])!;
 const settle = async () => {
@@ -89,6 +90,34 @@ beforeEach(() => {
 });
 
 describe('authored grammar in the practice hub', () => {
+  it('keeps the recovery notice until the identical retry is confirmed and rejects concurrent retry callbacks', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      let resolveRetry!: (value: unknown) => void;
+      api.recordEnglishPracticeAttempt.mockRejectedValueOnce(new Error('Synthetic lost response'));
+      api.recordEnglishPracticeAttempt.mockImplementationOnce(() => new Promise(resolve => { resolveRetry = resolve; }));
+      let tree = await selectOnlyScope('basic-svo');
+      const source = authoredQuestion(tree);
+      button(tree, source.answer).props.onClick(); tree = render();
+      button(tree, '判定する').props.onClick(); tree = await settle();
+      expect(renderToStaticMarkup(tree)).toContain('english-practice-save-error');
+      const retry = button(tree, '保存と進捗を再確認する');
+      retry.props.onClick(); retry.props.onClick();
+      tree = await settle();
+      expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(2);
+      expect(api.recordEnglishPracticeAttempt.mock.calls[1]).toEqual(api.recordEnglishPracticeAttempt.mock.calls[0]);
+      expect(renderToStaticMarkup(tree)).toContain('同じ回答で保存と進捗を再確認しています');
+      expect(button(tree, '保存と進捗を再確認中...').props.disabled).toBe(true);
+      // An old render's callback cannot start another request while the response is held.
+      retry.props.onClick(); tree = await settle();
+      expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(2);
+      const payload = api.recordEnglishPracticeAttempt.mock.calls[1][1];
+      resolveRetry({ id: payload.clientAttemptId, projectionStatus: 'COMPLETE' });
+      tree = await settle();
+      expect(renderToStaticMarkup(tree)).not.toContain('english-practice-save-error');
+      expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(2);
+    } finally { log.mockRestore(); }
+  });
   it('keeps a committed pending attempt for an explicit identical retry and clears the notice only after progress is confirmed', async () => {
     api.recordEnglishPracticeAttempt.mockImplementationOnce(async (_uid, payload) => ({
       id: payload.clientAttemptId, deduplicated: false, delegatedQuizAttempt: true, projectionStatus: 'PENDING',
@@ -222,5 +251,91 @@ describe('authored grammar in the practice hub', () => {
     expect(text(empty)).toContain('現在完了');
     expect(text(empty)).toContain('A1 入門');
     expect(elements(tree).filter(e => e.props['data-testid'] === 'grammar-practice-question')).toHaveLength(0);
+  });
+});
+
+
+describe('reviewed translation in the practice hub', () => {
+  const open = async () => {
+    let tree = await settle(); button(tree, '和訳').props.onClick(); return render();
+  };
+  const current = (tree: ReactElement) => {
+    const article = elements(tree).find(element => element.props['data-testid'] === 'translation-practice-question')!;
+    return ORIGINAL_TRANSLATION_QUESTIONS.find(source => source.id === article.props['data-question-id'])!;
+  };
+  const enter = (tree: ReactElement, answer: string) => elements(tree).find(element => element.type === 'textarea')!.props.onChange({ target: { value: answer } });
+
+  it('accepts a natural reviewed adverb-first Japanese chip order without saving an incorrect attempt', async () => {
+    currentUser = { ...user, englishLevel: EnglishLevel.A1 };
+    let tree = await open(); const source = current(tree);
+    button(tree, '訳の骨組みを並べる').props.onClick(); tree = render();
+    const chipButtons = elements(tree).filter(element => element.type === 'button' && source.orderChunks.includes(text(element)));
+    const alternate = [1, 0, ...source.orderChunks.slice(2).map((_chunk, index) => index + 2)];
+    for (const index of alternate) chipButtons.find(element => text(element) === source.orderChunks[index])!.props.onClick();
+    tree = render(); const check = button(tree, '判定する'); check.props.onClick(); check.props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1]).toMatchObject({ lane: 'translation', mode: 'JA_TRANSLATION_ORDER', correct: true });
+    expect(renderToStaticMarkup(tree)).not.toContain('正解:');
+  });
+
+  it('keeps an unregistered Japanese order editable without score or incorrect history', async () => {
+    currentUser = { ...user, englishLevel: EnglishLevel.A1 };
+    let tree = await open(); const source = current(tree);
+    button(tree, '訳の骨組みを並べる').props.onClick(); tree = render();
+    const chipButtons = elements(tree).filter(element => element.type === 'button' && source.orderChunks.includes(text(element)));
+    for (const index of source.orderChunks.map((_chunk, index) => index).reverse()) {
+      chipButtons.find(element => text(element) === source.orderChunks[index])!.props.onClick();
+    }
+    tree = render(); button(tree, '判定する').props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).not.toHaveBeenCalled();
+    expect(renderToStaticMarkup(tree)).toContain('未登録の並び');
+    expect(renderToStaticMarkup(tree)).toContain('誤答履歴には保存していません');
+    expect(button(tree, source.orderChunks[0]).props.disabled).toBeFalsy();
+  });
+
+  it('accepts a reviewed alternative and records once without associating an unrelated vocabulary word', async () => {
+    let tree = await open(); const source = current(tree);
+    expect(elements(tree).filter(element => element.props['data-testid'] === 'translation-practice-question')).toHaveLength(1);
+    expect(renderToStaticMarkup(tree)).not.toContain(source.referenceTranslation);
+    enter(tree, source.acceptedTranslations[0]); tree = render();
+    const check = button(tree, '答案チェック'); check.props.onClick(); check.props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1]).toMatchObject({ lane: 'translation', correct: true, score: 10, maxScore: 10, level: source.level });
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1].wordId).toBeUndefined();
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1].bookId).toBeUndefined();
+    expect(renderToStaticMarkup(tree)).toContain('10 / 10');
+    expect(renderToStaticMarkup(tree)).toContain(source.explanationJa);
+  });
+
+  it('explains unregistered wording and requires changed input before checking again without changing accuracy or history', async () => {
+    let tree = await open(); const source = current(tree); const answer = `別の表現：${source.referenceTranslation}`;
+    enter(tree, answer); tree = render(); button(tree, '答案チェック').props.onClick(); tree = await settle();
+    expect(renderToStaticMarkup(tree)).toContain('未採点');
+    expect(renderToStaticMarkup(tree)).toContain('点数・誤答履歴には保存していません');
+    expect(elements(tree).find(element => element.type === 'textarea')!.props.value).toBe(answer);
+    const checkChanged = button(tree, '修正した訳を確認'); expect(checkChanged.props.disabled).toBe(true);
+    expect(renderToStaticMarkup(tree)).toContain('同じ入力では判定は変わりません');
+    expect(api.recordEnglishPracticeAttempt).not.toHaveBeenCalled();
+    expect(renderToStaticMarkup(tree)).not.toContain('english-practice-translation-feedback-card');
+    button(tree, '別の和訳問題へ').props.onClick(); tree = render();
+    expect(current(tree).id).not.toBe(source.id);
+    button(tree, '前の問題を確認').props.onClick(); tree = render();
+    expect(current(tree).id).toBe(source.id);
+    expect(elements(tree).find(element => element.type === 'textarea')!.props.value).toBe(answer);
+    expect(api.recordEnglishPracticeAttempt).not.toHaveBeenCalled();
+    enter(tree, source.acceptedTranslations[0]); tree = render();
+    expect(button(tree, '修正した訳を確認').props.disabled).toBe(false);
+  });
+
+  it('records a specific reviewed meaning error with its reason and no fabricated ten-point rubric', async () => {
+    let tree = await open(); const source = current(tree); const error = source.knownIncorrectTranslations[0];
+    enter(tree, error.text); tree = render(); const check = button(tree, '答案チェック'); check.props.onClick(); check.props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1].correct).toBe(false);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1].translationFeedback).toBeUndefined();
+    expect(renderToStaticMarkup(tree)).toContain(error.reasonJa);
+    expect(renderToStaticMarkup(tree)).not.toContain(' / 10');
+    expect(text(elements(tree).find(element => element.props['data-testid'] === 'translation-assessment-notice'))).not.toContain('未採点');
+    expect(button(tree, '次の和訳へ')).toBeTruthy();
   });
 });

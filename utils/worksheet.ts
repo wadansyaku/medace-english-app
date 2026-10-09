@@ -137,7 +137,8 @@ const uniqueValues = (values: string[]): string[] => [...new Set(values.filter(B
 const normalizeJapanese = (value: string): string => value.trim().normalize('NFKC').replace(/\s+/g, '');
 
 const normalizeJapaneseTextAnswer = (value: string): string => normalizeJapanese(value)
-  .replace(/[。、，．,.!?！？「」『』（）()[\]【】]/g, '');
+  .replace(/[、，,!?！？「」『』（）()[\]【】]/g, '')
+  .replace(/[。．.]+$/g, '');
 
 const tokenizeJapanese = (value: string): string[] => {
   const normalized = value.trim().normalize('NFKC');
@@ -424,62 +425,31 @@ export const resolveJapaneseTranslationAttempt = ({
 }: {
   input: string;
   answer: string;
-}): 'correct' | 'incorrect' => (
-  isCorrectJapaneseTranslationAnswer(input, answer) ? 'correct' : 'incorrect'
+}): 'correct' | 'unassessed' => (
+  isCorrectJapaneseTranslationAnswer(input, answer) ? 'correct' : 'unassessed'
 );
 
 export const buildDeterministicTranslationFeedback = ({
-  input,
-  answer,
-  grammarExplanation,
+  input, answer, grammarExplanation,
 }: {
   input: string;
   answer: string;
   grammarExplanation?: GrammarScopeExplanation;
-}): JapaneseTranslationFeedback => {
-  const correct = isCorrectJapaneseTranslationAnswer(input, answer);
-  const criteria = [
-    {
-      label: '意味',
-      score: correct ? 4 : 1,
-      maxScore: 4,
-      comment: correct ? '英文全体の意味を押さえています。' : '正解例と意味のずれが残っています。',
-    },
-    {
-      label: '文法構造',
-      score: correct ? 3 : 1,
-      maxScore: 3,
-      comment: correct
-        ? '主語・動詞・修飾語の関係を訳に反映できています。'
-        : grammarExplanation?.commonMistakeJa || '文の骨組みをもう一度確認しましょう。',
-    },
-    {
-      label: '答案として自然か',
-      score: correct ? 3 : 1,
-      maxScore: 3,
-      comment: correct ? '高校受験・大学受験の答案として自然な範囲です。' : '採点者に伝わる日本語へ整える余地があります。',
-    },
-  ];
-
-  const score = criteria.reduce((sum, criterion) => sum + criterion.score, 0);
+}): JapaneseTranslationFeedback | null => {
+  if (!isCorrectJapaneseTranslationAnswer(input, answer)) return null;
   return {
-    isCorrect: correct,
-    score,
-    maxScore: 10,
-    verdictLabel: correct ? '満点答案' : '要復習',
-    examTarget: 'GENERAL',
-    expectedTranslation: answer,
-    userTranslation: input,
-    summaryJa: correct
-      ? '正解例と同じ意味で訳せています。次は同じ型を速く処理できるようにしましょう。'
-      : '正解例と一致していません。まず3ますで主語・動詞・目的語を固定してから訳しましょう。',
-    strengths: correct ? ['意味の中心を落とさず訳せています。'] : [],
-    issues: correct ? [] : ['正解例との差が大きいため、答案チェックが利用できない場合は不正解扱いにします。'],
+    isCorrect: true, score: 10, maxScore: 10, verdictLabel: '参考訳と一致', examTarget: 'GENERAL',
+    expectedTranslation: answer, userTranslation: input,
+    summaryJa: '参考訳と同じ表現で訳せています。別の表現でも正しい訳になる場合があります。',
+    strengths: ['参考訳の主語・動詞・修飾語を含めて訳せています。'], issues: [],
     improvedTranslation: answer,
-    grammarAdviceJa: grammarExplanation?.patternJa || '英文の主語・動詞・目的語を先に固定します。',
-    nextDrillJa: grammarExplanation?.automationDrillJa || '同じ型の短文を3回読み直してから、もう一度訳します。',
-    criteria,
-    usedAi: false,
+    grammarAdviceJa: grammarExplanation?.patternJa || '主語・動詞・目的語と修飾語の関係を確認します。',
+    nextDrillJa: grammarExplanation?.automationDrillJa || '英文の意味を保ちながら、自分の言葉でも訳してみましょう。',
+    criteria: [
+      { label: '意味', score: 4, maxScore: 4, comment: '参考訳と同じ意味要素を含んでいます。' },
+      { label: '文法構造', score: 3, maxScore: 3, comment: '参考訳と同じ主語・動詞・修飾語の関係です。' },
+      { label: '日本語表現', score: 3, maxScore: 3, comment: '参考訳と同じ表現です。' },
+    ], usedAi: false,
   };
 };
 

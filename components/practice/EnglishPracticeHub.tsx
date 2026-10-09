@@ -26,11 +26,9 @@ import {
   type JapaneseTranslationFeedback,
   type TranslationExamTarget,
   type UserProfile,
-  type WordData,
 } from '../../types';
 import { compareEnglishLevels, getGrammarScopesForPracticeSelection } from '../../utils/grammarScope';
 import {
-  buildGrammarPracticeItemsForWord,
   type EnglishWordOrderPracticeItem,
   type GrammarClozePracticeItem,
   type GrammarPracticeItem,
@@ -38,8 +36,11 @@ import {
 } from '../../utils/grammarPractice';
 import { buildGrammarScopeExplanation } from '../../utils/grammarScope';
 import { buildCuratedGrammarPracticeItems, isGrammarPracticeOrderCorrect } from '../../utils/grammarQuestionBank';
-import { buildDeterministicTranslationFeedback } from '../../utils/worksheet';
-import { evaluateJapaneseTranslationAnswer } from '../../services/gemini';
+import {
+  buildCuratedTranslationPracticeItems, assessCuratedTranslationAnswer, assessCuratedTranslationOrder,
+  type CuratedTranslationPracticeItem,
+} from '../../utils/translationQuestionBank';
+import type { JapaneseTranslationOrderAssessment } from '../../utils/japaneseTranslationOrder';
 import { learningService } from '../../services/learning';
 import {
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
@@ -96,45 +97,6 @@ const LEVEL_LABELS: Record<EnglishLevel, string> = {
   [EnglishLevel.C2]: 'C2 精密',
 };
 
-const FALLBACK_WORDS: WordData[] = [
-  {
-    id: 'practice-organize',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 1,
-    word: 'organize',
-    definition: '整理する',
-    exampleSentence: 'Students organize their notes before class.',
-    exampleMeaning: '生徒は 授業前に ノートを 整理する。',
-  },
-  {
-    id: 'practice-compare',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 2,
-    word: 'compare',
-    definition: '比較する',
-    exampleSentence: 'Learners compare two answers before choosing one.',
-    exampleMeaning: '生徒は 1つを選ぶ前に 2つの答えを 比較する。',
-  },
-  {
-    id: 'practice-explain',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 3,
-    word: 'explain',
-    definition: '説明する',
-    exampleSentence: 'Mika explains the idea to her classmates.',
-    exampleMeaning: 'ミカは クラスメートに その考えを 説明する。',
-  },
-  {
-    id: 'practice-improve',
-    bookId: ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
-    number: 4,
-    word: 'improve',
-    definition: '改善する',
-    exampleSentence: 'Daily practice improves reading skills over time.',
-    exampleMeaning: '毎日の練習は 少しずつ 読解力を 伸ばす。',
-  },
-];
-
 const laneConfig: Array<{
   id: PracticeLane;
   label: string;
@@ -187,12 +149,6 @@ const formatPercent = (value: number): number => {
   return 0;
 };
 
-const normalizeWordList = (words: WordData[]): WordData[] => (
-  [...words]
-    .filter((word) => word.word.trim() && word.definition.trim())
-    .sort((left, right) => left.number - right.number)
-);
-
 const selectDefaultScopeIds = (
   scopes: GrammarCurriculumScope[],
   userLevel: EnglishLevel,
@@ -220,15 +176,6 @@ const isGrammarClozeItem = (item: GrammarPracticeItem): item is GrammarClozePrac
 
 const isEnglishWordOrderItem = (item: GrammarPracticeItem): item is EnglishWordOrderPracticeItem => (
   item.kind === 'ENGLISH_WORD_ORDER'
-);
-
-const isJapaneseWordOrderItem = (item: GrammarPracticeItem): item is JapaneseWordOrderPracticeItem => (
-  item.kind === 'JAPANESE_WORD_ORDER'
-);
-
-const isOrderCorrect = (orderedChipIds: string[], correctChipIds: string[]): boolean => (
-  orderedChipIds.length === correctChipIds.length
-  && orderedChipIds.every((chipId, index) => chipId === correctChipIds[index])
 );
 
 const getOrderedText = (
@@ -263,9 +210,6 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [activeLane, setActiveLane] = useState<PracticeLane>(
     () => normalizePracticeLane(initialLane, isEmbeddedDrill ? 'grammar' : 'grammar'),
   );
-  const [sessionWords, setSessionWords] = useState<WordData[]>([]);
-  const [wordsLoading, setWordsLoading] = useState(true);
-  const [wordLoadFailed, setWordLoadFailed] = useState(false);
   const [practiceSeed, setPracticeSeed] = useState(1);
   const [grammarMode, setGrammarMode] = useState<GrammarMode>('GRAMMAR_CLOZE');
   const grammarQuestionCount = 5;
@@ -282,12 +226,15 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [translationMode, setTranslationMode] = useState<TranslationMode>('input');
   const [translationInputs, setTranslationInputs] = useState<Record<string, string>>({});
   const [translationOrders, setTranslationOrders] = useState<Record<string, string[]>>({});
+  const checkedTranslationOrderIdsRef = React.useRef(new Set<string>());
   const [checkedTranslationOrders, setCheckedTranslationOrders] = useState<Record<string, boolean>>({});
+  const [excludedTranslationQuestionIds, setExcludedTranslationQuestionIds] = useState<string[]>([]);
+  const [translationAssessmentNotes, setTranslationAssessmentNotes] = useState<Record<string, { status: 'incorrect' | 'unassessed'; reasonJa: string; input?: string }>>({});
+  const [translationOrderAssessments, setTranslationOrderAssessments] = useState<Record<string, JapaneseTranslationOrderAssessment>>({});
   const [translationFeedback, setTranslationFeedback] = useState<Record<string, JapaneseTranslationFeedback>>({});
   const [submittedTranslationInputs, setSubmittedTranslationInputs] = useState<Record<string, string>>({});
   const submittedTranslationInputRef = React.useRef<Record<string, string>>({});
-  const translationSubmissionVersionRef = React.useRef(0);
-  const [checkingTranslationId, setCheckingTranslationId] = useState<string | null>(null);
+  const [translationQuestionIndex, setTranslationQuestionIndex] = useState(0);
   const [practiceLevel, setPracticeLevel] = useState<EnglishLevel>(userLevel);
   const [readingSummary, setReadingSummary] = useState<ReadingPracticeSessionSummary | null>(null);
   const [writingLevel, setWritingLevel] = useState<EikenWritingLevel>('grade-2');
@@ -298,8 +245,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [writingDraft, setWritingDraft] = useState('');
   const [practiceSyncError, setPracticeSyncError] = useState<string | null>(null);
   const [practiceSyncRetry, setPracticeSyncRetry] = useState(0);
+  const [practiceSyncing, setPracticeSyncing] = useState(false);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
   const pendingPracticeSyncRef = React.useRef<Set<string>>(new Set());
+  const practiceSyncRetryQueuedRef = React.useRef(false);
 
   const activateLane = React.useCallback((lane: PracticeLane) => {
     setActiveLane(lane);
@@ -333,13 +282,23 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   React.useEffect(() => {
     saveEnglishPracticeProgress(practiceProgress);
+    // Release completed requests after the synced marker has reached local storage.
+    for (const attempt of practiceProgress.attempts) {
+      if (attempt.syncStatus === 'synced') pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+    }
+    setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
   }, [practiceProgress]);
 
   React.useEffect(() => {
     const pendingAttempts = getPendingEnglishPracticeAttempts(practiceProgress)
       .filter((attempt) => !pendingPracticeSyncRef.current.has(attempt.clientAttemptId))
       .slice(0, 8);
-    if (pendingAttempts.length === 0) return;
+    practiceSyncRetryQueuedRef.current = false;
+    if (pendingAttempts.length === 0) {
+      setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
+      return;
+    }
+    setPracticeSyncing(true);
 
     pendingAttempts.forEach((attempt) => {
       pendingPracticeSyncRef.current.add(attempt.clientAttemptId);
@@ -347,8 +306,9 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         user.uid,
         toEnglishPracticeStoragePayload(attempt),
       ).then((result) => {
-        pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
         if (result?.projectionStatus === 'PENDING') {
+          pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+          setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
           setPracticeSyncError('回答は保存済みです。課題の進捗をまだ確認できていません。同じ回答で保存と進捗を再確認できます。');
           return;
         }
@@ -357,34 +317,11 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       }).catch((error) => {
         console.error('English practice attempt sync failed', error);
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
+        setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
         setPracticeSyncError('結果を保存できませんでした。次に開いたとき、もう一度保存を試します。');
       });
     });
   }, [practiceProgress, user.uid, practiceSyncRetry]);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setWordsLoading(true);
-    setWordLoadFailed(false);
-
-    learningService.getDailySessionWords(user.uid, 12)
-      .then((words) => {
-        if (cancelled) return;
-        setSessionWords(normalizeWordList(words));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setWordLoadFailed(true);
-        setSessionWords([]);
-      })
-      .finally(() => {
-        if (!cancelled) setWordsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user.uid]);
 
   React.useEffect(() => {
     setSelectedScopeIds((current) => {
@@ -402,16 +339,17 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setTranslationInputs({});
     setTranslationOrders({});
     setCheckedTranslationOrders({});
+    checkedTranslationOrderIdsRef.current.clear();
     setTranslationFeedback({});
+    setTranslationAssessmentNotes({});
+    setTranslationOrderAssessments({});
     setSubmittedTranslationInputs({});
     submittedTranslationInputRef.current = {};
-    translationSubmissionVersionRef.current += 1;
-    setCheckingTranslationId(null);
+    setTranslationQuestionIndex(0);
     setReadingSummary(null);
-  }, [practiceLevel]);
+    setExcludedTranslationQuestionIds([]);
+  }, [practiceLevel, user.uid]);
 
-  const samplePracticeActive = !wordsLoading && (wordLoadFailed || sessionWords.length === 0);
-  const practiceWords = sessionWords.length > 0 ? sessionWords : samplePracticeActive ? FALLBACK_WORDS : [];
   const selectedScopes = useMemo(
     () => grammarScopes.filter((scope) => selectedScopeIds.includes(scope.id)),
     [grammarScopes, selectedScopeIds],
@@ -436,17 +374,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     checkedGrammarItemIdsRef.current.clear();
   }, [grammarMode, practiceLevel, selectedScopeIds.join('|')]);
 
-  const translationItems = useMemo(() => (
-    practiceWords
-      .slice(0, 6)
-      .map((word, index) => buildGrammarPracticeItemsForWord(word, {
-        seed: `translation:${practiceSeed}:${index}`,
-        japaneseQuestionMode: 'JA_TRANSLATION_INPUT',
-        userLevel: practiceLevel,
-      }).find(isJapaneseWordOrderItem) ?? null)
-      .filter((item): item is JapaneseWordOrderPracticeItem => Boolean(item))
-      .slice(0, 4)
-  ), [practiceLevel, practiceSeed, practiceWords]);
+  const translationItems = useMemo(() => buildCuratedTranslationPracticeItems({
+    userLevel: practiceLevel, seed: `translation:${practiceSeed}`, questionCount: 4,
+    excludeQuestionIds: excludedTranslationQuestionIds,
+  }), [practiceLevel, practiceSeed, excludedTranslationQuestionIds]);
 
   const readingPassages = useMemo(() => (
     buildReadingPracticePassages({
@@ -537,12 +468,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     attempt: EnglishPracticeAttemptInput,
     options?: { translationFeedback?: JapaneseTranslationFeedback },
   ) => {
-    const isFallbackWordAttempt = samplePracticeActive && !attempt.curatedQuestionId
-      && (attempt.lane === 'grammar' || attempt.lane === 'translation');
-    if (isFallbackWordAttempt || attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) {
-      setPracticeSyncError(null);
-      return;
-    }
+    if (attempt.bookId === ENGLISH_PRACTICE_SAMPLE_BOOK_ID) return;
 
     const attemptWithFeedback = options?.translationFeedback
       ? { ...attempt, translationFeedback: options.translationFeedback }
@@ -552,9 +478,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       const base = current.userUid === user.uid ? current : loadEnglishPracticeProgress(user.uid);
       return recordEnglishPracticeAttempt(base, attemptWithFeedback);
     });
-  }, [samplePracticeActive, user.uid]);
+  }, [user.uid]);
 
   const resetGeneratedPractice = () => {
+    const answeredTranslationIds = translationItems.filter(item =>
+      translationFeedback[item.id] || translationAssessmentNotes[item.id]?.status === 'incorrect'
+      || checkedTranslationOrders[item.id]).map(item => item.questionId);
+    setExcludedTranslationQuestionIds(current => [...new Set([...current, ...answeredTranslationIds])]);
     const answeredQuestionIds = grammarItems
       .filter(item => checkedGrammarItemIdsRef.current.has(item.id))
       .flatMap(item => item.feedback ? [item.feedback.questionId] : []);
@@ -568,11 +498,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     setTranslationInputs({});
     setTranslationOrders({});
     setCheckedTranslationOrders({});
+    checkedTranslationOrderIdsRef.current.clear();
     setTranslationFeedback({});
+    setTranslationAssessmentNotes({});
+    setTranslationOrderAssessments({});
     setSubmittedTranslationInputs({});
     submittedTranslationInputRef.current = {};
-    translationSubmissionVersionRef.current += 1;
-    setCheckingTranslationId(null);
+    setTranslationQuestionIndex(0);
   };
 
   const toggleScope = (scopeId: GrammarCurriculumScopeId) => {
@@ -618,6 +550,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       if (ordered.includes(chipId)) return current;
       return { ...current, [itemId]: [...ordered, chipId] };
     });
+    if (surface === 'translation') setTranslationOrderAssessments(current => { const next = { ...current }; delete next[itemId]; return next; });
   };
 
   const removeOrderChip = (itemId: string, chipId: string, surface: 'grammar' | 'translation') => {
@@ -626,6 +559,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       ...current,
       [itemId]: (current[itemId] || []).filter((id) => id !== chipId),
     }));
+    if (surface === 'translation') setTranslationOrderAssessments(current => { const next = { ...current }; delete next[itemId]; return next; });
   };
 
   const handleGrammarCheck = (item: GrammarPracticeItem, correct: boolean) => {
@@ -646,92 +580,46 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     });
   };
 
-  const handleTranslationOrderCheck = (item: JapaneseWordOrderPracticeItem, correct: boolean) => {
+  const handleTranslationOrderCheck = (item: CuratedTranslationPracticeItem) => {
+    if (checkedTranslationOrderIdsRef.current.has(item.id)) return;
+    const assessment = assessCuratedTranslationOrder(item, translationOrders[item.id] ?? []);
+    setTranslationOrderAssessments(current => ({ ...current, [item.id]: assessment }));
+    if (assessment.status === 'unassessed') return;
+    checkedTranslationOrderIdsRef.current.add(item.id);
     setCheckedTranslationOrders((current) => ({ ...current, [item.id]: true }));
     recordPracticeAttempt({
       lane: 'translation',
       mode: 'JA_TRANSLATION_ORDER',
-      correct,
-      wordId: item.wordId,
-      bookId: item.bookId,
-      word: item.word,
+      correct: assessment.status === 'correct',
       scopeId: item.grammarScope.scopeId,
       scopeLabelJa: item.grammarScope.labelJa,
-      level: practiceLevel,
+      level: item.level,
+      curatedQuestionId: item.questionId,
     });
   };
 
-  const handleTranslationSubmit = async (item: JapaneseWordOrderPracticeItem) => {
+  const handleTranslationSubmit = (item: CuratedTranslationPracticeItem) => {
     const input = translationInputs[item.id]?.trim() || '';
-    if (!input || checkingTranslationId || submittedTranslationInputRef.current[item.id] === input) return;
-    submittedTranslationInputRef.current = {
-      ...submittedTranslationInputRef.current,
-      [item.id]: input,
-    };
-    setSubmittedTranslationInputs((current) => ({ ...current, [item.id]: input }));
-    const submissionVersion = translationSubmissionVersionRef.current;
-
-    const grammarExplanation = buildGrammarScopeExplanation(item.grammarScope);
-    let feedback: JapaneseTranslationFeedback = {
-      ...buildDeterministicTranslationFeedback({
-        input,
-        answer: item.answerText,
-        grammarExplanation,
-      }),
-      examTarget,
-      sourceSentence: item.sourceSentence,
-      expectedTranslation: item.answerText,
-      userTranslation: input,
-    };
-
-    if (!feedback.isCorrect) {
-      setCheckingTranslationId(item.id);
-      try {
-        const aiFeedback = await evaluateJapaneseTranslationAnswer({
-          sourceSentence: item.sourceSentence,
-          expectedTranslation: item.answerText,
-          userTranslation: input,
-          grammarScopeLabel: item.grammarScope.labelJa,
-          grammarScopeId: item.grammarScope.scopeId,
-          examTarget,
-        });
-        if (aiFeedback) {
-          feedback = aiFeedback;
-        }
-      } catch {
-        feedback = {
-          ...feedback,
-          summaryJa: `${feedback.summaryJa} 今回は正解例と比べて、直す場所を確認しています。`,
-          issues: feedback.issues.length > 0
-            ? feedback.issues
-          : ['正解例を見ながら、主語・動詞・修飾語の対応をもう一度確認してください。'],
-        };
-      } finally {
-        if (translationSubmissionVersionRef.current === submissionVersion) {
-          setCheckingTranslationId(null);
-        }
-      }
+    if (!input || submittedTranslationInputRef.current[item.id] === input) return;
+    const assessment = assessCuratedTranslationAnswer(item, input, examTarget);
+    if (assessment.status === 'unassessed') {
+      setTranslationAssessmentNotes(current => ({ ...current, [item.id]: { status: 'unassessed', reasonJa: assessment.reasonJa, input } }));
+      return;
     }
-
-    if (translationSubmissionVersionRef.current !== submissionVersion) return;
-
-    setTranslationFeedback((current) => ({
-      ...current,
-      [item.id]: feedback,
-    }));
+    submittedTranslationInputRef.current = { ...submittedTranslationInputRef.current, [item.id]: input };
+    setSubmittedTranslationInputs(current => ({ ...current, [item.id]: input }));
+    if (assessment.feedback) {
+      setTranslationFeedback(current => ({ ...current, [item.id]: assessment.feedback! }));
+      setTranslationAssessmentNotes(current => { const next = { ...current }; delete next[item.id]; return next; });
+    } else {
+      setTranslationAssessmentNotes(current => ({ ...current, [item.id]: { status: 'incorrect', reasonJa: assessment.reasonJa } }));
+    }
     recordPracticeAttempt({
-      lane: 'translation',
-      mode: 'JA_TRANSLATION_INPUT',
-      correct: feedback.isCorrect,
-      score: feedback.score,
-      maxScore: feedback.maxScore,
-      wordId: item.wordId,
-      bookId: item.bookId,
-      word: item.word,
-      scopeId: item.grammarScope.scopeId,
-      scopeLabelJa: item.grammarScope.labelJa,
-      level: practiceLevel,
-    }, { translationFeedback: feedback });
+      lane: 'translation', mode: 'JA_TRANSLATION_INPUT', correct: assessment.status === 'correct',
+      score: assessment.feedback?.score, maxScore: assessment.feedback?.maxScore,
+      scopeId: item.grammarScope.scopeId, scopeLabelJa: item.grammarScope.labelJa,
+      level: item.level, curatedQuestionId: item.questionId,
+    }, assessment.feedback ? { translationFeedback: assessment.feedback } : undefined);
   };
 
   const handleReadingAnswer = React.useCallback((result: ReadingPracticeAnswerResult) => {
@@ -1194,27 +1082,43 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         <div className="mt-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-4">
           <div className="text-xs font-black text-medace-700">答案チェック</div>
           <p className="mt-2 text-sm font-bold leading-relaxed text-slate-600">
-            正解例と比べ、抜けや構文を確認します。
+            登録した参考訳・別訳と比べて確認します。別の自然な訳は、正しくても未採点になることがあります。誤答履歴には入れません。
           </p>
         </div>
       </section>
 
       <section className="order-1 space-y-3 xl:order-2">
-        {translationItems.map((item) => {
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-slate-600">
+          <span>{translationItems.length > 0 ? `${translationQuestionIndex + 1} / ${translationItems.length} 問` : 'このセットは完了です'}</span>
+          <button type="button" disabled={translationQuestionIndex === 0} onClick={() => setTranslationQuestionIndex(index => Math.max(0, index - 1))}
+            className="min-h-11 rounded-lg border border-slate-200 px-3 py-2 disabled:opacity-40">前の問題を確認</button>
+        </div>
+        {translationItems.length === 0 && <section role="status" className="rounded-lg border border-medace-100 bg-white p-4">
+          <p className="font-bold text-slate-800">この難しさの確認済み問題を一通り練習しました。</p>
+          <button type="button" onClick={() => { setExcludedTranslationQuestionIds([]); setTranslationQuestionIndex(0); }}
+            className="mt-3 min-h-11 rounded-lg bg-steady-action px-4 py-2 font-bold text-steady-on-action">もう一度練習する</button>
+        </section>}
+        {translationItems.slice(translationQuestionIndex, translationQuestionIndex + 1).map((item) => {
           const feedback = translationFeedback[item.id];
+          const assessmentNote = translationAssessmentNotes[item.id];
+          const assessed = Boolean(feedback) || assessmentNote?.status === 'incorrect';
           const translationInput = translationInputs[item.id] || '';
           const trimmedTranslationInput = translationInput.trim();
           const repeatedSubmittedTranslation = Boolean(trimmedTranslationInput)
             && submittedTranslationInputs[item.id] === trimmedTranslationInput;
+          const unchangedUnregisteredInput = assessmentNote?.status === 'unassessed' && assessmentNote.input === trimmedTranslationInput;
           const orderedChipIds = translationOrders[item.id] || [];
           const orderChecked = checkedTranslationOrders[item.id];
-          const orderCorrect = isOrderCorrect(orderedChipIds, item.correctChipIds);
+          const orderAssessment = translationOrderAssessments[item.id];
+          const orderCorrect = orderAssessment?.status === 'correct';
           const chipById = new Map(item.chips.map((chip) => [chip.id, chip.text]));
 
           return (
-            <article key={item.id} className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
-              <div className="text-xs font-black text-slate-400">和訳練習</div>
+            <article key={item.id} data-testid="translation-practice-question" data-question-id={item.questionId} data-question-version={item.questionVersion} className="rounded-lg border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <div className="text-xs font-black text-slate-500">和訳練習・{LEVEL_LABELS[item.level]}</div>
+              <p className="mt-2 text-sm font-bold text-slate-600">{item.reviewedQuestion.contextJa}</p>
               <p className="mt-2 text-lg font-black leading-relaxed text-slate-950">{item.sourceSentence}</p>
+              {item.reviewedQuestion.vocabularyNotesJa?.map(note => <p key={note} className="mt-2 text-xs font-bold text-slate-600">語彙のヒント: {note}</p>)}
 
               {translationMode === 'input' ? (
                 <>
@@ -1226,22 +1130,24 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     className="mt-4 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-bold leading-relaxed text-slate-800 outline-none transition-colors focus:border-medace-400 focus:ring-2 focus:ring-medace-100"
                     placeholder="日本語訳を全文で入力"
                   />
-                  {feedback ? (
+                  {assessed ? (
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={resetGeneratedPractice}
+                        onClick={() => {
+                          if (translationQuestionIndex + 1 < translationItems.length) setTranslationQuestionIndex(index => index + 1);
+                          else resetGeneratedPractice();
+                        }}
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover"
                       >
                         次の和訳へ <ArrowRight className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTranslationFeedback((current) => {
-                          const next = { ...current };
-                          delete next[item.id];
-                          return next;
-                        })}
+                        onClick={() => {
+                          setTranslationFeedback(current => { const next = { ...current }; delete next[item.id]; return next; });
+                          setTranslationAssessmentNotes(current => { const next = { ...current }; delete next[item.id]; return next; });
+                        }}
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-600 transition-colors hover:border-medace-300 hover:text-medace-800"
                       >
                         訳を修正して再提出
@@ -1251,15 +1157,21 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        disabled={!trimmedTranslationInput || checkingTranslationId === item.id || repeatedSubmittedTranslation}
+                        disabled={!trimmedTranslationInput || repeatedSubmittedTranslation || unchangedUnregisteredInput}
                         onClick={() => void handleTranslationSubmit(item)}
                         className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
                       >
-                        {checkingTranslationId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        答案チェック
+                        <PencilLine className="h-4 w-4" />
+                        {assessmentNote?.status === 'unassessed' ? '修正した訳を確認' : '答案チェック'}
                       </button>
                     </div>
                   )}
+                  {assessmentNote && <section role="status" aria-live="polite" data-testid="translation-assessment-notice"
+                    className={`mt-4 rounded-lg border px-4 py-3 text-sm leading-relaxed ${assessmentNote.status === 'unassessed' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-red-200 bg-red-50 text-red-800'}`}>
+                    <p className="font-bold">{assessmentNote.status === 'unassessed' ? '未登録の別訳・未採点' : '意味を確認しましょう'}</p>
+                    <p className="mt-2">{assessmentNote.reasonJa}</p>
+                    {assessmentNote.status === 'unassessed' && <p className="mt-2">点数・誤答履歴には保存していません。入力はそのまま残ります。</p>}
+                  </section>}
                   {feedback && (
                     <JapaneseTranslationFeedbackCard feedback={feedback} />
                   )}
@@ -1300,21 +1212,43 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      disabled={orderedChipIds.length !== item.correctChipIds.length || orderChecked}
-                      onClick={() => handleTranslationOrderCheck(item, orderCorrect)}
+                      disabled={orderedChipIds.length !== item.correctChipIds.length || orderChecked || orderAssessment?.status === 'unassessed'}
+                      onClick={() => handleTranslationOrderCheck(item)}
                       className="inline-flex min-h-10 items-center rounded-lg bg-steady-action px-4 py-2 text-sm font-black text-steady-on-action transition-colors hover:bg-steady-action-hover disabled:cursor-not-allowed disabled:bg-slate-300"
                     >
                       判定する
                     </button>
+                    <button type="button" disabled={orderChecked || orderedChipIds.length === 0}
+                      onClick={() => {
+                        setTranslationOrders(current => ({ ...current, [item.id]: [] }));
+                        setTranslationOrderAssessments(current => { const next = { ...current }; delete next[item.id]; return next; });
+                      }}
+                      className="min-h-11 rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40">並びをクリア</button>
                     {orderChecked && (
                       <span aria-live="polite" className={`inline-flex items-center gap-1 text-sm font-black ${orderCorrect ? 'text-emerald-700' : 'text-red-600'}`}>
                         {orderCorrect ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                        {orderCorrect ? '正解' : `正解: ${getOrderedText(item)}`}
+                        {orderCorrect ? '正解' : orderAssessment?.reasonJa}
                       </span>
                     )}
                   </div>
+                  {orderAssessment?.status === 'unassessed' && <section role="status" aria-live="polite" data-testid="translation-order-assessment-notice"
+                    className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+                    <p className="font-bold">未登録の並び・未採点</p>
+                    <p className="mt-2">{orderAssessment.reasonJa}</p>
+                    <p className="mt-2">並びを変えて確認するか、参考訳と比べてください。同じ並びを送信しても判定は変わりません。</p>
+                  </section>}
                 </>
               )}
+              {(assessed || assessmentNote || orderChecked || orderAssessment) && <details className="mt-4 rounded-lg border border-slate-200 p-3">
+                <summary className="cursor-pointer font-bold text-slate-800">参考訳と意味の要点を確認</summary>
+                <p className="mt-3 text-sm font-bold text-slate-800">{item.answerText}</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">{item.reviewedQuestion.explanationJa}</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">{item.reviewedQuestion.requiredMeaningElements.map(element => <li key={element}>{element}</li>)}</ul>
+                <p className="mt-2 text-xs text-slate-600">参考訳以外にも正しい表現があります。</p>
+              </details>}
+              {(assessmentNote?.status === 'unassessed' || (translationMode === 'order' && (orderChecked || orderAssessment))) && <button type="button"
+                onClick={() => { if (translationQuestionIndex + 1 < translationItems.length) setTranslationQuestionIndex(index => index + 1); else resetGeneratedPractice(); }}
+                className="mt-3 min-h-11 rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700">別の和訳問題へ</button>}
             </article>
           );
         })}
@@ -1645,7 +1579,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         {LEVEL_LABELS[practiceLevel]}
       </span>
       <span className="rounded-md border border-medace-100 bg-white px-3 py-1 text-xs font-black text-slate-500">
-        {activeLane === 'grammar' ? '文法問題で練習' : wordsLoading ? '単語を準備中' : samplePracticeActive ? 'お試し問題' : `${sessionWords.length}語で練習`}
+        {activeLane === 'grammar' ? '文法問題で練習' : activeLane === 'translation' ? '確認済みの和訳問題' : '専用問題で練習'}
       </span>
       <span className="rounded-md border border-medace-200 bg-medace-50 px-3 py-1 text-xs font-black text-medace-700">
         演習 {progressSummary.total}回 / {overallAccuracy}%
@@ -1660,25 +1594,17 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderPracticeNotices = () => (
     <>
-      {activeLane !== 'grammar' && wordsLoading && sessionWords.length === 0 && (
-        <section role="status" aria-live="polite" className="mb-4 rounded-lg border border-medace-100 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
-          <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-          単語を読み込み中です。
-        </section>
-      )}
-
-      {activeLane !== 'grammar' && samplePracticeActive && (
-        <section className="mb-4 rounded-lg border border-medace-200 bg-medace-50 px-4 py-3 text-sm font-bold text-medace-800">
-          お試し問題です。復習対象には入りません。
-        </section>
-      )}
-
-      {practiceSyncError && getPendingEnglishPracticeAttempts(practiceProgress).length > 0 && (
+      {practiceSyncError && (getPendingEnglishPracticeAttempts(practiceProgress).length > 0 || practiceSyncing) && (
         <section role="alert" data-testid="english-practice-save-error" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
-          <p>{practiceSyncError}</p>
-          <button type="button" data-testid="english-practice-save-retry" disabled={pendingPracticeSyncRef.current.size > 0}
-            onClick={() => { setPracticeSyncError(null); setPracticeSyncRetry(value => value + 1); }}
-            className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold disabled:opacity-60">保存と進捗を再確認する</button>
+          <p>{practiceSyncing ? '同じ回答で保存と進捗を再確認しています。完了までお待ちください。' : practiceSyncError}</p>
+          <button type="button" data-testid="english-practice-save-retry" disabled={practiceSyncing}
+            onClick={() => {
+              if (practiceSyncRetryQueuedRef.current || pendingPracticeSyncRef.current.size > 0) return;
+              practiceSyncRetryQueuedRef.current = true;
+              setPracticeSyncing(true);
+              setPracticeSyncRetry(value => value + 1);
+            }}
+            className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold disabled:opacity-60">{practiceSyncing ? '保存と進捗を再確認中...' : '保存と進捗を再確認する'}</button>
         </section>
       )}
     </>

@@ -319,3 +319,26 @@ describe('quiz attempt reducer', () => {
     });
   });
 });
+
+
+describe('unassessed translation state', () => {
+  it('retains the entire order without feedback or pending receipt and clears its notice when a chip is edited', () => {
+    let state = createInitialQuizAttemptState();
+    for (const tokenId of ['object', 'subject', 'time', 'verb']) {
+      state = quizAttemptReducer(state, { type: 'ADD_ORDER_TOKEN', tokenId, answerTokenCount: 4 });
+    }
+    state = quizAttemptReducer(state, { type: 'SET_TRANSLATION_UNASSESSED', message: '未登録の並び・未採点' });
+    expect(state).toMatchObject({ orderedTokenIds: ['object', 'subject', 'time', 'verb'], translationUnassessed: true,
+      orderFeedback: null, pendingAttempt: null, persistingAttempt: false });
+    state = quizAttemptReducer(state, { type: 'REMOVE_ORDER_TOKEN', tokenId: 'object' });
+    expect(state).toMatchObject({ orderedTokenIds: ['subject', 'time', 'verb'], translationUnassessed: false,
+      spellingFeedbackMessage: null, spellingFeedbackTone: null, pendingAttempt: null });
+  });
+  it('keeps the entered answer retryable and clears scoring UI without constructing a save attempt', () => {
+    let state = createInitialQuizAttemptState();
+    state = quizAttemptReducer(state, { type: 'SET_ANSWER_INPUT', value: '自然な別訳' });
+    state = quizAttemptReducer(state, { type: 'SET_CHECKING_TRANSLATION_FEEDBACK', value: true, message: '確認中' });
+    state = quizAttemptReducer(state, { type: 'SET_TRANSLATION_UNASSESSED', message: '未採点。履歴には保存していません。' });
+    expect(state).toMatchObject({ answerInput: '自然な別訳', inputResult: null, translationFeedback: null, checkingTranslationFeedback: false, pendingAttempt: null, persistingAttempt: false, spellingFeedbackTone: 'info' });
+  });
+});

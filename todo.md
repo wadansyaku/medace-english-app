@@ -1,9 +1,20 @@
-2026-10-09 後続公開指示: 本人が本番反映の完了と旧公開禁止の継続解除を明示。O1はPR64で通常CI/正式preview/productionへ進める。作文遅延後の課題draft初期化と、無料変更後の旧作文リンク解除不可を公開レビューで追加修正。作成/配布APIは組織の現行プランを確認し、対象外Writing付き課題を既存記録への書込前に拒否する。保存済みID・教材・履歴・課金/AI設定は保持。公開完了は独立deliveryの配備SHA/URL/after保持結果で判断する。
+2026-10-09 和訳改善版の公開承認: 本人が検証済み3e5cae11397b41ccff29a0d582204b863cd7a918のGitHub/preview/本番公開を承認。20問・別訳40・自然な別順20、未知訳の未採点/保存除外、保存retry確認、D1管理集計の上限修正が対象。正式CI・preview専用検証・本番配備・公開後の教材/履歴保持を通常gateで確認する。課金AI、secret、認可、新たな教材追加の範囲拡張は行わない。[公開受入と検証範囲](./docs/analysis/2026-10-09-translation-reviewed-release.md)。
+
+2026-10-09 O1公開完了: 本人が本番反映の完了と旧公開禁止の継続解除を明示。PR64を通常gateでmain 1b59c484686e363815afecd824e6541424747d06へ反映し、production37902893690・main CI37902893650成功、本番URL到達と配備SHAを確認。単語/教材/既存履歴とNaru1531語・638印のbefore/after保持をread-onlyで確認した。旧公開禁止は今後も再適用しない。後続和訳候補のローカル限定指示と必須公開gateは維持する。
+
+2026-10-09 和訳品質: [監査と受入基準](./docs/analysis/2026-10-09-translation-quality-local-candidate.md)。
+
+後続: [自然な別順・未登録答案・320px表示の修正](./docs/analysis/2026-10-09-translation-order-repair.md)。9a95e64を保持した独立ローカル候補で、Hubと教材小テストの3状態判定・登録済み20別順・未登録順の保存遮断・編集再提出を実装。最終gate結果は独立evidence/HANDOFFへ記録する。未push・未配備。
+
+- [x] 誤訳fallback・別訳の固定誤採点・末尾chip切捨て・矛盾評価の問題を固定/合成データで確認し、優先順と測定基準を設定。
+- [x] 限定20問/別訳40/意味誤り21と未採点・全文chip・評価整合・20秒打切りを独立ローカルへ実装。
+- [x] 最終型/unit/API/build/全browserと実アプリ5幅の受入を完了・証拠保全。検証ソース27b5d309、210files/2295unit、Cloud253＋IDB9の262件完了（既存管理グラフ1件は初回再試行、単独5幅×3回の15件は再試行なし成功、preview専用2skip）。和訳候補は独立branch/bundleで保全し、公開していない。
+- [ ] cloud question/version/答案追跡、外部講師承認、自由訳評価、過去履歴影響と実授業効果は次段階。
 
 2026-10-09再開: 本番74530de/原本訳/全1531語・638印をGETで保持確認。
 
 - [x] O1の作文取得だけの503/遅延で組織管理全停止を合成D1・実Chromeで再現し、基幹4資源と作文2資源を分離。作文だけretry・未取得/0件区別・保存済みリンク/無料境界を保持。独立ローカル候補で60migration/境界/型/build/2160unit・関連20browser retry0成功。
-- [ ] このO1候補の通常PR/CI/preview/full release gateと公開受入は未実施。10/9の指示範囲はローカルまでで、push/merge/deployなし。基幹4資源の各部分回復、実教室の一周、実Safari/iPhoneも未完。正本は[全体改善計画の10/9追記](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)。動画/Excelの再作成なし。
+- [x] O1は後続の本番反映指示を受け、PR64/main 1b59c484、正式preview/productionと公開先受入まで完了。公開完了のSHA/URL/データ保持は独立deliveryの証拠で確認。実教室の一周・実Safari/iPhoneは未検証のまま保持する。和訳候補は別のローカル限定作業。
 
 2026-10-08追加: [actuallyの原本訳の行ずれ](./docs/analysis/2026-10-08-naru-actually-original-row-correction.md)
 

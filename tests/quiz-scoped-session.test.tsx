@@ -55,6 +55,9 @@ import QuizHeader from '../components/quiz/QuizHeader';
 import QuizResultView from '../components/quiz/QuizResultView';
 import QuizSetupView from '../components/quiz/QuizSetupView';
 import { useQuizModeController } from '../hooks/useQuizModeController';
+import { evaluateJapaneseTranslationAnswer, generateGrammarPracticeQuestions } from '../services/gemini';
+import { buildDeterministicTranslationFeedback } from '../utils/worksheet';
+import { ORIGINAL_TRANSLATION_QUESTIONS } from '../config/translationQuestionBank';
 import { createFollowUpSpellingTaskIntent } from '../shared/learningTask';
 import { NARU_BOOK_ID } from '../shared/naruBook';
 import { normalizeNaruChapterQuizTask } from '../shared/naruStudy';
@@ -96,6 +99,8 @@ beforeEach(() => {
   harness.slots = []; harness.cursor = 0; harness.effects.clear(); harness.cleanups.clear();
   vi.clearAllMocks();
   vi.stubGlobal('window', { setTimeout: vi.fn(() => 1), clearTimeout: vi.fn() });
+  vi.mocked(generateGrammarPracticeQuestions).mockResolvedValue([]);
+  vi.mocked(evaluateJapaneseTranslationAnswer).mockResolvedValue(null);
   api.getBookSession.mockResolvedValue(words);
   api.getWordsByBook.mockResolvedValue([...words, noun]);
   api.getStudiedWordIdsByBook.mockResolvedValue([]);
@@ -287,5 +292,103 @@ describe('restored Naru quiz chapter content through the real controller', () =>
     expect(controller(restored).allWords.map(word => word.id)).toEqual(expectedIds);
     expect(controller(restored).questions.map(question => question.wordId).sort()).toEqual([...expectedIds].sort());
     expect(controller(restored).screen).toBe('RUNNING');
+  });
+});
+
+
+describe('translation grading failures never become incorrect history', () => {
+  const example: WordData = { id: 'translation-word', bookId: NARU_BOOK_ID, number: 1, word: 'organize', definition: '整理する', exampleSentence: 'Students organize their notes before class.', exampleMeaning: '生徒は 授業前に ノートを 整理する。' };
+  const alternative = '授業が始まる前に、生徒たちはノートを整理します。';
+  const prepare = async () => {
+    api.getWordsByBook.mockResolvedValue([example]);
+    await load(null);
+    controller(null).updateSetupConfig({ questionMode: 'JA_TRANSLATION_INPUT' });
+    controller(null).startQuiz({ ...controller(null).setupConfig, questionCount: 1 });
+    await vi.waitFor(() => expect(controller(null).screen).toBe('RUNNING'));
+    controller(null).setAnswerInput(alternative);
+  };
+
+  it.each(['null', '403', '429', '500', 'timeout', 'contradictory-score'])('keeps the answer unassessed, retryable and unsaved after %s', async scenario => {
+    await prepare();
+    if (scenario === 'contradictory-score') {
+      const coherent = buildDeterministicTranslationFeedback({ input: example.exampleMeaning!, answer: example.exampleMeaning! })!;
+      vi.mocked(evaluateJapaneseTranslationAnswer).mockResolvedValueOnce({ ...coherent, score: 0, criteria: coherent.criteria.map(criterion => ({ ...criterion, score: 0 })) });
+    } else if (scenario !== 'null') {
+      vi.mocked(evaluateJapaneseTranslationAnswer).mockRejectedValueOnce(scenario === 'timeout' ? new DOMException('Synthetic timeout', 'TimeoutError') : Object.assign(new Error('Synthetic response'), { status: Number(scenario) }));
+    }
+    await controller(null).handleHintSubmit({ preventDefault: vi.fn() } as any);
+    const result = controller(null);
+    expect(result.answerInput).toBe(alternative);
+    expect(result.inputResult).toBeNull();
+    expect(result.translationFeedback).toBeNull();
+    expect(result.spellingFeedbackMessage).toContain('未採点');
+    expect(result.pendingAttempt).toBeNull();
+    expect(result.checkingTranslationFeedback).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reviewTargets).toEqual([]);
+    expect(result.exitBlocked).toBe(false);
+    expect(api.recordQuizAttempt).not.toHaveBeenCalled();
+    const coherent = buildDeterministicTranslationFeedback({ input: example.exampleMeaning!, answer: example.exampleMeaning! })!;
+    vi.mocked(evaluateJapaneseTranslationAnswer).mockResolvedValueOnce({ ...coherent, sourceSentence: example.exampleSentence, expectedTranslation: example.exampleMeaning, userTranslation: alternative });
+    await controller(null).handleHintSubmit({ preventDefault: vi.fn() } as any);
+    expect(controller(null).inputResult).toBe('correct');
+    expect(api.recordQuizAttempt).toHaveBeenCalledTimes(1);
+    expect(controller(null).translationAwaitingAdvance).toBe(true);
+  });
+});
+
+describe('material Japanese ordering saves only assessed meanings', () => {
+  const reviewed = ORIGINAL_TRANSLATION_QUESTIONS.find(question => question.id.endsWith('-clock-time-01'))!;
+  const example: WordData = {
+    id: 'synthetic-order-word', bookId: NARU_BOOK_ID, number: 1,
+    word: 'library', definition: '図書館', exampleSentence: reviewed.sourceSentence,
+    exampleMeaning: reviewed.orderChunks.join(' '),
+  };
+  const prepare = async () => {
+    api.getWordsByBook.mockResolvedValue([example]);
+    await load(null);
+    controller(null).updateSetupConfig({ questionMode: 'JA_TRANSLATION_ORDER' });
+    controller(null).startQuiz({ ...controller(null).setupConfig, questionCount: 1 });
+    await vi.waitFor(() => expect(controller(null).screen).toBe('RUNNING'));
+    const question = controller(null).currentQuestion!;
+    expect(question.sourceSentence).toBe(reviewed.sourceSentence);
+    expect(question.answerTokenIds).toHaveLength(3);
+    return question.answerTokenIds!;
+  };
+  const select = (ids: string[]) => ids.forEach(id => controller(null).handleOrderTokenSelect(id));
+
+  it('accepts the reviewed adverb-first order from real material generation and saves it once', async () => {
+    const [subject, time, verb] = await prepare();
+    select([time, subject, verb]);
+    await Promise.all([controller(null).handleOrderSubmit(), controller(null).handleOrderSubmit()]);
+    expect(controller(null).orderFeedback).toBe('correct');
+    expect(controller(null).translationUnassessed).toBe(false);
+    expect(api.recordQuizAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordQuizAttempt.mock.calls[0].slice(1, 5)).toEqual([example.id, example.bookId, true, 'JA_TRANSLATION_ORDER']);
+    expect(controller(null).reviewTargets).toEqual([]);
+  });
+
+  it('leaves an unregistered order editable and unsaved, then accepts an edited reviewed order', async () => {
+    const [subject, time, verb] = await prepare();
+    const unknown = [subject, verb, time];
+    select(unknown);
+    await controller(null).handleOrderSubmit();
+    expect(controller(null).orderedTokenIds).toEqual(unknown);
+    expect(controller(null).translationUnassessed).toBe(true);
+    expect(controller(null).spellingFeedbackMessage).toContain('未登録の並び');
+    expect(controller(null).orderFeedback).toBeNull();
+    expect(controller(null).pendingAttempt).toBeNull();
+    expect(controller(null).score).toBe(0);
+    expect(controller(null).reviewTargets).toEqual([]);
+    expect(controller(null).exitBlocked).toBe(false);
+    await controller(null).handleOrderSubmit();
+    expect(api.recordQuizAttempt).not.toHaveBeenCalled();
+    controller(null).handleOrderTokensClear();
+    expect(controller(null).translationUnassessed).toBe(false);
+    select([time, subject, verb]);
+    await controller(null).handleOrderSubmit();
+    expect(controller(null).orderFeedback).toBe('correct');
+    expect(api.recordQuizAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordQuizAttempt.mock.calls[0][3]).toBe(true);
   });
 });

@@ -34,14 +34,14 @@ const JapaneseTranslationFeedbackCard: React.FC<JapaneseTranslationFeedbackCardP
           ? 'border-slate-200 bg-white text-slate-600'
           : 'border-medace-200 bg-medace-50 text-medace-700'
       }`}>
-        {feedback.usedAi === false ? '簡易判定' : '答案チェック'}
+        {feedback.usedAi === false ? '確認済みの表現' : '答案チェック'}
       </span>
     </div>
 
     <p className="mt-3 text-sm font-bold leading-relaxed text-slate-800">{feedback.summaryJa}</p>
     {feedback.usedAi === false && (
       <p className="mt-2 text-xs font-bold leading-relaxed text-slate-500">
-        通信状況または設定により、正解例との一致を中心に簡易判定しています。
+        確認済みの参考訳・別訳を使った判定です。ほかの表現にも正しい訳があります。
       </p>
     )}
 

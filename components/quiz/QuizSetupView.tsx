@@ -225,7 +225,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
               })}
             </div>
 
-            {isGrammarQuizMode(setupConfig.questionMode) && (
+            {isGrammarQuizMode(setupConfig.questionMode) && !['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'].includes(setupConfig.questionMode) && (
               <div className="mt-4 space-y-4 rounded-2xl border border-medace-100 bg-medace-50/50 px-4 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -279,6 +279,9 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
                 </div>
               </div>
             )}
+            {['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'].includes(setupConfig.questionMode) && <p className="mt-4 rounded-xl border border-medace-100 bg-medace-50 p-3 text-sm leading-relaxed text-slate-700">
+              教材の英文と日本語訳がそろった例文から出題します。訳を確認できない例文は出題しません。確認済みの別訳と解説付き問題は「英語演習」の和訳で練習できます。
+            </p>}
           </section>
 
           <section>

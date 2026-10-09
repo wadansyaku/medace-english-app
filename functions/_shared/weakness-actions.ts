@@ -293,15 +293,22 @@ export const readWeaknessProfilesByUserIds = async (
   userIds: string[],
 ): Promise<Map<string, StudentWeaknessProfile>> => {
   if (userIds.length === 0) return new Map();
-  const placeholders = userIds.map(() => '?').join(', ');
-  const rows = await readAll<DbWeaknessSignalRow>(
-    env,
-    `SELECT *
-     FROM student_weakness_signals
-     WHERE user_id IN (${placeholders})
-     ORDER BY updated_at DESC, score DESC`,
-    ...userIds,
-  );
+  // This query has no fixed bindings, so all 100 D1 parameters can hold user IDs.
+  const uniqueUserIds = [...new Set(userIds)];
+  const rows: DbWeaknessSignalRow[] = [];
+  for (let offset = 0; offset < uniqueUserIds.length; offset += 100) {
+    const batchUserIds = uniqueUserIds.slice(offset, offset + 100);
+    const placeholders = batchUserIds.map(() => '?').join(', ');
+    rows.push(...await readAll<DbWeaknessSignalRow>(
+      env,
+      `SELECT *
+       FROM student_weakness_signals
+       WHERE user_id IN (${placeholders})
+       ORDER BY updated_at DESC, score DESC`,
+      ...batchUserIds,
+    ));
+  }
+  rows.sort((left, right) => right.updated_at - left.updated_at || right.score - left.score);
   const grouped = new Map<string, WeaknessSignalSummary[]>();
   rows.forEach((row) => {
     const list = grouped.get(row.user_id) || [];

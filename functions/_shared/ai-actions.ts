@@ -36,6 +36,7 @@ import {
   validateAiActionRequest,
 } from '../../contracts/ai';
 import { buildInstructorFollowUpTemplate } from '../../shared/instructorFollowUp';
+import { isValidJapaneseTranslationFeedback } from '../../shared/translationFeedback';
 import { getAiActionEstimate, type MeteredAiAction } from '../../config/subscription';
 import { formatDateKey } from '../../utils/date';
 import type { AiGrammarQuestionDraft } from '../../utils/aiGrammarQuestions';
@@ -646,20 +647,8 @@ const generateGrammarPracticeQuestions = async (
   }
 };
 
-const clampScore = (value: unknown, min: number, max: number): number => {
-  const numeric = Math.round(Number(value));
-  if (!Number.isFinite(numeric)) return min;
-  return Math.min(max, Math.max(min, numeric));
-};
-
-const toStringArray = (value: unknown, fallback: string[]): string[] => (
-  Array.isArray(value)
-    ? value.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 4)
-    : fallback
-);
-
-const normalizeTranslationFeedback = (
-  parsed: any,
+export const normalizeTranslationFeedback = (
+  parsed: unknown,
   payload: {
     sourceSentence?: string;
     expectedTranslation: string;
@@ -667,44 +656,14 @@ const normalizeTranslationFeedback = (
     examTarget: TranslationExamTarget;
   },
 ): JapaneseTranslationFeedback => {
-  const maxScore = 10;
-  const criteria = Array.isArray(parsed?.criteria)
-    ? parsed.criteria.slice(0, 4).map((criterion: any) => ({
-      label: String(criterion?.label || '観点').slice(0, 24),
-      score: clampScore(criterion?.score, 0, clampScore(criterion?.maxScore ?? 3, 1, 5)),
-      maxScore: clampScore(criterion?.maxScore ?? 3, 1, 5),
-      comment: String(criterion?.comment || '').trim().slice(0, 120),
-    }))
-    : [];
-  const rawScore = criteria.length > 0
-    ? criteria.reduce((sum, criterion) => sum + criterion.score, 0)
-    : parsed?.score;
-  const score = clampScore(rawScore, 0, maxScore);
-
-  return {
-    isCorrect: typeof parsed?.isCorrect === 'boolean' ? parsed.isCorrect : score >= 8,
-    score,
-    maxScore,
-    verdictLabel: String(parsed?.verdictLabel || (score >= 8 ? '合格答案' : '要復習')).slice(0, 24),
-    examTarget: payload.examTarget,
-    sourceSentence: payload.sourceSentence,
-    expectedTranslation: payload.expectedTranslation,
-    userTranslation: payload.userTranslation,
-    summaryJa: String(parsed?.summaryJa || '和訳を採点しました。').trim().slice(0, 180),
-    strengths: toStringArray(parsed?.strengths, []),
-    issues: toStringArray(parsed?.issues, score >= 8 ? [] : ['意味や文構造に確認点があります。']),
-    improvedTranslation: String(parsed?.improvedTranslation || payload.expectedTranslation).trim().slice(0, 240),
-    grammarAdviceJa: String(parsed?.grammarAdviceJa || '主語・動詞・修飾語の関係を確認しましょう。').trim().slice(0, 180),
-    nextDrillJa: String(parsed?.nextDrillJa || '同じ英文を3ますで分けてから、もう一度訳しましょう。').trim().slice(0, 160),
-    criteria: criteria.length > 0
-      ? criteria
-      : [
-        { label: '意味', score: Math.min(score, 4), maxScore: 4, comment: '英文全体の意味を確認します。' },
-        { label: '文法構造', score: Math.min(Math.max(score - 4, 0), 3), maxScore: 3, comment: '主語・動詞・修飾語の関係を確認します。' },
-        { label: '受験答案らしさ', score: Math.min(Math.max(score - 7, 0), 3), maxScore: 3, comment: '採点者に伝わる自然な日本語へ整えます。' },
-      ],
-    usedAi: true,
-  };
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new HttpError(502, '和訳の採点結果を確認できませんでした。再試行してください。');
+  }
+  const feedback = { ...parsed, ...payload, usedAi: true };
+  if (!isValidJapaneseTranslationFeedback(feedback)) {
+    throw new HttpError(502, '和訳の採点結果を確認できませんでした。再試行してください。');
+  }
+  return feedback;
 };
 
 const evaluateJapaneseTranslationAnswer = async (

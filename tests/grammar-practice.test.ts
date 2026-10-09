@@ -85,9 +85,7 @@ describe('grammar practice helpers', () => {
     expect(english?.sourceSentence).toContain('monitor');
     expect(english?.correctChipIds.map((id) => english.chips.find((chip) => chip.id === id)?.text)).toContain('monitor');
 
-    expect(japanese?.source).toBe('fallback');
-    expect(japanese?.answerText).toContain('観察する');
-    expect(japanese?.chips.length).toBeGreaterThanOrEqual(2);
+    expect(japanese).toBeUndefined();
 
     expect(cloze?.source).toBe('fallback');
     expect(cloze?.clozeSentence).toContain('____');
@@ -223,7 +221,7 @@ describe('grammar practice helpers', () => {
       'teachers',
       'today',
     ]);
-    expect(japanese?.answerText).toBe('教材は 今日 先生に 観察される');
+    expect(japanese).toBeUndefined();
     expect(cloze?.grammarFocus).toBe('受け身');
     expect(cloze?.clozeSentence).toBe('The material ____ by teachers today.');
     expect(cloze?.answer).toBe('is monitored');
@@ -233,7 +231,7 @@ describe('grammar practice helpers', () => {
     { word: 'monitor', definition: '観察する', passive: '観察される' },
     { word: 'write', definition: '書く', passive: '書かれる' },
     { word: 'protect', definition: '守る', passive: '守られる' },
-  ])('keeps a natural Japanese passive translation for $word', ({ word, definition, passive }) => {
+  ])('does not treat an inferred passive template as a Japanese answer for $word', ({ word, definition }) => {
     const items = buildGrammarPracticeItemsForWord(createWord({
       id: `word-${word}`,
       word,
@@ -247,11 +245,10 @@ describe('grammar practice helpers', () => {
     });
     const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
 
-    expect(japanese?.answerText).toBe(`教材は 今日 先生に ${passive}`);
-    expect(japanese?.answerText).not.toMatch(/ことは.+確認される/);
+    expect(japanese).toBeUndefined();
   });
 
-  it('keeps the Japanese passive tense aligned with a past fallback sentence', () => {
+  it('does not infer a Japanese answer for a past fallback sentence', () => {
     const pastVariant = Array.from({ length: 40 }, (_, index) => (
       buildGrammarPracticeItemsForWord(createWord({
         id: 'word-monitor-past-passive',
@@ -269,9 +266,7 @@ describe('grammar practice helpers', () => {
     )));
 
     expect(pastVariant).toBeDefined();
-    expect(pastVariant?.find((item) => item.kind === 'JAPANESE_WORD_ORDER')).toMatchObject({
-      answerText: '教材は 昨日 生徒に 観察された',
-    });
+    expect(pastVariant?.find((item) => item.kind === 'JAPANESE_WORD_ORDER')).toBeUndefined();
   });
 
   it('does not invent a Japanese passive form for a non-passivizable definition', () => {
@@ -306,7 +301,7 @@ describe('grammar practice helpers', () => {
     expect(items.every((item) => item.grammarScope.scopeId === 'to-infinitive')).toBe(true);
   });
 
-  it('keeps Japanese full-translation input available without forcing a grammar drill scope', () => {
+  it('requires an actual translated example for Japanese full-translation input', () => {
     const items = buildGrammarPracticeItemsForWord(createWord({
       id: 'word-monitor',
       word: 'monitor',
@@ -322,10 +317,49 @@ describe('grammar practice helpers', () => {
 
     const japanese = items.find((item) => item.kind === 'JAPANESE_WORD_ORDER');
 
-    expect(japanese?.grammarScope).toMatchObject({
-      scopeId: 'to-infinitive',
-      isScopeLocked: false,
+    expect(japanese).toBeUndefined();
+  });
+
+  it('does not turn a missing example translation into a vocabulary definition answer', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({ exampleMeaning: null }), { seed: 0 });
+
+    expect(items.find((item) => item.kind === 'ENGLISH_WORD_ORDER')?.source).toBe('example');
+    expect(items.some((item) => item.kind === 'JAPANESE_WORD_ORDER')).toBe(false);
+  });
+
+  it('does not pair an example translation with a generated sentence for a requested scope', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord(), {
+      requestedScopeId: 'passive-voice', userLevel: EnglishLevel.A2, seed: 0,
     });
+
+    expect(items.find((item) => item.kind === 'ENGLISH_WORD_ORDER')?.source).toBe('fallback');
+    expect(items.some((item) => item.kind === 'JAPANESE_WORD_ORDER')).toBe(false);
+  });
+
+  it('does not pair a first English sentence with a translation of multiple sentences', () => {
+    const items = buildGrammarPracticeItemsForWord(createWord({
+      exampleSentence: 'Students organize their notes before class. They read them later.',
+      exampleMeaning: '生徒は 授業前に ノートを 整理し、後で 読む。',
+    }));
+
+    expect(items.some((item) => item.kind === 'JAPANESE_WORD_ORDER')).toBe(false);
+  });
+
+  it.each([
+    '生徒は 今日 授業前に 教室で 先生と 一緒に 自分の ノートを 丁寧に 整理する。',
+    '生徒は 授業前に 自分が昨日書いた大切なノートを 丁寧に整理するための手順を 確認して 最後まで 整理する。',
+    '生徒は 授業前に 「授業・復習用」の ノートを 整理する。',
+    '生徒は ノートを 整理するが、今日も 作業は 終わらない。',
+  ])('keeps the entire translation in the correct chip order: %s', (exampleMeaning) => {
+    const japanese = buildGrammarPracticeItemsForWord(createWord({ exampleMeaning }), { seed: 'full-answer' })
+      .find((item) => item.kind === 'JAPANESE_WORD_ORDER');
+    expect(japanese).toBeDefined();
+    if (!japanese || japanese.kind !== 'JAPANESE_WORD_ORDER') return;
+    const reconstructed = japanese.correctChipIds.map((id) => japanese.chips.find((chip) => chip.id === id)?.text).join('');
+
+    expect(japanese.chips.length).toBeLessThanOrEqual(7);
+    expect(reconstructed.replace(/\s+/g, '')).toBe(japanese.answerText.replace(/\s+/g, ''));
+    expect(reconstructed).toContain(japanese.answerText.replace(/\s+/g, '').slice(-4));
   });
 
   it('keeps chip order deterministic for the same seed', () => {

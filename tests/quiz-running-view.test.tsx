@@ -64,6 +64,44 @@ const renderQuiz = (overrides: Partial<React.ComponentProps<typeof QuizRunningVi
 );
 
 describe('QuizRunningView answer-bearing context', () => {
+  it('shows an editable unassessed Japanese order with optional reference, without incorrect feedback or repeat submission', () => {
+    const question: GeneratedWorksheetQuestion = {
+      ...baseQuestion, mode: 'JA_TRANSLATION_ORDER', interactionType: 'ORDERING',
+      sourceSentence: 'Students clean the room every morning.',
+      answer: '生徒たちは毎朝部屋を掃除します。',
+      tokens: [{ id: 's', text: '生徒たちは' }, { id: 't', text: '毎朝' }, { id: 'o', text: '部屋を' }, { id: 'v', text: '掃除します。' }],
+      answerTokenIds: ['s', 't', 'o', 'v'],
+    };
+    const markup = renderQuiz({ currentQuestion: question, orderedTokenIds: ['o', 's', 't', 'v'],
+      translationUnassessed: true, spellingFeedbackTone: 'info', spellingFeedbackMessage: '未登録の並びです。履歴には保存していません。' });
+    expect(markup).toContain('quiz-order-unassessed');
+    expect(markup).toContain('同じ並びでは判定は変わりません');
+    expect(markup).toContain('translation-unassessed-review');
+    expect(markup).toMatch(/aria-label="部屋をを外す"[^>]*>/);
+    expect(markup.match(/<button[^>]*aria-label="部屋をを外す"[^>]*>/)?.[0]).not.toMatch(/ disabled=/);
+    expect(markup.match(/<button[^>]*data-testid="quiz-order-submit"[^>]*>/)?.[0]).toMatch(/ disabled=/);
+    expect(markup).not.toContain('もう一度確認しましょう');
+    expect(markup).not.toContain('translation-feedback-card');
+  });
+  it('provides an explicit reference and a no-grade practice route only after an unassessed translation', () => {
+    const currentQuestion: GeneratedWorksheetQuestion = {
+      ...baseQuestion, mode: 'JA_TRANSLATION_INPUT', interactionType: 'TEXT_INPUT',
+      promptText: 'This box is lighter than that box.',
+      sourceTranslation: 'この箱はあの箱より軽い。', answer: 'この箱はあの箱より軽い。',
+      grammarExplanation: { scopeId: 'comparative', cefrLevel: EnglishLevel.A2,
+        labelJa: '比較級', patternJa: '比較対象を than で示します。', examFocusJa: '比較の向き',
+        commonMistakeJa: '比較対象の取り違え', automationDrillJa: '二つの箱を比べる' },
+    };
+    expect(renderQuiz({ currentQuestion })).not.toContain('translation-unassessed-review');
+    const unassessed = renderQuiz({ currentQuestion, answerInput: 'こちらの箱の方が軽い。',
+      translationUnassessed: true, spellingFeedbackTone: 'info', spellingFeedbackMessage: '未採点です。' });
+    expect(unassessed).toContain('translation-unassessed-review');
+    expect(unassessed).toContain('この箱はあの箱より軽い。');
+    expect(unassessed).toContain('比較対象を than で示します。');
+    expect(unassessed).toContain('採点せず確認済みの和訳練習へ');
+    expect(unassessed).not.toContain('translation-feedback-card');
+    expect(unassessed).not.toContain('translation-feedback-next');
+  });
   it('hides the original sentence for grammar cloze questions until the learner answers', () => {
     const beforeAnswer = renderQuiz();
 

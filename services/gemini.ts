@@ -31,14 +31,18 @@ export type {
 import { DIAGNOSTIC_QUESTIONS as STATIC_DIAGNOSTIC_QUESTIONS } from '../data/diagnostic';
 import { buildFallbackLearningPlan } from '../utils/learningPlan';
 import { buildInstructorFollowUpTemplate } from '../shared/instructorFollowUp';
+import { isValidJapaneseTranslationFeedback } from '../shared/translationFeedback';
 import type { GeneratedWorksheetQuestion } from '../utils/worksheet';
 import { ApiError, apiPost } from './apiClient';
 
 const callAi = async <TAction extends AiAction>(
   action: TAction,
   payload: AiActionPayload<TAction>,
+  options?: Pick<RequestInit, 'signal'>,
 ): Promise<AiActionResponse<TAction>> => {
-  return apiPost<AiActionResponse<TAction>>('/api/ai', { action, payload });
+  return options
+    ? apiPost<AiActionResponse<TAction>>('/api/ai', { action, payload }, options)
+    : apiPost<AiActionResponse<TAction>>('/api/ai', { action, payload });
 };
 
 const isRateLimitError = (error: unknown): boolean => error instanceof ApiError && error.status === 429;
@@ -185,7 +189,8 @@ export const evaluateJapaneseTranslationAnswer = async (payload: {
   examTarget?: TranslationExamTarget;
 }): Promise<JapaneseTranslationFeedback | null> => {
   try {
-    return await callAi('evaluateJapaneseTranslationAnswer', payload);
+    const feedback = await callAi('evaluateJapaneseTranslationAnswer', payload, { signal: AbortSignal.timeout(20_000) });
+    return isValidJapaneseTranslationFeedback(feedback) ? feedback : null;
   } catch (error) {
     if (!isRateLimitError(error) && !isAiUnavailableError(error) && !isAccessDeniedError(error)) {
       console.error('Japanese translation feedback failed:', error);

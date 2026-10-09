@@ -191,6 +191,7 @@ const QuizMode: React.FC<QuizModeProps> = ({
           spellingFeedbackTone={controller.spellingFeedbackTone}
           spellingFeedbackMessage={controller.spellingFeedbackMessage}
           translationFeedback={controller.translationFeedback}
+          translationUnassessed={controller.translationUnassessed}
           checkingTranslationFeedback={controller.checkingTranslationFeedback}
           translationAwaitingAdvance={controller.translationAwaitingAdvance}
           persistingAttempt={controller.persistingAttempt}

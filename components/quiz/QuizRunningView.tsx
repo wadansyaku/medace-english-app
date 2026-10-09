@@ -40,6 +40,7 @@ interface QuizRunningViewProps {
   spellingFeedbackTone: 'info' | 'correct' | 'incorrect' | null;
   spellingFeedbackMessage: string | null;
   translationFeedback: JapaneseTranslationFeedback | null;
+  translationUnassessed?: boolean;
   checkingTranslationFeedback: boolean;
   translationAwaitingAdvance: boolean;
   persistingAttempt: boolean;
@@ -89,6 +90,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
   spellingFeedbackTone,
   spellingFeedbackMessage,
   translationFeedback,
+  translationUnassessed = false,
   checkingTranslationFeedback,
   translationAwaitingAdvance,
   persistingAttempt,
@@ -137,7 +139,8 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     .map((tokenId) => tokenMap.get(tokenId))
     .filter((token): token is NonNullable<typeof currentQuestion.tokens>[number] => Boolean(token));
   const expectedTokenCount = currentQuestion.answerTokenIds?.length || 0;
-  const canSubmitOrder = isOrderMode && expectedTokenCount > 0 && orderedTokenIds.length === expectedTokenCount && !orderFeedback && !persistingAttempt;
+  const canSubmitOrder = isOrderMode && expectedTokenCount > 0 && orderedTokenIds.length === expectedTokenCount && !orderFeedback && !persistingAttempt
+    && !(currentQuestion.mode === 'JA_TRANSLATION_ORDER' && translationUnassessed);
   const hasAnsweredQuestion = isOrderMode
     ? Boolean(orderFeedback)
     : isTextInputMode
@@ -174,6 +177,19 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
     ? 'フィードバックを読んだので次へ'
     : 'フィードバックを読んだので結果を見る';
   const questionQualityState = currentQuestion.qualityState;
+  const unassessedTranslationReview = (isTranslationInputMode || currentQuestion.mode === 'JA_TRANSLATION_ORDER') && translationUnassessed && !isInputBusy && (
+    <section data-testid="translation-unassessed-review" className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-relaxed">
+      <details>
+        <summary className="cursor-pointer font-bold text-slate-800">参考訳を確認する</summary>
+        <p className="mt-3 text-slate-800">{currentQuestion.sourceTranslation || currentQuestion.answer}</p>
+        {currentQuestion.grammarExplanation && <p className="mt-2 text-slate-600">{currentQuestion.grammarExplanation.patternJa}</p>}
+        <p className="mt-2 text-slate-600">参考訳以外にも正しい表現があります。確認しても点数・誤答履歴は保存しません。</p>
+      </details>
+      <a href="/english-practice/translation" className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-slate-200 px-3 py-2 font-bold text-medace-800">
+        採点せず確認済みの和訳練習へ
+      </a>
+    </section>
+  );
 
   return (
   <div data-testid="quiz-running-view" className={isVocabularyQuestion ? "grid min-w-0 gap-2 [@media(min-width:640px)_and_(max-height:500px)]:grid-cols-2" : "space-y-4"}>
@@ -390,7 +406,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
             />
           )}
           {spellingFeedbackMessage && spellingFeedbackTone && (
-            <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
+            <div role="status" aria-live="polite" className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-bold ${
               spellingFeedbackTone === 'correct'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                 : spellingFeedbackTone === 'incorrect'
@@ -400,6 +416,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               {spellingFeedbackMessage}
             </div>
           )}
+          {unassessedTranslationReview}
           {isTranslationInputMode && translationFeedback && (
             <div className="mt-4 rounded-2xl border border-medace-200 bg-medace-50 px-4 py-4" data-testid="translation-feedback-card">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -487,7 +504,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           )}
         </section>
 
-        <MobileStickyActionBar className={isVocabularyQuestion ? "!static !m-0 !border-0 !bg-transparent !p-0 !shadow-none" : "-mx-4 px-4 sm:mx-0 sm:px-0"}>
+        <MobileStickyActionBar className={isVocabularyQuestion ? "!static !m-0 !border-0 !bg-transparent !p-0 !shadow-none" : "min-w-0 px-0"}>
           {showTranslationAdvanceAction ? (
             <button
               type="button"
@@ -552,15 +569,15 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
                 {selectedTokens.map((token, index) => (
                   <div
                     key={`${token.id}-${index}`}
-                    className={`inline-flex min-h-11 items-center gap-1 rounded-2xl border bg-white px-3 py-2 text-sm font-black shadow-sm ${
+                    className={`inline-flex min-h-11 max-w-full flex-wrap items-center gap-1 rounded-2xl border bg-white px-3 py-2 text-sm font-black shadow-sm ${
                       token.learnedWordId || token.learnedWord
                         ? 'border-medace-300 text-medace-800 ring-2 ring-medace-100'
                         : 'border-slate-200 text-slate-800'
                     }`}
                   >
-                    <span>{token.text}</span>
+                    <span className="min-w-0 max-w-full shrink-0 break-words">{token.text}</span>
                     {!orderFeedback && (
-                      <span className="ml-1 inline-flex items-center gap-0.5">
+                      <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
                         <button
                           type="button"
                           aria-label={`${token.text}を左へ`}
@@ -615,6 +632,13 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
               </div>
             </div>
           )}
+          {currentQuestion.mode === 'JA_TRANSLATION_ORDER' && translationUnassessed && <div role="status" aria-live="polite"
+            data-testid="quiz-order-unassessed" className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-relaxed text-amber-900">
+            <p className="font-bold">未登録の並び・未採点</p>
+            <p className="mt-2">{spellingFeedbackMessage}</p>
+            <p className="mt-2">同じ並びでは判定は変わりません。並びを変えて確認するか、参考訳と比べてください。</p>
+          </div>}
+          {unassessedTranslationReview}
         </section>
 
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -652,7 +676,7 @@ const QuizRunningView: React.FC<QuizRunningViewProps> = ({
           </div>
         </section>
 
-        <MobileStickyActionBar className="-mx-4 px-4 sm:mx-0 sm:px-0">
+        <MobileStickyActionBar className="min-w-0 px-0">
           <button
             type="button"
             data-testid="quiz-order-submit"

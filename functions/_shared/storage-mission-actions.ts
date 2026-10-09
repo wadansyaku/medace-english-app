@@ -1077,53 +1077,62 @@ export const readMissionAssignmentsByStudent = async (
   studentUids: string[],
 ): Promise<Map<string, MissionAssignment>> => {
   if (studentUids.length === 0) return new Map();
-  const placeholders = studentUids.map(() => '?').join(', ');
-  const rows = await readAll<DbMissionBoardRow>(
-    env,
-    `SELECT
-       a.id AS assignment_id,
-       a.student_user_id AS student_uid,
-       student.display_name AS student_name,
-       a.assigned_by_user_id AS assigned_by_uid,
-       assigner.display_name AS assigned_by_name,
-       a.assigned_at AS assigned_at,
-       a.started_at AS started_at,
-       a.restarted_at AS restarted_at,
-       a.last_activity_at AS last_activity_at,
-       a.completed_at AS completed_at,
-       a.status AS assignment_status,
-       a.new_word_ids_json AS new_word_ids_json,
-       a.review_word_ids_json AS review_word_ids_json,
-       a.quiz_day_keys_json AS quiz_day_keys_json,
-       m.id AS mission_id,
-       m.organization_id AS organization_id,
-       m.created_by_user_id AS created_by_uid,
-       m.learning_track AS learning_track,
-       m.title AS title,
-       m.rationale AS rationale,
-       m.book_id AS book_id,
-       m.book_title AS book_title,
-       m.new_words_target AS new_words_target,
-       m.review_words_target AS review_words_target,
-       m.quiz_target_count AS quiz_target_count,
-       m.writing_assignment_id AS writing_assignment_id,
-       wa.prompt_title AS writing_prompt_title,
-       wa.status AS writing_status,
-       m.due_at AS due_at,
-       m.status AS mission_status,
-       m.created_at AS mission_created_at,
-       m.updated_at AS mission_updated_at
-     FROM weekly_mission_assignments a
-     JOIN weekly_missions m ON m.id = a.mission_id
-     JOIN users student ON student.id = a.student_user_id
-     JOIN users assigner ON assigner.id = a.assigned_by_user_id
-     LEFT JOIN writing_assignments wa ON wa.id = m.writing_assignment_id
-     WHERE a.student_user_id IN (${placeholders})
-       AND a.status != ?
-     ORDER BY a.assigned_at DESC`,
-    ...studentUids,
-    WeeklyMissionStatus.ARCHIVED,
-  );
+  // D1 permits 100 bound parameters; reserve one for the archived-status filter.
+  const uniqueStudentUids = [...new Set(studentUids)];
+  const rows: DbMissionBoardRow[] = [];
+  for (let offset = 0; offset < uniqueStudentUids.length; offset += 99) {
+    const batchStudentUids = uniqueStudentUids.slice(offset, offset + 99);
+    const placeholders = batchStudentUids.map(() => '?').join(', ');
+    const batchRows = await readAll<DbMissionBoardRow>(
+      env,
+      `SELECT
+         a.id AS assignment_id,
+         a.student_user_id AS student_uid,
+         student.display_name AS student_name,
+         a.assigned_by_user_id AS assigned_by_uid,
+         assigner.display_name AS assigned_by_name,
+         a.assigned_at AS assigned_at,
+         a.started_at AS started_at,
+         a.restarted_at AS restarted_at,
+         a.last_activity_at AS last_activity_at,
+         a.completed_at AS completed_at,
+         a.status AS assignment_status,
+         a.new_word_ids_json AS new_word_ids_json,
+         a.review_word_ids_json AS review_word_ids_json,
+         a.quiz_day_keys_json AS quiz_day_keys_json,
+         m.id AS mission_id,
+         m.organization_id AS organization_id,
+         m.created_by_user_id AS created_by_uid,
+         m.learning_track AS learning_track,
+         m.title AS title,
+         m.rationale AS rationale,
+         m.book_id AS book_id,
+         m.book_title AS book_title,
+         m.new_words_target AS new_words_target,
+         m.review_words_target AS review_words_target,
+         m.quiz_target_count AS quiz_target_count,
+         m.writing_assignment_id AS writing_assignment_id,
+         wa.prompt_title AS writing_prompt_title,
+         wa.status AS writing_status,
+         m.due_at AS due_at,
+         m.status AS mission_status,
+         m.created_at AS mission_created_at,
+         m.updated_at AS mission_updated_at
+       FROM weekly_mission_assignments a
+       JOIN weekly_missions m ON m.id = a.mission_id
+       JOIN users student ON student.id = a.student_user_id
+       JOIN users assigner ON assigner.id = a.assigned_by_user_id
+       LEFT JOIN writing_assignments wa ON wa.id = m.writing_assignment_id
+       WHERE a.student_user_id IN (${placeholders})
+         AND a.status != ?
+       ORDER BY a.assigned_at DESC`,
+      ...batchStudentUids,
+      WeeklyMissionStatus.ARCHIVED,
+    );
+    rows.push(...batchRows);
+  }
+  // Keep the original global newest-first iteration order across query batches.
+  rows.sort((left, right) => right.assigned_at - left.assigned_at);
 
   const byStudent = new Map<string, MissionAssignment>();
   rows.forEach((row) => {
