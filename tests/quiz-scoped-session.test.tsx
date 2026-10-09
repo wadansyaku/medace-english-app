@@ -392,3 +392,47 @@ describe('material Japanese ordering saves only assessed meanings', () => {
     expect(api.recordQuizAttempt.mock.calls[0][3]).toBe(true);
   });
 });
+
+
+describe('material translation setup matches the questions it can generate', () => {
+  const example = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id.endsWith('-clock-time-01'))!;
+  const usableWord: WordData = { id: 'translation-usable', bookId: NARU_BOOK_ID, number: 1, word: 'library', definition: '図書館',
+    exampleSentence: example.sourceSentence, exampleMeaning: example.orderChunks.join(' ') };
+
+  it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('blocks empty %s generation before leaving setup or making requests', async (questionMode) => {
+    await load(null);
+    controller(null).updateSetupConfig({ questionMode });
+    expect(controller(null).setupCandidateWords).toEqual([]);
+    expect(controller(null).setupActualQuestionCount).toBe(0);
+    controller(null).goToReady();
+    expect(controller(null).screen).toBe('SETUP');
+    controller(null).startQuiz(controller(null).setupConfig);
+    expect(controller(null).screen).toBe('SETUP');
+    expect(controller(null).questions).toEqual([]);
+    expect(generateGrammarPracticeQuestions).not.toHaveBeenCalled();
+    expect(api.recordQuizAttempt).not.toHaveBeenCalled();
+    expect(renderToStaticMarkup(view(vi.fn(), null))).toContain('和訳問題に使える英文と日本語訳');
+  });
+
+  it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('starts exactly the displayed usable count in mixed %s material', async (questionMode) => {
+    api.getWordsByBook.mockResolvedValue([usableWord, ...words, noun]);
+    await load(null);
+    controller(null).updateSetupConfig({ questionMode });
+    expect(controller(null).setupCandidateWords.map(word => word.id)).toEqual([usableWord.id]);
+    expect(controller(null).setupActualQuestionCount).toBe(1);
+    controller(null).startQuiz(controller(null).setupConfig);
+    await vi.waitFor(() => expect(controller(null).screen).toBe('RUNNING'));
+    expect(controller(null).questions).toHaveLength(1);
+    expect(controller(null).questions[0].wordId).toBe(usableWord.id);
+    expect(api.recordQuizAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('explains the unstudied selection in %s without blaming valid examples', async (questionMode) => {
+    api.getWordsByBook.mockResolvedValue([usableWord]);
+    await load(null);
+    controller(null).updateSetupConfig({ questionMode, selectionMode: 'LEARNED_ONLY' });
+    expect(controller(null).setupCandidateWords).toEqual([]);
+    expect(controller(null).setupEmptyCopy).toContain('先にカード学習で評価');
+    expect(controller(null).setupEmptyCopy).not.toContain('例文がありません');
+  });
+});

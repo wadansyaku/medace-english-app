@@ -14,6 +14,7 @@ import { buildGrammarScopeExplanation } from './grammarScope';
 import {
   buildGrammarPracticeItemsForWord,
   hasEnoughGrammarPracticeData,
+  hasEnoughJapaneseTranslationPracticeData,
   type GrammarPracticeChip,
   type GrammarPracticeItem,
 } from './grammarPractice';
@@ -118,16 +119,19 @@ const toPracticeWord = (word: WorksheetSourceWord, index = 0): WordData => ({
 });
 
 export const canGenerateWorksheetQuestionForWord = (
-  word: Pick<WordData, 'word' | 'definition'>,
+  word: Pick<WordData, 'word' | 'definition' | 'exampleSentence' | 'exampleMeaning'>,
   mode: WorksheetQuestionMode,
 ): boolean => {
-  if (isGrammarWorksheetMode(mode) || mode === 'JA_TRANSLATION_INPUT') {
+  if (mode === 'JA_TRANSLATION_ORDER' || mode === 'JA_TRANSLATION_INPUT') {
+    return hasEnoughJapaneseTranslationPracticeData(word);
+  }
+  if (isGrammarWorksheetMode(mode)) {
     return hasEnoughGrammarPracticeData(word);
   }
   return Boolean(word.word.trim() && word.definition.trim());
 };
 
-export const filterWorksheetQuestionCandidates = <T extends Pick<WordData, 'word' | 'definition'>>(
+export const filterWorksheetQuestionCandidates = <T extends Pick<WordData, 'word' | 'definition' | 'exampleSentence' | 'exampleMeaning'>>(
   words: T[],
   mode: WorksheetQuestionMode,
 ): T[] => words.filter((word) => canGenerateWorksheetQuestionForWord(word, mode));

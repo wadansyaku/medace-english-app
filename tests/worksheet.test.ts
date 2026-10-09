@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildDeterministicTranslationFeedback,
+  canGenerateWorksheetQuestionForWord,
+  filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
   resolveJapaneseTranslationAttempt,
   resolveSpellingAttempt,
@@ -185,4 +187,40 @@ describe('generateWorksheetQuestions', () => {
   it('does not pair a generated be-verb sentence with an unrelated example translation', () => {
     expect(generateWorksheetQuestions(sourceWords, 'JA_TRANSLATION_INPUT', 2, { grammarScopeId: 'be-verb' })).toEqual([]);
   });
+});
+
+
+describe('Japanese worksheet eligibility matches real generated examples', () => {
+  const cases = [
+    ['valid', {}, true],
+    ['missing-example', { exampleSentence: null }, false],
+    ['missing-meaning', { exampleMeaning: null }, false],
+    ['target-absent', { exampleSentence: 'Students clean their notes before class.' }, false],
+    ['multiple-sentences', { exampleSentence: 'Students organize their notes before class. They read them later.' }, false],
+    ['untokenizable-meaning', { exampleMeaning: '整理' }, false],
+    ['duplicate-Japanese-chips', { exampleMeaning: 'ノート ノート' }, false],
+    ['duplicate-English-chips', { exampleSentence: 'Students organize the notes before the class.' }, false],
+    ['missing-definition', { definition: '' }, false],
+  ] as const;
+  it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('%s counts exactly the examples it generates', mode => {
+    const words = cases.map(([id, overrides]) => ({ ...sourceWords[0], id, ...overrides }));
+    cases.forEach(([, , eligible], index) => {
+      expect(canGenerateWorksheetQuestionForWord(words[index], mode)).toBe(eligible);
+      expect(generateWorksheetQuestions([words[index]], mode, 1)).toHaveLength(eligible ? 1 : 0);
+    });
+    const candidates = filterWorksheetQuestionCandidates(words, mode);
+    expect(candidates.map(word => word.id)).toEqual(['valid']);
+    for (const count of [1, 3, words.length]) {
+      const generated = generateWorksheetQuestions(words, mode, count);
+      expect(generated).toHaveLength(Math.min(count, candidates.length));
+      expect(generated.map(question => question.wordId)).toEqual(['valid']);
+    }
+  });
+  it.each(['EN_TO_JA', 'JA_TO_EN', 'SPELLING_HINT', 'EN_WORD_ORDER', 'GRAMMAR_CLOZE'] as const)(
+    'preserves %s availability when bilingual examples are missing', mode => {
+      const word = { ...sourceWords[0], exampleSentence: null, exampleMeaning: null };
+      expect(canGenerateWorksheetQuestionForWord(word, mode)).toBe(true);
+      expect(generateWorksheetQuestions([word], mode, 1)).toHaveLength(1);
+    },
+  );
 });

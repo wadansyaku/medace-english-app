@@ -803,7 +803,10 @@ export const useQuizModeController = ({
     if (allWords.length === 0) return '学習する単語がまだありません。先に単語帳を1冊用意してください。';
     if (setupConfig.selectionMode === 'LEARNED_ONLY' && studiedWordsError) return studiedWordsError;
     if (setupConfig.questionMode === 'JA_TRANSLATION_ORDER' || setupConfig.questionMode === 'JA_TRANSLATION_INPUT') {
-      return 'この条件には英文と日本語訳がそろった例文がありません。別の教材・範囲を選ぶか、英語演習の確認済み和訳問題で練習できます。';
+      if (setupConfig.selectionMode === 'LEARNED_ONLY' && studiedWordIds.length === 0) {
+        return '学習済みのみは、学習モードで評価した単語が1語以上あると使えます。先にカード学習で評価を付けるか、全範囲を選んでください。';
+      }
+      return 'この条件には和訳問題に使える英文と日本語訳がそろった例文がありません。別の教材・範囲を選ぶか、英語演習の確認済み和訳問題で練習できます。';
     }
     if (
       setupConfig.questionMode === 'GRAMMAR_CLOZE'
@@ -820,7 +823,7 @@ export const useQuizModeController = ({
       return `No. ${normalizedSetupRange.start} - ${normalizedSetupRange.end} には出題できる単語がありません。範囲を広げてください。`;
     }
     return '出題条件に合う単語がありません。';
-  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode, studiedWordsError]);
+  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode, studiedWordIds.length, studiedWordsError]);
 
   const retryStudiedWords = async () => {
     if (historyLoadingRef.current || isSmartSessionBookId(bookId)) return;

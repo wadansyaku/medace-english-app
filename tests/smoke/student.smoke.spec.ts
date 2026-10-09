@@ -600,3 +600,60 @@ test('student can open the dedicated practice screen from a direct route', async
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByText('英語演習のおすすめ')).toHaveCount(0);
 });
+
+
+for (const viewport of [{ width: 320, height: 568 }, { width: 1366, height: 900 }]) {
+  for (const mode of ['ja_translation_order', 'ja_translation_input'] as const) {
+    test(`material translation eligibility matches actual questions in ${mode} at ${viewport.width}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      await page.goto('/');
+      await exposeStudentDemo(page);
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+      await expect(page.getByTestId('student-dashboard')).toBeVisible();
+      const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id.endsWith('-clock-time-01'))!;
+      const title = `Synthetic Translation Eligibility ${mode} ${viewport.width}`;
+      const imported = await storageAction<{ importedBookIds: string[] }>(page, 'batchImportWords', {
+        defaultBookName: title, source: { kind: 'rows', rows: [
+          { bookName: title, number: 1, word: 'library', definition: '図書館', exampleSentence: source.sourceSentence, exampleMeaning: source.orderChunks.join(' ') },
+          { bookName: title, number: 2, word: 'walk', definition: '歩く' },
+          { bookName: title, number: 3, word: 'read', definition: '読む', exampleSentence: 'I read books every day.' },
+          { bookName: title, number: 4, word: 'compare', definition: '比較する', exampleSentence: 'The cats sleep on the mat.', exampleMeaning: '猫は マットの上で 眠ります。' },
+        ] },
+      });
+      const attempts: unknown[] = [];
+      page.on('request', request => {
+        if (request.method() !== 'POST' || !request.url().includes('/api/storage')) return;
+        const body = request.postDataJSON();
+        if (body.action === 'recordQuizAttempt') attempts.push(body.payload);
+      });
+      await page.goto(`/quiz/${imported.importedBookIds[0]}`);
+      const setup = page.getByTestId('quiz-setup-view');
+      await expect(setup).toBeVisible();
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.getByTestId(`quiz-direction-${mode}`).click();
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 1語');
+      await expect(setup.getByRole('heading', { name: '1問クイズ', exact: true })).toBeVisible();
+      await page.getByTestId('quiz-selection-range_random').click();
+      await page.getByLabel('開始番号', { exact: true }).fill('2');
+      await page.getByLabel('終了番号', { exact: true }).fill('4');
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 0語');
+      await expect(page.getByTestId('quiz-empty-state')).toContainText('和訳問題に使える英文と日本語訳');
+      await expect(setup.getByRole('heading', { name: '和訳の練習', exact: true })).toBeVisible();
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toBeDisabled();
+      expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.screenshot({ path: testInfo.outputPath(`translation-empty-${mode}-${viewport.width}.png`) });
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.getByTestId('quiz-direction-en_to_ja').click();
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 3語');
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
+      await page.getByTestId(`quiz-direction-${mode}`).click();
+      await page.getByTestId('quiz-selection-full_random').click();
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toHaveText('1問はじめる');
+      await page.getByTestId('quiz-setup-primary-cta').click();
+      await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+      await expect(page.getByTestId('quiz-running-view')).toContainText(source.sourceSentence);
+      expect(attempts).toEqual([]);
+    });
+  }
+}

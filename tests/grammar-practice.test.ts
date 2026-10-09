@@ -6,6 +6,7 @@ import {
   buildGrammarPracticeItems,
   buildGrammarPracticeItemsForWord,
   hasEnoughGrammarPracticeData,
+  hasEnoughJapaneseTranslationPracticeData,
 } from '../utils/grammarPractice';
 
 const createWord = (overrides: Partial<WordData> = {}): WordData => ({
@@ -395,5 +396,26 @@ describe('grammar practice helpers', () => {
       'ENGLISH_WORD_ORDER',
       'JAPANESE_WORD_ORDER',
     ]);
+  });
+});
+
+
+describe('lightweight Japanese translation eligibility', () => {
+  it.each([
+    [{}, true],
+    [{ exampleSentence: null }, false],
+    [{ exampleMeaning: null }, false],
+    [{ exampleSentence: 'Students clean their notes before class.' }, false],
+    [{ exampleSentence: 'Students organize their notes before class. They read them later.' }, false],
+    [{ exampleMeaning: '整理' }, false],
+    [{ exampleMeaning: 'ノート ノート' }, false],
+    [{ exampleSentence: 'Students organize the notes before the class.' }, false],
+  ] as const)('uses the same bilingual/chip checks as actual items: %j', (overrides, expected) => {
+    const word = createWord(overrides);
+    expect(hasEnoughJapaneseTranslationPracticeData(word)).toBe(expected);
+    for (const japaneseQuestionMode of ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const) {
+      const japanese = buildGrammarPracticeItemsForWord(word, { japaneseQuestionMode }).filter(item => item.kind === 'JAPANESE_WORD_ORDER');
+      expect(japanese).toHaveLength(expected ? 1 : 0);
+    }
   });
 });

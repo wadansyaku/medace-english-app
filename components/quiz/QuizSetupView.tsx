@@ -50,6 +50,8 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
   const visibleQuestionCount = setupActualQuestionCount > 0
     ? setupActualQuestionCount
     : setupConfig.questionCount;
+  const isEmptyTranslation = setupActualQuestionCount === 0
+    && ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'].includes(setupConfig.questionMode);
   const primaryCtaCopy = setupActualQuestionCount > 0
     ? `${visibleQuestionCount}問はじめる`
     : '出題できません';
@@ -58,7 +60,7 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
     <div data-testid="quiz-setup-view" className="space-y-3">
       <section className="ui-panel space-y-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-950">{visibleQuestionCount}問クイズ</h2>
+          <h2 className="text-2xl font-black text-slate-950">{isEmptyTranslation ? '和訳の練習' : `${visibleQuestionCount}問クイズ`}</h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-500">
             必要なときだけ詳細設定で条件を変えます。
           </p>
@@ -174,22 +176,24 @@ const QuizSetupView: React.FC<QuizSetupViewProps> = ({
             {setupConfig.selectionMode === 'RANGE_RANDOM' && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="ui-form-label">開始番号</label>
+                  <label htmlFor="quiz-range-start" className="ui-form-label">開始番号</label>
                   <input
                     type="number"
                     min={minWordNumber}
                     max={maxWordNumber}
+                    id="quiz-range-start"
                     value={setupConfig.rangeStart}
                     onChange={(event) => onUpdateSetupConfig({ rangeStart: Number(event.target.value) || minWordNumber })}
                     className="ui-input"
                   />
                 </div>
                 <div>
-                  <label className="ui-form-label">終了番号</label>
+                  <label htmlFor="quiz-range-end" className="ui-form-label">終了番号</label>
                   <input
                     type="number"
                     min={minWordNumber}
                     max={maxWordNumber}
+                    id="quiz-range-end"
                     value={setupConfig.rangeEnd}
                     onChange={(event) => onUpdateSetupConfig({ rangeEnd: Number(event.target.value) || maxWordNumber })}
                     className="ui-input"

@@ -813,6 +813,29 @@ const tokenizeJapaneseAnswer = (answer: string): string[] => {
   return compactJapaneseChips(roughTokens);
 };
 
+type JapaneseTranslationExampleWord = Pick<WordData, 'word' | 'definition' | 'exampleSentence' | 'exampleMeaning'>;
+
+/** Check the actual bilingual example, without generating fallback exercises or shuffled chips. */
+const resolveJapaneseTranslationExample = (word: JapaneseTranslationExampleWord): {
+  sourceSentence: string; answerText: string; tokens: string[];
+} | null => {
+  if (!hasEnoughGrammarPracticeData(word)) return null;
+  const sourceSentence = firstSentence(word.exampleSentence);
+  if (!sourceSentence || normalizeWhitespace(word.exampleSentence || '') !== sourceSentence
+    || !isUsableEnglishSentence(sourceSentence, word.word)) return null;
+  const answerText = normalizeJapanese(word.exampleMeaning || '');
+  if (!answerText) return null;
+  const tokens = tokenizeJapaneseAnswer(answerText);
+  if (tokens.length < JAPANESE_CHIP_MIN || tokens.length > JAPANESE_CHIP_MAX
+    || !hasUniqueOrderingTokens(tokens)
+    || tokens.join('').replace(/\s+/g, '') !== answerText.replace(/\s+/g, '')) return null;
+  return { sourceSentence, answerText, tokens };
+};
+
+export const hasEnoughJapaneseTranslationPracticeData = (word: JapaneseTranslationExampleWord): boolean => (
+  resolveJapaneseTranslationExample(word) !== null
+);
+
 const createEnglishWordOrderItem = (
   word: WordData,
   sentence: string,
@@ -846,13 +869,9 @@ const createJapaneseWordOrderItem = (
   seed: string,
 ): JapaneseWordOrderPracticeItem | null => {
   // Vocabulary definitions and inferred sentence templates are not translations.
-  if (source !== 'example' || normalizeWhitespace(word.exampleSentence || '') !== sourceSentence) return null;
-  const answerText = normalizeJapanese(word.exampleMeaning || '');
-  if (!answerText) return null;
-  const tokens = tokenizeJapaneseAnswer(answerText);
-  if (tokens.length < JAPANESE_CHIP_MIN || tokens.length > JAPANESE_CHIP_MAX) return null;
-  if (!hasUniqueOrderingTokens(tokens)) return null;
-  if (tokens.join('').replace(/\s+/g, '') !== answerText.replace(/\s+/g, '')) return null;
+  const example = resolveJapaneseTranslationExample(word);
+  if (source !== 'example' || !example || example.sourceSentence !== sourceSentence) return null;
+  const { answerText, tokens } = example;
 
   const id = `${word.id}:japanese-word-order`;
   return {
