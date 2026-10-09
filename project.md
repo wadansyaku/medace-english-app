@@ -1,3 +1,7 @@
+2026-10-09 後続公開指示: 本人が本番反映の完了と旧公開禁止の継続解除を明示。O1はPR64で通常CI/正式preview/productionへ進める。作文遅延後の課題draft初期化と、無料変更後の旧作文リンク解除不可を公開レビューで追加修正。作成/配布APIは組織の現行プランを確認し、対象外Writing付き課題を既存記録への書込前に拒否する。保存済みID・教材・履歴・課金/AI設定は保持。公開完了は独立deliveryの配備SHA/URL/after保持結果で判断する。
+
+2026-10-09: 本番74530deの公開SHAとNaru全1531語・638印・訂正後の全公開語義/例文/補完フラグをGETで再確認。10/12の講師紹介に向け、作文の部分的な取得失敗が基本組織画面まで停止させるO1だけを実再現・限定修正した。独立ローカル候補の2160unit・関連20browser retry0等が成功。今回は未push/未配備で、secret/権限/有料AIを変更せず、実Safari/iPhone未検証を維持する。[全体計画の10/9受入](./docs/analysis/2026-10-07-steady-study-improvement-plan.md)。
+
 2026-10-08: PR61/main `0736ae71597bfb512e800ca73a87a9b3ea900e76`のUIと、[初回自動発音A8](./docs/analysis/2026-10-08-first-visible-word-pronunciation.md)の[PR62](https://github.com/wadansyaku/medace-english-app/pull/62)/main `1425152cf323bf1c254f1d67347ec747bb7afb78`を通常gateで本番受入済み（production37733127312/37753211999成功）。旧公開禁止は解除済みで、以後の通常公開依頼へ再適用しない。A8は2,101unit・型/build/API・配備先244 browser回帰・native Mac Chromeで確認。追加の[actuallyの訳の行ずれ訂正](./docs/analysis/2026-10-08-naru-actually-original-row-correction.md)は修正版Excelを納品し、既存ID/履歴/1,531語/638印を保持するローカル候補を用意した。訂正候補18767dfは当初ローカルまで保存した。後続の本人承認「本番アプリと教材データにも適用してよい」を受け、通常PR/CI/preview/productionの公開工程を進める。stage→対応コード到達→明示applyの順序を守り、公開完了は配備とafter受入の証拠で判断する。
 
 2026-10-07 最終ローカル候補: [単語優先・生徒入口・管理画面の受入](./docs/analysis/2026-10-07-integrated-ui-acceptance.md)。アプリ896a4a03、199files2045unit/type/build、Cloud188＋IDB9全回帰成功（preview専用2skip）。本番は引き続き182ba3d、候補は未公開。長期復習は独立0ae54239の未接続契約。

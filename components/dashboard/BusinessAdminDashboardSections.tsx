@@ -41,6 +41,7 @@ interface BusinessAdminDashboardSectionsProps {
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
   writingState: BusinessAdminWritingState;
+  onRetryWriting?: () => Promise<void>;
   isLocalMockData: boolean;
 }
 
@@ -226,6 +227,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
   writingAssignments,
   writingQueue,
   writingState,
+  onRetryWriting,
   isLocalMockData,
 }) => {
   const policy = getSubscriptionPolicy(snapshot.subscriptionPlan);
@@ -242,6 +244,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
         writingState={writingState}
+        onRetryWriting={onRetryWriting}
       />
     );
   }
@@ -265,6 +268,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
         writingState={writingState}
+        onRetryWriting={onRetryWriting}
         isLocalMockData={isLocalMockData}
         nextActionView={nextActionView}
         onChangeView={onChangeView}
@@ -287,6 +291,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         settingsSnapshot={settingsSnapshot}
         books={books}
         writingAssignments={writingAssignments}
+        writingState={writingState}
       />
     );
   }
@@ -324,6 +329,7 @@ const BusinessAdminDashboardSections: React.FC<BusinessAdminDashboardSectionsPro
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
         writingState={writingState}
+        onRetryWriting={onRetryWriting}
       />
     );
   }

@@ -6,6 +6,7 @@ import BusinessAdminDashboardSections from '../components/dashboard/BusinessAdmi
 import WorkspaceDashboardShell from '../components/dashboard/WorkspaceDashboardShell';
 import BusinessAdminOverviewSection from '../components/dashboard/businessAdmin/BusinessAdminOverviewSection';
 import BusinessAdminWritingSection from '../components/dashboard/businessAdmin/BusinessAdminWritingSection';
+import BusinessAdminWritingNotice from '../components/dashboard/businessAdmin/BusinessAdminWritingNotice';
 import type { BusinessAdminDashboardController } from '../components/dashboard/businessAdmin/shared';
 import {
   getBusinessAdminWritingNotice,
@@ -210,4 +211,16 @@ describe('business admin writing availability in rendered views', () => {
     expect(html.match(/>0件<\/div>/g)).toHaveLength(4);
     expect(writingOps.render).toHaveBeenCalledOnce();
   });
+});
+
+it('offers a writing-only retry for failed retrieval and keeps loading status distinct', () => {
+  const retry = async () => {};
+  const failed = renderToStaticMarkup(<BusinessAdminWritingNotice state="ERROR" onRetry={retry} />);
+  expect(failed).toContain('作文情報を再取得');
+  expect(failed).toContain('role="alert"');
+  expect(failed).toContain('tabindex="-1"');
+  const loading = renderToStaticMarkup(<BusinessAdminWritingNotice state="LOADING" onRetry={retry} />);
+  expect(loading).toContain('role="status"');
+  expect(loading).not.toContain('<button');
+  expect(loading).not.toContain('0件');
 });

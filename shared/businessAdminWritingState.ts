@@ -18,7 +18,7 @@ export const getBusinessAdminWritingNotice = (state: BusinessAdminWritingState):
     };
     case 'ERROR': return {
       value: '未取得', title: '作文情報を取得できませんでした',
-      description: '再読み込みして作文情報を取得してください。現在の件数は確認できていません。',
+      description: '作文情報を再取得してください。現在の件数は確認できていません。教材・担当・週次課題は引き続き利用できます。',
     };
     case 'READY': return null;
   }

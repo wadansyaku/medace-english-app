@@ -46,6 +46,7 @@ interface BusinessAdminOverviewSectionProps {
   writingAssignments: WritingAssignment[];
   writingQueue: WritingQueueItem[];
   writingState: BusinessAdminWritingState;
+  onRetryWriting?: () => Promise<void>;
   isLocalMockData: boolean;
   nextActionView: BusinessAdminWorkspaceView;
   onChangeView: (view: BusinessAdminWorkspaceView) => void;
@@ -66,6 +67,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
   writingAssignments,
   writingQueue,
   writingState,
+  onRetryWriting,
   isLocalMockData,
   nextActionView,
   onChangeView,
@@ -508,7 +510,7 @@ const BusinessAdminOverviewSection: React.FC<BusinessAdminOverviewSectionProps> 
           >
             作文ワークスペースへ <ArrowRight className="h-4 w-4" />
           </button>
-        </section> : <BusinessAdminWritingNotice state={writingState} />}
+        </section> : <BusinessAdminWritingNotice state={writingState} onRetry={onRetryWriting} />}
 
         <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center gap-3">

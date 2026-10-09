@@ -206,6 +206,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
     loading,
     error,
     refresh,
+    refreshWriting,
   } = useBusinessAdminDashboardData(user);
   const controller = useBusinessAdminDashboardController({
     snapshot,
@@ -232,7 +233,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
               <p className="text-xs font-bold text-slate-400">組織管理</p>
               <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">組織データを集計中</h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                {writingState === 'LOADING' ? '次アクション、割当、講師負荷、作文キューをまとめて読み込んでいます。' : '次アクション、割当、講師負荷を読み込んでいます。'}
+                次アクション、割当、講師負荷を読み込んでいます。
               </p>
             </div>
           </div>
@@ -383,6 +384,7 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
         writingAssignments={writingAssignments}
         writingQueue={writingQueue}
         writingState={writingState}
+        onRetryWriting={refreshWriting}
         isLocalMockData={isLocalMockData}
       />
     </WorkspaceDashboardShell>

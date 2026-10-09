@@ -165,7 +165,9 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     expect(notifiedSnapshot.nextRequiredActionTarget?.kind || 'DONE').toMatch(/WRITING_ASSIGNMENT|DONE/);
 
     await page.getByTestId('workspace-tab-writing').click();
-    await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+    // A successful read does not bypass the existing classroom activation gate.
+    await page.getByTestId('workspace-tab-overview').click();
+    await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
     await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
   } else if ([
     'ISSUE_FIRST_WRITING_ASSIGNMENT',
@@ -182,7 +184,9 @@ test('group admin bootstrap seeds the demo activation loop and leaves guided nex
     } else {
       await expect(page.getByTestId('business-admin-decision-panel').getByRole('heading', { name: '初回作文を配布する' })).toBeVisible();
       await page.getByTestId('workspace-tab-writing').click();
-      await expect(page.getByTestId('writing-ops-panel')).toBeVisible();
+      // A successful read does not bypass the existing classroom activation gate.
+    await page.getByTestId('workspace-tab-overview').click();
+    await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
       await expect(page.getByTestId('business-admin-activation-gate')).toHaveCount(0);
     }
   } else {
@@ -751,6 +755,41 @@ test('free school activation completes available steps without requiring forbidd
     await page.reload();
     await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
     expect((await storageAction<any>(page, 'getOrganizationDashboardSnapshot')).activationState).toBe('ACTIVE');
+    // Present an old link left by a plan downgrade. This only replaces local
+    // synthetic read responses; the new vocabulary mission uses the real API.
+    const issuedPayloads: any[] = [];
+    await page.route('**/api/storage', async route => {
+      const request = route.request().postDataJSON();
+      if (request.action === 'createWeeklyMission') issuedPayloads.push(request.payload);
+      if (request.action !== 'getWeeklyMissionBoard') return route.continue();
+      const response = await route.fetch();
+      const board = await response.json();
+      for (const assignment of board.assignments) {
+        if (assignment.studentUid === student.uid && assignment.mission.id === mission.id) {
+          assignment.mission.writingAssignmentId = 'synthetic-old-writing-after-downgrade';
+        }
+      }
+      await route.fulfill({ response, json: board });
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await page.getByTestId('workspace-tab-assignments').click();
+    await page.getByTestId(`assignment-row-${student.uid}`).click();
+    const oldLinkSelect = page.getByTestId('weekly-mission-writing-assignment');
+    await expect(oldLinkSelect).toBeEnabled();
+    await expect(oldLinkSelect).toHaveValue('synthetic-old-writing-after-downgrade');
+    await expect(page.getByTestId('weekly-mission-issue-submit')).toBeDisabled();
+    await oldLinkSelect.selectOption('');
+    await expect(page.getByTestId('weekly-mission-issue-submit')).toBeEnabled();
+    await expect(oldLinkSelect.locator('option')).toHaveCount(1);
+    const clearEvidence = testInfo.outputPath('free-old-writing-link-cleared.png');
+    await oldLinkSelect.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: clearEvidence });
+    await testInfo.attach('free-old-writing-link-cleared', { path: clearEvidence, contentType: 'image/png' });
+    await page.getByTestId('weekly-mission-issue-submit').click();
+    await expect(page.getByText(`${student.displayName}さんへ今週ミッションを配布しました。`, { exact: true })).toBeVisible();
+    expect(issuedPayloads).toHaveLength(1);
+    expect(issuedPayloads[0].writingAssignmentId).toBeUndefined();
     expect(writingRequests).toEqual([]);
     expect(await page.evaluate(async () => (await fetch('/api/writing/assignments?scope=organization')).status)).toBe(403);
   } finally {
@@ -783,14 +822,138 @@ test('paid school writing state distinguishes pending and failed fetches from co
   await page.route(queuePattern, route => route.fulfill({ status: 503, contentType: 'application/json',
     body: JSON.stringify({ error: '検証用：作文キューの取得失敗' }) }));
   await page.reload();
-  await expect(page.getByRole('button', { name: '再読み込み', exact: true })).toBeVisible();
-  await expect(page.getByText('検証用：作文キューの取得失敗')).toBeVisible();
+  await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'ERROR');
+  await expect(page.getByRole('button', { name: '作文情報を再取得', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '管理者ワークスペースを読み込めません' })).toHaveCount(0);
   await expect(page.getByText('添削待ち', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('business-admin-writing-queue')).toHaveCount(0);
   await writingStateEvidence(page, testInfo, 'paid-fetch-error-no-zero');
   await page.unroute(queuePattern);
-  await page.getByRole('button', { name: '再読み込み', exact: true }).click();
+  await page.getByRole('button', { name: '作文情報を再取得', exact: true }).click();
   await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
   await expect(page.getByTestId('business-admin-writing-state')).toHaveCount(0);
   await writingStateEvidence(page, testInfo, 'paid-retry-confirmed-zero');
+});
+
+for (const viewport of [{ width: 320, height: 740 }, { width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+  test(`group admin basic workspace survives optional writing failure at ${viewport.width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    let failQueue = true;
+    let queueRequests = 0;
+    await page.route('**/api/writing/review-queue?*', async route => {
+      queueRequests += 1;
+      if (failQueue) {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic optional writing queue outage' }) });
+      } else {
+        await route.continue();
+      }
+    });
+    await loginGroupAdminDemo(page);
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '管理者ワークスペースを読み込めません' })).toHaveCount(0);
+    await page.getByTestId('workspace-tab-settings').click();
+    await expect(page.getByTestId('organization-settings-name-input')).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath('settings-during-writing-outage.png') });
+    await page.getByTestId('workspace-tab-writing').click();
+    const notice = page.getByTestId('business-admin-writing-state');
+    await expect(notice).toHaveAttribute('data-writing-state', 'ERROR');
+    await expect(notice).toContainText('現在の件数は確認できていません');
+    await expect(notice).not.toContainText('0件');
+    await page.screenshot({ path: testInfo.outputPath('writing-outage-basic-workspace.png') });
+    let baseRequests = 0;
+    page.on('request', request => { if (new URL(request.url()).pathname === '/api/storage') baseRequests += 1; });
+    failQueue = false;
+    const retry = notice.getByRole('button', { name: '作文情報を再取得', exact: true });
+    await retry.focus();
+    await retry.press('Enter');
+    await expect(notice).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    // A successful read does not bypass the existing classroom activation gate.
+    await page.getByTestId('workspace-tab-overview').click();
+    await expect(page.getByTestId('business-admin-writing-queue')).toBeVisible();
+    expect(baseRequests).toBe(0);
+    expect(queueRequests).toBe(2);
+    expect(pageErrors).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await expect(page).toHaveTitle(/Steady Study/);
+    await expect(page.locator('vite-error-overlay')).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: testInfo.outputPath('writing-retried-workspace.png') });
+  });
+}
+
+test('group admin basic settings stay usable while optional writing is delayed', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/writing/review-queue?*', async route => {
+    await delayed;
+    await route.continue();
+  });
+  try {
+    await loginGroupAdminDemo(page);
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await page.getByTestId('workspace-tab-settings').click();
+    await expect(page.getByTestId('organization-settings-name-input')).toBeEnabled();
+    await page.getByTestId('workspace-tab-writing').click();
+    const notice = page.getByTestId('business-admin-writing-state');
+    await expect(notice).toHaveAttribute('data-writing-state', 'LOADING');
+    await expect(notice).not.toContainText('0件');
+    await page.screenshot({ path: testInfo.outputPath('writing-delayed-basic-workspace.png') });
+    release();
+    await expect(notice).toHaveCount(0);
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+  } finally { release(); }
+});
+
+test('delayed writing assignments preserve the weekly mission draft in the real workspace', async ({ page }, testInfo) => {
+  test.skip(process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Local synthetic draft acceptance only');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginGroupAdminDemo(page);
+  await runtimeAdminPost(page, 'runtime-admin/bootstrap-demo-organization');
+  let release!: () => void;
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/writing/assignments?scope=organization', async route => {
+    await delayed;
+    // Only a local read fixture; this assignment is never submitted to an API.
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      assignments: [{ id: 'synthetic-delayed-draft-assignment', promptTitle: '確認用作文' }],
+    }) });
+  });
+  try {
+    await page.reload();
+    await expect(page.getByTestId('business-admin-dashboard')).toBeVisible();
+    await page.getByTestId('workspace-tab-assignments').click();
+    await page.locator('[data-testid^="assignment-row-"]').first().click();
+    const form = page.getByTestId('weekly-mission-form');
+    await expect(form).toBeVisible();
+    const targets = form.locator('input[type="number"]');
+    await targets.nth(0).fill('7');
+    await targets.nth(1).fill('5');
+    await targets.nth(2).fill('2');
+    await form.locator('input[type="date"]').fill('2030-02-20');
+    await page.getByTestId('weekly-mission-track-select').selectOption('COMMON_TEST');
+    const bookSelect = page.getByTestId('weekly-mission-book-select');
+    const draftBookId = await bookSelect.evaluate(element => {
+      const select = element as HTMLSelectElement;
+      return Array.from(select.options).find(option => !option.disabled && option.value !== select.value)?.value ?? '';
+    });
+    await bookSelect.selectOption(draftBookId);
+    const writingSelect = page.getByTestId('weekly-mission-writing-assignment');
+    await expect(writingSelect).toBeDisabled();
+    const savedLink = await writingSelect.inputValue();
+    release();
+    await expect(writingSelect).toBeEnabled();
+    await expect(targets.nth(0)).toHaveValue('7');
+    await expect(targets.nth(1)).toHaveValue('5');
+    await expect(targets.nth(2)).toHaveValue('2');
+    await expect(form.locator('input[type="date"]')).toHaveValue('2030-02-20');
+    await expect(page.getByTestId('weekly-mission-track-select')).toHaveValue('COMMON_TEST');
+    await expect(bookSelect).toHaveValue(draftBookId);
+    await expect(writingSelect).toHaveValue(savedLink);
+    await page.screenshot({ path: testInfo.outputPath('weekly-mission-draft-after-writing-response.png') });
+  } finally { release(); }
 });
