@@ -70,9 +70,13 @@ export const usePersonalWordbookDraft = (ownerUid: string) => {
       return latest;
     }
     current.current = next;
-    const stored = writePersonalWordbookDraft(next);
-    failedWriteBase.current = stored ? null : snapshot.raw;
-    observedRaw.current = stored ? JSON.stringify(next) : snapshot.raw;
+    // Do not overwrite an unseen external request when only reads are denied.
+    const stored = snapshot.available && writePersonalWordbookDraft(next);
+    // Unavailable reads have raw=null, which does not mean the key is absent.
+    // Preserve the last value actually observed until storage can be read.
+    const diskBase = snapshot.available ? snapshot.raw : observedRaw.current;
+    failedWriteBase.current = stored ? null : diskBase;
+    observedRaw.current = stored ? JSON.stringify(next) : diskBase;
     lastWriteSucceeded.current = stored;
     revision.current += 1;
     setPersisted(stored);

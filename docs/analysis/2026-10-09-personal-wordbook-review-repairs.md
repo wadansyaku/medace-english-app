@@ -17,3 +17,11 @@
 backend D1/IDB receipt、原子batch/transaction、owner/RBAC、公式承認、原本/語ID/履歴、料金、AI送信の実装は変更しない。曖昧な応答/503/timeoutはpendingを解除せず同ID・同内容を再送し、既知400/401/403/409の編集復帰を維持する。localStorage read→setItemはCAS transactionではなく、全ての並行編集の原子的保証とは記録しない。
 
 実Safari/iPhone・実IME/ソフトキーボード・支援技術・一般教室の受入は引き続き未検証。全試験は合成データのみで、本番の実生徒保存や障害注入は行わない。
+
+## 独立再監査で見つかった読取・書込停止の派生
+
+独立再監査の13合成ケースでは基本2件が解消し12PASS、読取と書込の両方が停止してから復帰した場合の旧pending復活が残った。pendingを実保存→getItem/setItemを拒否→API400→画面内訂正→復帰→最初の編集で旧pendingに戻ることを旧b5実Chromeでも再現した。
+
+読取不能時のsnapshot.raw=nullをキー不存在としてbaselineへ記録しない。最後に実際に観測したrawをfailedWriteBase/observedRawへ維持する。追加の実二タブ検証ではgetItemだけ失敗・setItemは可能な時にBの新pendingをAが上書きすることも再現したため、snapshot.available=falseの間はdiskへ書かずmemory-onlyで訂正を保持する。復帰時に実rawが未変化なら訂正memoryを保持し、Bの新pendingへ変化していれば採用して同ID・同内容を再確認する。未知応答のpendingを解除しない。
+
+新3ブラウザーケースは両方停止後の旧拒否保持、両方停止中のB新pending、読取だけ停止中のB新pending。二タブの実localStorageに保存された要求の不変と復帰後の実D1保存値を検証する。最終対象・全gateの件数/SHA/画像はdeliveryと同じレビュー資料へ記録する。D1/IDB/backend・課金・認可・migrationの追加変更はない。localStorage全編集のCASや端末間共有を保証しない。

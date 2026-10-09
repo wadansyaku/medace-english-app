@@ -4,7 +4,7 @@
 
 ## 公開対象と証拠
 
-基準main `4955b54d370ef62fb14502031a405e83acc4d677` から、直接単語・意味入力、登録後/ゲストの本人別下書き、原子的な個人保存receipt、返却された実教材IDからの学習を反映する。実装候補は `b5f8b81f23498ef51c19c08f69045efba928c192`、tree `822ce8c1073bf573cbf85997e9971cb5187a331a`。今回の公開用追記は方針・運用文書のみで、同候補のアプリ/API/契約/migration/testsを変更しない。
+基準main `4955b54d370ef62fb14502031a405e83acc4d677` から、直接単語・意味入力、登録後/ゲストの本人別下書き、原子的な個人保存receipt、返却された実教材IDからの学習を反映する。実装候補は `b5f8b81f23498ef51c19c08f69045efba928c192`、tree `822ce8c1073bf573cbf85997e9971cb5187a331a`。公開用文書だけのa17bd0fに加え、独立再監査で判明したread/write停止復帰の派生を最小修正し、新3ケースを追加する。backend/API/契約/migrationはb5と同一。最終候補の全gateと独立再確認を通してから公開する。
 
 実Mac Chromeの最終local-only gateは11/11工程、214files/2426unit、Cloudflare291＋native IDB12の303browser成功、retry/flaky0。preview限定2件は実previewで確認する。CSV読込中の別下書き世代、400拒否後のpending解除write失敗、unmount後CSVを修正し、対象回帰9件・追加4ケースが成功。最終sourceの独立read-only再確認でも公開を止める重大懸念なし。独立確認は本番保存実行とは区別する。
 

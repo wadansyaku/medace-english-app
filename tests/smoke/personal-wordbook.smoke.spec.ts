@@ -476,6 +476,82 @@ test('personal definite rejection remains editable when clearing its persisted r
   expect(await storageAction<any[]>(page, 'getWordsByBook', { bookId: result.importedBookIds[0] })).toEqual([expect.objectContaining({ word: 'corrected-after-rejected-write', definition: '訂正後も編集を保持' })]);
 });
 
+for (const recoveredDisk of ['unchanged rejected request', 'new request from another tab', 'new request while only reads fail'] as const) {
+  test(`personal rejected request stays corrected across a read and write outage (${recoveredDisk})`, async ({ page }, info) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    const user = await login(page); const modal = await openCreate(page);
+    await fillWord(page, 'before-storage-outage', '読み書き停止前'); await confirm(page);
+    const requests: CatalogImportRequest[] = [];
+    await page.route('**/api/storage', async route => {
+      if (route.request().postDataJSON()?.action !== 'batchImportWords') return route.continue();
+      requests.push(route.request().postDataJSON().payload);
+      if (requests.length !== 1) return route.continue();
+      const stored = await page.evaluate(uid => JSON.parse(localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`)!), user!.uid);
+      expect(stored.pendingRequest).toEqual(requests[0]);
+      await page.evaluate(readsOnly => {
+        const originalRead = Storage.prototype.getItem;
+        const originalWrite = Storage.prototype.setItem;
+        Object.assign(window, { restorePersonalDraftStorage: () => {
+          Storage.prototype.getItem = originalRead; Storage.prototype.setItem = originalWrite;
+        } });
+        Storage.prototype.getItem = function (key) {
+          if (key.startsWith('steady-study:personal-wordbook-draft:')) throw new DOMException('Synthetic read unavailable', 'SecurityError');
+          return originalRead.call(this, key);
+        };
+        if (!readsOnly) Storage.prototype.setItem = function (key, value) {
+          if (key.startsWith('steady-study:personal-wordbook-draft:')) throw new DOMException('Synthetic write unavailable', 'SecurityError');
+          return originalWrite.call(this, key, value);
+        };
+      }, recoveredDisk === 'new request while only reads fail');
+      return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic rejected request during storage outage' }) });
+    });
+    await modal.getByTestId('phrasebook-create-submit').click();
+    await expect(modal.getByRole('alert')).toContainText('Synthetic rejected request during storage outage');
+    if (recoveredDisk !== 'new request while only reads fail') await expect(modal.getByText(/下書きをこのブラウザーに保存できません/)).toBeVisible();
+    await fillWord(page, 'corrected-during-storage-outage', '読み書き停止中も訂正を保持');
+    await expect(modal.getByTestId('personal-wordbook-confirmation')).toHaveCount(0);
+    let externalRequest: CatalogImportRequest | undefined;
+    if (recoveredDisk !== 'unchanged rejected request') {
+      const pageB = await page.context().newPage();
+      try {
+        await pageB.goto('/'); await expect(pageB.getByTestId('student-dashboard')).toBeVisible();
+        externalRequest = await pageB.evaluate(uid => {
+          const title = '別タブの新しい保存';
+          const row = { draftId: crypto.randomUUID(), word: 'external-pending-after-outage', definition: '別タブの未確認要求を守る' };
+          const request = { clientImportId: crypto.randomUUID(), createdByUid: uid, defaultBookName: title,
+            source: { kind: 'rows' as const, rows: [{ word: row.word, definition: row.definition, bookName: title, number: 1 }] } };
+          localStorage.setItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`, JSON.stringify({ ownerUid: uid, updatedAt: Date.now(), title, rows: [row], pendingRequest: request }));
+          return request;
+        }, user!.uid);
+        await modal.getByLabel('単語', { exact: true }).fill('memory-edit-while-external-pending-is-unreadable');
+        const diskRequest = await pageB.evaluate(uid => JSON.parse(localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`)!).pendingRequest, user!.uid);
+        expect(diskRequest).toEqual(externalRequest);
+        await expect(modal.getByText(/下書きをこのブラウザーに保存できません/)).toBeVisible();
+      } finally { await pageB.close(); }
+    }
+    await page.evaluate(() => (window as unknown as { restorePersonalDraftStorage: () => void }).restorePersonalDraftStorage());
+    await modal.getByLabel('単語', { exact: true }).fill('corrected-after-storage-recovery');
+    if (externalRequest) {
+      await expect(modal.getByTestId('personal-wordbook-confirmation')).toContainText('external-pending-after-outage');
+      await expect(modal.getByRole('button', { name: '保存を再確認', exact: true })).toBeVisible();
+    } else {
+      await expect(modal.getByTestId('personal-wordbook-confirmation')).toHaveCount(0);
+      await expect(modal.getByRole('button', { name: '保存を再確認', exact: true })).toHaveCount(0);
+      await expect(modal.getByLabel('単語', { exact: true })).toHaveValue('corrected-after-storage-recovery');
+      await expect(modal.getByRole('textbox', { name: '意味', exact: true })).toHaveValue('読み書き停止中も訂正を保持');
+      await confirm(page);
+    }
+    await screenshot(page, info, externalRequest ? 'storage-recovery-preserves-external-pending' : 'storage-recovery-retains-corrected-memory');
+    const result = await save(page);
+    expect(requests).toHaveLength(2); expect(requests[1].clientImportId).not.toBe(requests[0].clientImportId);
+    if (externalRequest) expect(requests[1]).toEqual(externalRequest);
+    const words = await storageAction<any[]>(page, 'getWordsByBook', { bookId: result.importedBookIds[0] });
+    expect(words).toEqual([expect.objectContaining(externalRequest
+      ? { word: 'external-pending-after-outage', definition: '別タブの未確認要求を守る' }
+      : { word: 'corrected-after-storage-recovery', definition: '読み書き停止中も訂正を保持' })]);
+  });
+}
+
 test('personal delayed CSV after modal unmount cannot update the old owner draft', async ({ page }) => {
   const user = await login(page); const modal = await openCreate(page); await fillWord(page, 'before-unmount', '閉じた下書きを保持');
   const before = await page.evaluate(uid => localStorage.getItem(`steady-study:personal-wordbook-draft:v1:${encodeURIComponent(uid)}`), user!.uid);
