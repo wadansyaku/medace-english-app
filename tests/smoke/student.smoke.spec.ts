@@ -639,6 +639,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 1366, height: 900 
       await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 0語');
       await expect(page.getByTestId('quiz-empty-state')).toContainText('和訳問題に使える英文と日本語訳');
       await expect(setup.getByRole('heading', { name: '和訳の練習', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^\d+問クイズ$/ })).toHaveCount(0);
       await expect(page.getByTestId('quiz-setup-primary-cta')).toBeDisabled();
       expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
       await page.getByTestId('quiz-advanced-settings-toggle').click();

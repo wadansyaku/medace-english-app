@@ -412,6 +412,7 @@ describe('material translation setup matches the questions it can generate', () 
     expect(generateGrammarPracticeQuestions).not.toHaveBeenCalled();
     expect(api.recordQuizAttempt).not.toHaveBeenCalled();
     expect(renderToStaticMarkup(view(vi.fn(), null))).toContain('和訳問題に使える英文と日本語訳');
+    expect(findElement(view(vi.fn(), null), QuizHeader)!.props.title).toBe('和訳の練習');
   });
 
   it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('starts exactly the displayed usable count in mixed %s material', async (questionMode) => {

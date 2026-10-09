@@ -56,7 +56,10 @@ const QuizMode: React.FC<QuizModeProps> = ({
   };
 
   const headerTitle = controller.screen === 'SETUP'
-    ? `${controller.setupActualQuestionCount || controller.setupConfig.questionCount}問クイズ`
+    ? controller.setupActualQuestionCount === 0
+      && ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'].includes(controller.setupConfig.questionMode)
+      ? '和訳の練習'
+      : `${controller.setupActualQuestionCount || controller.setupConfig.questionCount}問クイズ`
     : controller.screen === 'READY'
       ? 'この条件で始める'
       : controller.screen === 'RUNNING'
