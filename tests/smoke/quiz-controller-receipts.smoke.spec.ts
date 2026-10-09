@@ -25,6 +25,8 @@ const f = globalThis.__quizControllerFixture;
 const words = ['learn', 'read', 'write'].map((word, index) => ({
   id: 'synthetic-word-' + index, bookId: 'synthetic-quiz-book', number: index + 1,
   word, definition: ['学ぶ', '読む', '書く'][index], searchKey: word,
+  exampleSentence: ['I learn English every day.', 'I read books every day.', 'I write letters every day.'][index],
+  exampleMeaning: ['私は 毎日 英語を 学びます。', '私は 毎日 本を 読みます。', '私は 毎日 手紙を 書きます。'][index],
 }));
 Object.assign(learningService, {
   getBooks: async () => [{ id: 'synthetic-quiz-book', title: '合成教材', wordCount: words.length }],
