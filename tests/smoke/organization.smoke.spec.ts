@@ -755,6 +755,41 @@ test('free school activation completes available steps without requiring forbidd
     await page.reload();
     await expect(page.getByTestId('business-admin-writing-state')).toHaveAttribute('data-writing-state', 'NOT_INCLUDED');
     expect((await storageAction<any>(page, 'getOrganizationDashboardSnapshot')).activationState).toBe('ACTIVE');
+    // Present an old link left by a plan downgrade. This only replaces local
+    // synthetic read responses; the new vocabulary mission uses the real API.
+    const issuedPayloads: any[] = [];
+    await page.route('**/api/storage', async route => {
+      const request = route.request().postDataJSON();
+      if (request.action === 'createWeeklyMission') issuedPayloads.push(request.payload);
+      if (request.action !== 'getWeeklyMissionBoard') return route.continue();
+      const response = await route.fetch();
+      const board = await response.json();
+      for (const assignment of board.assignments) {
+        if (assignment.studentUid === student.uid && assignment.mission.id === mission.id) {
+          assignment.mission.writingAssignmentId = 'synthetic-old-writing-after-downgrade';
+        }
+      }
+      await route.fulfill({ response, json: board });
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await page.getByTestId('workspace-tab-assignments').click();
+    await page.getByTestId(`assignment-row-${student.uid}`).click();
+    const oldLinkSelect = page.getByTestId('weekly-mission-writing-assignment');
+    await expect(oldLinkSelect).toBeEnabled();
+    await expect(oldLinkSelect).toHaveValue('synthetic-old-writing-after-downgrade');
+    await expect(page.getByTestId('weekly-mission-issue-submit')).toBeDisabled();
+    await oldLinkSelect.selectOption('');
+    await expect(page.getByTestId('weekly-mission-issue-submit')).toBeEnabled();
+    await expect(oldLinkSelect.locator('option')).toHaveCount(1);
+    const clearEvidence = testInfo.outputPath('free-old-writing-link-cleared.png');
+    await oldLinkSelect.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: clearEvidence });
+    await testInfo.attach('free-old-writing-link-cleared', { path: clearEvidence, contentType: 'image/png' });
+    await page.getByTestId('weekly-mission-issue-submit').click();
+    await expect(page.getByText(`${student.displayName}さんへ今週ミッションを配布しました。`, { exact: true })).toBeVisible();
+    expect(issuedPayloads).toHaveLength(1);
+    expect(issuedPayloads[0].writingAssignmentId).toBeUndefined();
     expect(writingRequests).toEqual([]);
     expect(await page.evaluate(async () => (await fetch('/api/writing/assignments?scope=organization')).status)).toBe(403);
   } finally {

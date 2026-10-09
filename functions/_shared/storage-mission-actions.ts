@@ -15,6 +15,7 @@ import {
   type WeeklyMissionBoard,
   WritingAssignmentStatus,
   UserRole,
+  SubscriptionPlan,
 } from '../../types';
 import {
   buildMissionProgress,
@@ -686,6 +687,9 @@ export const handleCreateWeeklyMission = async (
   if (!isLearningTrack(payload.learningTrack)) {
     throw new HttpError(400, '学習トラックが不正です。');
   }
+  if (payload.writingAssignmentId && organization.subscriptionPlan !== SubscriptionPlan.TOB_PAID) {
+    throw new HttpError(403, 'このプランでは英作文課題をミッションに紐づけできません。紐づけを解除して配布してください。');
+  }
   const existingMissionCountRow = await readFirst<{ count: number }>(
     env,
     'SELECT COUNT(*) AS count FROM weekly_missions WHERE organization_id = ?',
@@ -857,6 +861,9 @@ export const handleAssignWeeklyMission = async (
   }
   if (mission.organization_id && mission.organization_id !== organization.organizationId) {
     throw new HttpError(403, '同じ組織のミッションのみ配布できます。');
+  }
+  if (mission.writing_assignment_id && organization.subscriptionPlan !== SubscriptionPlan.TOB_PAID) {
+    throw new HttpError(403, 'このプランでは英作文課題を含むミッションを配布できません。作文を紐づけないミッションを作成してください。');
   }
 
   const student = await readFirst<{ id: string; display_name: string; role: string; organization_id: string | null }>(

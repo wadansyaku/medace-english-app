@@ -1,3 +1,5 @@
+2026-10-09 後続公開指示: 本人が本番反映の完了と旧公開禁止の継続解除を明示。O1はPR64で通常CI/正式preview/productionへ進める。作文遅延後の課題draft初期化と、無料変更後の旧作文リンク解除不可を公開レビューで追加修正。作成/配布APIは組織の現行プランを確認し、対象外Writing付き課題を既存記録への書込前に拒否する。保存済みID・教材・履歴・課金/AI設定は保持。公開完了は独立deliveryの配備SHA/URL/after保持結果で判断する。
+
 2026-10-08 現行: PR61のUIと[A8 初回自動発音](./analysis/2026-10-08-first-visible-word-pronunciation.md)は本番受入済み。PR62/main `1425152`、production37753211999成功、配備先244 browser回帰成功。旧公開禁止は今後も再適用しない。[actuallyの原本行対応訂正](./analysis/2026-10-08-naru-actually-original-row-correction.md)は修正版Excel納品済み・アプリはローカル候補。旧出典・ID・履歴を保持し、後続公開時のstage/配備/apply順序を文書化した。
 
 # Documentation Index

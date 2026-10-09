@@ -110,3 +110,18 @@ it('preserves an existing writing link and disables its editing while writing is
   expect(rendered).toMatch(/<option value="existing-writing-link" selected="">保存済みの作文紐づけを保持<\/option>/);
   expect(rendered).toContain('保存済みの紐づけは変更しません');
 });
+
+it('lets an excluded plan remove its old writing link and enables issuing only after removal', () => {
+  const render = (missionWritingAssignmentId: string) => renderToStaticMarkup(<BusinessAdminAssignmentsSection
+    controller={{ ...controller, missionBookId: '', missionWritingAssignmentId }}
+    snapshot={snapshot} settingsSnapshot={null} books={[]} writingAssignments={[]} writingState="NOT_INCLUDED"
+  />);
+  const linked = render('existing-writing-link');
+  expect(linked).not.toMatch(/data-testid="weekly-mission-writing-assignment"[^>]*disabled=""/);
+  expect(linked).toContain('<option value="">紐づけない</option>');
+  expect(linked).toContain('対象外の保存済み紐づけ（解除してください）');
+  expect(linked).toMatch(/data-testid="weekly-mission-issue-submit"[^>]*disabled=""/);
+  const unlinked = render('');
+  expect(unlinked).not.toMatch(/data-testid="weekly-mission-issue-submit"[^>]*disabled=""/);
+  expect(unlinked).not.toContain('existing-writing-link');
+});

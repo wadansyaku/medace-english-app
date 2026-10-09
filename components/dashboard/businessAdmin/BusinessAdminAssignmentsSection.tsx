@@ -56,7 +56,8 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
     ? books.find((book) => book.id === controller.missionBookId) || null
     : null;
   const selectedMissionBookBlocked = Boolean(selectedMissionBook && !isMissionSelectableBook(selectedMissionBook));
-  const missionIssueDisabled = controller.missionSavingUid === controller.selectedAssignmentStudent?.uid || selectedMissionBookBlocked;
+  const unsupportedWritingLink = writingState === 'NOT_INCLUDED' && Boolean(controller.missionWritingAssignmentId);
+  const missionIssueDisabled = controller.missionSavingUid === controller.selectedAssignmentStudent?.uid || selectedMissionBookBlocked || unsupportedWritingLink;
 
   return (
     <div className="space-y-6">
@@ -461,7 +462,7 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                       <label className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-slate-400">任意の英作文課題</label>
                       <select
                         data-testid="weekly-mission-writing-assignment"
-                        disabled={writingState !== 'READY'}
+                        disabled={writingState !== 'READY' && writingState !== 'NOT_INCLUDED'}
                         value={controller.missionWritingAssignmentId}
                         onChange={(event) => controller.setMissionWritingAssignmentId(event.target.value)}
                         className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-medace-500 focus:ring-2 focus:ring-medace-100"
@@ -471,13 +472,18 @@ const BusinessAdminAssignmentsSection: React.FC<BusinessAdminAssignmentsSectionP
                           {writingAssignments.map((assignment) => (
                             <option key={assignment.id} value={assignment.id}>{assignment.promptTitle}</option>
                           ))}
+                        </> : writingState === 'NOT_INCLUDED' ? <>
+                          <option value="">紐づけない</option>
+                          {controller.missionWritingAssignmentId && <option value={controller.missionWritingAssignmentId}>対象外の保存済み紐づけ（解除してください）</option>}
                         </> : <option value={controller.missionWritingAssignmentId}>
                           {controller.missionWritingAssignmentId ? '保存済みの作文紐づけを保持' : '作文情報の確認後に変更できます'}
                         </option>}
                       </select>
                       {writingState !== 'READY' && (
                         <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                          作文の利用状態は作文画面で確認できます。保存済みの紐づけは変更しません。
+                          {writingState === 'NOT_INCLUDED'
+                            ? 'このプランでは作文を紐づけできません。保存済みの紐づけがある場合は「紐づけない」を選んでから配布してください。'
+                            : '作文の利用状態は作文画面で確認できます。保存済みの紐づけは変更しません。'}
                         </p>
                       )}
                     </div>
