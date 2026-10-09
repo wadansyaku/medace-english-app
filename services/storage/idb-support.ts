@@ -11,7 +11,7 @@ import type { WeaknessInteractionEvent } from '../../shared/weakness';
 import type { QuizAttemptReceipt } from '../../shared/quizAttempt';
 
 export const DB_NAME = 'MedAceDB';
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export const STORES = {
   BOOKS: 'books',
@@ -24,6 +24,7 @@ export const STORES = {
   INTERACTION_EVENTS: 'interactionEvents',
   STUDY_ATTEMPT_RECEIPTS: 'studyAttemptReceipts',
   QUIZ_ATTEMPT_RECEIPTS: 'quizAttemptReceipts',
+  PERSONAL_CATALOG_IMPORT_RECEIPTS: 'personalCatalogImportReceipts',
   WEAKNESS_SIGNALS: 'weaknessSignals',
   COMMERCIAL_REQUESTS: 'commercialRequests',
   PRODUCT_ANNOUNCEMENTS: 'productAnnouncements',
@@ -106,6 +107,7 @@ export const initStorageDb = (): Promise<IDBDatabase> => new Promise((resolve, r
     if (!db.objectStoreNames.contains(STORES.INTERACTION_EVENTS)) db.createObjectStore(STORES.INTERACTION_EVENTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.STUDY_ATTEMPT_RECEIPTS)) db.createObjectStore(STORES.STUDY_ATTEMPT_RECEIPTS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.QUIZ_ATTEMPT_RECEIPTS)) db.createObjectStore(STORES.QUIZ_ATTEMPT_RECEIPTS, { keyPath: 'id' });
+    if (!db.objectStoreNames.contains(STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS)) db.createObjectStore(STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS, { keyPath: ['uid', 'clientImportId'] });
     if (!db.objectStoreNames.contains(STORES.WEAKNESS_SIGNALS)) db.createObjectStore(STORES.WEAKNESS_SIGNALS, { keyPath: 'id' });
     if (!db.objectStoreNames.contains(STORES.COMMERCIAL_REQUESTS)) db.createObjectStore(STORES.COMMERCIAL_REQUESTS, { keyPath: 'id', autoIncrement: true });
     if (!db.objectStoreNames.contains(STORES.PRODUCT_ANNOUNCEMENTS)) db.createObjectStore(STORES.PRODUCT_ANNOUNCEMENTS, { keyPath: 'id' });

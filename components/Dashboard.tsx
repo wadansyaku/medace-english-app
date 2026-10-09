@@ -314,6 +314,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         viewModel={viewModel}
         isMobileViewport={isMobileViewport}
         onUserUpdate={onUserUpdate}
+        onStartPersonalBook={(bookId) => onSelectBook(bookId, 'study')}
       />
 
       {selectedPracticeLane ? (

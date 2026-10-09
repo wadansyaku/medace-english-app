@@ -280,8 +280,8 @@ describe('IndexedDB study receipt upgrade', () => {
     }
   });
 
-  it('adds study and quiz receipt stores without recreating existing version-six data', async () => {
-    const oldStoreNames = new Set<string>(Object.values(STORES).filter((name) => name !== STORES.STUDY_ATTEMPT_RECEIPTS && name !== STORES.QUIZ_ATTEMPT_RECEIPTS));
+  it('adds study, quiz and personal import receipt stores without recreating existing version-six data', async () => {
+    const oldStoreNames = new Set<string>(Object.values(STORES).filter((name) => name !== STORES.STUDY_ATTEMPT_RECEIPTS && name !== STORES.QUIZ_ATTEMPT_RECEIPTS && name !== STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS));
     const db = {
       objectStoreNames: { contains: (name: string) => oldStoreNames.has(name) },
       createObjectStore: vi.fn(),
@@ -294,11 +294,12 @@ describe('IndexedDB study receipt upgrade', () => {
       openRequest.onupgradeneeded?.call(openRequest as IDBOpenDBRequest, new Event('upgradeneeded') as IDBVersionChangeEvent);
       openRequest.onsuccess?.call(openRequest as IDBOpenDBRequest, new Event('success'));
       await expect(opened).resolves.toBe(db);
-      expect(DB_VERSION).toBe(8);
-      expect(open).toHaveBeenCalledWith('MedAceDB', 8);
-      expect(db.createObjectStore).toHaveBeenCalledTimes(2);
+      expect(DB_VERSION).toBe(9);
+      expect(open).toHaveBeenCalledWith('MedAceDB', 9);
+      expect(db.createObjectStore).toHaveBeenCalledTimes(3);
       expect(db.createObjectStore).toHaveBeenCalledWith(STORES.STUDY_ATTEMPT_RECEIPTS, { keyPath: 'id' });
       expect(db.createObjectStore).toHaveBeenCalledWith(STORES.QUIZ_ATTEMPT_RECEIPTS, { keyPath: 'id' });
+      expect(db.createObjectStore).toHaveBeenCalledWith(STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS, { keyPath: ['uid', 'clientImportId'] });
     } finally {
       vi.unstubAllGlobals();
     }

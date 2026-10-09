@@ -1,5 +1,5 @@
 import type { WordData } from '../types';
-import { normalizeCatalogImport } from './catalogImport';
+import { catalogRowsAreEquivalent, normalizeCatalogImport } from './catalogImport';
 
 export interface GuestLocalBook {
   id: string;
@@ -10,7 +10,7 @@ export interface GuestLocalBook {
 
 export const GUEST_LOCAL_BOOK_LIMITS = {
   books: 10, words: 200, title: 80, word: 120, definition: 1000,
-  example: 2000, importBytes: 256 * 1024, storedChars: 2 * 1024 * 1024,
+  example: 2000, sourceNote: 1000, importBytes: 256 * 1024, storedChars: 2 * 1024 * 1024,
   lifetimeMs: 7 * 24 * 60 * 60 * 1000,
 } as const;
 const STORAGE_KEY = 'steady-study:guest-local-books:v1';
@@ -22,6 +22,7 @@ export interface GuestBookInputWord {
   definition: string;
   exampleSentence?: string;
   exampleMeaning?: string;
+  sourceNote?: string;
 }
 
 const requiredText = (value: string, label: string, max: number): string => {
@@ -46,11 +47,14 @@ export const createGuestLocalBook = (
       const definition = requiredText(row.definition, `${index + 1}行目の意味`, GUEST_LOCAL_BOOK_LIMITS.definition);
       const exampleSentence = row.exampleSentence?.trim();
       const exampleMeaning = row.exampleMeaning?.trim();
+      const sourceNote = row.sourceNote?.trim();
       if ((exampleSentence?.length ?? 0) > GUEST_LOCAL_BOOK_LIMITS.example || (exampleMeaning?.length ?? 0) > GUEST_LOCAL_BOOK_LIMITS.example) {
         throw new Error(`${index + 1}行目の例文・例文訳は2000文字以内にしてください。`);
       }
+      if ((sourceNote?.length ?? 0) > GUEST_LOCAL_BOOK_LIMITS.sourceNote) throw new Error(`${index + 1}行目の出典は1000文字以内にしてください。`);
       return { id: `${id}:word:${index + 1}`, bookId: id, number: index + 1, word, definition,
-        ...(exampleSentence ? { exampleSentence } : {}), ...(exampleMeaning ? { exampleMeaning } : {}) };
+        ...(exampleSentence ? { exampleSentence } : {}), ...(exampleMeaning ? { exampleMeaning } : {}),
+        ...(sourceNote ? { sourceNote } : {}) };
     }),
   };
 };
@@ -112,9 +116,10 @@ export const parseGuestLocalBookCsv = (text: string, title: string): GuestBookIn
   if (!parsed.rows.length) throw new Error('CSVに単語がありません。WordとMeaning列を確認してください。');
   // Validate the complete batch before any book is added; never silently discard rows.
   const validated = createGuestLocalBook(title, parsed.rows);
-  return validated.words.map(({ word, definition, exampleSentence, exampleMeaning }) => ({
+  return validated.words.map(({ word, definition, exampleSentence, exampleMeaning, sourceNote }) => ({
     word, definition,
     ...(exampleSentence ? { exampleSentence } : {}), ...(exampleMeaning ? { exampleMeaning } : {}),
+    ...(sourceNote ? { sourceNote } : {}),
   }));
 };
 
@@ -132,7 +137,8 @@ const isBook = (value: unknown, now: number): value is GuestLocalBook => {
       || typeof word.word !== 'string' || !word.word.trim() || word.word.length > GUEST_LOCAL_BOOK_LIMITS.word
       || typeof word.definition !== 'string' || !word.definition.trim() || word.definition.length > GUEST_LOCAL_BOOK_LIMITS.definition
       || (word.exampleSentence != null && (typeof word.exampleSentence !== 'string' || word.exampleSentence.length > GUEST_LOCAL_BOOK_LIMITS.example))
-      || (word.exampleMeaning != null && (typeof word.exampleMeaning !== 'string' || word.exampleMeaning.length > GUEST_LOCAL_BOOK_LIMITS.example))) return false;
+      || (word.exampleMeaning != null && (typeof word.exampleMeaning !== 'string' || word.exampleMeaning.length > GUEST_LOCAL_BOOK_LIMITS.example))
+      || (word.sourceNote != null && (typeof word.sourceNote !== 'string' || word.sourceNote.length > GUEST_LOCAL_BOOK_LIMITS.sourceNote))) return false;
     ids.add(word.id);
     return true;
   });
@@ -188,4 +194,84 @@ export const saveGuestLocalBook = (book: GuestLocalBook): GuestLocalBooksSnapsho
 export const removeGuestLocalBook = (id: string): GuestLocalBooksSnapshot => {
   const snapshot = writeBooks(readGuestLocalBooks().books.filter(book => book.id !== id));
   return { ...snapshot, notice: snapshot.persisted ? 'この端末から単語帳を削除しました。' : snapshot.notice };
+};
+
+export interface GuestDraftRow extends GuestBookInputWord { draftId: string }
+export interface GuestWordbookDraft { title: string; rows: GuestDraftRow[]; updatedAt: number }
+export interface GuestWordbookDraftSnapshot { draft: GuestWordbookDraft; persisted: boolean }
+const DRAFT_STORAGE_KEY = 'steady-study:guest-wordbook-draft:v1';
+let memoryDraft: GuestWordbookDraft | null = null;
+let memoryDraftOnly = false;
+export const createGuestDraftRow = (row?: GuestBookInputWord): GuestDraftRow => ({
+  word: '', definition: '', ...row,
+  draftId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+});
+export const emptyGuestWordbookDraft = (now = Date.now()): GuestWordbookDraft => ({
+  title: '自分の単語帳', rows: [createGuestDraftRow()], updatedAt: now,
+});
+const isDraft = (value: unknown, now: number): value is GuestWordbookDraft => {
+  if (!value || typeof value !== 'object') return false;
+  const draft = value as GuestWordbookDraft;
+  if (typeof draft.title !== 'string' || draft.title.length > GUEST_LOCAL_BOOK_LIMITS.title
+    || !Number.isFinite(draft.updatedAt) || draft.updatedAt > now || draft.updatedAt <= now - GUEST_LOCAL_BOOK_LIMITS.lifetimeMs
+    || !Array.isArray(draft.rows) || !draft.rows.length || draft.rows.length > GUEST_LOCAL_BOOK_LIMITS.words) return false;
+  const ids = new Set<string>();
+  return draft.rows.every(row => {
+    if (!row || typeof row.draftId !== 'string' || !row.draftId || row.draftId.length > 128 || ids.has(row.draftId)
+      || typeof row.word !== 'string' || row.word.length > GUEST_LOCAL_BOOK_LIMITS.word
+      || typeof row.definition !== 'string' || row.definition.length > GUEST_LOCAL_BOOK_LIMITS.definition
+      || (row.exampleSentence != null && (typeof row.exampleSentence !== 'string' || row.exampleSentence.length > GUEST_LOCAL_BOOK_LIMITS.example))
+      || (row.exampleMeaning != null && (typeof row.exampleMeaning !== 'string' || row.exampleMeaning.length > GUEST_LOCAL_BOOK_LIMITS.example))
+      || (row.sourceNote != null && (typeof row.sourceNote !== 'string' || row.sourceNote.length > GUEST_LOCAL_BOOK_LIMITS.sourceNote))) return false;
+    ids.add(row.draftId); return true;
+  });
+};
+/** Guest input stays separate from account drafts and is never imported into an account. */
+export const readGuestWordbookDraft = (now = Date.now()): GuestWordbookDraftSnapshot => {
+  if (memoryDraft && !isDraft(memoryDraft, now)) memoryDraft = null;
+  if (memoryDraftOnly) return { draft: memoryDraft ?? emptyGuestWordbookDraft(now), persisted: false };
+  try {
+    const raw = globalThis.localStorage.getItem(DRAFT_STORAGE_KEY);
+    const value: unknown = raw && raw.length <= GUEST_LOCAL_BOOK_LIMITS.storedChars ? JSON.parse(raw) : null;
+    const draft = isDraft(value, now) ? value : emptyGuestWordbookDraft(now);
+    memoryDraft = draft;
+    return { draft, persisted: true };
+  } catch {
+    memoryDraftOnly = true;
+    return { draft: memoryDraft ?? emptyGuestWordbookDraft(now), persisted: false };
+  }
+};
+export const writeGuestWordbookDraft = (draft: GuestWordbookDraft, now = Date.now()): GuestWordbookDraftSnapshot => {
+  const next = { ...draft, updatedAt: now };
+  memoryDraft = next;
+  try {
+    const payload = JSON.stringify(next);
+    if (payload.length > GUEST_LOCAL_BOOK_LIMITS.storedChars) throw new Error('too large');
+    globalThis.localStorage.setItem(DRAFT_STORAGE_KEY, payload);
+    memoryDraftOnly = false;
+    return { draft: next, persisted: true };
+  } catch {
+    memoryDraftOnly = true;
+    return { draft: next, persisted: false };
+  }
+};
+
+/** Validate every entered row first; a partially entered current row is never silently skipped. */
+export const prepareGuestWordbookDraft = (draft: GuestWordbookDraft) => {
+  const enteredRows = draft.rows.filter(row => [row.word, row.definition, row.exampleSentence, row.exampleMeaning, row.sourceNote]
+    .some(value => typeof value === 'string' && value.trim()));
+  const validated = createGuestLocalBook(draft.title.trim() || '自分の単語帳', enteredRows);
+  const rows: GuestBookInputWord[] = [];
+  const duplicateRowNumbers: number[] = [];
+  validated.words.forEach((word, index) => {
+    const row: GuestBookInputWord = { word: word.word, definition: word.definition,
+      ...(word.exampleSentence ? { exampleSentence: word.exampleSentence } : {}),
+      ...(word.exampleMeaning ? { exampleMeaning: word.exampleMeaning } : {}),
+      ...(word.sourceNote ? { sourceNote: word.sourceNote } : {}) };
+    if (rows.some(existing => catalogRowsAreEquivalent(existing, row))) duplicateRowNumbers.push(index + 1);
+    else rows.push(row);
+  });
+  // The preview and final save use the same book ID, including repeated activation of the save button.
+  return { book: { ...validated, words: rows.map((row, index) => ({ ...row,
+    id: `${validated.id}:word:${index + 1}`, bookId: validated.id, number: index + 1 })) }, duplicateRowNumbers };
 };

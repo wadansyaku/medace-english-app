@@ -1,5 +1,5 @@
 import React, { type ReactElement } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0 }));
 vi.mock('react', async (importOriginal) => {
@@ -12,12 +12,13 @@ vi.mock('react', async (importOriginal) => {
     },
     useState: (initial: unknown) => {
       const index = harness.cursor++;
-      if (!(index in harness.slots)) harness.slots[index] = initial;
+      if (!(index in harness.slots)) harness.slots[index] = typeof initial === 'function' ? initial() : initial;
       return [harness.slots[index], (next: unknown) => {
         harness.slots[index] = typeof next === 'function' ? next(harness.slots[index]) : next;
       }];
     },
     useEffect: () => {},
+    useCallback: (callback: unknown) => callback,
   };
   return { ...original, ...hooks, default: { ...original.default, ...hooks } };
 });
@@ -25,6 +26,10 @@ vi.mock('react', async (importOriginal) => {
 import PhrasebookCreateModal from '../components/dashboard/PhrasebookCreateModal';
 import StudentDashboardModals from '../components/dashboard/StudentDashboardModals';
 import { UserRole } from '../types';
+import { ApiError } from '../services/apiClient';
+import { createPersonalDraftRow, emptyPersonalWordbookDraft, readPersonalWordbookDraft, writePersonalWordbookDraft } from '../shared/personalWordbookDraft';
+import PersonalWordbookEditor from '../components/dashboard/PersonalWordbookEditor';
+import type { CatalogImportResult } from '../contracts/storage';
 
 type Props = React.ComponentProps<typeof PhrasebookCreateModal>;
 type Node = ReactElement<Record<string, any>>;
@@ -41,183 +46,132 @@ const find = (tree: Node, predicate: (node: Node) => boolean) => {
 };
 const byId = (tree: Node, id: string) => find(tree, (node) => node.props.id === id);
 const submit = (tree: Node) => find(tree, (node) => node.props['data-testid'] === 'phrasebook-create-submit');
+const savedResult: CatalogImportResult = { importedBookIds: ['actual-server-book-id'], importedBookCount: 1, importedWordCount: 1, skippedRowCount: 0, warnings: [] };
 const deferred = () => {
-  let resolve!: () => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
+  let resolve!: (value: CatalogImportResult) => void; let reject!: (error: Error) => void;
+  const promise = new Promise<CatalogImportResult>((done, fail) => { resolve = done; reject = fail; });
   return { promise, resolve, reject };
 };
 const fixture = (overrides: Partial<Props> = {}) => {
-  const state = { open: true, newBookTitle: '教材A', rawText: 'Word,Meaning\nsource,出典', createMode: 'TEXT' as Props['createMode'], creating: false };
-  const handlers = {
-    onClose: vi.fn(() => { state.open = false; }),
-    onChangeTitle: vi.fn((value: string) => { state.newBookTitle = value; }),
-    onChangeRawText: vi.fn((value: string) => { state.rawText = value; }),
-    onChangeMode: vi.fn((value: Props['createMode']) => { state.createMode = value; }),
-    onFileChange: vi.fn(),
-    onCreate: vi.fn<() => void | Promise<void>>().mockResolvedValue(undefined),
-  };
-  const render = () => {
-    harness.cursor = 0;
-    return PhrasebookCreateModal({ ...state, uploadFile: null, errorMsg: null, canUseSelectedCreateMode: true, currentPlanLabel: '合成テストプラン', ...handlers, ...overrides }) as Node;
-  };
-  return { state, handlers, render };
+  writePersonalWordbookDraft({ ...emptyPersonalWordbookDraft('synthetic-student'), title: '教材A', rows: [createPersonalDraftRow({ word: 'plant', definition: '植物' })] });
+  const handlers = { onClose: vi.fn(), onStartStudy: vi.fn(), onCreate: vi.fn<Props['onCreate']>().mockResolvedValue(savedResult) };
+  const render = () => { harness.cursor = 0; return PhrasebookCreateModal({ open: true, ownerUid: 'synthetic-student', creating: false, canUseSelectedCreateMode: true, currentPlanLabel: '合成プラン', ...handlers, ...overrides }) as Node; };
+  return { handlers, render };
 };
+const confirm = (f: ReturnType<typeof fixture>) => { submit(f.render()).props.onClick(); return f.render(); };
+const text = (tree: Node) => JSON.stringify(tree, (_key, value) => typeof value === 'function' ? undefined : value);
+beforeEach(() => {
+  harness.slots = []; harness.cursor = 0;
+  const values = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key) });
+});
 
-beforeEach(() => { harness.slots = []; harness.cursor = 0; });
+afterEach(() => { vi.unstubAllGlobals(); });
 
-describe('My phrasebook creation keeps one pending input intact', () => {
-  it('blocks duplicate submit, edits, mode switches and all close paths in the same tick', async () => {
-    const save = deferred();
-    const f = fixture();
-    f.handlers.onCreate.mockReturnValue(save.promise);
-    const original = f.render();
-    const first = submit(original).props.onClick();
-    const second = submit(original).props.onClick();
-    byId(original, 'phrasebook-create-book-title').props.onChange({ target: { value: '教材B' } });
-    byId(original, 'phrasebook-create-source-text').props.onChange({ target: { value: 'New source B.' } });
-    nodes(original).filter((node) => node.type === 'button' && node.props.onClick).forEach((node) => {
-      if (node !== submit(original)) node.props.onClick();
-    });
-    original.props.onClose(); // Escape and overlay both use this callback.
-    expect(f.handlers.onCreate).toHaveBeenCalledTimes(1);
-    expect(f.handlers.onClose).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeTitle).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeRawText).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeMode).not.toHaveBeenCalled();
-    const pending = f.render();
-    expect(byId(pending, 'phrasebook-create-book-title').props.readOnly).toBe(true);
-    expect(byId(pending, 'phrasebook-create-source-text').props.readOnly).toBe(true);
-    expect(pending.props.closeOnOverlayClick).toBe(false);
-    expect(nodes(pending).filter((node) => node.type === 'button').every((node) => node.props.disabled)).toBe(true);
-    save.resolve();
-    await Promise.all([first, second]);
+describe('direct My wordbook creation and immutable receipt recovery', () => {
+  it('requires both fields in the current row and does not save before confirmation', () => {
+    const f = fixture(); const tree = f.render();
+    find(tree, node => node.type === PersonalWordbookEditor).props.onChange([createPersonalDraftRow({ word: 'unfinished', definition: '' })]);
+    submit(f.render()).props.onClick();
+    expect(text(f.render())).toContain('単語と意味を両方'); expect(f.handlers.onCreate).not.toHaveBeenCalled();
+    find(f.render(), node => node.type === PersonalWordbookEditor).props.onChange([createPersonalDraftRow({ word: 'plant', definition: '植物' })]);
+    expect(text(confirm(f))).toContain('保存する内容を確認'); expect(f.handlers.onCreate).not.toHaveBeenCalled();
   });
-
-  it('lets a delayed success clear only the accepted A input because B cannot be entered while pending', async () => {
-    const save = deferred();
-    const f = fixture();
-    f.handlers.onCreate.mockImplementation(async () => {
-      f.state.creating = true;
-      await save.promise;
-      f.state.rawText = '';
-      f.state.newBookTitle = '';
-      f.state.open = false;
-      f.state.creating = false;
-    });
-    const first = submit(f.render()).props.onClick();
-    const pending = f.render();
-    byId(pending, 'phrasebook-create-book-title').props.onChange({ target: { value: '教材B' } });
-    byId(pending, 'phrasebook-create-source-text').props.onChange({ target: { value: 'B source.' } });
-    pending.props.onClose();
-    expect(f.state.newBookTitle).toBe('教材A');
-    expect(f.state.rawText).toBe('Word,Meaning\nsource,出典');
-    expect(f.state.open).toBe(true);
-    save.resolve();
-    await first;
-    expect(f.state.open).toBe(false);
-    expect(f.state.rawText).toBe('');
-    expect(f.handlers.onChangeTitle).not.toHaveBeenCalled();
+  it('blocks duplicate submit, edits and every close path synchronously while the save is pending', async () => {
+    const save = deferred(); const f = fixture(); f.handlers.onCreate.mockReturnValue(save.promise);
+    const editing = f.render(); const confirmed = confirm(f); submit(confirmed).props.onClick(); submit(confirmed).props.onClick();
+    byId(editing, 'phrasebook-create-book-title').props.onChange({ target: { value: 'B' } });
+    find(editing, node => node.type === PersonalWordbookEditor).props.onChange([createPersonalDraftRow({ word: 'B', definition: 'B' })]);
+    editing.props.onClose(); confirmed.props.onClose();
+    nodes(confirmed).filter(node => node.type === 'button' && node.props['aria-label'] === '閉じる').forEach(node => node.props.onClick());
+    expect(f.handlers.onCreate).toHaveBeenCalledTimes(1); expect(f.handlers.onClose).not.toHaveBeenCalled();
+    expect(readPersonalWordbookDraft('synthetic-student').title).toBe('教材A');
+    expect(readPersonalWordbookDraft('synthetic-student').rows[0].word).toBe('plant');
+    const pending = f.render(); expect(pending.props.closeOnOverlayClick).toBe(false); expect(submit(pending).props.disabled).toBe(true);
+    save.resolve(savedResult); await vi.waitFor(() => expect(text(f.render())).toContain('単語帳を保存しました'));
   });
-
-  it('keeps the source after a delayed failure and unlocks editing and retry', async () => {
-    const save = deferred();
-    const f = fixture();
-    f.handlers.onCreate.mockReturnValueOnce(save.promise);
-    const first = submit(f.render()).props.onClick();
-    save.reject(new Error('保存を確認できませんでした'));
-    await first;
-    const failed = f.render();
-    expect(f.state.open).toBe(true);
-    expect(f.state.newBookTitle).toBe('教材A');
-    expect(f.state.rawText).toBe('Word,Meaning\nsource,出典');
-    expect(byId(failed, 'phrasebook-create-source-text').props.readOnly).toBe(false);
-    expect(find(failed, (node) => node.props.role === 'alert').props.children).toContainEqual(expect.objectContaining({ props: expect.objectContaining({ children: '保存を確認できませんでした' }) }));
-    byId(failed, 'phrasebook-create-book-title').props.onChange({ target: { value: '教材B' } });
-    await submit(f.render()).props.onClick();
-    expect(f.state.newBookTitle).toBe('教材B');
-    expect(f.handlers.onCreate).toHaveBeenCalledTimes(2);
+  it('freezes an ambiguous reply and retries the exact ID/payload rather than accepting edits', async () => {
+    const f = fixture(); f.handlers.onCreate.mockRejectedValueOnce(new Error('response lost'));
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('response lost'));
+    const first = f.handlers.onCreate.mock.calls[0][0]; const failed = f.render();
+    expect(text(failed)).toContain('保存を再確認'); expect(nodes(failed).some(node => node.type === PersonalWordbookEditor)).toBe(false);
+    expect(readPersonalWordbookDraft('synthetic-student').pendingRequest).toEqual(first);
+    submit(failed).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('単語帳を保存しました'));
+    expect(f.handlers.onCreate.mock.calls[1][0]).toEqual(first);
   });
-
-  it('releases the same-tick lock when the callback throws synchronously', async () => {
-    const f = fixture();
-    f.handlers.onCreate.mockImplementationOnce(() => { throw new Error('接続を確認してください'); });
-    await submit(f.render()).props.onClick();
-    expect(submit(f.render()).props.disabled).toBe(false);
-    await submit(f.render()).props.onClick();
-    expect(f.handlers.onCreate).toHaveBeenCalledTimes(2);
+  it('recovers an unconfirmed request after reopening with the same immutable creation ID', async () => {
+    const f = fixture(); f.handlers.onCreate.mockRejectedValueOnce(new Error('reply lost'));
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('reply lost'));
+    const original = f.handlers.onCreate.mock.calls[0][0];
+    harness.slots = []; harness.cursor = 0;
+    expect(text(f.render())).toContain('保存を再確認');
+    submit(f.render()).props.onClick();
+    await vi.waitFor(() => expect(text(f.render())).toContain('単語帳を保存しました'));
+    expect(f.handlers.onCreate.mock.calls[1][0]).toEqual(original);
   });
-
-  it('also honors an already pending parent operation before any local submit', () => {
-    const f = fixture({ creating: true });
-    const tree = f.render();
-    tree.props.onClose();
-    submit(tree).props.onClick();
+  it('unlocks known server rejection for correction and preserves original rows', async () => {
+    const f = fixture(); f.handlers.onCreate.mockRejectedValueOnce(new ApiError('修正してください', 400));
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('修正してください'));
+    expect(readPersonalWordbookDraft('synthetic-student').pendingRequest).toBeUndefined();
+    expect(find(f.render(), node => node.type === PersonalWordbookEditor).props.rows[0].word).toBe('plant');
+    byId(f.render(), 'phrasebook-create-book-title').props.onChange({ target: { value: '修正版' } });
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(f.handlers.onCreate).toHaveBeenCalledTimes(2));
+    expect(f.handlers.onCreate.mock.calls[1][0].defaultBookName).toBe('修正版');
+  });
+  it('does not treat an undefined save result as success and releases the busy lock for retry', async () => {
+    const f = fixture(); f.handlers.onCreate.mockResolvedValueOnce(undefined);
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('保存結果を確認できません'));
+    expect(submit(f.render()).props.disabled).toBe(false); expect(readPersonalWordbookDraft('synthetic-student').pendingRequest).toBeDefined();
+    submit(f.render()).props.onClick(); await vi.waitFor(() => expect(f.handlers.onCreate).toHaveBeenCalledTimes(2));
+  });
+  it('honors parent pending state for stale edit, confirmation and close events', () => {
+    const f = fixture({ creating: true }); const tree = f.render(); tree.props.onClose(); submit(tree).props.onClick();
     byId(tree, 'phrasebook-create-book-title').props.onChange({ target: { value: 'B' } });
-    expect(f.handlers.onClose).not.toHaveBeenCalled();
-    expect(f.handlers.onCreate).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeTitle).not.toHaveBeenCalled();
+    expect(f.handlers.onCreate).not.toHaveBeenCalled(); expect(f.handlers.onClose).not.toHaveBeenCalled();
+    expect(readPersonalWordbookDraft('synthetic-student').title).toBe('教材A');
   });
-
-  it('provides a focusable native button for file selection and locks late file events', async () => {
-    const save = deferred();
-    const f = fixture({ createMode: 'FILE', uploadFile: new File(['synthetic'], 'sample.csv', { type: 'text/csv' }) });
-    f.handlers.onCreate.mockReturnValue(save.promise);
-    const tree = f.render();
-    const input = byId(tree, 'phrasebook-create-file-upload');
-    const click = vi.fn();
-    input.props.ref.current = { click };
-    const picker = find(tree, (node) => node.props['data-testid'] === 'phrasebook-create-file-picker');
-    expect(picker.type).toBe('button');
-    expect(picker.props.type).toBe('button');
-    expect(picker.props.tabIndex).not.toBe(-1);
-    picker.props.onClick();
-    expect(click).toHaveBeenCalledTimes(1);
-    const first = submit(tree).props.onClick();
-    picker.props.onClick();
-    input.props.onChange({ target: { files: [new File(['B'], 'new.csv')] } });
-    expect(click).toHaveBeenCalledTimes(1);
-    expect(f.handlers.onFileChange).not.toHaveBeenCalled();
-    const pending = f.render();
-    expect(byId(pending, 'phrasebook-create-file-upload').props.disabled).toBe(true);
-    save.resolve();
-    await first;
+  it('keeps CSV optional, rejects PDF extraction and never submits during file import', async () => {
+    const f = fixture(); const tree = f.render(); const input = byId(tree, 'phrasebook-create-file-upload');
+    expect(input.props.accept).toBe('.csv,text/csv');
+    input.props.onChange({ target: { files: [new File(['synthetic'], 'source.pdf', { type: 'application/pdf' })], value: 'source.pdf' } });
+    await vi.waitFor(() => expect(nodes(f.render()).some(node => node.props.role === 'alert')).toBe(true));
+    expect(f.handlers.onCreate).not.toHaveBeenCalled(); expect(readPersonalWordbookDraft('synthetic-student').rows[0].word).toBe('plant');
   });
-
-  it('does not call creation for an empty title even if a stale event handler is invoked', async () => {
-    const f = fixture({ newBookTitle: ' ' });
-    await submit(f.render()).props.onClick();
-    expect(f.handlers.onCreate).not.toHaveBeenCalled();
+  it('starts study using the actual returned book ID and displays persisted warnings', async () => {
+    const f = fixture(); f.handlers.onCreate.mockResolvedValue({ ...savedResult, skippedRowCount: 1, warnings: [{ code: 'DUPLICATE_ROW', rowNumber: 3, message: 'duplicate synthetic row' }] });
+    submit(confirm(f)).props.onClick(); await vi.waitFor(() => expect(text(f.render())).toContain('単語帳を保存しました'));
+    const tree = f.render(); expect(text(tree)).toContain('duplicate synthetic row');
+    find(tree, node => node.props['data-testid'] === 'personal-wordbook-start-study').props.onClick();
+    expect(f.handlers.onStartStudy).toHaveBeenCalledWith('actual-server-book-id'); expect(f.handlers.onClose).toHaveBeenCalledTimes(1);
   });
-
-  it('accepts CSV only and explains stopped OCR without calling creation or clearing the selected input', async () => {
-    const uploadFile = new File(['synthetic'], 'source.pdf', { type: 'application/pdf' });
-    const f = fixture({ createMode: 'FILE', uploadFile });
-    const tree = f.render();
-    expect(byId(tree, 'phrasebook-create-file-upload').props.accept).toBe('.csv,text/csv');
-    expect(submit(tree).props.disabled).toBe(true);
-    await submit(tree).props.onClick();
-    expect(f.handlers.onCreate).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeTitle).not.toHaveBeenCalled();
-    expect(f.handlers.onChangeRawText).not.toHaveBeenCalled();
-    expect(find(tree, node => node.props['data-testid'] === 'phrasebook-create-validation-message').props.children).toContain('自動抽出は現在利用できません');
-    expect(find(tree, node => node.type === 'span' && node.props.children === uploadFile.name)).toBeTruthy();
+  it('guards the parent modal close while controller is creating', () => {
+    const close = vi.fn(); const controller = { creating: true, setShowCreateModal: close };
+    const tree = StudentDashboardModals({ user: { uid: 'synthetic-student', email: 'student@example.invalid', displayName: '合成生徒', role: UserRole.STUDENT }, announcementFeed: { feed: [] }, controller,
+      viewModel: { canCreateFromText: true, currentPlanPolicy: { label: 'テスト' } }, isMobileViewport: false, onUserUpdate: () => {} } as unknown as React.ComponentProps<typeof StudentDashboardModals>) as Node;
+    const modal = find(tree, node => node.type === PhrasebookCreateModal); modal.props.onClose(); expect(close).not.toHaveBeenCalled();
+    controller.creating = false; modal.props.onClose(); expect(close).toHaveBeenCalledWith(false);
   });
-
-  it('guards the parent modal close callback while its controller is creating', () => {
-    const close = vi.fn();
-    const controller = { creating: true, createMode: 'TEXT', setShowCreateModal: close };
-    const tree = StudentDashboardModals({
-      user: { uid: 'synthetic-student', email: 'student@example.invalid', displayName: '合成生徒', role: UserRole.STUDENT },
-      announcementFeed: { feed: [] }, controller,
-      viewModel: { canCreateFromText: true, currentPlanPolicy: { label: 'テスト' } },
-      isMobileViewport: false, onUserUpdate: () => {},
-    } as unknown as React.ComponentProps<typeof StudentDashboardModals>) as Node;
-    const modal = find(tree, (node) => node.type === PhrasebookCreateModal);
-    modal.props.onClose();
-    expect(close).not.toHaveBeenCalled();
-    controller.creating = false;
-    modal.props.onClose();
-    expect(close).toHaveBeenCalledWith(false);
+  it.each(['success', 'rejection', 'lost-response'] as const)('preserves a newer other-tab draft after an old save %s', async outcome => {
+    const old = deferred(); const f = fixture(); f.handlers.onCreate.mockReturnValue(old.promise);
+    submit(confirm(f)).props.onClick();
+    expect(readPersonalWordbookDraft('synthetic-student').pendingRequest).toBeDefined();
+    const newer = { ...emptyPersonalWordbookDraft('synthetic-student'), title: '次の単語帳',
+      rows: [createPersonalDraftRow({ word: 'newer-tab-word', definition: '別タブの新しい入力' })] };
+    writePersonalWordbookDraft(newer);
+    if (outcome === 'success') old.resolve(savedResult);
+    else old.reject(outcome === 'rejection' ? new ApiError('old request rejected', 409) : new Error('old reply lost'));
+    await vi.waitFor(() => expect(submit(f.render()).props.disabled).toBe(false));
+    expect(readPersonalWordbookDraft('synthetic-student')).toEqual(newer);
+    expect(find(f.render(), node => node.type === PersonalWordbookEditor).props.rows).toEqual(newer.rows);
+    expect(text(f.render())).not.toContain('単語帳を保存しました');
+    expect(nodes(f.render()).some(node => node.props.role === 'alert')).toBe(false);
+  });
+  it('completes its own memory-only save when storage writes fail', async () => {
+    const f = fixture();
+    f.render();
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('quota'); } });
+    submit(confirm(f)).props.onClick();
+    await vi.waitFor(() => expect(text(f.render())).toContain('単語帳を保存しました'));
+    expect(text(f.render())).toContain('下書きをこのブラウザーに保存できません');
   });
 });

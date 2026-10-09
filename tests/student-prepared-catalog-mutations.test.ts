@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SubscriptionPlan, UserRole } from '../types';
 
 const harness = vi.hoisted(() => ({ slots: [] as unknown[], cursor: 0 }));
@@ -14,6 +14,7 @@ const service = vi.hoisted(() => ({ save: vi.fn(), textAi: vi.fn(), mediaAi: vi.
 vi.mock('../services/dashboard', () => ({ dashboardService: { batchImportWords: service.save } }));
 vi.mock('../services/gemini', () => ({ extractVocabularyFromText: service.textAi, extractVocabularyFromMedia: service.mediaAi }));
 import { useStudentDashboardMutations } from '../hooks/useStudentDashboardMutations';
+import { emptyPersonalWordbookDraft, createPersonalDraftRow, preparePersonalDraftRequest } from '../shared/personalWordbookDraft';
 
 const params = () => ({
   user: { uid: 'synthetic-owner', email: 'synthetic@example.test', role: UserRole.STUDENT, subscriptionPlan: SubscriptionPlan.TOC_PAID },
@@ -31,8 +32,31 @@ beforeEach(() => {
   vi.clearAllMocks();
   service.save.mockResolvedValue({ importedWordCount: 1, importedBookCount: 1, warnings: [], skippedRowCount: 0 });
 });
+afterEach(() => vi.useRealTimers());
+const directRequest = () => preparePersonalDraftRequest({ ...emptyPersonalWordbookDraft('synthetic-owner'), rows: [createPersonalDraftRow({ word: 'source', definition: '出典' })] });
 
 describe('personal prepared book persistence', () => {
+  it('releases an unanswered request after twenty seconds and retries the same immutable payload', async () => {
+    vi.useFakeTimers();
+    const input = params(); const request = directRequest();
+    service.save.mockReturnValueOnce(new Promise(() => {}));
+    const first = render(input).handleCreatePhrasebook(request);
+    const failed = expect(first).rejects.toThrow('保存の応答を確認できません');
+    await vi.advanceTimersByTimeAsync(20_000); await failed;
+    expect(input.setCreating).toHaveBeenLastCalledWith(false);
+    await render(input).handleCreatePhrasebook(request);
+    expect(service.save.mock.calls.map(call => call[0])).toEqual([request, request]);
+    expect(input.setShowCreateModal).not.toHaveBeenCalled();
+  });
+  it('returns a confirmed book before a stalled dashboard refresh without offering another import', async () => {
+    const input = params(); const request = directRequest();
+    input.refreshDashboard = vi.fn().mockReturnValue(new Promise(() => {}));
+    const result = await render(input).handleCreatePhrasebook(request);
+    expect(result?.importedWordCount).toBe(1);
+    expect(input.setCreating).toHaveBeenLastCalledWith(false);
+    expect(input.setRawText).not.toHaveBeenCalled();
+    expect(input.setShowCreateModal).not.toHaveBeenCalled();
+  });
   it('saves prepared examples through the owner storage path and makes no provider request', async () => {
     const input = params();
     await render(input).handleCreatePhrasebook();

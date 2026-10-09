@@ -272,3 +272,51 @@ describe('local catalog write contracts', () => {
   });
 
 });
+
+describe('personal local import receipts', () => {
+  const setupReceipt = () => {
+    const lookup = createControlledRequest<unknown>();
+    const bookLookup = createControlledRequest<unknown>();
+    const booksAdd = vi.fn(); const wordsAdd = vi.fn(); const receiptsAdd = vi.fn();
+    const transaction = createControlledTransaction({
+      [STORES.BOOKS]: { add: booksAdd, get: () => bookLookup.request } as unknown as IDBObjectStore,
+      [STORES.WORDS]: { add: wordsAdd } as unknown as IDBObjectStore,
+      [STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS]: { add: receiptsAdd, get: () => lookup.request } as unknown as IDBObjectStore,
+    });
+    Object.assign(transaction.transaction, { abort: vi.fn(() => transaction.transaction.onabort?.call(transaction.transaction, new Event('abort'))) });
+    const db = { transaction: vi.fn(() => transaction.transaction) } as unknown as IDBDatabase;
+    const context = { getDb: async () => db, getSession: async () => ({ uid: 'student-1' }) } as unknown as LocalCatalogStorageContext;
+    const request = { ...makeImportRequest(), clientImportId: 'receipt-id-000001', createdByUid: 'student-1' };
+    return { context, request, lookup, bookLookup, booksAdd, wordsAdd, receiptsAdd, transaction, db };
+  };
+  it('writes book, words and receipt in one transaction and waits for commit', async () => {
+    const f = setupReceipt(); let resolved = false;
+    const pending = batchImportWordsLocal(f.context, f.request).then(r => { resolved = true; return r; });
+    await vi.waitFor(() => expect(f.lookup.request.onsuccess).toBeTypeOf('function'));
+    f.lookup.succeed(undefined);
+    expect(f.db.transaction).toHaveBeenCalledWith([STORES.BOOKS, STORES.WORDS, STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS], 'readwrite');
+    expect(f.booksAdd).toHaveBeenCalledTimes(1); expect(f.wordsAdd).toHaveBeenCalledTimes(1); expect(f.receiptsAdd).toHaveBeenCalledTimes(1);
+    await flushMicrotasks(); expect(resolved).toBe(false);
+    f.transaction.complete();
+    expect(await pending).toEqual(f.receiptsAdd.mock.calls[0][0].result);
+  });
+  it.each(['same', 'changed', 'deleted'] as const)('replays or refuses receipt (%s) without adding records', async mode => {
+    const f = setupReceipt();
+    const { preparePersonalCatalogImport } = await import('../shared/personalCatalogImport');
+    const prepared = await preparePersonalCatalogImport(f.request, 'student-1');
+    const pending = batchImportWordsLocal(f.context, f.request);
+    const asserted = mode === 'same' ? pending : expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(f.lookup.request.onsuccess).toBeTypeOf('function'));
+    f.lookup.succeed({ ...prepared, fingerprint: mode === 'changed' ? 'other' : prepared.fingerprint });
+    if (mode !== 'changed') f.bookLookup.succeed(mode === 'deleted' ? undefined : makeLegacyBook({ id: prepared.bookId }));
+    if (mode === 'same') { f.transaction.complete(); expect(await asserted).toEqual(prepared.result); } else await asserted;
+    expect(f.booksAdd).not.toHaveBeenCalled(); expect(f.wordsAdd).not.toHaveBeenCalled(); expect(f.receiptsAdd).not.toHaveBeenCalled();
+  });
+  it('rejects an aborted write instead of returning the prepared result', async () => {
+    const f = setupReceipt(); const pending = batchImportWordsLocal(f.context, f.request);
+    const rejected = expect(pending).rejects.toThrow('synthetic write failure');
+    await vi.waitFor(() => expect(f.lookup.request.onsuccess).toBeTypeOf('function'));
+    f.lookup.succeed(undefined); f.transaction.fail(new Error('synthetic write failure'));
+    await rejected;
+  });
+});

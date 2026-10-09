@@ -1111,6 +1111,105 @@ const main = async () => {
       'duplicate phrasebook rows should return a DUPLICATE_ROW warning',
     );
 
+    // Direct-entry receipts: native local D1, including concurrent replies and rollback.
+    // SQL literals below are escaped even though every value is a synthetic fixture.
+    const importSqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
+    const directImportId = 'api-direct-import-receipt-0001';
+    const directTitle = "Direct student's 植物";
+    const directRequest = {
+      clientImportId: directImportId, createdByUid: orgStudentUser.uid, defaultBookName: directTitle,
+      source: { kind: 'rows', rows: [
+        { word: 'plant', definition: '植物', number: 7, sourceNote: 'synthetic source', sourceEntryId: 17 },
+        { word: 'plant', definition: '植える', number: 8, sourceNote: 'synthetic source', sourceEntryId: 18 },
+        { word: 'plant', definition: '植物', number: 9, sourceNote: 'synthetic source', sourceEntryId: 17 },
+      ] },
+    };
+    const ledgerCountBeforeDirect = (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS count FROM material_source_ledger'))[0].count;
+    const concurrentDirect = await Promise.all([
+      orgStudent.storageRaw('batchImportWords', directRequest),
+      orgStudent.storageRaw('batchImportWords', directRequest),
+    ]);
+    assert(concurrentDirect.every(response => response.status === 200), 'same-ID concurrent direct imports should both recover a 200 receipt');
+    const directResult = concurrentDirect[0].data;
+    assert(JSON.stringify(directResult) === JSON.stringify(concurrentDirect[1].data), 'concurrent direct imports should return identical receipt results');
+    assert(directResult.importedBookCount === 1 && directResult.importedWordCount === 2 && directResult.skippedRowCount === 1,
+      'direct import should deduplicate exact rows while preserving distinct senses');
+    assert(directResult.warnings.some(warning => warning.code === 'DUPLICATE_ROW' && warning.rowNumber === 3), 'direct receipt should identify the third duplicate row');
+    const directBookId = directResult.importedBookIds[0];
+    const directCounts = (await queryLocalSql(persistDir, `SELECT
+      (SELECT COUNT(*) FROM books WHERE id=${importSqlLiteral(directBookId)} AND created_by=${importSqlLiteral(orgStudentUser.uid)}) AS books,
+      (SELECT COUNT(*) FROM words WHERE book_id=${importSqlLiteral(directBookId)}) AS words,
+      (SELECT COUNT(*) FROM personal_catalog_import_receipts WHERE user_id=${importSqlLiteral(orgStudentUser.uid)} AND client_import_id=${importSqlLiteral(directImportId)}) AS receipts,
+      (SELECT COUNT(*) FROM books WHERE title=${importSqlLiteral(directTitle)} AND created_by=${importSqlLiteral(orgStudentUser.uid)}) AS title_books`))[0];
+    assert(directCounts.books === 1 && directCounts.words === 2 && directCounts.receipts === 1 && directCounts.title_books === 1,
+      'concurrent direct imports must create only one owned book, two words and one receipt');
+    const directWords = await orgStudent.storage('getWordsByBook', { bookId: directBookId });
+    assert(directWords.length === 2 && directWords.some(word => word.definition === '植物' && word.number === 7 && word.sourceEntryId === 17)
+      && directWords.some(word => word.definition === '植える' && word.number === 8 && word.sourceEntryId === 18)
+      && directWords.every(word => word.sourceNote === 'synthetic source'), 'direct homographs should preserve original numbers and provenance');
+    const directRetry = await orgStudent.storage('batchImportWords', directRequest);
+    assert(JSON.stringify(directRetry) === JSON.stringify(directResult), 'a repeated direct request should replay its exact result');
+    const retryWords = await orgStudent.storage('getWordsByBook', { bookId: directBookId });
+    assert(JSON.stringify(directWords.map(word => word.id).sort()) === JSON.stringify(retryWords.map(word => word.id).sort()), 'replay must preserve word IDs');
+    const changedDirect = await orgStudent.storageRaw('batchImportWords', { ...directRequest, defaultBookName: 'Changed direct title' });
+    assert(changedDirect.status === 409, 'changed content under a direct creation ID must conflict');
+    const mismatchedDirect = await freeStudent.storageRaw('batchImportWords', { ...directRequest, clientImportId: 'api-direct-owner-mismatch' });
+    assert(mismatchedDirect.status === 403, 'direct import must reject another account owner UID');
+
+    const atomicImportId = 'api-direct-atomic-rollback-0001';
+    const atomicBookId = `personal-${createHash('sha256').update(`${orgStudentUser.uid}:${atomicImportId}`).digest('hex')}`;
+    const atomicRequest = {
+      clientImportId: atomicImportId, createdByUid: orgStudentUser.uid, defaultBookName: 'Synthetic atomic direct import',
+      source: { kind: 'rows', rows: Array.from({ length: 201 }, (_, index) => ({
+        word: index === 200 ? 'MY_IMPORT_ATOMIC_FAIL' : `synthetic_atomic_${index + 1}`,
+        definition: `合成意味${index + 1}`, number: index + 1,
+      })) },
+    };
+    try {
+      await executeLocalSql(persistDir, `CREATE TRIGGER my_import_atomic_fail BEFORE INSERT ON words
+        WHEN NEW.book_id=${importSqlLiteral(atomicBookId)} AND NEW.word='MY_IMPORT_ATOMIC_FAIL'
+        BEGIN SELECT RAISE(ABORT, 'synthetic direct import atomic failure'); END;`);
+      const atomicRejected = await orgStudent.storageRaw('batchImportWords', atomicRequest);
+      assert(atomicRejected.status === 500, 'the forced 201st-word failure should reject direct import');
+      const rolledBack = (await queryLocalSql(persistDir, `SELECT
+        (SELECT COUNT(*) FROM books WHERE id=${importSqlLiteral(atomicBookId)}) AS books,
+        (SELECT COUNT(*) FROM words WHERE book_id=${importSqlLiteral(atomicBookId)}) AS words,
+        (SELECT COUNT(*) FROM personal_catalog_import_receipts WHERE user_id=${importSqlLiteral(orgStudentUser.uid)} AND client_import_id=${importSqlLiteral(atomicImportId)}) AS receipts`))[0];
+      assert(rolledBack.books === 0 && rolledBack.words === 0 && rolledBack.receipts === 0,
+        'native D1 must roll back book, all 200 preceding words and receipt after the 201st-word failure');
+    } finally {
+      await executeLocalSql(persistDir, 'DROP TRIGGER IF EXISTS my_import_atomic_fail');
+    }
+    const atomicRecovered = await orgStudent.storage('batchImportWords', atomicRequest);
+    assert(atomicRecovered.importedBookIds[0] === atomicBookId && atomicRecovered.importedWordCount === 201,
+      'the unchanged failed request should succeed with all words after the trigger is removed');
+    const maximumDirectRequest = {
+      clientImportId: 'api-direct-maximum-500-rows', createdByUid: orgStudentUser.uid, defaultBookName: 'Synthetic 500-word direct import',
+      source: { kind: 'rows', rows: Array.from({ length: 500 }, (_, index) => ({
+        word: `synthetic_maximum_${index + 1}`, definition: `合成上限意味${index + 1}`, number: index + 1,
+      })) },
+    };
+    const maximumDirectResult = await orgStudent.storage('batchImportWords', maximumDirectRequest);
+    const maximumDirectWords = await orgStudent.storage('getWordsByBook', { bookId: maximumDirectResult.importedBookIds[0] });
+    assert(maximumDirectResult.importedWordCount === 500 && maximumDirectWords.length === 500
+      && maximumDirectWords.some(word => word.number === 500 && word.definition === '合成上限意味500'),
+      'the supported 500-row limit must commit and round-trip all words on native D1');
+    const changedDirectRows = await orgStudent.storageRaw('batchImportWords', {
+      ...directRequest, source: { kind: 'rows', rows: directRequest.source.rows.map((row, index) => index ? row : { ...row, definition: '異なる意味' }) },
+    });
+    assert(changedDirectRows.status === 409, 'a changed word meaning under the same creation ID must conflict');
+    await orgStudent.storage('deleteBook', { bookId: directBookId });
+    const deletedDirectRetry = await orgStudent.storageRaw('batchImportWords', directRequest);
+    assert(deletedDirectRetry.status === 409, 'receipt replay must not resurrect a deleted direct book');
+    const deletedDirect = (await queryLocalSql(persistDir, `SELECT
+      (SELECT COUNT(*) FROM books WHERE id=${importSqlLiteral(directBookId)}) AS books,
+      (SELECT COUNT(*) FROM words WHERE book_id=${importSqlLiteral(directBookId)}) AS words,
+      (SELECT COUNT(*) FROM personal_catalog_import_receipts WHERE user_id=${importSqlLiteral(orgStudentUser.uid)} AND client_import_id=${importSqlLiteral(directImportId)}) AS receipts`))[0];
+    assert(deletedDirect.books === 0 && deletedDirect.words === 0 && deletedDirect.receipts === 1,
+      'deleted direct books retain only the anti-resurrection receipt');
+    const ledgerCountAfterDirect = (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS count FROM material_source_ledger'))[0].count;
+    assert(ledgerCountAfterDirect === ledgerCountBeforeDirect, 'direct personal imports must not write the official rights ledger');
+
     const orgBooksAfterPhrasebook = await orgStudent.storage('getBooks');
     assert(
       orgBooksAfterPhrasebook.some((book) => book.title === 'Follow-up Drill'),

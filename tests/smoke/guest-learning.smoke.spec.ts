@@ -176,10 +176,11 @@ test(`guest signup explicitly imports immutable Naru answers after a lost respon
 test('long device-only books wrap at 320px and long words remain scrollable with result focus', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 740 }); await openNaru(page);
   await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await page.getByText('単語帳名を変更（任意）', { exact: true }).click();
   await page.getByLabel('単語帳名（80文字以内）').fill('LongTitle'.repeat(8));
-  await page.getByLabel('英単語', { exact: true }).fill('longword'.repeat(15));
-  await page.getByLabel('意味', { exact: true }).fill('meaning'.repeat(100));
-  await page.getByRole('button', { name: '下書きに追加', exact: true }).click(); await page.getByRole('button', { name: '単語帳を作成する', exact: true }).click();
+  await page.getByLabel('単語', { exact: true }).fill('longword'.repeat(15));
+  await page.getByRole('textbox', { name: '意味', exact: true }).fill('meaning'.repeat(100));
+  await page.getByTestId('guest-wordbook-confirm').click(); await page.getByRole('button', { name: '単語帳を作成する', exact: true }).click();
   await page.getByRole('button', { name: 'この単語帳で学ぶ', exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await page.screenshot({ path: info.outputPath('local-book-title-320.png'), fullPage: true });
@@ -192,6 +193,98 @@ test('long device-only books wrap at 320px and long words remain scrollable with
   await page.screenshot({ path: info.outputPath('local-book-meaning-320.png'), fullPage: true });
   await page.getByTestId('guest-rate-2').click(); await expect(page.getByTestId('guest-session-result').locator('h2')).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
+test('guest direct entry retains editable draft, confirms duplicates, and learns the actual saved book without CSV', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mutations: string[] = []; const errors: string[] = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/') && !['GET', 'HEAD'].includes(request.method())) mutations.push(request.url()); });
+  page.on('pageerror', cause => errors.push(cause.message));
+  await openNaru(page);
+  await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  const word = page.getByLabel('単語', { exact: true }); const meaning = page.getByRole('textbox', { name: '意味', exact: true });
+  await word.fill('bank'); await meaning.fill('銀行');
+  await word.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true });
+  await expect(page.getByTestId('guest-wordbook-confirmation')).toHaveCount(0);
+  await page.getByRole('button', { name: '次の単語を追加', exact: true }).click();
+  await word.fill('bank'); await meaning.fill('岸');
+  await page.getByRole('button', { name: '次の単語を追加', exact: true }).click();
+  await word.fill('bank'); await meaning.fill('誤入力');
+  await page.getByRole('button', { name: '3語目を編集', exact: true }).click(); await meaning.fill('銀行');
+  await page.getByRole('button', { name: '2語目を削除', exact: true }).click();
+  await page.getByRole('button', { name: '削除を取り消す', exact: true }).click();
+  await page.getByRole('button', { name: 'ゲストホームへ戻る', exact: true }).click();
+  await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await expect(page.getByRole('list', { name: '入力した単語', exact: true }).getByRole('listitem')).toHaveCount(3);
+  await page.reload(); await expect(page.getByTestId('guest-local-books-screen')).toBeVisible();
+  await expect(word).toHaveValue('bank');
+  await expect(page.getByRole('list', { name: '入力した単語', exact: true })).toContainText('岸');
+  await page.getByTestId('guest-wordbook-confirm').click();
+  const confirmation = page.getByTestId('guest-wordbook-confirmation');
+  await expect(confirmation).toContainText('2語をこの端末に保存'); await expect(confirmation).toContainText('同じ単語が1件');
+  await expect(confirmation.getByRole('list', { name: '保存する単語' }).getByRole('listitem')).toHaveCount(2);
+  await page.getByRole('button', { name: '入力へ戻る', exact: true }).click(); await expect(word).toBeFocused();
+  await page.getByTestId('guest-wordbook-confirm').click(); await page.getByTestId('guest-wordbook-save').click();
+  await expect(page.getByTestId('guest-wordbook-created')).toContainText('自分の単語帳 · 2語を作成');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('steady-study:guest-local-books:v1') ?? '[]'));
+  expect(saved).toHaveLength(1); expect(saved[0].words.map((row: any) => row.definition)).toEqual(['銀行', '岸']);
+  expect(saved[0].words[0].bookId).toBe(saved[0].id);
+  await page.getByRole('button', { name: '作成した単語帳で学ぶ', exact: true }).click();
+  await expect(page.getByTestId('guest-selected-book')).toContainText('自分の単語帳');
+  await page.getByTestId('guest-study-start').click();
+  await expect(page.getByTestId('guest-study-card')).toHaveAttribute('data-word-id', saved[0].words[0].id);
+  await expect(page.getByTestId('guest-study-card')).toHaveAttribute('data-book-id', saved[0].id);
+  await page.getByTestId('guest-flip').click(); await expect(page.getByTestId('guest-card-back').locator('h2')).toHaveText(saved[0].words[0].definition);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  expect(mutations).toEqual([]); expect(errors).toEqual([]);
+  await page.screenshot({ path: info.outputPath('guest-direct-entry-saved-card-390.png'), fullPage: true });
+});
+
+test('guest delayed CSV completion after Back preserves the entered draft and never appends to a later screen', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalText = File.prototype.text;
+    File.prototype.text = async function () {
+      if (this.name === 'slow.csv') await new Promise<void>(resolve => { (window as any).__releaseGuestCsv = resolve; });
+      return originalText.call(this);
+    };
+  });
+  await openNaru(page); await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await page.getByLabel('単語', { exact: true }).fill('apple'); await page.getByRole('textbox', { name: '意味', exact: true }).fill('りんご');
+  await page.getByText('CSVファイルがある場合は取り込む', { exact: true }).click();
+  await page.getByLabel('CSVファイル', { exact: true }).setInputFiles({ name: 'slow.csv', mimeType: 'text/csv', buffer: Buffer.from('Word,Meaning\nbook,本') });
+  await expect(page.getByText('CSVを読み込んでいます…', { exact: true })).toBeVisible();
+  await page.goBack(); await expect(page.getByTestId('guest-local-books-screen')).toHaveCount(0);
+  await page.evaluate(() => (window as any).__releaseGuestCsv());
+  await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await expect(page.getByLabel('単語', { exact: true })).toHaveValue('apple');
+  await expect(page.getByRole('textbox', { name: '意味', exact: true })).toHaveValue('りんご');
+  await expect(page.getByRole('list', { name: '入力した単語', exact: true })).toHaveCount(0);
+  await expect(page.getByText('1語を取り込みました。', { exact: false })).toHaveCount(0);
+  await page.reload(); await expect(page.getByLabel('単語', { exact: true })).toHaveValue('apple');
+  await page.getByTestId('guest-wordbook-confirm').click(); await page.getByTestId('guest-wordbook-save').click();
+  await expect(page.getByTestId('guest-wordbook-created')).toContainText('1語を作成');
+  const books = await page.evaluate(() => JSON.parse(localStorage.getItem('steady-study:guest-local-books:v1') ?? '[]'));
+  expect(books).toHaveLength(1); expect(books[0].words.map((row: any) => row.word)).toEqual(['apple']);
+});
+
+test('guest storage failure keeps one-word entry usable across returning to the screen and explains memory-only saving', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalGet = Storage.prototype.getItem; const originalSet = Storage.prototype.setItem;
+    const isGuestWordbook = (key: string) => key === 'steady-study:guest-wordbook-draft:v1' || key === 'steady-study:guest-local-books:v1';
+    Storage.prototype.getItem = function (key: string) { if (isGuestWordbook(key)) throw new Error('Synthetic storage failure'); return originalGet.call(this, key); };
+    Storage.prototype.setItem = function (key: string, value: string) { if (isGuestWordbook(key)) throw new Error('Synthetic quota failure'); originalSet.call(this, key, value); };
+  });
+  await openNaru(page); await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await expect(page.getByText('入力の下書きをこの端末に保存できません。', { exact: false })).toBeVisible();
+  await page.getByLabel('単語', { exact: true }).fill('book'); await page.getByRole('textbox', { name: '意味', exact: true }).fill('本');
+  await page.getByRole('button', { name: 'ゲストホームへ戻る', exact: true }).click();
+  await page.getByRole('button', { name: '自分の単語帳を作る・取り込む', exact: true }).click();
+  await expect(page.getByLabel('単語', { exact: true })).toHaveValue('book');
+  await page.getByTestId('guest-wordbook-confirm').click(); await page.getByTestId('guest-wordbook-save').click();
+  await expect(page.getByTestId('guest-wordbook-created')).toContainText('端末への保存は確認できません');
+  await page.getByRole('button', { name: '作成した単語帳で学ぶ', exact: true }).click(); await page.getByTestId('guest-study-start').click();
+  await expect(page.getByTestId('guest-card-front').locator('h2')).toHaveText('book');
+  await page.getByTestId('guest-flip').click(); await expect(page.getByTestId('guest-card-back').locator('h2')).toHaveText('本');
 });
 
 test('guest advance and single-word requeue never expose answers, including reduced motion and rapid clicks', async ({ browser }) => {

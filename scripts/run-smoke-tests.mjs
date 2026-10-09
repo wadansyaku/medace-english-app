@@ -298,6 +298,7 @@ const sentinelFiles = [
 ];
 
 const cloudflareFiles = [
+  'tests/smoke/personal-wordbook.smoke.spec.ts',
   'tests/smoke/pronunciation.smoke.spec.ts',
   'tests/smoke/guest-pronunciation.smoke.spec.ts',
   'tests/smoke/quiz-pronunciation.smoke.spec.ts',
@@ -345,7 +346,7 @@ const suites = suiteMode === 'sentinel'
           ? []
           : [{
             name: 'idb',
-            files: ['tests/smoke/idb.smoke.spec.ts', 'tests/smoke/quiz-receipts-idb.smoke.spec.ts'],
+            files: ['tests/smoke/idb.smoke.spec.ts', 'tests/smoke/quiz-receipts-idb.smoke.spec.ts', 'tests/smoke/personal-wordbook-idb.smoke.spec.ts'],
             env: {
               VITE_STORAGE_MODE: 'idb',
             },

@@ -58,7 +58,9 @@ test('dashboard recovery keeps failed data unknown and retries without creating 
 for (const width of [320, 1366]) {
   test(`personal prepared CSV keeps failed input and saves examples without AI at ${width}px`, async ({ page }, info) => {
     await page.setViewportSize({ width, height: width === 320 ? 568 : 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     let saveCalls = 0;
+    const requests: unknown[] = [];
     const aiRequests: string[] = [];
     const pageErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(error.message));
@@ -69,6 +71,7 @@ for (const width of [320, 1366]) {
     await page.route('**/api/storage', async route => {
       if (route.request().postDataJSON()?.action === 'batchImportWords') {
         saveCalls += 1;
+        requests.push(route.request().postDataJSON().payload);
         if (saveCalls === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic prepared-book save unavailable' }) });
       }
       await route.continue();
@@ -77,27 +80,32 @@ for (const width of [320, 1366]) {
     await maybeCompleteOnboarding(page);
     await openDashboardReference(page, 'library');
     const firstCreate = page.getByTestId('library-create-first-personal-book');
-    if (await firstCreate.count()) await firstCreate.click();
+    if (await firstCreate.isVisible().catch(() => false)) await firstCreate.click();
     else await page.getByTestId('dashboard-library-section').getByRole('button', { name: /^(作成|新規作成)$/ }).click();
     const modal = page.getByRole('dialog', { name: 'My単語帳 作成', exact: true });
     const title = `Synthetic prepared CSV ${width} ${Date.now()}`;
     const csv = 'Word,Meaning,ExampleSentence,ExampleMeaning\nsource,出典,Please check the source.,出典を確認してください。';
-    await modal.getByLabel('タイトル', { exact: true }).fill(title);
-    const input = modal.getByLabel('単語・語義（CSV形式）', { exact: true });
-    await input.fill(csv);
-    await modal.getByRole('button', { name: 'CSV取込', exact: true }).click();
+    await modal.getByLabel('単語帳名（変更は任意）', { exact: true }).fill(title);
+    await modal.getByText('CSVから取り込む', { exact: true }).click();
     await modal.locator('input[type="file"]').setInputFiles({ name: 'synthetic-not-sent.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 synthetic only') });
-    await expect(modal.getByTestId('phrasebook-create-validation-message')).toContainText('自動抽出は現在利用できません');
+    await expect(modal.getByRole('alert')).toContainText('自動抽出は現在利用できません');
     await expect(modal.getByTestId('phrasebook-create-submit')).toBeDisabled();
     expect(saveCalls).toBe(0); expect(aiRequests).toEqual([]);
-    await modal.getByRole('button', { name: '手入力', exact: true }).click();
-    await expect(input).toHaveValue(csv);
+    await modal.getByLabel('CSVを貼り付ける', { exact: true }).fill(csv);
+    await modal.getByRole('button', { name: 'CSVを入力欄へ取り込む', exact: true }).click();
+    await expect(modal.getByLabel('単語', { exact: true })).toHaveValue('source');
+    await expect(modal.getByRole('textbox', { name: '意味', exact: true })).toHaveValue('出典');
+    await modal.getByTestId('phrasebook-create-submit').click();
+    const confirmation = modal.getByTestId('personal-wordbook-confirmation');
+    await expect(confirmation).toContainText('Please check the source.');
+    await expect(confirmation).toContainText('出典を確認してください。');
     await modal.getByTestId('phrasebook-create-submit').click();
     await expect(modal.getByRole('alert')).toContainText('Synthetic prepared-book save unavailable');
     await expect(modal.getByRole('alert')).toBeFocused();
     await expect(modal.getByRole('alert')).toBeInViewport();
-    await expect(input).toHaveValue(csv);
-    await expect(modal.getByLabel('タイトル', { exact: true })).toHaveValue(title);
+    await expect(confirmation).toContainText(title);
+    await expect(confirmation).toContainText('Please check the source.');
+    await expect(modal.getByTestId('phrasebook-create-submit')).toHaveText('保存を再確認');
     expect(saveCalls).toBe(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
     const geometry = await modal.evaluate(element => {
@@ -106,17 +114,19 @@ for (const width of [320, 1366]) {
     });
     expect(geometry.top).toBeGreaterThanOrEqual(-1);
     expect(geometry.bottom).toBeLessThanOrEqual(geometry.height + 1);
-    await page.screenshot({ path: info.outputPath(`prepared-import-held-${width}.png`) });
+    await page.screenshot({ path: info.outputPath(`prepared-import-held-${width}.png`), animations: 'disabled' });
     const responsePromise = page.waitForResponse(response => response.url().endsWith('/api/storage')
       && response.request().postDataJSON()?.action === 'batchImportWords' && response.ok());
     await modal.getByTestId('phrasebook-create-submit').evaluate((button: HTMLButtonElement) => { button.click(); button.click(); });
     const result = await (await responsePromise).json();
-    await expect(modal).toHaveCount(0);
-    expect(saveCalls).toBe(2);
+    await expect(modal.getByTestId('personal-wordbook-saved')).toContainText('1語を保存しました');
+    expect(saveCalls).toBe(2); expect(requests[1]).toEqual(requests[0]);
     expect(result.importedBookCount).toBe(1);
     expect(result.importedWordCount).toBe(1);
     const words = await storageAction<any[]>(page, 'getWordsByBook', { bookId: result.importedBookIds[0] });
     expect(words).toEqual([expect.objectContaining({ word: 'source', definition: '出典', exampleSentence: 'Please check the source.', exampleMeaning: '出典を確認してください。' })]);
+    await modal.getByRole('button', { name: '一覧へ', exact: true }).click();
+    await expect(modal).toHaveCount(0);
     await page.reload();
     await expect(page.getByTestId('student-dashboard')).toBeVisible();
     const revisited = await storageAction<any[]>(page, 'getWordsByBook', { bookId: result.importedBookIds[0] });

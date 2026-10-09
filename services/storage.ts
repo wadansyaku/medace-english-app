@@ -516,6 +516,7 @@ export class IndexedDBStorageService implements IStorageService {
         STORES.INTERACTION_EVENTS,
         STORES.STUDY_ATTEMPT_RECEIPTS,
         STORES.QUIZ_ATTEMPT_RECEIPTS,
+        STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS,
         STORES.WEAKNESS_SIGNALS,
         STORES.COMMERCIAL_REQUESTS,
         STORES.PRODUCT_ANNOUNCEMENTS,
@@ -533,6 +534,7 @@ export class IndexedDBStorageService implements IStorageService {
     tx.objectStore(STORES.INTERACTION_EVENTS).clear();
     tx.objectStore(STORES.STUDY_ATTEMPT_RECEIPTS).clear();
     tx.objectStore(STORES.QUIZ_ATTEMPT_RECEIPTS).clear();
+    tx.objectStore(STORES.PERSONAL_CATALOG_IMPORT_RECEIPTS).clear();
     tx.objectStore(STORES.WEAKNESS_SIGNALS).clear();
     tx.objectStore(STORES.COMMERCIAL_REQUESTS).clear();
     tx.objectStore(STORES.PRODUCT_ANNOUNCEMENTS).clear();

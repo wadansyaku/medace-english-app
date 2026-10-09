@@ -1,6 +1,8 @@
-2026-10-09 和訳改善版の公開承認: 本人が検証済み3e5cae11397b41ccff29a0d582204b863cd7a918のGitHub/preview/本番公開を承認。20問・別訳40・自然な別順20、未知訳の未採点/保存除外、保存retry確認、D1管理集計の上限修正が対象。正式CI・preview専用検証・本番配備・公開後の教材/履歴保持を通常gateで確認する。課金AI、secret、認可、新たな教材追加の範囲拡張は行わない。[公開受入と検証範囲](./docs/analysis/2026-10-09-translation-reviewed-release.md)。
+2026-10-09 My単語帳改善候補: CSVを用意せず単語・意味を直接入力し、確認・保存・実教材IDで学習を開始する導線を実装。登録後とゲストの下書きを分け、識別子付き個人保存にD1/IDBの原子的receiptを追加した。旧包括公開禁止は継続解除済み。後続の独立レビュー指示に従い、新しいpush・公開は候補レビューの確認待ち。最終検証の結果は [今回の受入記録](./docs/analysis/2026-10-09-personal-wordbook-direct-entry.md) と独立deliveryへ記録する。
 
-2026-10-09 O1公開完了: 本人が本番反映の完了と旧公開禁止の継続解除を明示。PR64を通常gateでmain 1b59c484686e363815afecd824e6541424747d06へ反映し、production37902893690・main CI37902893650成功、本番URL到達と配備SHAを確認。単語/教材/既存履歴とNaru1531語・638印のbefore/after保持をread-onlyで確認した。旧公開禁止は今後も再適用しない。後続和訳候補のローカル限定指示と必須公開gateは維持する。
+2026-10-09 和訳改善版の本番公開完了: PR65を通常gateでmain `4955b54d370ef62fb14502031a405e83acc4d677`へ反映。最終source `fefe1e5c7d319819f22fe616e8a2504140a82a20`、2356unit・276browser・正式CI/preview/production成功。公開導線5件、認証5幅10画像、実本番アセット＋合成APIの学習5幅25画像を受入。Naru1531語/638印と既存履歴265件・保存受領85件をread-onlyで保持確認。旧公開禁止は継続解除し、通常の必須gateを維持する。 [公開受入と検証範囲](./docs/analysis/2026-10-09-translation-reviewed-release.md)。
+
+2026-10-09 O1公開完了: 本人が本番反映の完了と旧公開禁止の継続解除を明示。PR64を通常gateでmain 1b59c484686e363815afecd824e6541424747d06へ反映し、production37902893690・main CI37902893650成功、本番URL到達と配備SHAを確認。単語/教材/既存履歴とNaru1531語・638印のbefore/after保持をread-onlyで確認した。旧公開禁止は今後も再適用しない。当時の後続候補のローカル限定記録は時点の履歴であり、後の公開承認は最新記録を優先する。必須公開gateは維持する。
 
 2026-10-09 和訳品質: [監査と受入基準](./docs/analysis/2026-10-09-translation-quality-local-candidate.md)。
 

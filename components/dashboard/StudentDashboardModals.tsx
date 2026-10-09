@@ -19,6 +19,7 @@ interface StudentDashboardModalsProps {
   viewModel: StudentDashboardViewModel;
   isMobileViewport: boolean;
   onUserUpdate: (user: UserProfile) => void;
+  onStartPersonalBook: (bookId: string) => void;
 }
 
 export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
@@ -28,9 +29,8 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
   viewModel,
   isMobileViewport,
   onUserUpdate,
+  onStartPersonalBook,
 }) => {
-  const canUseSelectedCreateMode = controller.createMode === 'TEXT' ? viewModel.canCreateFromText : viewModel.canCreateFromFile;
-
   return (
     <>
       <DashboardDeleteBookDialog
@@ -93,23 +93,17 @@ export const StudentDashboardModals: React.FC<StudentDashboardModalsProps> = ({
       />
 
       <PhrasebookCreateModal
+        key={user.uid}
         open={controller.showCreateModal}
-        createMode={controller.createMode}
-        rawText={controller.rawText}
-        uploadFile={controller.uploadFile}
-        newBookTitle={controller.newBookTitle}
+        ownerUid={user.uid}
         creating={controller.creating}
-        errorMsg={controller.errorMsg}
-        canUseSelectedCreateMode={canUseSelectedCreateMode}
+        canUseSelectedCreateMode={viewModel.canCreateFromText}
         currentPlanLabel={viewModel.currentPlanPolicy.label}
         onClose={() => {
           if (!controller.creating) controller.setShowCreateModal(false);
         }}
-        onChangeMode={controller.setCreateMode}
-        onChangeRawText={controller.setRawText}
-        onChangeTitle={controller.setNewBookTitle}
-        onFileChange={controller.handleFileChange}
         onCreate={controller.handleCreatePhrasebook}
+        onStartStudy={onStartPersonalBook}
       />
     </>
   );
