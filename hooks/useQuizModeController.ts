@@ -17,7 +17,6 @@ import {
   filterWorksheetQuestionCandidates,
   generateWorksheetQuestions,
   isGrammarWorksheetMode,
-  resolveJapaneseTranslationAttempt,
   resolveSpellingAttempt,
   toWorksheetSourceWords,
 } from '../utils/worksheet';
@@ -39,6 +38,8 @@ import { isSmartSessionBookId } from '../shared/studySession';
 import { getBookTaskWordRange, isWordInStudyRange } from '../shared/studyScope';
 import { NARU_BOOK_ID } from '../shared/naruBook';
 import type { QuizAttemptInput } from '../shared/quizAttempt';
+import { isValidJapaneseTranslationFeedback } from '../shared/translationFeedback';
+import { assessWorksheetTranslationOrder } from '../utils/translationQuestionBank';
 
 export type QuizScreen = 'SETUP' | 'READY' | 'RUNNING' | 'RESULT';
 
@@ -68,6 +69,7 @@ export interface QuizAttemptState {
   spellingFeedbackTone: QuizAttemptFeedbackTone | null;
   spellingFeedbackMessage: string | null;
   translationFeedback: JapaneseTranslationFeedback | null;
+  translationUnassessed: boolean;
   checkingTranslationFeedback: boolean;
   translationAwaitingAdvance: boolean;
   saveError: string | null;
@@ -89,6 +91,7 @@ export type QuizAttemptAction =
   | { type: 'SET_INPUT_FEEDBACK'; result: QuizAttemptResult; tone: Exclude<QuizAttemptFeedbackTone, 'info'>; message: string }
   | { type: 'SHOW_SPELLING_HINT'; message: string }
   | { type: 'SET_CHECKING_TRANSLATION_FEEDBACK'; value: boolean; message?: string }
+  | { type: 'SET_TRANSLATION_UNASSESSED'; message: string }
   | {
     type: 'SET_TRANSLATION_RESULT';
     feedback: JapaneseTranslationFeedback;
@@ -111,6 +114,7 @@ export const createInitialQuizAttemptState = (): QuizAttemptState => ({
   spellingFeedbackTone: null,
   spellingFeedbackMessage: null,
   translationFeedback: null,
+  translationUnassessed: false,
   checkingTranslationFeedback: false,
   translationAwaitingAdvance: false,
   saveError: null,
@@ -130,10 +134,15 @@ const resetQuestionAttemptState = (state: QuizAttemptState): QuizAttemptState =>
   spellingFeedbackTone: null,
   spellingFeedbackMessage: null,
   translationFeedback: null,
+  translationUnassessed: false,
   checkingTranslationFeedback: false,
   translationAwaitingAdvance: false,
   saveError: null,
 });
+
+const clearUnassessedTranslationNotice = (state: QuizAttemptState): QuizAttemptState => state.translationUnassessed
+  ? { ...state, translationUnassessed: false, spellingFeedbackTone: null, spellingFeedbackMessage: null }
+  : state;
 
 export const quizAttemptReducer = (
   state: QuizAttemptState,
@@ -155,10 +164,10 @@ export const quizAttemptReducer = (
       ) {
         return state;
       }
-      return { ...state, orderedTokenIds: [...state.orderedTokenIds, action.tokenId] };
+      return { ...clearUnassessedTranslationNotice(state), orderedTokenIds: [...state.orderedTokenIds, action.tokenId] };
     case 'REMOVE_ORDER_TOKEN':
       return {
-        ...state,
+        ...clearUnassessedTranslationNotice(state),
         orderedTokenIds: state.orderedTokenIds.filter((tokenId) => tokenId !== action.tokenId),
       };
     case 'MOVE_ORDER_TOKEN': {
@@ -168,14 +177,14 @@ export const quizAttemptReducer = (
       const orderedTokenIds = [...state.orderedTokenIds];
       const [item] = orderedTokenIds.splice(index, 1);
       orderedTokenIds.splice(nextIndex, 0, item);
-      return { ...state, orderedTokenIds };
+      return { ...clearUnassessedTranslationNotice(state), orderedTokenIds };
     }
     case 'CLEAR_ORDER_TOKENS':
-      return { ...state, orderedTokenIds: [] };
+      return { ...clearUnassessedTranslationNotice(state), orderedTokenIds: [] };
     case 'SET_ORDER_FEEDBACK':
-      return { ...state, orderFeedback: action.value };
+      return { ...clearUnassessedTranslationNotice(state), orderFeedback: action.value };
     case 'SET_ANSWER_INPUT':
-      return { ...state, answerInput: action.value };
+      return { ...clearUnassessedTranslationNotice(state), answerInput: action.value };
     case 'SET_INPUT_FEEDBACK':
       return {
         ...state,
@@ -194,6 +203,7 @@ export const quizAttemptReducer = (
       return {
         ...state,
         checkingTranslationFeedback: action.value,
+        translationUnassessed: action.value ? false : state.translationUnassessed,
         spellingFeedbackTone: action.value ? 'info' : state.spellingFeedbackTone,
         spellingFeedbackMessage: action.value && action.message ? action.message : state.spellingFeedbackMessage,
       };
@@ -201,8 +211,20 @@ export const quizAttemptReducer = (
       return {
         ...state,
         translationFeedback: action.feedback,
+        translationUnassessed: false,
         inputResult: action.result,
         spellingFeedbackTone: action.result,
+        spellingFeedbackMessage: action.message,
+      };
+    case 'SET_TRANSLATION_UNASSESSED':
+      return {
+        ...state,
+        orderFeedback: null,
+        checkingTranslationFeedback: false,
+        translationFeedback: null,
+        translationUnassessed: true,
+        inputResult: null,
+        spellingFeedbackTone: 'info',
         spellingFeedbackMessage: action.message,
       };
     case 'SET_TRANSLATION_AWAITING_ADVANCE':
@@ -372,6 +394,7 @@ export const useQuizModeController = ({
     spellingFeedbackTone,
     spellingFeedbackMessage,
     translationFeedback,
+    translationUnassessed,
     checkingTranslationFeedback,
     translationAwaitingAdvance,
     saveError,
@@ -524,7 +547,7 @@ export const useQuizModeController = ({
     config.questionMode,
     questionCount,
     {
-      grammarScopeId: config.grammarScopeId,
+      grammarScopeId: ['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'].includes(config.questionMode) ? undefined : config.grammarScopeId,
     },
   );
 
@@ -779,6 +802,12 @@ export const useQuizModeController = ({
   const setupEmptyCopy = useMemo(() => {
     if (allWords.length === 0) return '学習する単語がまだありません。先に単語帳を1冊用意してください。';
     if (setupConfig.selectionMode === 'LEARNED_ONLY' && studiedWordsError) return studiedWordsError;
+    if (setupConfig.questionMode === 'JA_TRANSLATION_ORDER' || setupConfig.questionMode === 'JA_TRANSLATION_INPUT') {
+      if (setupConfig.selectionMode === 'LEARNED_ONLY' && studiedWordIds.length === 0) {
+        return '学習済みのみは、学習モードで評価した単語が1語以上あると使えます。先にカード学習で評価を付けるか、全範囲を選んでください。';
+      }
+      return 'この条件には和訳問題に使える英文と日本語訳がそろった例文がありません。別の教材・範囲を選ぶか、英語演習の確認済み和訳問題で練習できます。';
+    }
     if (
       setupConfig.questionMode === 'GRAMMAR_CLOZE'
       || setupConfig.questionMode === 'EN_WORD_ORDER'
@@ -794,7 +823,7 @@ export const useQuizModeController = ({
       return `No. ${normalizedSetupRange.start} - ${normalizedSetupRange.end} には出題できる単語がありません。範囲を広げてください。`;
     }
     return '出題条件に合う単語がありません。';
-  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode, studiedWordsError]);
+  }, [allWords.length, normalizedSetupRange.end, normalizedSetupRange.start, setupConfig.questionMode, setupConfig.selectionMode, studiedWordIds.length, studiedWordsError]);
 
   const retryStudiedWords = async () => {
     if (historyLoadingRef.current || isSmartSessionBookId(bookId)) return;
@@ -1005,7 +1034,14 @@ export const useQuizModeController = ({
     if (!currentQuestion || !isOrderMode || orderFeedback || persistingAttempt || savedAttemptRef.current) return;
     const answerTokenIds = currentQuestion.answerTokenIds || [];
     if (answerTokenIds.length === 0 || orderedTokenIds.length !== answerTokenIds.length) return;
-    const correct = orderedTokenIds.every((tokenId, index) => tokenId === answerTokenIds[index]);
+    const japaneseAssessment = currentQuestion.mode === 'JA_TRANSLATION_ORDER'
+      ? assessWorksheetTranslationOrder(currentQuestion, orderedTokenIds) : undefined;
+    if (japaneseAssessment?.status === 'unassessed') {
+      dispatchAttempt({ type: 'SET_TRANSLATION_UNASSESSED', message: japaneseAssessment.reasonJa });
+      return;
+    }
+    const correct = japaneseAssessment ? japaneseAssessment.status === 'correct'
+      : orderedTokenIds.every((tokenId, index) => tokenId === answerTokenIds[index]);
     dispatchAttempt({ type: 'SET_ORDER_FEEDBACK', value: correct ? 'correct' : 'incorrect' });
     await persistAttempt(correct, Math.max(0, Date.now() - questionStartedAtRef.current));
   };
@@ -1018,45 +1054,49 @@ export const useQuizModeController = ({
       const gradingGeneration = generationRef.current;
       gradingRef.current = true;
       const responseTimeMs = Math.max(0, Date.now() - questionStartedAtRef.current);
-      const translationAttempt = resolveJapaneseTranslationAttempt({
-        input: answerInput,
-        answer: currentQuestion.answer,
-      });
       let feedback = buildDeterministicTranslationFeedback({
         input: answerInput,
         answer: currentQuestion.answer,
         grammarExplanation: currentQuestion.grammarExplanation,
       });
-      feedback = {
-        ...feedback,
-        examTarget: resolveTranslationExamTarget(),
-        sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
-        expectedTranslation: currentQuestion.answer,
-        userTranslation: answerInput,
-      };
-
-      if (translationAttempt !== 'correct') {
-        dispatchAttempt({
-          type: 'SET_CHECKING_TRANSLATION_FEEDBACK',
-          value: true,
-          message: '受験答案として採点中です...',
-        });
-        const aiFeedback = await evaluateJapaneseTranslationAnswer({
+      if (feedback) {
+        feedback = {
+          ...feedback,
+          examTarget: resolveTranslationExamTarget(),
           sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
           expectedTranslation: currentQuestion.answer,
           userTranslation: answerInput,
-          grammarScopeLabel: currentQuestion.grammarScope?.labelJa || currentQuestion.grammarFocus,
-          grammarScopeId: currentQuestion.grammarScope?.scopeId,
-          examTarget: resolveTranslationExamTarget(),
+        };
+      } else {
+        dispatchAttempt({
+          type: 'SET_CHECKING_TRANSLATION_FEEDBACK',
+          value: true,
+          message: '答案を確認中です...',
         });
-        if (gradingGeneration !== generationRef.current) return;
-        if (aiFeedback) {
-          feedback = aiFeedback;
+        try {
+          const candidate = await evaluateJapaneseTranslationAnswer({
+            sourceSentence: currentQuestion.sourceSentence || currentQuestion.promptText,
+            expectedTranslation: currentQuestion.answer,
+            userTranslation: answerInput,
+            grammarScopeLabel: currentQuestion.grammarScope?.labelJa || currentQuestion.grammarFocus,
+            grammarScopeId: currentQuestion.grammarScope?.scopeId,
+            examTarget: resolveTranslationExamTarget(),
+          });
+          if (isValidJapaneseTranslationFeedback(candidate)) feedback = candidate;
+        } catch {
+          // A transport/provider failure supplies no evidence about this answer.
         }
-        dispatchAttempt({ type: 'SET_CHECKING_TRANSLATION_FEEDBACK', value: false });
       }
-
+      if (gradingGeneration !== generationRef.current) return;
       gradingRef.current = false;
+      dispatchAttempt({ type: 'SET_CHECKING_TRANSLATION_FEEDBACK', value: false });
+      if (!feedback) {
+        dispatchAttempt({
+          type: 'SET_TRANSLATION_UNASSESSED',
+          message: '未採点です。利用条件や通信状態のため、有効な評価結果を取得できませんでした。点数・誤答履歴には保存していません。入力は残ります。参考訳と比べるか、利用状態を確認してから答案チェックを再試行できます。',
+        });
+        return;
+      }
       const correct = feedback.isCorrect;
       dispatchAttempt({
         type: 'SET_TRANSLATION_RESULT',
@@ -1181,6 +1221,7 @@ export const useQuizModeController = ({
     showSpellingHint,
     spellingFeedbackTone,
     spellingFeedbackMessage,
+    translationUnassessed,
     reviewTargets,
     activeSummary,
     percentage,

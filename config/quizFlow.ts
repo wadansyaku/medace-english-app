@@ -16,7 +16,7 @@ export const isGrammarQuizMode = (mode: WorksheetQuestionMode): boolean => (
 export const getDefaultGrammarScopeIdForMode = (
   mode: WorksheetQuestionMode,
 ): GrammarCurriculumScopeId | undefined => (
-  isGrammarQuizMode(mode)
+  isGrammarQuizMode(mode) && mode !== 'JA_TRANSLATION_ORDER' && mode !== 'JA_TRANSLATION_INPUT'
     ? DEFAULT_GRAMMAR_SCOPE_ID_BY_MODE[mode as keyof typeof DEFAULT_GRAMMAR_SCOPE_ID_BY_MODE]
     : undefined
 );

@@ -8,7 +8,7 @@ interface QuizControllerFixture {
   controller: QuizController;
   saves: Array<{ uid: string; payload: QuizAttemptInput }>;
   pendingSaves: Array<{ resolve: (receiptOverride?: unknown) => void; reject: () => void }>;
-  pendingGrades: Array<{ resolve: () => void }>;
+  pendingGrades: Array<{ resolve: (override?: unknown) => void }>;
   taskIntent: { missionAssignmentId: string; intentType: string };
 }
 type FixtureWindow = typeof window & { __quizControllerFixture: QuizControllerFixture };
@@ -25,6 +25,8 @@ const f = globalThis.__quizControllerFixture;
 const words = ['learn', 'read', 'write'].map((word, index) => ({
   id: 'synthetic-word-' + index, bookId: 'synthetic-quiz-book', number: index + 1,
   word, definition: ['学ぶ', '読む', '書く'][index], searchKey: word,
+  exampleSentence: ['I learn English every day.', 'I read books every day.', 'I write letters every day.'][index],
+  exampleMeaning: ['私は 毎日 英語を 学びます。', '私は 毎日 本を 読みます。', '私は 毎日 手紙を 書きます。'][index],
 }));
 Object.assign(learningService, {
   getBooks: async () => [{ id: 'synthetic-quiz-book', title: '合成教材', wordCount: words.length }],
@@ -89,12 +91,16 @@ export const generateGrammarPracticeQuestions = async (words, mode) => words.map
   grammarScope: { scopeId: 'be-verb', labelJa: 'be動詞' },
 }));
 export const evaluateJapaneseTranslationAnswer = (payload) => new Promise(resolve => {
-  globalThis.__quizControllerFixture.pendingGrades.push({ resolve: () => resolve({
+  globalThis.__quizControllerFixture.pendingGrades.push({ resolve: (override) => resolve(override === undefined ? {
     ...payload, isCorrect: false, score: 2, maxScore: 10, verdictLabel: '合成部分点',
     examTarget: 'GENERAL', summaryJa: '合成の採点結果', strengths: [], issues: ['合成の指摘'],
     improvedTranslation: payload.expectedTranslation, grammarAdviceJa: '合成文法',
-    nextDrillJa: '合成練習', criteria: [], usedAi: true,
-  }) });
+    nextDrillJa: '合成練習', criteria: [
+      { label: '意味', score: 2, maxScore: 4, comment: '意味を確認' },
+      { label: '構文', score: 0, maxScore: 3, comment: '構文を確認' },
+      { label: '自然さ', score: 0, maxScore: 3, comment: '表現を確認' },
+    ], usedAi: true,
+  } : override) });
 });
 `;
 
@@ -344,6 +350,38 @@ test('late translation grading cannot create an attempt in a replacement session
   await expect.poll(() => state(page)).toMatchObject({ screen: 'RUNNING', index: 0, score: 0, checking: false, answerInput: '', saving: false });
   expect(await saves(page)).toHaveLength(0);
 });
+
+for (const response of ['null', 'inconsistent'] as const) {
+  test(`unassessed translation ${response} preserves input without an incorrect receipt and permits retry`, async ({ page }, testInfo) => {
+    await start(page, 'translation');
+    const answer = 'これは別の自然な和訳です。';
+    await submitTranslation(page, answer);
+    await expect.poll(() => state(page)).toMatchObject({ checking: true });
+    await page.evaluate(kind => {
+      const grade = (window as FixtureWindow).__quizControllerFixture.pendingGrades[0];
+      grade.resolve(kind === 'null' ? null : { isCorrect: true, score: 0, maxScore: 10, criteria: [] });
+    }, response);
+    await expect.poll(() => state(page)).toMatchObject({ checking: false, saving: false, index: 0, score: 0, answerInput: answer });
+    await expect(page.getByTestId('quiz-running-view').getByRole('status')).toContainText('未採点');
+    expect(await saves(page)).toEqual([]);
+    const review = page.getByTestId('translation-unassessed-review');
+    await expect(review).toBeVisible();
+    await review.locator('summary').click();
+    await expect(review).toContainText('これは合成問題です。');
+    await expect(review.getByRole('link', { name: '採点せず確認済みの和訳練習へ' })).toHaveAttribute('href', '/english-practice/translation');
+    expect(await saves(page)).toEqual([]);
+    const screenshot = testInfo.outputPath(`unassessed-quiz-${response}.png`);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    await testInfo.attach('unassessed-quiz', { path: screenshot, contentType: 'image/png' });
+    await page.getByRole('button', { name: '和訳を判定する', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as FixtureWindow).__quizControllerFixture.pendingGrades.length)).toBe(2);
+    await page.evaluate(() => (window as FixtureWindow).__quizControllerFixture.pendingGrades[1].resolve());
+    await expect.poll(() => saves(page).then(value => value.length)).toBe(1);
+    await settleSave(page, 0);
+    await expect.poll(() => state(page)).toMatchObject({ saving: false, index: 0, score: 0, awaitingAdvance: true });
+    expect((await saves(page))[0].payload.translationFeedback).toMatchObject({ userTranslation: answer, isCorrect: false, score: 2 });
+  });
+}
 
 test('missing or invalid receipts keep the answer unconfirmed until the same payload receives a matching receipt', async ({ page }, testInfo) => {
   const invalidReceipts = ['missing', 'wrong-attempt', 'wrong-word', 'wrong-book', 'malformed-body', 'non-finite-time'] as const;

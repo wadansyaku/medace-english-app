@@ -1,5 +1,6 @@
 import { exposeStudentDemo } from './smoke-support';
 import { formatDateKey } from '../../utils/date';
+import { ORIGINAL_TRANSLATION_QUESTIONS } from '../../config/translationQuestionBank';
 import { attachSmokeDiagnostics, expect, test } from './diagnostics';
 
 import {
@@ -16,6 +17,230 @@ import {
   storageAction,
   updateSessionProfile,
 } from './smoke-support';
+
+for (const viewport of [
+  { width: 320, height: 568 }, { width: 390, height: 844 },
+  { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 },
+]) {
+  test(`Japanese chip ordering keeps unknown order editable and accepts a reviewed natural order at ${viewport.width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await exposeStudentDemo(page);
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await updateSessionProfile(page, { englishLevel: 'A1' });
+    const attempts: any[] = [];
+    page.on('request', request => {
+      if (!request.url().includes('/api/storage') || request.method() !== 'POST') return;
+      const body = request.postDataJSON();
+      if (body.action === 'recordEnglishPracticeAttempt') attempts.push(body.payload);
+    });
+    await page.goto('/english-practice/translation');
+    await page.getByRole('button', { name: '訳の骨組みを並べる', exact: true }).click();
+    const question = page.getByTestId('translation-practice-question');
+    await expect(question).toHaveCount(1);
+    const id = await question.getAttribute('data-question-id');
+    const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id === id)!;
+    expect(source.alternateOrders.length).toBeGreaterThan(0);
+    for (const chunk of [...source.orderChunks].reverse()) await question.getByRole('button', { name: chunk, exact: true }).click();
+    await question.getByRole('button', { name: '判定する', exact: true }).click();
+    const notice = question.getByTestId('translation-order-assessment-notice');
+    await expect(notice).toContainText('未登録の並び・未採点');
+    await expect(notice).toContainText('点数・誤答履歴には保存していません');
+    await expect(question.getByRole('button', { name: '判定する', exact: true })).toBeDisabled();
+    await expect(question.getByRole('button', { name: source.orderChunks[0], exact: true })).toBeEnabled();
+    expect(attempts).toEqual([]);
+    await question.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(question).toContainText(source.referenceTranslation);
+    expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`translation-order-unassessed-${viewport.width}.png`), fullPage: true });
+    await question.getByRole('button', { name: '並びをクリア', exact: true }).click();
+    await expect(notice).toHaveCount(0);
+    for (const index of source.alternateOrders[0]) await question.getByRole('button', { name: source.orderChunks[index], exact: true }).click();
+    await question.getByRole('button', { name: '判定する', exact: true }).evaluate(button => {
+      (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click();
+    });
+    await expect(question.getByText('正解', { exact: true })).toBeVisible();
+    await expect.poll(() => attempts.length).toBe(1);
+    expect(attempts[0]).toMatchObject({ lane: 'translation', correct: true });
+    expect(attempts[0].wordId).toBeUndefined();
+    expect(attempts[0].bookId).toBeUndefined();
+    await page.screenshot({ path: testInfo.outputPath(`translation-order-correct-${viewport.width}.png`), fullPage: true });
+    await question.getByRole('button', { name: '別の和訳問題へ', exact: true }).click();
+    await page.getByRole('button', { name: '前の問題を確認', exact: true }).click();
+    await expect(question).toHaveAttribute('data-question-id', source.id);
+    await expect(question.getByText('正解', { exact: true })).toBeVisible();
+    expect(attempts).toHaveLength(1);
+  });
+
+  test(`material Japanese chip ordering never saves an unknown order and accepts a registered order at ${viewport.width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await exposeStudentDemo(page);
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id.endsWith('-clock-time-01'))!;
+    const title = `Synthetic Translation Order ${viewport.width}`;
+    const imported = await storageAction<{ importedBookIds: string[] }>(page, 'batchImportWords', {
+      defaultBookName: title,
+      source: { kind: 'rows', rows: [{ bookName: title, number: 1, word: 'library', definition: '図書館',
+        exampleSentence: source.sourceSentence, exampleMeaning: source.orderChunks.join(' ') }] },
+    });
+    const attempts: any[] = [];
+    page.on('request', request => {
+      if (!request.url().includes('/api/storage') || request.method() !== 'POST') return;
+      const body = request.postDataJSON();
+      if (body.action === 'recordQuizAttempt') attempts.push(body.payload);
+    });
+    await page.goto(`/quiz/${imported.importedBookIds[0]}`);
+    await expect(page.getByTestId('quiz-setup-view')).toBeVisible();
+    await page.locator('summary').filter({ hasText: '詳細設定' }).click();
+    await page.getByTestId('quiz-direction-ja_translation_order').click();
+    await page.getByTestId('quiz-setup-primary-cta').click();
+    const quiz = page.getByTestId('quiz-running-view');
+    await expect(quiz).toBeVisible();
+    await expect(quiz).toContainText(source.sourceSentence);
+    const chunks = source.orderChunks.map(chunk => chunk.replace(/。$/, ''));
+    for (const index of [0, 2, 1]) await quiz.getByRole('button', { name: chunks[index], exact: true }).click();
+    await quiz.getByTestId('quiz-order-submit').click();
+    await expect(quiz.getByTestId('quiz-order-unassessed')).toContainText('未登録の並び・未採点');
+    await expect(quiz.getByTestId('quiz-order-unassessed')).toContainText('点数・誤答履歴には保存していません');
+    await expect(quiz.getByTestId('quiz-order-submit')).toBeDisabled();
+    await expect(quiz.getByRole('button', { name: 'やり直す', exact: true })).toBeEnabled();
+    expect(attempts).toEqual([]);
+    const review = quiz.getByTestId('translation-unassessed-review');
+    await review.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(review).toContainText(chunks.join(' '));
+    expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`material-order-unassessed-${viewport.width}.png`), fullPage: true });
+    await quiz.getByRole('button', { name: 'やり直す', exact: true }).click();
+    await expect(quiz.getByTestId('quiz-order-unassessed')).toHaveCount(0);
+    for (const index of source.alternateOrders[0]) await quiz.getByRole('button', { name: chunks[index], exact: true }).click();
+    await quiz.getByTestId('quiz-order-submit').evaluate(button => {
+      (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click();
+    });
+    await expect.poll(() => attempts.length).toBe(1);
+    expect(attempts[0]).toMatchObject({ bookId: imported.importedBookIds[0], correct: true, questionMode: 'JA_TRANSLATION_ORDER' });
+    await expect(quiz.getByText('正解です', { exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`material-order-correct-${viewport.width}.png`) });
+    await expect(page.getByTestId('quiz-result-view')).toBeVisible();
+    expect(attempts).toHaveLength(1);
+  });
+
+  test(`reviewed translation keeps unknown answers unassessed in the actual app at ${viewport.width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await exposeStudentDemo(page);
+    await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    const attempts: any[] = [];
+    const aiRequests: string[] = [];
+    page.on('request', request => {
+      if (request.url().includes('/api/ai')) aiRequests.push(request.url());
+      if (request.url().includes('/api/storage') && request.method() === 'POST') {
+        const body = request.postDataJSON();
+        if (body.action === 'recordEnglishPracticeAttempt') attempts.push(body.payload);
+      }
+    });
+    await page.goto('/english-practice/translation');
+    const question = page.getByTestId('translation-practice-question');
+    await expect(question).toHaveCount(1);
+    const id = await question.getAttribute('data-question-id');
+    const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id === id)!;
+    expect(source).toBeTruthy();
+    await expect(question).toContainText(source.sourceSentence);
+    await expect(question).not.toContainText(source.referenceTranslation);
+    await expect(question.getByTestId('english-practice-translation-feedback-card')).toHaveCount(0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const initialScreenshot = testInfo.outputPath(`translation-question-before-answer-${viewport.width}.png`);
+    await page.screenshot({ path: initialScreenshot, fullPage: true });
+    await testInfo.attach('translation-question-before-answer', { path: initialScreenshot, contentType: 'image/png' });
+    const input = question.getByRole('textbox');
+    const unknown = 'この答案は未確認の別表現です。';
+    await input.fill(unknown);
+    await question.getByRole('button', { name: '答案チェック', exact: true }).click();
+    const notice = question.getByTestId('translation-assessment-notice');
+    await expect(notice).toContainText('未採点');
+    await expect(notice).toContainText('点数・誤答履歴には保存していません');
+    await expect(input).toHaveValue(unknown);
+    await expect(question.getByRole('button', { name: '修正した訳を確認', exact: true })).toBeDisabled();
+    await expect(notice).toContainText('未登録の別訳');
+    await expect(notice).toContainText('同じ入力では判定は変わりません');
+    await question.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await expect(input).toHaveValue(unknown);
+    expect(attempts).toEqual([]);
+    await question.getByRole('button', { name: '別の和訳問題へ', exact: true }).click();
+    await expect(question).not.toHaveAttribute('data-question-id', source.id);
+    await page.getByRole('button', { name: '前の問題を確認', exact: true }).click();
+    await expect(question).toHaveAttribute('data-question-id', source.id);
+    await expect(input).toHaveValue(unknown);
+    await expect(notice).toContainText('未採点');
+    await input.fill(source.acceptedTranslations[0]);
+    await question.getByRole('button', { name: '修正した訳を確認', exact: true }).click();
+    await expect(question.getByTestId('english-practice-translation-feedback-card')).toContainText('10 / 10');
+    await expect.poll(() => attempts.length).toBe(1);
+    expect(attempts[0]).toMatchObject({ lane: 'translation', correct: true });
+    expect(attempts[0].wordId).toBeUndefined();
+    expect(attempts[0].bookId).toBeUndefined();
+    expect(aiRequests).toEqual([]);
+    expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const screenshot = testInfo.outputPath(`reviewed-translation-${viewport.width}.png`);
+    await page.screenshot({ path: screenshot, fullPage: true });
+    await testInfo.attach('reviewed-translation-actual-app', { path: screenshot, contentType: 'image/png' });
+    await question.getByRole('button', { name: '次の和訳へ', exact: true }).click();
+    await page.getByRole('button', { name: '前の問題を確認', exact: true }).click();
+    await expect(input).toHaveValue(source.acceptedTranslations[0]);
+    await expect(question.getByTestId('english-practice-translation-feedback-card')).toContainText('10 / 10');
+    expect(attempts).toHaveLength(1);
+  });
+}
+
+test('reviewed translation retries the same saved payload after a failed cloud response', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await exposeStudentDemo(page);
+  await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+  await expect(page.getByTestId('student-dashboard')).toBeVisible();
+  const requests: any[] = [];
+  let releaseRetry!: () => void;
+  const heldRetry = new Promise<void>(resolve => { releaseRetry = resolve; });
+  await page.route('**/api/storage', async route => {
+    const body = route.request().postDataJSON();
+    if (body.action !== 'recordEnglishPracticeAttempt') return route.continue();
+    requests.push(body.payload);
+    if (requests.length === 1) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Synthetic response unavailable' }) });
+    if (requests.length === 2) await heldRetry;
+    return route.continue();
+  });
+  await page.goto('/english-practice/translation');
+  const question = page.getByTestId('translation-practice-question');
+  await expect(question).toHaveCount(1);
+  const id = await question.getAttribute('data-question-id');
+  const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id === id)!;
+  await question.getByRole('textbox').fill(source.acceptedTranslations[0]);
+  await question.getByRole('button', { name: '答案チェック', exact: true }).click();
+  const notice = page.getByTestId('english-practice-save-error');
+  await expect(notice).toContainText('保存できませんでした');
+  await page.getByTestId('english-practice-save-retry').evaluate(button => {
+    (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click();
+  });
+  await expect.poll(() => requests.length).toBe(2);
+  await expect(notice).toContainText('同じ回答で保存と進捗を再確認しています');
+  await expect(page.getByTestId('english-practice-save-retry')).toBeDisabled();
+  expect(requests[1]).toEqual(requests[0]);
+  releaseRetry();
+  await expect(notice).toHaveCount(0);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  await page.reload();
+  await expect(page.getByTestId('english-practice-hub')).toBeVisible();
+  await expect(page.getByTestId('english-practice-save-error')).toHaveCount(0);
+  expect(requests).toHaveLength(2);
+});
 
 test('demo student can start immediately without onboarding and reach the dashboard', async ({ page }) => {
   await page.goto('/');
@@ -375,3 +600,61 @@ test('student can open the dedicated practice screen from a direct route', async
   await expect(page.getByTestId('english-practice-hub')).toHaveCount(0);
   await expect(page.getByText('英語演習のおすすめ')).toHaveCount(0);
 });
+
+
+for (const viewport of [{ width: 320, height: 568 }, { width: 1366, height: 900 }]) {
+  for (const mode of ['ja_translation_order', 'ja_translation_input'] as const) {
+    test(`material translation eligibility matches actual questions in ${mode} at ${viewport.width}`, async ({ page }, testInfo) => {
+      await page.setViewportSize(viewport);
+      await page.goto('/');
+      await exposeStudentDemo(page);
+      await page.getByTestId(MOBILE_FLOW_TEST_IDS.demoLoginStudent).click();
+      await expect(page.getByTestId('student-dashboard')).toBeVisible();
+      const source = ORIGINAL_TRANSLATION_QUESTIONS.find(item => item.id.endsWith('-clock-time-01'))!;
+      const title = `Synthetic Translation Eligibility ${mode} ${viewport.width}`;
+      const imported = await storageAction<{ importedBookIds: string[] }>(page, 'batchImportWords', {
+        defaultBookName: title, source: { kind: 'rows', rows: [
+          { bookName: title, number: 1, word: 'library', definition: '図書館', exampleSentence: source.sourceSentence, exampleMeaning: source.orderChunks.join(' ') },
+          { bookName: title, number: 2, word: 'walk', definition: '歩く' },
+          { bookName: title, number: 3, word: 'read', definition: '読む', exampleSentence: 'I read books every day.' },
+          { bookName: title, number: 4, word: 'compare', definition: '比較する', exampleSentence: 'The cats sleep on the mat.', exampleMeaning: '猫は マットの上で 眠ります。' },
+        ] },
+      });
+      const attempts: unknown[] = [];
+      page.on('request', request => {
+        if (request.method() !== 'POST' || !request.url().includes('/api/storage')) return;
+        const body = request.postDataJSON();
+        if (body.action === 'recordQuizAttempt') attempts.push(body.payload);
+      });
+      await page.goto(`/quiz/${imported.importedBookIds[0]}`);
+      const setup = page.getByTestId('quiz-setup-view');
+      await expect(setup).toBeVisible();
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.getByTestId(`quiz-direction-${mode}`).click();
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 1語');
+      await expect(setup.getByRole('heading', { name: '1問クイズ', exact: true })).toBeVisible();
+      await page.getByTestId('quiz-selection-range_random').click();
+      await page.getByLabel('開始番号', { exact: true }).fill('2');
+      await page.getByLabel('終了番号', { exact: true }).fill('4');
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 0語');
+      await expect(page.getByTestId('quiz-empty-state')).toContainText('和訳問題に使える英文と日本語訳');
+      await expect(setup.getByRole('heading', { name: '和訳の練習', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /^\d+問クイズ$/ })).toHaveCount(0);
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toBeDisabled();
+      expect(await findUnexpectedHorizontalOverflow(page)).toEqual([]);
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.screenshot({ path: testInfo.outputPath(`translation-empty-${mode}-${viewport.width}.png`) });
+      await page.getByTestId('quiz-advanced-settings-toggle').click();
+      await page.getByTestId('quiz-direction-en_to_ja').click();
+      await expect(page.getByTestId('quiz-setup-compact-summary')).toContainText('候補 3語');
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toBeEnabled();
+      await page.getByTestId(`quiz-direction-${mode}`).click();
+      await page.getByTestId('quiz-selection-full_random').click();
+      await expect(page.getByTestId('quiz-setup-primary-cta')).toHaveText('1問はじめる');
+      await page.getByTestId('quiz-setup-primary-cta').click();
+      await expect(page.getByTestId('quiz-running-view')).toBeVisible();
+      await expect(page.getByTestId('quiz-running-view')).toContainText(source.sourceSentence);
+      expect(attempts).toEqual([]);
+    });
+  }
+}

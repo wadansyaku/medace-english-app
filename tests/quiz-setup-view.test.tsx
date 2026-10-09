@@ -150,3 +150,28 @@ describe('QuizSetupView compact setup', () => {
     expect(rendered).toContain('data-testid="quiz-grammar-scope-');
   });
 });
+
+
+describe('translation uses its actual bilingual example', () => {
+  it.each(['JA_TRANSLATION_INPUT', 'JA_TRANSLATION_ORDER'] as const)('does not force a fictional grammar sentence for %s', questionMode => {
+    expect(getDefaultGrammarScopeIdForMode(questionMode)).toBeUndefined();
+    const rendered = renderSetup({ setupConfig: { ...baseConfig, questionMode } });
+    expect(rendered).toContain('英文と日本語訳がそろった例文');
+    expect(rendered).not.toContain('quiz-grammar-scope-basic-svo');
+  });
+});
+
+
+describe('translation setup with no usable examples', () => {
+  it.each(['JA_TRANSLATION_ORDER', 'JA_TRANSLATION_INPUT'] as const)('explains the empty %s state without advertising nonexistent questions', (questionMode) => {
+    const markup = renderSetup({
+      setupConfig: { ...baseConfig, questionMode }, setupCandidateWordsLength: 0, setupActualQuestionCount: 0,
+      setupEmptyCopy: '和訳問題に使える例文がありません。別の範囲を選んでください。',
+    });
+    expect(markup).toContain('和訳の練習</h2>');
+    expect(markup).not.toContain('5問クイズ</h2>');
+    expect(markup).toContain('出題できません');
+    expect(markup).toContain('和訳問題に使える例文がありません');
+    expect(markup).toMatch(/data-testid="quiz-setup-primary-cta"[^>]*disabled/);
+  });
+});

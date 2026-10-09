@@ -82,36 +82,42 @@ const buildSelectableAttemptBookSql = (attemptAlias: string, bookAlias: string, 
   )
 )`;
 
-const readEnglishPracticeLaneStatsByUserIds = async (
+export const readEnglishPracticeLaneStatsByUserIds = async (
   env: AppEnv,
   userIds: string[],
   since: number,
 ): Promise<Map<string, EnglishPracticeLaneStats[]>> => {
   if (userIds.length === 0) return new Map();
-  const rows = await readAll<{
+  // Reserve one of D1's 100 bound parameters for the time-window filter.
+  const uniqueUserIds = [...new Set(userIds)];
+  const rows: Array<{
     user_id: string;
     lane: EnglishPracticeLaneId;
     total: number;
     correct_count: number;
     last_practiced_at: number;
-  }>(
-    env,
-    `SELECT
-       e.user_id,
-       e.lane,
-       COUNT(*) AS total,
-       COALESCE(SUM(CASE WHEN e.correct = 1 THEN 1 ELSE 0 END), 0) AS correct_count,
-       MAX(e.created_at) AS last_practiced_at
-     FROM english_practice_attempts e
-     LEFT JOIN books b ON b.id = e.book_id
-     LEFT JOIN material_source_ledger m ON m.book_id = b.id
-     WHERE e.user_id IN (${buildInClause(userIds.length)})
-       AND e.created_at >= ?
-       AND ${buildSelectableAttemptBookSql('e', 'b', 'm')}
-     GROUP BY e.user_id, e.lane`,
-    ...userIds,
-    since,
-  );
+  }> = [];
+  for (let offset = 0; offset < uniqueUserIds.length; offset += 99) {
+    const batchUserIds = uniqueUserIds.slice(offset, offset + 99);
+    rows.push(...await readAll<(typeof rows)[number]>(
+      env,
+      `SELECT
+         e.user_id,
+         e.lane,
+         COUNT(*) AS total,
+         COALESCE(SUM(CASE WHEN e.correct = 1 THEN 1 ELSE 0 END), 0) AS correct_count,
+         MAX(e.created_at) AS last_practiced_at
+       FROM english_practice_attempts e
+       LEFT JOIN books b ON b.id = e.book_id
+       LEFT JOIN material_source_ledger m ON m.book_id = b.id
+       WHERE e.user_id IN (${buildInClause(batchUserIds.length)})
+         AND e.created_at >= ?
+         AND ${buildSelectableAttemptBookSql('e', 'b', 'm')}
+       GROUP BY e.user_id, e.lane`,
+      ...batchUserIds,
+      since,
+    ));
+  }
 
   const statsByUser = new Map<string, EnglishPracticeLaneStats[]>();
   rows.forEach((row) => {
