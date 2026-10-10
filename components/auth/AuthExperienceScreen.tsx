@@ -7,7 +7,7 @@ import ModalOverlay from '../ModalOverlay';
 import PublicInfoPage from '../PublicInfoPage';
 import PublicRolePage from '../public/PublicRolePage';
 import { OrganizationRole, UserRole, type PublicMotivationSnapshot } from '../../types';
-import type { PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
+import { getPublicBusinessRoleConfig, type PublicBusinessRoleKey } from '../../shared/publicBusinessRoles';
 
 export interface AuthExperienceScreenProps {
   currentView: 'login' | 'guestLearning' | 'guestTrial' | 'publicInfo' | 'publicRole';
@@ -57,7 +57,8 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
     onClosePasswordRecovery, onRequestPasswordRecovery,
   } = props;
   const busy = authSubmitting || passwordRecoveryLoading;
-  const title = showPasswordRecovery ? 'パスワードの再設定' : authMode === 'LOGIN' ? 'ログイン' : '新規登録';
+  const staffRole = props.currentView === 'publicRole' && props.publicRole && props.publicRole !== 'student' ? getPublicBusinessRoleConfig(props.publicRole) : null;
+  const title = showPasswordRecovery ? 'パスワードの再設定' : staffRole ? `${staffRole.title}としてログイン` : authMode === 'LOGIN' ? 'ログイン' : '新規登録';
   const emailRef = React.useRef<HTMLInputElement | null>(null);
   const nameRef = React.useRef<HTMLInputElement | null>(null);
   const errorRef = React.useRef<HTMLDivElement | null>(null);
@@ -79,7 +80,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
   }, [authError]);
 
   return (
-    <section data-testid="auth-focused-form" className="rounded-panel border border-medace-200 bg-white p-5 shadow-xl sm:p-7">
+    <section data-testid="auth-focused-form" className={`rounded-panel border border-medace-200 bg-white p-5 shadow-xl sm:p-7 ${staffRole ? 'staff-login-card' : ''}`}>
       <header className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold text-medace-700">{BRAND.shortName}</p>
@@ -91,7 +92,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
         </button>
       </header>
 
-      {!showPasswordRecovery && (
+      {!showPasswordRecovery && !staffRole && (
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl border border-medace-200 bg-medace-50 p-1" aria-label="アカウントの操作">
           {(['LOGIN', 'SIGNUP'] as const).map((mode) => (
             <button key={mode} type="button" onClick={() => onChangeAuthMode(mode)} disabled={busy} aria-pressed={authMode === mode}
@@ -101,16 +102,17 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
           ))}
         </div>
       )}
-      <p id="auth-form-description" className="mb-5 text-sm leading-relaxed text-slate-600">
+      <p id="auth-form-description" className="staff-login-description mb-5 text-sm leading-relaxed text-slate-600">
         {showPasswordRecovery
           ? '登録したメールアドレスを入力してください。再設定の依頼を受け付けます。'
+          : staffRole ? '案内された既存アカウントでログインしてください。この役割で登録されたアカウントのみ利用できます。'
           : authMode === 'LOGIN'
-            ? '生徒も講師も、登録済みのアカウントでログインできます。'
-            : '生徒用アカウントを作ります。講師の方は教室から案内されたアカウントでログインしてください。'}
+            ? '登録済みのアカウントでログインしてください。'
+            : '生徒用アカウントを作ります。登録後すぐに単語学習を始められます。'}
       </p>
 
       <form onSubmit={showPasswordRecovery ? (event) => { event.preventDefault(); onRequestPasswordRecovery(); } : onSubmitEmailAuth}
-        aria-describedby="auth-form-description" aria-busy={busy} className="space-y-4">
+        aria-describedby="auth-form-description" aria-busy={busy} className={`space-y-4 ${staffRole && !showPasswordRecovery ? 'staff-login-form' : ''}`}>
         {authMode === 'SIGNUP' && !showPasswordRecovery && (
           <div>
             <label htmlFor="auth-display-name" className="ui-form-label mb-2">表示名</label>
@@ -155,17 +157,17 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
             )}
           </>
         )}
-        {authError && <div ref={errorRef} tabIndex={-1} role="alert" data-testid="auth-error" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{authError}</div>}
+        {authError && <div ref={errorRef} tabIndex={-1} role="alert" data-testid="auth-error" className="staff-login-full-width rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{authError}</div>}
         {showPasswordRecovery && passwordRecoveryMessage && (
           <div role="status" data-testid="password-recovery-message" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-relaxed text-emerald-800">{passwordRecoveryMessage}</div>
         )}
         <button type="submit" disabled={busy} data-testid={showPasswordRecovery ? 'submit-password-recovery' : 'auth-submit'}
-          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-4 py-3 text-base font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover disabled:cursor-wait disabled:opacity-60">
+          className="staff-login-full-width flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-steady-action px-4 py-3 text-base font-bold text-steady-on-action shadow-sm transition-colors hover:bg-steady-action-hover disabled:cursor-wait disabled:opacity-60">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : showPasswordRecovery ? <LifeBuoy className="h-4 w-4" aria-hidden="true" /> : authMode === 'LOGIN' ? <LogIn className="h-4 w-4" aria-hidden="true" /> : <UserPlus className="h-4 w-4" aria-hidden="true" />}
           {busy ? '送信中...' : showPasswordRecovery ? passwordRecoveryMessage ? 'もう一度依頼する' : '再設定を依頼する' : authMode === 'LOGIN' ? 'ログイン' : '登録して学習を始める'}
         </button>
         {authMode === 'LOGIN' && !showPasswordRecovery && (
-          <button type="button" onClick={onOpenPasswordRecovery} disabled={busy} data-testid="open-password-recovery" className="min-h-11 w-full rounded-lg text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">パスワードを忘れた方</button>
+          <button type="button" onClick={onOpenPasswordRecovery} disabled={busy} data-testid="open-password-recovery" className="staff-login-full-width min-h-11 w-full rounded-lg text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">パスワードを忘れた方</button>
         )}
         {showPasswordRecovery ? (
           <div data-testid="password-recovery-panel">
@@ -183,6 +185,28 @@ const AuthExperienceScreen: React.FC<AuthExperienceScreenProps> = (props) => {
     motivationSnapshot, motivationLoading, motivationError, onClosePublicInfo, onOpenPublicRole,
     onClosePublicRole, onDemoLogin, onOpenAuth, onCloseAuth } = props;
   const busy = authSubmitting || passwordRecoveryLoading;
+  const staffRole = currentView === 'publicRole' && publicRole && publicRole !== 'student'
+    ? getPublicBusinessRoleConfig(publicRole) : null;
+
+  React.useEffect(() => {
+    if (!staffRole || busy) return;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClosePublicRole();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [staffRole, busy, onClosePublicRole]);
+
+  if (staffRole) {
+    return <div data-testid={staffRole.pageTestId} className="staff-login-page mx-auto my-4 max-w-lg sm:my-8">
+      <AuthForm {...props} authMode="LOGIN" onCloseAuth={() => { if (!busy) onClosePublicRole(); }} />
+      <button type="button" data-testid="public-role-back" onClick={onClosePublicRole} disabled={busy}
+        className="mt-3 min-h-11 w-full rounded-xl px-4 text-sm font-bold text-medace-800 hover:bg-medace-50 disabled:opacity-50">学習の入口へ戻る</button>
+    </div>;
+  }
 
   const content = currentView === 'guestTrial' || currentView === 'guestLearning' ? props.guestTrialContent : currentView === 'publicRole' && publicRole ? (
     <PublicRolePage roleKey={publicRole} onDemoLogin={onDemoLogin} onBack={onClosePublicRole}

@@ -1,3 +1,4 @@
+import type { StaffLoginEntry } from '../../shared/staffLogin';
 import type { QuizAttemptReceipt } from '../../shared/quizAttempt';
 import type {
   ActivityLog,
@@ -62,7 +63,7 @@ import type {
 
 export interface SessionStorageService {
   login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null>;
-  authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null>;
+  authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string, loginEntry?: StaffLoginEntry): Promise<UserProfile | null>;
   requestPasswordRecovery(email: string, source?: string): Promise<PasswordRecoveryResponse>;
   confirmPasswordReset(token: string, password: string): Promise<PasswordResetConfirmResponse>;
   saveSession(user: UserProfile): Promise<void>;
