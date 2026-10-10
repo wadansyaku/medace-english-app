@@ -11,6 +11,7 @@ import {
   getPublicBusinessRoleDirectPath,
   type PublicBusinessRoleKey,
 } from '../../shared/publicBusinessRoles';
+import { IDB_MOCK_USERS } from '../../services/storage/mockData';
 
 export const mobileViewport = { width: 390, height: 844 };
 export const iphoneUserAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
@@ -487,8 +488,23 @@ export const loginBusinessStudentDemo = async (page: Page) => {
   await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, MOBILE_FLOW_TEST_IDS.studentDashboard);
 };
 
+const loginExistingIdbStaffAccount = async (page: Page, roleKey: Exclude<PublicBusinessRoleKey, 'student'>) => {
+  const role = getPublicBusinessRoleConfig(roleKey);
+  const existingAccount = IDB_MOCK_USERS.find(user => user.role === role.demoRole
+    && user.organizationRole === role.demoOrganizationRole);
+  expect(existingAccount, 'Use only an existing IDB fixture account').toBeDefined();
+  await page.getByTestId('auth-email-input').fill(existingAccount!.email);
+  await page.getByTestId('auth-password-input').fill('existing-local-idb-account');
+  await page.getByTestId('auth-submit').click();
+};
+
 export const loginInstructorDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'instructor');
+  if (expectIdbStorageMode) {
+    await loginExistingIdbStaffAccount(page, 'instructor');
+    await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'instructor-dashboard');
+    return;
+  }
   const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
     data: { action: 'demo-login', role: role.demoRole, organizationRole: role.demoOrganizationRole } });
   expect(response.status(), 'Existing protected demo API must authorize the test fixture').toBe(200);
@@ -498,6 +514,11 @@ export const loginInstructorDemo = async (page: Page) => {
 
 export const loginGroupAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'group-admin');
+  if (expectIdbStorageMode) {
+    await loginExistingIdbStaffAccount(page, 'group-admin');
+    await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'business-admin-dashboard');
+    return;
+  }
   const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
     data: { action: 'demo-login', role: role.demoRole, organizationRole: role.demoOrganizationRole } });
   expect(response.status(), 'Existing protected demo API must authorize the test fixture').toBe(200);
@@ -507,6 +528,11 @@ export const loginGroupAdminDemo = async (page: Page) => {
 
 export const loginAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'service-admin');
+  if (expectIdbStorageMode) {
+    await loginExistingIdbStaffAccount(page, 'service-admin');
+    await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'admin-header');
+    return;
+  }
   const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
     data: { action: 'demo-login', role: role.demoRole, demoPassword: 'admin' } });
   expect(response.status(), 'Existing admin fixture API retains its password and runtime guard').toBe(200);
