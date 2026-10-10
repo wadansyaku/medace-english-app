@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import net from 'node:net';
-import { createHash } from 'node:crypto';
+import { createHash, pbkdf2Sync, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
@@ -153,7 +153,7 @@ class SessionClient {
       }
     }
 
-    return { status: response.status, data };
+    return { status: response.status, data, setCookies };
   }
 
   async demoLogin(role, organizationRole, demoPassword) {
@@ -424,6 +424,97 @@ const queryLocalSql = async (persistDir, sql) => {
   const payload = JSON.parse(stdout);
   return (Array.isArray(payload) ? payload : [payload])
     .flatMap((entry) => entry?.results || []);
+};
+
+// Runs only against this runner's temporary --local D1 database and localhost server.
+const verifyRealStaffEntryAuthentication = async ({ persistDir, baseUrl, adminUser, groupAdminUser, instructorUser, student }) => {
+  assert(new URL(baseUrl).hostname === '127.0.0.1', 'staff credential fixtures must remain localhost-only');
+  const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const password = 'local-staff-entry-integration-password';
+  const salt = randomBytes(16);
+  const iterations = 100000;
+  const passwordHash = `pbkdf2$${iterations}$${salt.toString('base64')}$${pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('base64')}`;
+  const staff = [['instructor', instructorUser], ['group-admin', groupAdminUser], ['service-admin', adminUser]];
+  const originals = await queryLocalSql(persistDir, `SELECT id, password_hash FROM users WHERE id IN (${staff.map(([, user]) => quote(user.uid)).join(',')})`);
+  assert(originals.length === 3, 'staff entry checks must reuse all three existing fixture identities');
+  await executeLocalSql(persistDir, `UPDATE users SET password_hash = ${quote(passwordHash)} WHERE id IN (${originals.map((user) => quote(user.id)).join(',')})`);
+  const sessionCount = async () => (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM sessions'))[0].n;
+  const auth = (client, user, entry, override = {}) => client.request('/api/auth', { method: 'POST', body: JSON.stringify({
+    action: 'email-auth', email: user.email, password, isSignUp: false, loginEntry: entry, ...override,
+  }) });
+  const denied = async (client, user, entry, expected, override = {}) => {
+    const priorCookie = client.cookie;
+    const priorSessions = await sessionCount();
+    const result = await auth(client, user, entry, override);
+    assert(result.status === expected, `staff entry ${entry} should return ${expected}, received ${result.status}`);
+    assert(result.setCookies.length === 0 && client.cookie === priorCookie, 'rejected staff login must not issue, clear or replace existing cookie');
+    assert(await sessionCount() === priorSessions, 'rejected staff login must not insert/delete sessions');
+    assert((await client.get('/api/session')).uid === user.uid, 'rejected entry must preserve existing session identity');
+    return result;
+  };
+  try {
+    for (const [entry, user] of staff) {
+      const client = new SessionClient(baseUrl, `real-${entry}`);
+      const result = await auth(client, user, entry);
+      assert(result.status === 200 && result.data.uid === user.uid && result.data.role === user.role,
+        `real ${entry} login must authenticate existing identity without role grant`);
+      assert(result.setCookies.length === 1, `matching ${entry} login should issue one session cookie`);
+      assert((await client.get('/api/session')).uid === user.uid, `matching ${entry} session must survive readback`);
+      const wrongEntry = entry === 'service-admin' ? 'instructor' : 'service-admin';
+      await denied(client, user, wrongEntry, 403);
+      if (entry !== 'service-admin') await denied(client, user, entry === 'instructor' ? 'group-admin' : 'instructor', 403);
+      const wrongPassword = await denied(client, user, wrongEntry, 401, { password: 'incorrect-password' });
+      assert(String(wrongPassword.data?.error || wrongPassword.data?.message || '').includes('メールアドレスまたはパスワード'),
+        'invalid credentials must return generic credential failure before role information');
+      const usersBeforeSignup = (await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM users'))[0].n;
+      await denied(client, user, entry, 400, { isSignUp: true, role: 'ADMIN' });
+      assert((await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM users'))[0].n === usersBeforeSignup, 'staff signup must not create any account');
+      for (const malformed of ['student', '', null, 7, {}]) await denied(client, user, malformed, 400);
+      if (entry === 'service-admin') continue;
+      if (entry === 'instructor') {
+        const originalShadow = (await queryLocalSql(persistDir, `SELECT organization_role FROM users WHERE id = ${quote(user.uid)}`))[0].organization_role;
+        try {
+          await executeLocalSql(persistDir, `UPDATE users SET organization_role = 'GROUP_ADMIN' WHERE id = ${quote(user.uid)}`);
+          await denied(client, user, 'group-admin', 403);
+          const canonicalSession = await client.get('/api/session');
+          assert(canonicalSession.uid === user.uid && canonicalSession.organizationRole === 'INSTRUCTOR',
+            'session reads must use canonical instructor membership over stale group-admin shadow');
+          assert((await queryLocalSql(persistDir, `SELECT role FROM organization_memberships WHERE user_id = ${quote(user.uid)} AND status = 'ACTIVE'`))[0].role === 'INSTRUCTOR',
+            'authentication and session reads must never promote existing membership from stale shadow');
+        } finally {
+          await executeLocalSql(persistDir, `UPDATE users SET organization_role = ${quote(originalShadow)} WHERE id = ${quote(user.uid)}`);
+        }
+      }
+      const beforeMembership = await queryLocalSql(persistDir, `SELECT * FROM organization_memberships WHERE user_id = ${quote(user.uid)} AND status = 'ACTIVE'`);
+      const beforeOrg = await queryLocalSql(persistDir, `SELECT * FROM organizations WHERE id = ${quote(user.organizationId)}`);
+      assert(beforeMembership.length === 1 && beforeOrg.length === 1, 'staff fixture must have one canonical active organization membership');
+      try {
+        await executeLocalSql(persistDir, `UPDATE organization_memberships SET status = 'INACTIVE' WHERE user_id = ${quote(user.uid)}`);
+        await denied(client, user, entry, 403);
+        assert((await queryLocalSql(persistDir, `SELECT status FROM organization_memberships WHERE user_id = ${quote(user.uid)}`))[0].status === 'INACTIVE',
+          'failed real staff login must not repair inactive membership from stale shadow columns');
+      } finally {
+        await executeLocalSql(persistDir, `UPDATE organization_memberships SET status = 'ACTIVE' WHERE user_id = ${quote(user.uid)} AND organization_id = ${quote(user.organizationId)}`);
+      }
+      assert((await client.get('/api/session')).uid === user.uid, 'inactive-membership rejection must preserve old authenticated identity');
+      try {
+        await executeLocalSql(persistDir, `UPDATE organizations SET status = 'INACTIVE' WHERE id = ${quote(user.organizationId)}`);
+        await denied(client, user, entry, 403);
+        assert((await queryLocalSql(persistDir, `SELECT status FROM organizations WHERE id = ${quote(user.organizationId)}`))[0].status === 'INACTIVE',
+          'failed real staff login must not reactivate organization');
+      } finally {
+        await executeLocalSql(persistDir, `UPDATE organizations SET status = ${quote(beforeOrg[0].status)} WHERE id = ${quote(user.organizationId)}`);
+      }
+      assert((await client.get('/api/session')).uid === user.uid, 'inactive-organization rejection must preserve existing session identity');
+    }
+    const guest = new SessionClient(baseUrl, 'staff-entry-guest');
+    for (const [client, status] of [[guest, 401], [student, 403]]) {
+      const result = await client.storageRaw('getAdminDashboardSnapshot');
+      assert(result.status === status && result.setCookies.length === 0, 'admin data must remain unavailable to guests/students');
+    }
+  } finally {
+    for (const user of originals) await executeLocalSql(persistDir, `UPDATE users SET password_hash = ${user.password_hash === null ? 'NULL' : quote(user.password_hash)} WHERE id = ${quote(user.id)}`);
+  }
 };
 
 const executeLocalSqlFile = async (persistDir, filePath) => {
@@ -731,6 +822,9 @@ const main = async () => {
     const instructorUser = await instructor.get('/api/session');
     assert(instructorUser.organizationRole === 'INSTRUCTOR', 'provisioned instructor should receive instructor organization role');
     assert(instructorUser.organizationId === groupAdminUser.organizationId, 'provisioned instructor should join the group admin organization');
+
+    console.log('Verifying real staff entry authentication against local D1...');
+    await verifyRealStaffEntryAuthentication({ persistDir, baseUrl, adminUser, groupAdminUser, instructorUser, student: freeStudent });
 
     console.log('Verifying student entry provisioning preserves identity, history and authorization...');
     const entryStudent = new SessionClient(baseUrl, 'role-entry-student');

@@ -1,3 +1,4 @@
+import { isStaffLoginEntry, matchesStaffEntryRole, type StaffLoginEntry } from '../../shared/staffLogin';
 import {
   OrganizationRole,
   SubscriptionPlan,
@@ -58,7 +59,10 @@ export const authenticate = async (
   isSignUp: boolean,
   role?: UserRole,
   displayName?: string,
+  loginEntry?: StaffLoginEntry,
 ): Promise<UserProfile | null> => {
+  if (loginEntry !== undefined && !isStaffLoginEntry(loginEntry)) throw new Error('ログイン入口が正しくありません。');
+  if (isSignUp && loginEntry !== undefined) throw new Error('講師・管理者の入口からアカウントを登録することはできません。');
   if (isSignUp) {
     const createdUser: UserProfile = {
       uid: `mock-user-${Date.now()}`,
@@ -73,6 +77,10 @@ export const authenticate = async (
   }
 
   const matchedUser = IDB_MOCK_USERS.find((candidate) => candidate.email === email) || IDB_MOCK_USERS[0];
+  if (loginEntry && (!matchesStaffEntryRole(loginEntry, matchedUser)
+    || (loginEntry !== 'service-admin' && (!matchedUser.organizationId || (matchedUser.organizationRole !== OrganizationRole.INSTRUCTOR && matchedUser.organizationRole !== OrganizationRole.GROUP_ADMIN))))) {
+    throw new Error('このログイン入口を利用する権限がありません。正しい入口をご確認ください。');
+  }
   await saveSession(context, matchedUser);
   return matchedUser;
 };

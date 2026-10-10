@@ -489,22 +489,28 @@ export const loginBusinessStudentDemo = async (page: Page) => {
 
 export const loginInstructorDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'instructor');
-  await page.getByTestId(role.primaryActionTestId).click();
+  const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
+    data: { action: 'demo-login', role: role.demoRole, organizationRole: role.demoOrganizationRole } });
+  expect(response.status(), 'Existing protected demo API must authorize the test fixture').toBe(200);
+  await page.goto('/instructor');
   await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'instructor-dashboard');
 };
 
 export const loginGroupAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'group-admin');
-  await page.getByTestId(role.primaryActionTestId).click();
+  const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
+    data: { action: 'demo-login', role: role.demoRole, organizationRole: role.demoOrganizationRole } });
+  expect(response.status(), 'Existing protected demo API must authorize the test fixture').toBe(200);
+  await page.goto('/instructor');
   await waitForAuthenticatedSession(page, demoLoginSessionTimeoutMs, 'business-admin-dashboard');
 };
 
 export const loginAdminDemo = async (page: Page) => {
   const role = await openBusinessRolePage(page, 'service-admin');
-  await page.getByTestId(role.primaryActionTestId).click();
-  await expect(page.getByTestId('admin-demo-password')).toBeVisible();
-  await page.getByTestId('admin-demo-password').fill('admin');
-  await page.getByTestId('admin-demo-submit').click();
+  const response = await page.request.post('/api/auth', { headers: { Origin: new URL(page.url()).origin },
+    data: { action: 'demo-login', role: role.demoRole, demoPassword: 'admin' } });
+  expect(response.status(), 'Existing admin fixture API retains its password and runtime guard').toBe(200);
+  await page.goto('/admin');
 };
 
 export const resolveWritingStudentSelectValue = async (

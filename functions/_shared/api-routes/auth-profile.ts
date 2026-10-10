@@ -1,3 +1,4 @@
+import { isStaffLoginEntry, matchesStaffEntryRole } from '../../../shared/staffLogin';
 import {
   AuthRequest,
   DemoLoginRequest,
@@ -104,6 +105,13 @@ const handleEmailAuth = async (
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const requestedRole = body.role || UserRole.STUDENT;
+  const loginEntry = (body as EmailAuthRequest & { loginEntry?: unknown }).loginEntry;
+  if (loginEntry !== undefined && !isStaffLoginEntry(loginEntry)) {
+    throw new HttpError(400, 'ログイン入口が正しくありません。');
+  }
+  if (body.isSignUp && loginEntry !== undefined) {
+    throw new HttpError(400, '講師・管理者の入口からアカウントを登録することはできません。');
+  }
   const authScopeKey = createAuthAttemptScopeKey(request, 'email-auth', email || 'anonymous');
 
   if (!email || !password) {
@@ -146,17 +154,41 @@ const handleEmailAuth = async (
   }
 
   await assertAuthAttemptAllowed(env, authScopeKey);
-  const existing = await findUserByEmail(env, email);
+  const existing = isStaffLoginEntry(loginEntry)
+    ? await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<DbUserRow>()
+    : await findUserByEmail(env, email);
   if (!existing || !(await verifyPassword(password, existing.password_hash))) {
     await recordAuthFailure(env, authScopeKey);
     throw new HttpError(401, 'メールアドレスまたはパスワードが間違っています。');
   }
 
+  let authenticatedUser = existing;
+  if (isStaffLoginEntry(loginEntry)) {
+    const denied = () => new HttpError(403, 'このログイン入口を利用する権限がありません。正しい入口をご確認ください。');
+    if (loginEntry === 'service-admin') {
+      if (!matchesStaffEntryRole(loginEntry, mapUserRowToProfile(existing))) throw denied();
+    } else {
+      // Membership is authoritative; stale user shadow columns cannot authorize entry.
+      if (existing.role !== UserRole.INSTRUCTOR) throw denied();
+      const membership = await env.DB.prepare(`
+        SELECT o.id AS organization_id, o.display_name AS organization_name,
+               o.subscription_plan AS subscription_plan, m.role AS organization_role
+          FROM organization_memberships m JOIN organizations o ON o.id = m.organization_id
+         WHERE m.user_id = ? AND m.status = 'ACTIVE' AND o.status = 'ACTIVE'
+         LIMIT 1
+      `).bind(existing.id).first<Pick<DbUserRow, 'organization_id' | 'organization_name' | 'subscription_plan' | 'organization_role'>>();
+      if (!membership) throw denied();
+      authenticatedUser = { ...existing, ...membership };
+      if (!matchesStaffEntryRole(loginEntry, mapUserRowToProfile(authenticatedUser))) throw denied();
+      // An active student membership never supplies instructor permission.
+      if (membership.organization_role !== 'INSTRUCTOR' && membership.organization_role !== 'GROUP_ADMIN') throw denied();
+    }
+  }
   await clearAuthFailures(env, authScopeKey);
   const sessionCookie = await createSession(env, request, existing.id);
 
   return {
-    response: createJsonResponse(mapUserRowToProfile(existing), {
+    response: createJsonResponse(mapUserRowToProfile(authenticatedUser), {
       headers: { 'Set-Cookie': sessionCookie },
     }),
   };

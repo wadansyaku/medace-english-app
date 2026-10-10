@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import AuthExperienceScreen, { AuthForm, type AuthExperienceScreenProps } from '../components/auth/AuthExperienceScreen';
 import PublicRolePage from '../components/public/PublicRolePage';
+import StaffEntryStatus from '../components/auth/StaffEntryStatus';
+import { UserRole } from '../types';
 
 const noop = () => {};
 const base: AuthExperienceScreenProps = {
@@ -78,5 +80,21 @@ describe('focused auth experience', () => {
     expect(html).toContain('data-testid="public-role-back"');
     expect(html).toContain('data-testid="public-role-login"');
     expect(html).toContain('登録済みのアカウントでログイン');
+  });
+  it.each(['instructor', 'group-admin', 'service-admin'] as const)('opens %s as a login-only form even with a signup query', (publicRole) => {
+    const html = renderToStaticMarkup(<AuthExperienceScreen {...base} currentView="publicRole" publicRole={publicRole} authMode="SIGNUP" authPanelMode="SIGNUP" />);
+    expect(html).toContain('としてログイン');
+    expect(html).toContain('data-testid="auth-email-input"');
+    expect(html).toContain('autoComplete="current-password"');
+    expect(html).toContain('学習の入口へ戻る');
+    for (const forbidden of ['auth-display-name-input', 'auth-confirm-password-input', '新規登録', 'demo-login', '画面プレビュー', 'business-role-preview']) expect(html).not.toContain(forbidden);
+  });
+  it('shows a safe return action for a signed-in student without another login or role switch', () => {
+    const html = renderToStaticMarkup(<StaffEntryStatus user={{ uid: 'test', role: UserRole.STUDENT, email: 'test@example.invalid', displayName: 'Test' }} entry="service-admin" onOpenHome={noop} />);
+    expect(html).toContain('この入口は利用できません');
+    expect(html).toContain('自分の学習へ戻る');
+    expect(html).not.toContain('auth-email');
+    expect(html).not.toContain('demo-login');
+    expect(html).not.toContain('role-card');
   });
 });

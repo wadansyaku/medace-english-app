@@ -673,3 +673,14 @@ summary:focus-visible {
 }
 
 .study-definition-editing { overflow: auto; }
+
+/* Dedicated staff forms keep both credentials visible in phone landscape. */
+@media (min-width: 640px) and (max-height: 520px) {
+  .staff-login-page { margin-top: 0; margin-bottom: 8px; }
+  .staff-login-card { padding: 16px; }
+  .staff-login-card header { margin-bottom: 8px; }
+  .staff-login-card .staff-login-description { margin-bottom: 12px; }
+  .staff-login-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .staff-login-form > * { margin-top: 0; margin-bottom: 0; }
+  .staff-login-form .staff-login-full-width { grid-column: 1 / -1; }
+}

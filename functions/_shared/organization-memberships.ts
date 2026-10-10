@@ -86,6 +86,7 @@ export const readActiveOrganizationContextForUser = async (
      JOIN organizations o ON o.id = m.organization_id
      WHERE m.user_id = ?
        AND m.status = 'ACTIVE'
+       AND o.status = 'ACTIVE'
      LIMIT 1`,
     userId,
   );
@@ -434,10 +435,19 @@ export const maybeSyncBusinessMembershipFromUser = async (
     return;
   }
 
-  await upsertActiveOrganizationMembership(env, {
-    userId: user.id,
-    organizationId: user.organization_id,
-    organizationRole,
-    subscriptionPlan: user.subscription_plan as SubscriptionPlan,
-  });
+  // Membership records (including revocations) are authoritative over legacy user shadows.
+  const existingMembership = await readFirst<{ user_id: string }>(env,
+    'SELECT user_id FROM organization_memberships WHERE user_id = ? LIMIT 1', user.id);
+  if (existingMembership) return;
+  const organization = await readOrganizationById(env, user.organization_id);
+  if (!organization || organization.status !== 'ACTIVE') return;
+  const now = Date.now();
+  // Recheck in the insert so concurrent grants/revocations cannot be overwritten.
+  await env.DB.prepare(`
+    INSERT INTO organization_memberships (user_id, organization_id, role, status, created_at, updated_at)
+    SELECT ?, ?, ?, 'ACTIVE', ?, ?
+     WHERE NOT EXISTS (SELECT 1 FROM organization_memberships WHERE user_id = ?)
+       AND EXISTS (SELECT 1 FROM organizations WHERE id = ? AND status = 'ACTIVE')
+    ON CONFLICT(user_id, organization_id) DO NOTHING
+  `).bind(user.id, organization.id, organizationRole, now, now, user.id, organization.id).run();
 };
