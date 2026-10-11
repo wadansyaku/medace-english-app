@@ -85,11 +85,56 @@ test('teacher report persists through owner triage, manual export, failed retest
     await refresh(page); await expand(own); await expect(own.getByLabel('再テストした条件と結果')).toHaveValue(''); await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
     await expect(own.getByText('入力文字列と公開版は一致しています。修正内容や再テスト結果をアプリが検証したものではありません。', { exact: true })).toBeVisible();
     await own.getByLabel('再テストした条件と結果').fill('320pxと390pxで操作を確認'); await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeEnabled(); await own.getByRole('button', { name: '再テスト成功を記録' }).click(); await expect(own.getByText('再テスト成功が記録されています。')).toBeVisible();
-    const passed = await readReport(page, payload.report.id); expect(passed.status).toBe('RETEST_PASS'); expect(passed.history).toHaveLength(7); expect(passed.history.at(-1)!.note).toContain(`現在の公開版: ${deployedRevision}`); expect(passed.history.at(-1)!.note).toContain('自動検証ではありません');
+    const passed = await readReport(page, payload.report.id); expect(passed.status).toBe('RETEST_PASS'); expect(passed.history).toHaveLength(7); expect(passed.history.at(-1)!.note).toContain(`現在の公開版: ${deployedRevision}`); expect(passed.history.at(-1)!.note).toContain('自動検証ではありません'); expect(passed.history.at(-1)!.note).toContain(`サーバー確認の公開版: ${deployedRevision}。修正版との照合: 一致`);
     await page.reload(); await open(page); await expand(card(page, title)); await expect(card(page, title).locator('ol li')).toHaveCount(7);
     await card(page, title).locator('ol').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('feedback-retest-history.png') });
     expect(errors).toEqual([]);
   } finally { await adminContext.close(); }
+});
+
+test('server rejects stale-tab and direct successful retests while unknown or mismatched UI metadata stays blocked', async ({ page }) => {
+  await page.goto('/'); await loginAdminDemo(page);
+  const origin = new URL(page.url()).origin;
+  const post = (data: unknown) => page.request.post('/api/product-feedback', { data, headers: { Origin: origin } });
+  const listResponse = await post({ action: 'list' }); expect(listResponse.ok()).toBe(true);
+  const deployedRevision = ((await listResponse.json()) as ProductFeedbackList).deploymentRevision;
+  const title = `版検証 ${randomUUID()}`; const id = randomUUID();
+  const created = await post({ action: 'create', id, input: input(title), privacyConfirmed: true }); expect(created.ok()).toBe(true);
+  const advance = async (expectedRevision: number, change: unknown) => {
+    const response = await post({ action: 'advance', id, expectedRevision, mutationId: randomUUID(), change }); expect(response.ok()).toBe(true);
+  };
+  await advance(1, { type: 'triage', priority: 'P1', acceptance: '対象の公開版で次の操作が見える' });
+  await advance(2, { type: 'prepare-handoff' });
+  const staleRevision = `old-${deployedRevision ?? 'unknown'}`;
+  await advance(3, { type: 'record-fix', revision: staleRevision, note: '旧版を使った合成回帰' });
+  let metadata: string | null = deployedRevision;
+  await page.route('**/api/product-feedback', async route => {
+    const body = route.request().postDataJSON();
+    if (body.action === 'list') {
+      const response = await route.fetch(); const result = await response.json();
+      await route.fulfill({ response, json: { ...result, deploymentRevision: metadata } }); return;
+    }
+    await route.continue();
+  });
+  await open(page); const report = card(page, title); await expand(report);
+  await report.getByLabel('再テストした条件と結果').fill('対象操作を確認');
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
+  await expect(report.getByText(deployedRevision
+    ? '公開版と入力された修正版が一致していません。対象版の成功としては記録できません。公開版を確認してから一覧を更新してください。'
+    : '公開版を確認できていません。対象版の成功としては記録できません。一覧を更新して公開版を確認してください。', { exact: true })).toBeVisible();
+  metadata = null; await refresh(page);
+  await expect(report.getByText('公開版を確認できていません。対象版の成功としては記録できません。一覧を更新して公開版を確認してください。', { exact: true })).toBeVisible();
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
+  // Simulate an old tab which still believes its fix is the public deployment.
+  // Only list metadata is intercepted; the actual mutation reaches real D1.
+  metadata = staleRevision; await refresh(page);
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeEnabled();
+  const rejected = page.waitForResponse(response => response.url().endsWith('/api/product-feedback') && response.request().postDataJSON().action === 'advance');
+  await report.getByRole('button', { name: '再テスト成功を記録' }).click(); const rejectedResponse = await rejected; expect(rejectedResponse.status()).toBe(409); expect((await rejectedResponse.json()).error).toContain('再読み込み');
+  await expect(page.getByText('別の更新がありました。一覧を再取得しています。入力は保持しました。最新の状態を確認して、操作を再検討してください。', { exact: false })).toBeVisible();
+  const direct = await post({ action: 'advance', id, expectedRevision: 4, mutationId: randomUUID(), change: { type: 'retest', passed: true, note: 'Client claims matching public version' } });
+  expect(direct.status()).toBe(409); expect((await direct.json()).error).toContain('再読み込み');
+  const unchanged = await readReport(page, id); expect(unchanged.status).toBe('FIXED'); expect(unchanged.revision).toBe(4); expect(unchanged.history).toHaveLength(4);
 });
 
 test('lost create response retries the same report, while list failure stays unknown and keyboard close preserves draft', async ({ page }) => {
