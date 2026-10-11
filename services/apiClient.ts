@@ -1,3 +1,5 @@
+import { captureWorkspaceRequest, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
+
 class ApiError extends Error {
   status: number;
 
@@ -42,35 +44,53 @@ const parseError = async (response: Response): Promise<never> => {
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const normalizedMethod = (init?.method || 'GET').toUpperCase();
-  const response = await fetch(path, {
-    credentials: 'include',
-    cache: init?.cache ?? (normalizedMethod === 'GET' ? 'no-store' : undefined),
-    ...init,
-    headers: {
-      ...DEFAULT_HEADERS,
-      ...(init?.headers || {}),
-    },
-  });
+  const context = captureWorkspaceRequest();
+  const abortFromCaller = () => context.controller.abort();
+  if (init?.signal?.aborted) abortFromCaller();
+  init?.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  try {
+    const response = await fetch(path, {
+      credentials: 'include',
+      cache: init?.cache ?? (normalizedMethod === 'GET' ? 'no-store' : undefined),
+      ...init,
+      signal: context.controller.signal,
+      headers: {
+        ...DEFAULT_HEADERS,
+        ...context.headers,
+        ...(init?.headers || {}),
+      },
+    });
 
-  if (!response.ok) {
-    return parseError(response);
+    if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+
+    if (!response.ok) {
+      return await parseError(response);
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    if (!isJsonResponse(response)) {
+      const text = await response.text();
+      throw new ApiError(
+        text.trim().startsWith('<!DOCTYPE')
+          ? 'API が HTML を返しました。`vite preview` ではなく `wrangler pages dev dist` を利用してください。'
+          : 'API が JSON 以外のレスポンスを返しました。',
+        response.status,
+      );
+    }
+
+    const result = await response.json() as T;
+    if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+    return result;
+  } catch (error) {
+    if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+    throw error;
+  } finally {
+    init?.signal?.removeEventListener('abort', abortFromCaller);
+    releaseWorkspaceRequest(context);
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  if (!isJsonResponse(response)) {
-    const text = await response.text();
-    throw new ApiError(
-      text.trim().startsWith('<!DOCTYPE')
-        ? 'API が HTML を返しました。`vite preview` ではなく `wrangler pages dev dist` を利用してください。'
-        : 'API が JSON 以外のレスポンスを返しました。',
-      response.status,
-    );
-  }
-
-  return response.json() as Promise<T>;
 };
 
 export const apiGet = <T>(path: string): Promise<T> => request<T>(path, { method: 'GET' });

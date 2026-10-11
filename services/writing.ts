@@ -16,6 +16,7 @@ import type {
 } from '../contracts/writing';
 import type { WritingExamCategory } from '../types';
 import { apiGet, apiPost } from './apiClient';
+import { captureWorkspaceRequest, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
 
 const buildQuery = (params: Record<string, string | undefined>): string => {
   const search = new URLSearchParams();
@@ -70,24 +71,33 @@ export const uploadWritingAsset = async (
   upload: CreateWritingUploadUrlResponse,
   file: File,
 ): Promise<void> => {
-  const sha256Base64 = await calculateWritingAssetSha256Base64(file);
-  const response = await fetch(upload.uploadUrl, {
-    method: upload.method,
-    headers: {
-      ...upload.headers,
-      'X-Content-SHA256': sha256Base64,
-    },
-    body: file,
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    if (response.status === 409) {
-      throw new Error('このアップロードURLはすでに使用済みです。再度アップロードしてください。');
+  const context = captureWorkspaceRequest();
+  try {
+    const sha256Base64 = await calculateWritingAssetSha256Base64(file);
+    if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+    const response = await fetch(upload.uploadUrl, {
+      method: upload.method,
+      headers: {
+        ...upload.headers,
+        ...context.headers,
+        'X-Content-SHA256': sha256Base64,
+      },
+      body: file,
+      credentials: 'include',
+      signal: context.controller.signal,
+    });
+    if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+    if (!response.ok) {
+      if (response.status === 409) {
+        throw new Error('このアップロードURLはすでに使用済みです。再度アップロードしてください。');
+      }
+      if (response.status === 410) {
+        throw new Error('アップロードURLの有効期限が切れました。再度アップロードしてください。');
+      }
+      throw new Error(`アップロードに失敗しました: ${response.status}`);
     }
-    if (response.status === 410) {
-      throw new Error('アップロードURLの有効期限が切れました。再度アップロードしてください。');
-    }
-    throw new Error(`アップロードに失敗しました: ${response.status}`);
+  } finally {
+    releaseWorkspaceRequest(context);
   }
 };
 

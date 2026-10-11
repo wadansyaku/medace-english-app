@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { sessionService } from '../services/session';
+import { clearWorkspaceContext, prepareWorkspaceRestore } from '../services/workspaceContext';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
@@ -114,13 +115,23 @@ export const useAuthExperienceController = ({
   useEffect(() => {
     const initSession = async () => {
       try {
+        if (typeof window !== 'undefined') prepareWorkspaceRestore(window.location.pathname);
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);
           navigateAfterAuthentication(sessionUser, true);
         }
       } catch (error) {
-        console.error('Session restore failed', error);
+        // A denied workspace does not erase the existing personal identity.
+        clearWorkspaceContext();
+        if (error && typeof error === 'object' && 'status' in error && error.status === 403) {
+          try {
+            const identity = await sessionService.getSession();
+            if (identity) { setUser(identity); navigateAfterAuthentication(identity, true); }
+          } catch { setAuthError('ログイン情報を確認できませんでした。通信を確認して再試行してください。'); }
+        } else {
+          setAuthError('ログイン情報を確認できませんでした。通信を確認して再試行してください。');
+        }
       } finally {
         setAuthLoading(false);
       }
