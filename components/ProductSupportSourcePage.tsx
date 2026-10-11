@@ -29,10 +29,10 @@ const ProductSupportSourcePage: React.FC<ProductSupportSourceLocation & {
   const source = resolved?.[0];
   // Student help must not introduce staff entry instructions.
   const visible = source && !(role === 'STUDENT' && source.topic === 'staff-login') ? source : null;
-  return <section className="mx-auto w-full max-w-2xl min-w-0 space-y-5 rounded-2xl border border-orange-100 bg-white p-4 text-[#2F1609] sm:p-6 [overflow-wrap:anywhere]" data-testid="product-support-source-page">
+  return <section className="mx-auto w-full max-w-2xl min-w-0 space-y-5 rounded-2xl border border-medace-100 bg-white p-4 text-[#2F1609] sm:p-6 [overflow-wrap:anywhere]" data-testid="product-support-source-page">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="text-xl font-bold">使い方案内の根拠</h2>
-      <button type="button" onClick={onBack} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold">{role === 'GUEST' ? '公開案内へ戻る' : '自分の画面へ戻る'}</button>
+      <button type="button" onClick={onBack} className="min-h-11 rounded-xl border border-medace-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold">{role === 'GUEST' ? '公開案内へ戻る' : '自分の画面へ戻る'}</button>
     </div>
     {visible ? <article className="space-y-3" data-testid="product-support-source-body">
       <h3 className="text-lg font-bold">{visible.title}</h3>

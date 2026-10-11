@@ -27,7 +27,7 @@ type Pending = {
   status: Exclude<ProductSupportResponse['status'], 'ANSWERED'> | 'CONNECTION_FAILED';
   recheckAllowed: boolean;
 };
-const control = 'min-h-11 rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-bold text-[#2F1609] disabled:opacity-50';
+const control = 'min-h-11 rounded-xl border border-medace-200 bg-white px-3 py-2 text-sm font-bold text-[#2F1609] disabled:opacity-50';
 const pendingCopy: Record<Pending['status'], string> = {
   DISABLED: '回答処理は停止しています。入力は残っています。',
   CAPACITY_REACHED: '会話回答の利用枠に達しています。入力は残っています。',
@@ -144,7 +144,7 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
     void send(request, request);
   };
 
-  return <section aria-label="製品についての会話" className="min-w-0 rounded-2xl border border-orange-100 bg-white p-4 text-[#2F1609]">
+  return <section aria-label="製品についての会話" className="min-w-0 rounded-2xl border border-medace-100 bg-white p-4 text-[#2F1609]">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-bold">Steady Studyの使い方を聞く</h3>
       <button type="button" className={control} onClick={clear} data-testid="support-clear">会話を消す</button>
@@ -156,7 +156,7 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
         <p className="whitespace-pre-wrap rounded-xl bg-[#FDF3ED] p-3 text-sm leading-6"><span className="font-bold">あなた: </span>{turn.question}</p>
         <p ref={index === turns.length - 1 ? latestAnswer : undefined} tabIndex={-1} className="whitespace-pre-wrap text-sm leading-6" data-testid="support-answer">{turn.answer}</p>
         <p className="text-xs text-[#75452E]">{turn.providerUsed ? 'AIによる回答。根拠も確認してください。' : '公開案内からの回答（生成OFF）'}</p>
-        {turn.sources.map(source => <details key={source.sourceId} className="rounded-xl border border-orange-100 p-3" data-testid="support-source">
+        {turn.sources.map(source => <details key={source.sourceId} className="rounded-xl border border-medace-100 p-3" data-testid="support-source">
           <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold">根拠を読む: {source.title}</summary>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.content}</p>
           <p className="mt-2 text-xs leading-5">根拠ID: {source.sourceId} · 確認日: {source.checkedAt} · 仕様版: {source.targetVersion}</p>
@@ -178,7 +178,7 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
         <textarea ref={input} aria-label="製品についての質問" rows={2} maxLength={PRODUCT_SUPPORT_MAX_QUESTION_CHARS} value={question}
           disabled={busy} readOnly={pending !== null} onChange={event => setQuestion(event.target.value)}
           placeholder="たとえば、登録なしで使った記録はどうなりますか？"
-          className="mt-1 w-full min-w-0 rounded-xl border border-orange-200 bg-white p-3 text-base font-normal leading-6" />
+          className="mt-1 w-full min-w-0 rounded-xl border border-medace-200 bg-white p-3 text-base font-normal leading-6" />
       </label>
       {!ready && <p role="status" className="text-sm leading-6" data-testid="support-disabled">{disabledReason || '会話の回答処理は停止しています。質問は入力できますが、送信しません。'}</p>}
       {inputError && <p role="alert" className="text-sm text-red-800">{inputError}</p>}

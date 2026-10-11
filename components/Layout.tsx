@@ -329,7 +329,7 @@ const Layout: React.FC<LayoutProps> = ({
           )}
           {onOpenProductSupport && <button type="button" onClick={onOpenProductSupport}
             data-product-support-trigger aria-label="使い方について質問する" title="使い方について質問する"
-            className={`min-h-11 min-w-11 shrink-0 rounded-xl border border-orange-200 bg-[#FDF3ED] font-bold text-[#2F1609] ${compactHeader ? 'px-2 text-xs' : 'px-3 text-sm'}`}>
+            className={`min-h-11 min-w-11 shrink-0 rounded-xl border border-medace-200 bg-[#FDF3ED] font-bold text-[#2F1609] ${compactHeader ? 'px-2 text-xs' : 'px-3 text-sm'}`}>
             質問
           </button>}
         </div>
