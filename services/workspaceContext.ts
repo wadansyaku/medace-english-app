@@ -81,7 +81,7 @@ export const captureWorkspaceRequest = (): CapturedWorkspaceRequest => {
   return { generation, headers, controller };
 };
 
-export const isWorkspaceRequestCurrent = (request: CapturedWorkspaceRequest): boolean => request.generation === generation;
+export const isWorkspaceRequestCurrent = (request: CapturedWorkspaceRequest): boolean => request.generation === generation && !request.controller.signal.aborted;
 export const releaseWorkspaceRequest = (request: CapturedWorkspaceRequest) => requests.delete(request.controller);
 export const isCurrentWorkspaceProfile = (user: UserProfile): boolean => current.uid
   ? getWorkspaceContextKey(current.uid, current.access) === getWorkspaceContextKey(user.uid, user.workspaceAccess)

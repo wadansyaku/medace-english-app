@@ -83,6 +83,7 @@ vi.mock('../functions/_shared/organization-memberships', async () => {
   return {
     ...actual,
     readActiveOrganizationContextForUser: mocks.readActiveOrganizationContextForUser,
+    readActiveActorOrganizationContext: (env: AppEnv, actor: DbUserRow) => mocks.readActiveOrganizationContextForUser(env, actor.id),
   };
 });
 

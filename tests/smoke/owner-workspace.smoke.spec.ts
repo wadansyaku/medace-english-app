@@ -29,7 +29,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
     await page.setViewportSize(viewport); await login(page); await checkLayout(page);
     await page.screenshot({ path: testInfo.outputPath('teacher.png'), animations: 'disabled' });
-    await selector(page).focus(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+    await selector(page).focus(); await page.keyboard.press('Space'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
     await expect(school(page)).toBeVisible(); await expect(selector(page)).toHaveValue('group-admin');
     await expect(selector(page)).toBeFocused(); await checkLayout(page);
     await page.screenshot({ path: testInfo.outputPath('school.png'), animations: 'disabled' });

@@ -23,7 +23,7 @@ export interface WorkspaceGrantRow {
   subscription_plan: string;
 }
 
-const denied = (): HttpError => new HttpError(403, 'この業務画面を利用する権限を確認できません。案内元に利用権限をご確認ください。');
+const denied = (): HttpError => new HttpError(403, 'この業務画面を利用する権限を確認できません。案内元にアカウントの利用権限をご確認ください。');
 
 export const readWorkspaceGrant = async (env: AppEnv, userId: string): Promise<WorkspaceGrantRow | null> => {
   const row = await env.DB.prepare(`

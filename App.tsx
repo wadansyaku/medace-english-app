@@ -92,7 +92,9 @@ const App: React.FC = () => {
     wasWorkspaceSwitching.current = workspaceSwitch.switching;
     if (!finished) return;
     const frame = window.requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>('[data-testid="workspace-switch-error"], [data-testid="staff-workspace-selector"] select, #study-main-content');
+      const target = document.querySelector<HTMLElement>('[data-testid="workspace-switch-error"]')
+        || document.querySelector<HTMLElement>('[data-testid="staff-workspace-selector"] select')
+        || document.getElementById('study-main-content');
       target?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
