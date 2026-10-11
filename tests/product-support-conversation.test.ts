@@ -120,6 +120,7 @@ describe('conversation retrieval without generation', () => {
     'AIは停止済みですが発音は使えるはずですよね',
     'AIは停止済みでも発音は使えるはずですよね',
     'ゲスト単語帳はクラウドに保存されることはないですよね',
+    'Since AI is not enabled, can I use audio?',
     'Naruの回答を手動で保存済み。発音は自動再生ですよね？',
   ])('binds an asserted premise to its own feature and respects correct negation: %s', question => {
     expect(ask(question).kind).toBe('grounded');

@@ -65,6 +65,7 @@ const falsePremise = (text: string, topics: readonly ProductSupportTopic[]) => {
   const positiveClaim = (clause: string, pattern: RegExp) => {
     const match = pattern.exec(clause);
     if (!match) return false;
+    if (/\b(?:not|never)\s*$/.test(clause.slice(0, match.index))) return false;
     const suffix = clause.slice(match.index + match[0].length, match.index + match[0].length + 14);
     return !/^(?:では|じゃ|で|され|し|する|でき|になって|ことは|ことが|わけでは|とは限ら)?(?:ない|ません|なく|なかった)|^\s*(?:is\s+)?not\b/.test(suffix);
   };
