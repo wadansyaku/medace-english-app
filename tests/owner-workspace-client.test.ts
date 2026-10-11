@@ -72,14 +72,15 @@ describe('tab-scoped explicit workspace requests', () => {
     await expect(apiGet('/api/storage')).rejects.toMatchObject({ status: 403 });
     expect(isCurrentWorkspaceProfile(canonical)).toBe(true);
   });
-  it('does not let an old error body invalidate a newer workspace or grant version', async () => {
+  it.each([7, 8])('does not let an old error body invalidate a reentered workspace at version %i', async version => {
     acceptWorkspaceProfile(profile('instructor'));
     const body = deferred<unknown>();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403,
       headers: new Headers({ 'Content-Type': 'application/json' }), json: () => body.promise }));
     const old = apiGet('/api/storage'); const denied = expect(old).rejects.toMatchObject({ name: 'AbortError' });
     await Promise.resolve();
-    const next = profile('instructor', 8); acceptWorkspaceProfile(next);
+    selectWorkspaceForSession('personal', 'synthetic-workspace-owner');
+    const next = profile('instructor', version); acceptWorkspaceProfile(next);
     body.resolve(revoked()); await denied;
     expect(isCurrentWorkspaceProfile(next)).toBe(true);
   });
