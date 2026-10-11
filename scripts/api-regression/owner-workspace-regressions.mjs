@@ -242,17 +242,23 @@ export const verifyOwnerWorkspaceRegressions = async ({
     requireStatus(settings, 200, 'school settings');
     assert(settings.data.organizationId === orgId && settings.data.members.every((member) => member.userUid !== otherStudent.uid),
       'settings must use the grant classroom and exclude the other classroom');
+    const selectedTeacher = settings.data.eligibleInstructors?.find((instructor) => instructor.userUid === owner.uid);
+    assert(selectedTeacher && settings.data.eligibleInstructors.filter((instructor) => instructor.userUid === owner.uid).length === 1
+      && settings.data.eligibleInstructors.every((instructor) => instructor.userUid !== otherStudent.uid),
+    'class settings must offer the explicit granted teacher once without adding a foreign student');
     const classroom = await storage(school, schoolHeaders, 'upsertOrganizationCohort', { name: 'Synthetic owner grant class only' });
     requireStatus(classroom, 200, 'grant classroom cohort creation');
     createdCohortId = classroom.data.id;
     assert(typeof createdCohortId === 'string' && createdCohortId.length > 0, 'new local classroom cohort must have a real stored ID');
     requireStatus(await storage(school, schoolHeaders, 'setInstructorCohorts', {
-      instructorUid: owner.uid, cohortIds: [createdCohortId],
+      instructorUid: selectedTeacher.userUid, cohortIds: [createdCohortId],
     }), 204, 'granted teacher must be assignable to its classroom cohort');
     const settingsWithCohort = await storage(school, schoolHeaders, 'getOrganizationSettingsSnapshot');
     requireStatus(settingsWithCohort, 200, 'settings with granted teacher cohort');
     assert((settingsWithCohort.data.instructorCohorts[owner.uid] || []).join(',') === createdCohortId,
       'settings must expose the owner teacher cohort assignment');
+    assert(settingsWithCohort.data.eligibleInstructors.filter((instructor) => instructor.userUid === owner.uid).length === 1,
+      'saved cohort settings must retain one explicit granted instructor candidate');
     const canonicalOwnerMember = settingsWithCohort.data.members.find((member) => member.userUid === owner.uid);
     assert(canonicalOwnerMember?.userRole === 'STUDENT' && canonicalOwnerMember.organizationRole === 'STUDENT',
       'the canonical membership roster must retain the original student authority');

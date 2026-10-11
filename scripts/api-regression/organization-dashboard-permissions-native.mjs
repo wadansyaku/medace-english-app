@@ -45,9 +45,9 @@ try {
       .bind(sessionId,uid,createHash('sha256').update(rawToken).digest('base64'),Date.now()+600000,Date.now()).run();
     cookieByUid.set(uid,`medace_session=${encodeURIComponent(rawToken)}`);
   }
-  const call=async(uid,action='getOrganizationDashboardSnapshot',headers={})=>{
+  const call=async(uid,action='getOrganizationDashboardSnapshot',headers={},payload)=>{
     const response=await mf.dispatchFetch('http://localhost/api/storage',{method:'POST',headers:{
-      Origin:'http://localhost','Content-Type':'application/json',Cookie:cookieByUid.get(uid),...headers},body:JSON.stringify({action})});
+      Origin:'http://localhost','Content-Type':'application/json',Cookie:cookieByUid.get(uid),...headers},body:JSON.stringify({action,...(payload===undefined?{}:{payload})})});
     const body=await response.text();
     return {status:response.status,body,data:body?JSON.parse(body):null};
   };
@@ -87,6 +87,35 @@ try {
     await denied('permission-owner',permissionWorkspaceHeaders('group-admin'),label);
     await db.batch([db.prepare("UPDATE workspace_access_grants SET status='ACTIVE',grant_version=7,school_admin_access=1 WHERE user_id='permission-owner'"),
       db.prepare("UPDATE organizations SET status='ACTIVE' WHERE id='permission-org-a'")]);
+  }
+  // This optional DTO regression only runs after the independent picker repair
+  // is integrated; the dashboard boundary above is also useful by itself.
+  if(process.env.MEDACE_VERIFY_GRANTED_STAFF_PICKER==='1') {
+    const settings=await call('permission-school','getOrganizationSettingsSnapshot');
+    check(settings.status===200,'canonical school settings available');
+    const selected=settings.data.eligibleInstructors?.find(row=>row.userUid==='permission-owner');
+    check(selected&&settings.data.eligibleInstructors.filter(row=>row.userUid==='permission-owner').length===1,'granted raw student is offered once');
+    check(settings.data.eligibleInstructors.every(row=>row.userUid!=='permission-foreign'&&row.userUid!=='permission-hidden'),'foreign and plain students are not instructor candidates');
+    check(settings.data.members.every(row=>row.userUid!=='permission-owner'),'canonical membership remains only in owner personal organization');
+    const save=await call('permission-school','setInstructorCohorts',{}, {instructorUid:selected.userUid,cohortIds:['permission-class-hidden']});
+    check(save.status===204,'offered grant instructor is accepted by the real cohort save API');
+    const reread=await call('permission-school','getOrganizationSettingsSnapshot');
+    check(reread.data.instructorCohorts['permission-owner']?.join(',')==='permission-class-hidden','saved grant instructor cohort persists');
+    for(const mutation of ["UPDATE workspace_access_grants SET status='REVOKED' WHERE user_id='permission-owner'",
+      "UPDATE workspace_access_grants SET teacher_access=0 WHERE user_id='permission-owner'",
+      "UPDATE workspace_access_grants SET staff_organization_id='permission-org-b' WHERE user_id='permission-owner'"]) {
+      await db.prepare(mutation).run();
+      const refreshed=await call('permission-school','getOrganizationSettingsSnapshot');
+      check(refreshed.status===200&&refreshed.data.eligibleInstructors.every(row=>row.userUid!=='permission-owner'),'fresh canonical admin removes ineligible grant candidate');
+      const deniedSave=await call('permission-school','setInstructorCohorts',{}, {instructorUid:'permission-owner',cohortIds:['permission-class-hidden']});
+      check(deniedSave.status===404,'revoked/disabled/foreign instructor cannot be saved');
+      const retained=await db.prepare("SELECT cohort_id FROM organization_cohort_instructors WHERE instructor_user_id='permission-owner'").all();
+      check(retained.results?.length===1&&retained.results[0].cohort_id==='permission-class-hidden','rejected save preserves the existing cohort assignment');
+      await db.prepare("UPDATE workspace_access_grants SET status='ACTIVE',teacher_access=1,staff_organization_id='permission-org-a' WHERE user_id='permission-owner'").run();
+    }
+    await db.prepare("UPDATE workspace_access_grants SET grant_version=8 WHERE user_id='permission-owner'").run();
+    const latest=await call('permission-school','getOrganizationSettingsSnapshot');
+    check(latest.status===200&&latest.data.eligibleInstructors.some(row=>row.userUid==='permission-owner'),'canonical admin lists the instructor from the latest grant version');
   }
   const raw=await db.prepare("SELECT role,organization_id,organization_role FROM users WHERE id='permission-owner'").first();
   check(raw.role==='STUDENT'&&raw.organization_id==='permission-org-b'&&raw.organization_role==='STUDENT','raw owner canonical student identity retained');
