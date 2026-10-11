@@ -3,7 +3,7 @@ import { captureWorkspaceRequest, isWorkspaceRequestCurrent, releaseWorkspaceReq
 class ApiError extends Error {
   status: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, readonly details?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -21,10 +21,12 @@ const isJsonResponse = (response: Response): boolean => {
 
 const parseError = async (response: Response): Promise<never> => {
   let message = `Request failed with status ${response.status}`;
+  let details: unknown;
 
   try {
     if (isJsonResponse(response)) {
       const payload = await response.json() as { error?: string; message?: string };
+      details = payload;
       message = payload.message || payload.error || message;
     } else {
       const text = await response.text();
@@ -39,7 +41,7 @@ const parseError = async (response: Response): Promise<never> => {
     if (text) message = text;
   }
 
-  throw new ApiError(message, response.status);
+  throw new ApiError(message, response.status, details);
 };
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
