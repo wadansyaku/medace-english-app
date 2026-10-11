@@ -1,4 +1,5 @@
 import type { QuizAttemptReceipt } from '../shared/quizAttempt';
+import type { StaffLoginEntry } from '../shared/staffLogin';
 import {
   ActivityLog,
   AdminDashboardSnapshot,
@@ -636,6 +637,7 @@ export interface DemoLoginRequest {
 
 export interface EmailAuthRequest {
   action: 'email-auth';
+  loginEntry?: StaffLoginEntry;
   role?: UserRole;
   email?: string;
   password?: string;

@@ -2,8 +2,8 @@ import { sessionClient, type SessionClient } from './clients';
 
 export const sessionService: SessionClient = {
   addXP: (user, amount) => sessionClient.addXP(user, amount),
-  authenticate: (email, password, isSignUp, role, displayName) => (
-    sessionClient.authenticate(email, password, isSignUp, role, displayName)
+  authenticate: (email, password, isSignUp, role, displayName, loginEntry) => (
+    sessionClient.authenticate(email, password, isSignUp, role, displayName, loginEntry)
   ),
   requestPasswordRecovery: (email, source) => sessionClient.requestPasswordRecovery(email, source),
   confirmPasswordReset: (token, password) => sessionClient.confirmPasswordReset(token, password),

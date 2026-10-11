@@ -112,7 +112,7 @@ describe('public business role entrypoints', () => {
     expect(demoStudent.englishLevel).toBeTruthy();
   });
 
-  it('keeps role cards on the separate public guide and out of the entire student entry', () => {
+  it('keeps staff links out of the student entry and public learner guide', () => {
     const authMarkup = buildAuthScreen();
     const publicMarkup = buildPublicInfoPage();
 
@@ -120,8 +120,13 @@ describe('public business role entrypoints', () => {
       expect(authMarkup).not.toContain(role.cardActionTestId);
       expect(authMarkup).not.toContain(role.cardTestId);
       expect(authMarkup).not.toContain(role.title);
-      expect(publicMarkup).toContain(role.cardTestId);
-      expect(publicMarkup).toContain(role.cardActionTestId);
+      if (role.key === 'student') {
+        expect(publicMarkup).toContain(role.cardTestId);
+        expect(publicMarkup).toContain(role.cardActionTestId);
+      } else {
+        expect(publicMarkup).not.toContain(role.cardTestId);
+        expect(publicMarkup).not.toContain(role.cardActionTestId);
+      }
     }
     expect(publicMarkup).not.toContain('導入相談を送る');
     expect(publicMarkup).not.toContain('学校・教室向け導入を相談する');
@@ -129,8 +134,7 @@ describe('public business role entrypoints', () => {
     expect(publicMarkup).not.toContain('相談フォーム');
     expect(authMarkup).not.toContain('role-entry-heading');
     expect(authMarkup).not.toContain('business-role-preview-section');
-    expect(publicMarkup).toContain('生徒の登録・ログインは共通です');
-    expect(publicMarkup).toContain('アカウントに付与された権限に応じた画面');
+    expect(publicMarkup).toContain('生徒用アカウントでログインしてください');
   });
 
   it.each(['LOGIN', 'SIGNUP'] as const)('keeps the %s form free of role choices', (authMode) => {

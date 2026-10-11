@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { SubscriptionPlan } from '../types';
-import { hydrateUserOrganizationFromMembership } from '../functions/_shared/organization-memberships';
+import { SubscriptionPlan, OrganizationRole, UserRole } from '../types';
+import { hydrateUserOrganizationFromMembership, maybeSyncBusinessMembershipFromUser, readActiveOrganizationContextForUser } from '../functions/_shared/organization-memberships';
 import type { AppEnv, D1PreparedStatement, DbUserRow } from '../functions/_shared/types';
 
 const createEnvWithActiveMembership = (row: Record<string, unknown> | null): AppEnv => {
@@ -81,5 +81,59 @@ describe('organization membership hydration', () => {
     await expect(
       hydrateUserOrganizationFromMembership(createEnvWithActiveMembership(null), user),
     ).resolves.toEqual(user);
+  });
+});
+
+
+describe('legacy membership bootstrap respects canonical authorization', () => {
+  const setup = (membership: Record<string, unknown> | null, organizationStatus = 'ACTIVE') => {
+    const writes = vi.fn(async () => ({ meta: {} }));
+    const sqls: string[] = [];
+    const env: AppEnv = { DB: { prepare: (sql) => {
+      sqls.push(sql);
+      const statement: D1PreparedStatement = { bind: () => statement,
+        first: async <T>() => (sql.includes('FROM organization_memberships') ? membership : {
+          id: 'legacy-org', display_name: 'Legacy org', subscription_plan: SubscriptionPlan.TOB_PAID, status: organizationStatus,
+        }) as T | null, all: async () => ({ meta: {}, results: [] }), run: writes };
+      return statement;
+    }, batch: async () => [] } };
+    return { env, writes, sqls };
+  };
+  const legacy = createUser({ role: UserRole.INSTRUCTOR, organization_id: 'legacy-org',
+    organization_role: OrganizationRole.GROUP_ADMIN, subscription_plan: SubscriptionPlan.TOB_PAID });
+
+  it.each(['ACTIVE', 'INACTIVE'])('never overwrites an existing %s membership from stale admin shadow', async (status) => {
+    const { env, writes } = setup({ user_id: legacy.id, organization_id: 'other-org', role: OrganizationRole.INSTRUCTOR, status });
+    await maybeSyncBusinessMembershipFromUser(env, legacy);
+    expect(writes).not.toHaveBeenCalled();
+  });
+  it('does not bootstrap into an inactive organization', async () => {
+    const { env, writes } = setup(null, 'INACTIVE');
+    await maybeSyncBusinessMembershipFromUser(env, legacy);
+    expect(writes).not.toHaveBeenCalled();
+  });
+  it('preserves first-time legacy bootstrap with an atomic non-overwriting insert', async () => {
+    const { env, writes, sqls } = setup(null);
+    await maybeSyncBusinessMembershipFromUser(env, legacy);
+    expect(writes).toHaveBeenCalledOnce();
+    const insert = sqls.find((sql) => sql.includes('INSERT INTO organization_memberships'))!;
+    expect(insert).toContain('WHERE NOT EXISTS');
+    expect(insert).toContain("AND status = 'ACTIVE'");
+    expect(insert).toContain('DO NOTHING');
+    expect(sqls.some((sql) => sql.includes('UPDATE users') || sql.includes('UPDATE organizations'))).toBe(false);
+  });
+  it('requires active organization as well as active membership on reads', async () => {
+    const { env, sqls } = setup(null);
+    await readActiveOrganizationContextForUser(env, legacy.id);
+    expect(sqls[0]).toContain("m.status = 'ACTIVE'");
+    expect(sqls[0]).toContain("o.status = 'ACTIVE'");
+  });
+  it('hydrates the canonical lower role and other organization over stale admin shadow', async () => {
+    const env = createEnvWithActiveMembership({ organization_id: 'other-org', organization_name: 'Canonical org',
+      organization_role: OrganizationRole.INSTRUCTOR, subscription_plan: SubscriptionPlan.TOB_FREE });
+    const hydrated = await hydrateUserOrganizationFromMembership(env, legacy);
+    expect(hydrated.organization_role).toBe(OrganizationRole.INSTRUCTOR);
+    expect(hydrated.organization_id).toBe('other-org');
+    expect(hydrated.subscription_plan).toBe(SubscriptionPlan.TOB_FREE);
   });
 });

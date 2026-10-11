@@ -1,3 +1,4 @@
+import type { StaffLoginEntry } from '../shared/staffLogin';
 import type { QuizAttemptReceipt } from '../shared/quizAttempt';
 import type { BookStudyOverview, StudyWordRange } from '../types';
 import { assertNoDailyStudyWordRange, getBookTaskWordRange, normalizeStudyWordRange } from '../shared/studyScope';
@@ -83,7 +84,7 @@ export class CloudflareStorageService implements IStorageService {
     return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
   }
 
-  async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null> {
+  async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string, loginEntry?: StaffLoginEntry): Promise<UserProfile | null> {
     const user = await apiPost<UserProfile | null>('/api/auth', {
       action: 'email-auth',
       email,
@@ -91,6 +92,7 @@ export class CloudflareStorageService implements IStorageService {
       isSignUp,
       role,
       displayName,
+      ...(loginEntry !== undefined ? { loginEntry } : {}),
     });
     return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
   }

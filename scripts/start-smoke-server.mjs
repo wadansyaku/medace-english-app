@@ -139,6 +139,11 @@ try {
     '--file', path.join(cwd, 'tests/fixtures/guest-naru-smoke.sql'),
   ]);
   await runCommand(guestFixture.command, guestFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+  const staffFixture = createNodeToolCommand('wrangler', [
+    'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir,
+    '--file', path.join(cwd, 'tests/fixtures/staff-login-smoke.sql'),
+  ]);
+  await runCommand(staffFixture.command, staffFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
   // This disposable runtime exercises the live writing contract with a

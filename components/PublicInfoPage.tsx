@@ -84,14 +84,12 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
       <div className="overflow-hidden rounded-[32px] border border-medace-100 bg-white shadow-[0_28px_90px_rgba(255,130,22,0.12)]">
         <div className="border-b border-slate-100 bg-medace-50 p-8 md:p-10">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold tracking-[0.12em] text-medace-500">役割別の案内</p>
+            <p className="text-sm font-bold tracking-[0.12em] text-medace-700">学習の案内</p>
             <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-              役割別の
-              <br />
-              専用リンク
+              学習を始める・続ける
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-600 md:text-[1.05rem]">
-              生徒の登録・ログインは共通です。講師・学校管理者・サービス管理者は専用リンクから案内を確認し、登録済みのアカウントでログインします。ログイン後は、アカウントに付与された権限に応じた画面を開きます。
+              登録なしで単語学習を始められます。学習記録を保存して振り返るには、生徒用アカウントでログインしてください。
             </p>
           </div>
 
@@ -111,6 +109,7 @@ const PublicInfoPage: React.FC<PublicInfoPageProps> = ({
         <div className="space-y-8 p-6 md:p-8">
           <BusinessRolePreviewSection
             onOpenRole={onOpenRole}
+            learnerOnly
           />
 
         </div>

@@ -49,7 +49,7 @@ test('a dedicated staff URL opens its entry and browser back returns to the stud
   await page.goto(getPublicBusinessRoleDirectPath('instructor'));
   await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRoleDirectPath('instructor')}$`));
   await expect(page.getByTestId('public-role-page-instructor')).toBeVisible();
-  await expect(page.getByTestId('public-role-login')).toBeVisible();
+  await expect(page.getByTestId('auth-email-input')).toBeVisible();
   await expect(page.getByTestId('instructor-dashboard')).toHaveCount(0);
   const sessionResponse = await page.request.get('/api/session');
   expect([200, 204]).toContain(sessionResponse.status());
@@ -61,22 +61,20 @@ test('a dedicated staff URL opens its entry and browser back returns to the stud
   await expect(page.getByTestId('start-first-guest')).toBeVisible();
 });
 
-test('public role link hub keeps the business role previews visible', async ({ page }) => {
+test('public learner guide exposes only the student entry', async ({ page }) => {
   await page.goto('/public');
 
   await expect(page).toHaveURL(/\/public$/);
   await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
   await expect(page.getByTestId('business-role-preview-student')).toBeVisible();
-  await expect(page.getByTestId('business-role-preview-instructor')).toBeVisible();
-  await expect(page.getByTestId('business-role-preview-admin')).toBeVisible();
-  await expect(page.getByTestId('business-role-preview-service-admin')).toBeVisible();
+  for (const id of ['business-role-preview-instructor', 'business-role-preview-admin', 'business-role-preview-service-admin']) await expect(page.getByTestId(id)).toHaveCount(0);
 });
 
-test('public role link hub links every business role card to its dedicated route and browser back returns to the hub', async ({ page }) => {
+test('public learner guide links to the student route and browser back returns to the guide', async ({ page }) => {
   await page.goto('/public');
   await expect(page.getByTestId('business-role-preview-section')).toBeVisible();
 
-  for (const roleKey of PUBLIC_BUSINESS_ROLE_KEYS) {
+  for (const roleKey of ['student'] as const) {
     const role = getPublicBusinessRoleConfig(roleKey);
     await page.getByTestId(role.cardActionTestId).click();
     await expect(page).toHaveURL(new RegExp(`${getPublicBusinessRoleDirectPath(roleKey)}$`));
@@ -87,26 +85,16 @@ test('public role link hub links every business role card to its dedicated route
   }
 });
 
-test('public role pages always emit a noindex robots tag and service admin action stays safe', async ({ page }) => {
+test('public staff entry emits noindex and keeps the administrator workspace behind real login', async ({ page }) => {
   await page.goto('/service-admin');
 
   await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
-  const previewSection = page.getByTestId('public-role-preview-service-admin');
-  const previewTopBeforeClick = await previewSection.evaluate((element) => element.getBoundingClientRect().top);
-  await page.getByTestId('demo-login-admin').click();
-
-  const passwordGate = page.getByTestId('admin-demo-password');
-  if (await passwordGate.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await expect(passwordGate).toBeVisible();
-    return;
-  }
-
-  expect(previewTopBeforeClick).toBeGreaterThan(160);
-  await expect.poll(
-    async () => previewSection.evaluate((element) => Math.round(element.getBoundingClientRect().top)),
-    { timeout: 3000 },
-  ).toBeLessThan(160);
+  await expect(page.getByTestId('auth-email-input')).toBeVisible();
+  await expect(page.getByTestId('auth-password-input')).toBeVisible();
+  await expect(page.getByTestId('demo-login-admin')).toHaveCount(0);
+  await expect(page.getByTestId('public-role-preview-service-admin')).toHaveCount(0);
+  await expect(page.getByTestId('admin-password-recovery-requests')).toHaveCount(0);
 });
 
 test('service admin dedicated access link resolves to the protected admin entrypoint', async ({ page }) => {
@@ -114,7 +102,7 @@ test('service admin dedicated access link resolves to the protected admin entryp
 
   await expect(page.getByTestId('public-role-page-service-admin')).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex,\s*nofollow,\s*noarchive/i);
-  await expect(page.getByTestId('demo-login-admin')).toBeVisible();
+  await expect(page.getByTestId('auth-email-input')).toBeVisible();
 });
 
 test('preview deployment surfaces a visible preview banner and noindex marker', async ({ page }) => {

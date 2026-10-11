@@ -4,6 +4,7 @@ import { sessionService } from '../services/session';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
+import { isStaffLoginEntry, matchesStaffEntryRole } from '../shared/staffLogin';
 import { usePublicMotivationSnapshot } from './usePublicMotivationSnapshot';
 import { getHomeAppRoute, type AppNavigationAction, type AppNavigationState } from './useAppNavigation';
 
@@ -18,6 +19,7 @@ interface UseAuthExperienceControllerParams {
 export const shouldPreserveCurrentRoute = (
   navigationState: AppNavigationState,
   nextHomeView: ReturnType<typeof getHomeAppRoute>,
+  restoringSession = false,
 ): boolean => {
   switch (navigationState.currentView) {
     case 'dashboard':
@@ -34,6 +36,10 @@ export const shouldPreserveCurrentRoute = (
       return nextHomeView === 'dashboard' && !navigationState.authPanelMode;
     case 'resetPassword':
       return true;
+    case 'publicRole':
+      return restoringSession && isStaffLoginEntry(navigationState.publicRole);
+    case 'publicInfo':
+      return false;
     default:
       return false;
   }
@@ -47,6 +53,7 @@ export const useAuthExperienceController = ({
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [staffLoginCompletionPending, setStaffLoginCompletionPending] = useState(false);
   const authRequestInFlightRef = useRef(false);
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,22 +78,32 @@ export const useAuthExperienceController = ({
     error: publicMotivationError,
   } = usePublicMotivationSnapshot(!user);
   const navigationStateRef = useRef(navigationState);
+  const navigationRevisionRef = useRef(0);
 
+  if (navigationStateRef.current !== navigationState) navigationRevisionRef.current += 1;
   navigationStateRef.current = navigationState;
 
   useEffect(() => {
-    if (navigationState.authPanelMode) setAuthMode(navigationState.authPanelMode);
+    if (navigationState.currentView === 'publicRole' && isStaffLoginEntry(navigationState.publicRole)) {
+      if (navigationState.authPanelMode === 'SIGNUP') dispatchNavigation({ type: 'open-auth', mode: 'LOGIN', historyMode: 'replace' });
+      setAuthMode('LOGIN');
+    } else if (navigationState.authPanelMode) setAuthMode(navigationState.authPanelMode);
     setAuthError(null);
     setShowPasswordRecovery(false);
     setPasswordRecoveryMessage(null);
     setPassword('');
     setConfirmPassword('');
-  }, [navigationState.authPanelMode]);
+  }, [navigationState.authPanelMode, navigationState.currentView, navigationState.publicRole, dispatchNavigation]);
 
-  const navigateAfterAuthentication = (loggedInUser: UserProfile) => {
+  const navigateAfterAuthentication = (loggedInUser: UserProfile, restoringSession = false) => {
     const currentNavigation = navigationStateRef.current;
     const homeView = getHomeAppRoute(loggedInUser);
-    if (shouldPreserveCurrentRoute(currentNavigation, homeView)) {
+    if (!restoringSession && currentNavigation.currentView === 'publicRole' && currentNavigation.publicRole
+      && currentNavigation.publicRole !== 'student' && !matchesStaffEntryRole(currentNavigation.publicRole, loggedInUser)) {
+      dispatchNavigation({ type: 'sync-from-location', state: { ...currentNavigation, authPanelMode: undefined }, historyMode: 'replace' });
+      return;
+    }
+    if (shouldPreserveCurrentRoute(currentNavigation, homeView, restoringSession)) {
       if (currentNavigation.authPanelMode) dispatchNavigation({ type: 'close-auth', historyMode: 'replace' });
     } else {
       dispatchNavigation({ type: 'go-home', view: homeView, historyMode: 'replace' });
@@ -100,7 +117,7 @@ export const useAuthExperienceController = ({
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);
-          navigateAfterAuthentication(sessionUser);
+          navigateAfterAuthentication(sessionUser, true);
         }
       } catch (error) {
         console.error('Session restore failed', error);
@@ -111,6 +128,15 @@ export const useAuthExperienceController = ({
 
     void initSession();
   }, [dispatchNavigation]);
+
+  useEffect(() => {
+    if (authLoading || !user || staffLoginCompletionPending) return;
+    // A public history entry can predate login; keep its URL aligned with the rendered home.
+    if (navigationState.currentView === 'publicInfo'
+      || (navigationState.currentView === 'publicRole' && !isStaffLoginEntry(navigationState.publicRole))) {
+      dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(user), historyMode: 'replace' });
+    }
+  }, [authLoading, user, staffLoginCompletionPending, navigationState.currentView, navigationState.publicRole, dispatchNavigation]);
 
   useEffect(() => {
     applyDisplayPreferences(getStoredDisplayPreferences(user?.uid));
@@ -196,6 +222,10 @@ export const useAuthExperienceController = ({
     }
 
     if (authMode === 'SIGNUP') {
+      if (navigationStateRef.current.currentView === 'publicRole' && navigationStateRef.current.publicRole !== 'student') {
+        setAuthError('この入口では既存のアカウントでログインしてください。');
+        return;
+      }
       if (!displayName.trim()) {
         setAuthError('表示名を入力してください。');
         return;
@@ -212,6 +242,10 @@ export const useAuthExperienceController = ({
 
     authRequestInFlightRef.current = true;
     setAuthSubmitting(true);
+    const submittedNavigation = navigationStateRef.current;
+    const loginEntry = submittedNavigation.currentView === 'publicRole' && isStaffLoginEntry(submittedNavigation.publicRole)
+      ? submittedNavigation.publicRole : undefined;
+    const submittedRevision = navigationRevisionRef.current;
     try {
       const loggedInUser = await sessionService.authenticate(
         email.trim(),
@@ -219,15 +253,21 @@ export const useAuthExperienceController = ({
         authMode === 'SIGNUP',
         undefined,
         authMode === 'SIGNUP' ? displayName.trim() : undefined,
+        loginEntry,
       );
       if (loggedInUser) {
         setUser(loggedInUser);
-        navigateAfterAuthentication(loggedInUser);
+        if (loginEntry && navigationRevisionRef.current !== submittedRevision) {
+          // Browser Back remains the user's current location after a late response.
+          setStaffLoginCompletionPending(true);
+        } else {
+          navigateAfterAuthentication(loggedInUser);
+        }
       } else {
-        setAuthError('ログインに失敗しました。入力内容を確認してもう一度お試しください。');
+        if (!loginEntry || navigationRevisionRef.current === submittedRevision) setAuthError('ログインに失敗しました。入力内容を確認してもう一度お試しください。');
       }
     } catch (error: any) {
-      setAuthError(error?.message || '認証エラーが発生しました。');
+      if (!loginEntry || navigationRevisionRef.current === submittedRevision) setAuthError(error?.message || '認証エラーが発生しました。');
     } finally {
       authRequestInFlightRef.current = false;
       setAuthSubmitting(false);
@@ -280,6 +320,7 @@ export const useAuthExperienceController = ({
 
   const switchAuthMode = (mode: AuthMode) => {
     if (authRequestInFlightRef.current) return;
+    if (mode === 'SIGNUP' && navigationStateRef.current.currentView === 'publicRole' && navigationStateRef.current.publicRole !== 'student') return;
     if (navigationState.authPanelMode === mode) return;
     dispatchNavigation({ type: 'open-auth', mode, historyMode: navigationState.authPanelMode ? 'replace' : 'push' });
     setAuthMode(mode);
@@ -310,6 +351,7 @@ export const useAuthExperienceController = ({
       // its late completion can close a new form or clear a newer session.
       await sessionService.clearSession();
       setUser(null);
+      setStaffLoginCompletionPending(false);
       dispatchNavigation({ type: 'reset' });
       setDisplayName('');
       setEmail('');
@@ -365,6 +407,12 @@ export const useAuthExperienceController = ({
     user,
     setCurrentUser: setUser,
     authLoading,
+    staffLoginCompletionPending,
+    openAuthenticatedHome: () => {
+      if (!user) return;
+      setStaffLoginCompletionPending(false);
+      dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(user) });
+    },
     logoutError,
     authExperienceProps,
     isDemoUser: isDemoEmail(user?.email),

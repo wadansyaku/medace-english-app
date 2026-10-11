@@ -1,3 +1,4 @@
+import type { StaffLoginEntry } from '../shared/staffLogin';
 import { createEnglishPracticeQuizAttemptId, type QuizAttemptReceipt } from '../shared/quizAttempt';
 
 import {
@@ -270,8 +271,8 @@ export class IndexedDBStorageService implements IStorageService {
     return loginWithAuthSession(this.getAuthSessionContext(), role, demoPassword, organizationRole);
   }
 
-  async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string): Promise<UserProfile | null> {
-    return authenticateWithAuthSession(this.getAuthSessionContext(), email, password, isSignUp, role, displayName);
+  async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string, loginEntry?: StaffLoginEntry): Promise<UserProfile | null> {
+    return authenticateWithAuthSession(this.getAuthSessionContext(), email, password, isSignUp, role, displayName, loginEntry);
   }
 
   async requestPasswordRecovery(email: string, source?: string): Promise<PasswordRecoveryResponse> {

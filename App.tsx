@@ -7,6 +7,8 @@ import { isGroupAdmin } from './config/access';
 import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from './config/workspace';
 import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
+import StaffEntryStatus from './components/auth/StaffEntryStatus';
+import { isStaffLoginEntry } from './shared/staffLogin';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
 import PasswordResetScreen from './components/auth/PasswordResetScreen';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
@@ -45,6 +47,8 @@ const App: React.FC = () => {
     user,
     setCurrentUser,
     authLoading,
+    staffLoginCompletionPending,
+    openAuthenticatedHome,
     logoutError,
     authExperienceProps,
     isDemoUser,
@@ -281,7 +285,7 @@ const App: React.FC = () => {
           {...authExperienceProps}
           onClosePublicInfo={() => dispatchNavigation({ type: 'close-public-info' })}
           onOpenPublicRole={(roleKey) => dispatchNavigation({ type: 'open-public-role', role: roleKey })}
-          onClosePublicRole={() => dispatchNavigation({ type: 'close-public-role' })}
+          onClosePublicRole={() => dispatchNavigation({ type: isStaffLoginEntry(publicRole) ? 'reset' : 'close-public-role' })}
           onStartGuestTrial={() => dispatchNavigation({ type: 'open-guest-learning' })}
           guestTrialContent={currentView === 'guestTrial' ? <GuestTrialScreen
             onBack={() => dispatchNavigation({ type: 'reset' })}
@@ -293,6 +297,10 @@ const App: React.FC = () => {
           /> : undefined}
         />
       );
+    }
+    if (staffLoginCompletionPending || (currentView === 'publicRole' && isStaffLoginEntry(publicRole))) {
+      return <StaffEntryStatus user={user} entry={isStaffLoginEntry(publicRole) ? publicRole : undefined}
+        completedAfterNavigation={staffLoginCompletionPending} onOpenHome={openAuthenticatedHome} />;
     }
     return renderHomeContent();
   };
@@ -331,7 +339,7 @@ const App: React.FC = () => {
         </Suspense>
       </Layout>
 
-      {user && !authLoading && (
+      {user && !authLoading && currentView !== 'publicRole' && !staffLoginCompletionPending && (
         <AnnouncementOverlay
           feed={announcementFeed.feed}
           suppressModal={suppressAnnouncementModal}
