@@ -1,4 +1,4 @@
-2026-10-11 既存本人の3業務画面候補: 正本STUDENT・所属・学習・パスワードを保持し、明示UID grantとタブ内リクエストcontextで講師/学校管理者の固定教室とサービス管理者の全教室を分離する。modern短縮Cookieを共通認証で拒否。0064はschemaのみ、本人対象教室未確定のため本番grant/公開は未実施。旧公開禁止は解除済み、同一統合SHAの通常gateと対象確認を維持する。[認可・保存・受入境界](./docs/analysis/2026-10-11-explicit-owner-workspaces.md)。
+2026-10-11 既存本人の3業務画面候補: 正本STUDENT・所属・学習・パスワードを保持し、明示UID grantとタブ内リクエストcontextで講師/学校管理者の固定教室とサービス管理者の全教室を分離する。modern短縮Cookieを共通認証で拒否。0064はschemaのみ、既存の対象教室と改名・本人grantは確認・承認済み。本番grantとこの候補の公開は未実施。旧公開禁止は解除済み、親再レビューと同一統合SHAの通常gate、公開後のfresh対象照合を維持する。[認可・保存・受入境界](./docs/analysis/2026-10-11-explicit-owner-workspaces.md)。
 
 2026-10-11: 長期復習接続はPR69/main `4e70b66e7ee9c4ca20e1aa421a96c649aa3ea85a`の本番反映と公開後受入を完了。main CI `38141884890`・production `38141884879`成功、公式334 Cloud＋25 native・配備後5件、MacのGET/HEAD限定29件成功。0062の制約、Naru1531語/638印・教材/ID hashと学習記録集計の保持を読み取り確認。保存した自己評価から移る「長期復習期」を、現在の教材・章の期限復習へ少量接続する。設定容量の20%・最大3語、日新規distinct5語を初期値とし、回答保存・通常目標と分離する。実教室・長期記憶効果は未検証。[実装と測定の境界](./docs/analysis/2026-10-11-bounded-long-term-review.md)。
 
