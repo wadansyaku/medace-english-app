@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogImportResult } from '../contracts/storage';
 import getClientRuntimeFlags from '../config/runtime';
 import { dashboardService } from '../services/dashboard';
-import { BookAccessScope, BookCatalogSource, type BookMetadata, type WordData } from '../types';
+import { BookAccessScope, BookCatalogSource, type BookMetadata, type UserProfile, type WordData } from '../types';
 import { BRAND } from '../config/brand';
 import { useAdminDashboardSnapshot } from '../hooks/useAdminDashboardSnapshot';
 import { useAdminCommercialOps } from '../hooks/useAdminCommercialOps';
@@ -12,7 +12,7 @@ import AdminCommercialOpsView from './admin/AdminCommercialOpsView';
 import AdminContentImportView from './admin/AdminContentImportView';
 import AdminDashboardView from './admin/AdminDashboardView';
 import AdminAiUsageView from './admin/AdminAiUsageView';
-import ProductFeedbackPanel from './ProductFeedbackPanel';
+import { ProductFeedbackWorkspaceEntry, type ProductFeedbackWorkspaceProps } from './ProductFeedbackPanel';
 
 const appendImportSummary = (
   setLog: React.Dispatch<React.SetStateAction<string[]>>,
@@ -27,8 +27,7 @@ const appendImportSummary = (
   ]);
 };
 
-const AdminPanel: React.FC = () => {
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+const AdminPanel: React.FC<ProductFeedbackWorkspaceProps & { user: UserProfile }> = ({ user, ...feedbackProps }) => {
   const [panelView, setPanelView] = useState<'dashboard' | 'content' | 'commercial' | 'ai'>('dashboard');
   const {
     snapshot,
@@ -236,7 +235,7 @@ const AdminPanel: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 pb-12">
-      <ProductFeedbackPanel open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <ProductFeedbackWorkspaceEntry user={user} workspace="admin" {...feedbackProps} />
       {examplePreview && <ModalOverlay ariaLabel="保存済み例文の確認" mobileBehavior="sheet" panelClassName="w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 sm:p-6" onClose={closeExamplePreview}>
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="text-xl font-bold text-slate-900">保存済み例文の確認</h2><p className="mt-1 break-words text-sm text-slate-600">{examplePreview.book.title}</p></div><button type="button" onClick={closeExamplePreview} className="min-h-11 shrink-0 whitespace-nowrap rounded-lg border px-3 text-sm">閉じる</button></div>
         {examplePreview.error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{examplePreview.error}</p>}
@@ -304,7 +303,6 @@ const AdminPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" onClick={() => setFeedbackOpen(true)} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
           <div className="inline-flex max-w-full flex-wrap rounded-2xl border border-medace-100 bg-medace-50 p-1">
             <button
               onClick={() => { if (!importPending.current) setPanelView('dashboard'); }}

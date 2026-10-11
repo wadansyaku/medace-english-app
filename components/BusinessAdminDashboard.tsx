@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -33,9 +33,9 @@ import { getBusinessAdminWritingNotice } from '../shared/businessAdminWritingSta
 import B2BStorageModeBanner from './workspace/B2BStorageModeBanner';
 import BusinessAdminDashboardSections from './dashboard/BusinessAdminDashboardSections';
 import WorkspaceDashboardShell from './dashboard/WorkspaceDashboardShell';
-import ProductFeedbackPanel from './ProductFeedbackPanel';
+import { ProductFeedbackWorkspaceEntry, type ProductFeedbackWorkspaceProps } from './ProductFeedbackPanel';
 
-interface BusinessAdminDashboardProps {
+interface BusinessAdminDashboardProps extends ProductFeedbackWorkspaceProps {
   user: UserProfile;
   onSelectBook: (bookId: string, mode: 'study' | 'quiz') => void;
   activeView: BusinessAdminWorkspaceView;
@@ -392,12 +392,8 @@ const BusinessAdminWorkspace: React.FC<BusinessAdminDashboardProps> = ({
 };
 
 const BusinessAdminDashboard: React.FC<BusinessAdminDashboardProps> = (props) => {
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
   return <>
-    <ProductFeedbackPanel key={props.user.uid} open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
-    <div className="mb-4 flex justify-end">
-      <button type="button" onClick={() => setFeedbackOpen(true)} className="min-h-11 rounded-xl border border-orange-200 bg-[#FDF3ED] px-4 py-2 text-sm font-bold text-[#2F1609]">FAQ・製品の報告</button>
-    </div>
+    <div className="mb-4"><ProductFeedbackWorkspaceEntry user={props.user} workspace="business-admin" productFeedbackDraft={props.productFeedbackDraft} onProductFeedbackDraftConsumed={props.onProductFeedbackDraftConsumed} productFeedbackContextKey={props.productFeedbackContextKey} /></div>
     <BusinessAdminWorkspace {...props} />
   </>;
 };

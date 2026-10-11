@@ -7,9 +7,10 @@ export interface ProductFeedbackStatusLinkProps {
   audience: 'teacher' | 'admin';
   onOpen: (status?: ProductFeedbackStatus) => void;
   refreshKey?: string | number;
+  openLabel?: string;
 }
 
-export const ProductFeedbackStatusLink: React.FC<ProductFeedbackStatusLinkProps> = ({ contextKey, audience, onOpen, refreshKey }) => {
+export const ProductFeedbackStatusLink: React.FC<ProductFeedbackStatusLinkProps> = ({ contextKey, audience, onOpen, refreshKey, openLabel }) => {
   const state = useProductFeedbackStatus(contextKey, true, refreshKey);
   if (!contextKey) return null;
   const correctScope = state.data?.canManage === (audience === 'admin');
@@ -32,7 +33,7 @@ export const ProductFeedbackStatusLink: React.FC<ProductFeedbackStatusLinkProps>
       {data && <div className="mt-2 flex flex-wrap gap-2">
         {buttons.map(({ status, label }) => <button key={status} type="button" onClick={() => onOpen(status)} className="min-h-11 max-w-full break-words rounded-xl border border-orange-300 bg-white px-3 py-2 text-sm font-bold hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{label} {data.counts[status]}件</button>)}
       </div>}
-      <button type="button" onClick={() => onOpen()} className="mt-2 min-h-11 max-w-full break-words rounded-xl bg-[#F66D0B] px-3 py-2 text-sm font-bold text-[#2F1609] hover:bg-orange-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{audience === 'teacher' ? '報告する・対応を見る' : 'すべての報告を見る'}</button>
+      <button type="button" onClick={() => onOpen()} className="mt-2 min-h-11 max-w-full break-words rounded-xl bg-[#F66D0B] px-3 py-2 text-sm font-bold text-[#2F1609] hover:bg-orange-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{openLabel || (audience === 'teacher' ? '報告する・対応を見る' : 'すべての報告を見る')}</button>
     </div>
   );
 };
