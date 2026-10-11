@@ -18,6 +18,8 @@ import { readVisibleStudentIds } from '../functions/_shared/student-visibility';
 import { handleGetAllStudentsProgress } from '../functions/_shared/organization-student-read-model';
 import { OrganizationRole, SubscriptionPlan, UserRole } from '../types';
 import { createSqliteD1 } from './helpers/sqlite-d1';
+import { handleError, HttpError } from '../functions/_shared/http';
+import { WORKSPACE_ACCESS_REVOKED } from '../contracts/workspaceAccess';
 
 const fixtures: ReturnType<typeof createSqliteD1>[] = [];
 afterEach(() => fixtures.splice(0).forEach((fixture) => fixture.sqlite.close()));
@@ -80,6 +82,32 @@ const setup = () => {
 };
 
 describe('explicit UID workspace grants on the production SQL schema', () => {
+  it.each(['revoke', 'version', 'missing'] as const)('returns a scoped revocation marker after %s of a verified explicit grant', async change => {
+    const f = setup();
+    const actor = await projectStaffWorkspace(f.env, f.identity(), 'instructor', { grantVersion: 7, organizationId: 'staff-org-a' });
+    if (change === 'revoke') f.sqlite.exec("UPDATE workspace_access_grants SET status='REVOKED' WHERE user_id='grant-owner'");
+    if (change === 'version') f.sqlite.exec("UPDATE workspace_access_grants SET grant_version=8 WHERE user_id='grant-owner'");
+    if (change === 'missing') f.sqlite.exec("DELETE FROM workspace_access_grants WHERE user_id='grant-owner'");
+    const cause = await revalidateWorkspaceContext(f.env, actor).catch(error => error);
+    expect(cause).toBeInstanceOf(HttpError);
+    const response = handleError(cause);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ errorCode: WORKSPACE_ACCESS_REVOKED,
+      workspaceContext: { uid: 'grant-owner', workspace: 'instructor', organizationId: 'staff-org-a', grantVersion: 7 } });
+    expect(f.identity().role).toBe(UserRole.STUDENT);
+  });
+  it('leaves generic scope, forged identity and canonical role denial unmarked', async () => {
+    const f = setup();
+    const orgError = await projectStaffWorkspace(f.env, f.identity(), 'instructor', { grantVersion: 7, organizationId: 'student-org-b' }).catch(error => error);
+    expect(orgError.details).toBeUndefined();
+    const identityError = await projectRequestWorkspace(f.env, f.identity(), new Request('https://local.invalid/api/storage', { headers: {
+      'X-MedAce-Workspace': 'instructor', 'X-MedAce-Workspace-Identity': 'other-student', 'X-MedAce-Workspace-Version': '7', 'X-MedAce-Workspace-Org': 'staff-org-a',
+    } })).catch(error => error);
+    expect(identityError.details).toBeUndefined();
+    const canonicalError = await projectStaffWorkspace(f.env, f.identity('canonical-school-admin'), 'instructor', { grantVersion: 0 }).catch(error => error);
+    expect(canonicalError.details).toBeUndefined();
+    expect(await handleError(new HttpError(403, '担当範囲の生徒のみです。')).json()).not.toHaveProperty('errorCode');
+  });
   it.each([
     ['instructor', UserRole.INSTRUCTOR, OrganizationRole.INSTRUCTOR, 'staff-org-a'],
     ['group-admin', UserRole.INSTRUCTOR, OrganizationRole.GROUP_ADMIN, 'staff-org-a'],

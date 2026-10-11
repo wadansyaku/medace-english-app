@@ -5,8 +5,10 @@ import {
   WORKSPACE_IDENTITY_HEADER,
   WORKSPACE_ORGANIZATION_HEADER,
   WORKSPACE_VERSION_HEADER,
+  WORKSPACE_ACCESS_REVOKED,
   type StaffWorkspace,
   type WorkspaceAccess,
+  type WorkspaceRevocationDetails,
 } from '../contracts/workspaceAccess';
 import type { UserProfile } from '../types';
 
@@ -15,6 +17,7 @@ interface TabWorkspace { uid?: string; access?: WorkspaceAccess; requested?: Sta
 let current: TabWorkspace = {};
 let generation = 0;
 const requests = new Set<AbortController>();
+const revocationListeners = new Set<(context: WorkspaceRevocationDetails['workspaceContext']) => void>();
 
 const save = () => {
   try {
@@ -67,6 +70,7 @@ export const acceptWorkspaceProfile = (user: UserProfile | null) => {
 
 export interface CapturedWorkspaceRequest {
   generation: number;
+  contextKey: string;
   headers: Record<string, string>;
   controller: AbortController;
 }
@@ -84,7 +88,29 @@ export const captureWorkspaceRequest = (): CapturedWorkspaceRequest => {
   }
   const controller = new AbortController();
   requests.add(controller);
-  return { generation, headers, controller };
+  return { generation, contextKey: getWorkspaceContextKey(current.uid || '', current.access), headers, controller };
+};
+
+export const subscribeWorkspaceRevocation = (listener: (context: WorkspaceRevocationDetails['workspaceContext']) => void) => {
+  revocationListeners.add(listener);
+  return () => { revocationListeners.delete(listener); };
+};
+
+export const invalidateRevokedWorkspace = (request: CapturedWorkspaceRequest, details: unknown): boolean => {
+  if (!isWorkspaceRequestCurrent(request) || !current.uid || !current.access || current.access.grantVersion < 1
+    || !details || typeof details !== 'object') return false;
+  const payload = details as Partial<WorkspaceRevocationDetails>;
+  const context = payload.workspaceContext;
+  if (payload.errorCode !== WORKSPACE_ACCESS_REVOKED || !context || typeof context !== 'object'
+    || typeof context.uid !== 'string' || !isStaffWorkspace(context.workspace)
+    || !Number.isSafeInteger(context.grantVersion) || context.grantVersion < 1
+    || !(context.organizationId === null || (typeof context.organizationId === 'string' && context.organizationId.length > 0))) return false;
+  const key = getWorkspaceContextKey(context.uid, { workspace: context.workspace, organizationId: context.organizationId || undefined,
+    grantVersion: context.grantVersion, availableWorkspaces: [] });
+  if (key !== request.contextKey || key !== getWorkspaceContextKey(current.uid, current.access)) return false;
+  clearWorkspaceContext();
+  for (const listener of revocationListeners) listener(context);
+  return true;
 };
 
 export const isWorkspaceRequestCurrent = (request: CapturedWorkspaceRequest): boolean => request.generation === generation && !request.controller.signal.aborted;

@@ -1,4 +1,4 @@
-import { captureWorkspaceRequest, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
+import { captureWorkspaceRequest, invalidateRevokedWorkspace, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
 
 class ApiError extends Error {
   status: number;
@@ -36,10 +36,7 @@ const parseError = async (response: Response): Promise<never> => {
           : text;
       }
     }
-  } catch {
-    const text = await response.text();
-    if (text) message = text;
-  }
+  } catch { /* Keep the status message when the response body cannot be read. */ }
 
   throw new ApiError(message, response.status, details);
 };
@@ -88,6 +85,7 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     return result;
   } catch (error) {
     if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+    if (error instanceof ApiError && error.status === 403) invalidateRevokedWorkspace(context, error.details);
     throw error;
   } finally {
     init?.signal?.removeEventListener('abort', abortFromCaller);

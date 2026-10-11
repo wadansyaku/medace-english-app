@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiPost } from '../services/apiClient';
-import { acceptWorkspaceProfile, clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore, selectWorkspaceForSession } from '../services/workspaceContext';
-import { getWorkspaceContextKey } from '../contracts/workspaceAccess';
+import { ApiError, apiGet, apiPost } from '../services/apiClient';
+import { acceptWorkspaceProfile, clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore, selectWorkspaceForSession, subscribeWorkspaceRevocation } from '../services/workspaceContext';
+import { getWorkspaceContextKey, WORKSPACE_ACCESS_REVOKED } from '../contracts/workspaceAccess';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 
 const storage = new Map<string, string>();
@@ -15,6 +15,11 @@ const profile = (workspace: 'instructor' | 'group-admin' | 'service-admin', vers
 });
 const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
 const deferred = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { resolve, promise }; };
+const revoked = (changes = {}) => ({ error: 'Grant changed', errorCode: WORKSPACE_ACCESS_REVOKED,
+  workspaceContext: { uid: 'synthetic-workspace-owner', workspace: 'instructor', organizationId: 'synthetic-staff-org', grantVersion: 7, ...changes } });
+const rejection = (details: unknown, status = 403) => new Response(JSON.stringify(details), {
+  status, headers: { 'Content-Type': 'application/json' },
+});
 
 beforeEach(() => {
   storage.clear();
@@ -25,6 +30,59 @@ beforeEach(() => {
 afterEach(() => { clearWorkspaceContext(); vi.unstubAllGlobals(); });
 
 describe('tab-scoped explicit workspace requests', () => {
+  it('invalidates only a matching verified grant and keeps the server payload on ApiError', async () => {
+    acceptWorkspaceProfile(profile('instructor'));
+    const notify = vi.fn(); const unsubscribe = subscribeWorkspaceRevocation(notify);
+    const payload = { ...revoked(), productSupportAdmission: 'NOT_ADMITTED' };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection(payload)));
+    const error = await apiGet('/api/storage').catch(error => error);
+    expect(error).toBeInstanceOf(ApiError);
+    if (!(error instanceof ApiError)) throw error;
+    expect(error.details).toEqual(payload);
+    expect(notify).toHaveBeenCalledExactlyOnceWith(payload.workspaceContext);
+    expect(isCurrentWorkspaceProfile(profile('instructor'))).toBe(false);
+    expect(storage.size).toBe(0);
+    const fetch = vi.fn().mockResolvedValue(json({ role: 'STUDENT' })); vi.stubGlobal('fetch', fetch);
+    await apiGet('/api/session');
+    expect(fetch.mock.calls[0][1].headers['X-MedAce-Workspace']).toBeUndefined();
+    unsubscribe();
+  });
+  it.each([
+    { uid: 'another-owner' }, { workspace: 'group-admin' }, { organizationId: 'other-org' },
+    { organizationId: undefined }, { grantVersion: 8 }, { grantVersion: 0 },
+  ])('preserves the active staff state for a mismatched marker %j', async changes => {
+    const active = profile('instructor'); acceptWorkspaceProfile(active);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection(revoked(changes))));
+    await expect(apiGet('/api/storage')).rejects.toMatchObject({ status: 403 });
+    expect(isCurrentWorkspaceProfile(active)).toBe(true); expect(storage.size).toBe(1);
+  });
+  it.each([403, 503])('preserves verified data for an ordinary %i response', async status => {
+    const active = profile('instructor'); acceptWorkspaceProfile(active);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection({ error: 'Temporary or out of scope' }, status)));
+    await expect(apiGet('/api/storage')).rejects.toMatchObject({ status });
+    expect(isCurrentWorkspaceProfile(active)).toBe(true);
+  });
+  it('preserves the active staff state on network failure and canonical version-zero denial', async () => {
+    const active = profile('instructor'); acceptWorkspaceProfile(active);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(apiGet('/api/storage')).rejects.toThrow('Failed to fetch');
+    expect(isCurrentWorkspaceProfile(active)).toBe(true);
+    const canonical = profile('instructor', 0); acceptWorkspaceProfile(canonical);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection(revoked({ grantVersion: 0 }))));
+    await expect(apiGet('/api/storage')).rejects.toMatchObject({ status: 403 });
+    expect(isCurrentWorkspaceProfile(canonical)).toBe(true);
+  });
+  it('does not let an old error body invalidate a newer workspace or grant version', async () => {
+    acceptWorkspaceProfile(profile('instructor'));
+    const body = deferred<unknown>();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403,
+      headers: new Headers({ 'Content-Type': 'application/json' }), json: () => body.promise }));
+    const old = apiGet('/api/storage'); const denied = expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+    const next = profile('instructor', 8); acceptWorkspaceProfile(next);
+    body.resolve(revoked()); await denied;
+    expect(isCurrentWorkspaceProfile(next)).toBe(true);
+  });
   it('sends the selected identity, role scope and version on every operation', async () => {
     acceptWorkspaceProfile(profile('instructor'));
     const fetch = vi.fn().mockResolvedValue(json({ students: [] })); vi.stubGlobal('fetch', fetch);

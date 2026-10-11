@@ -4,6 +4,7 @@ import {
   WORKSPACE_IDENTITY_HEADER,
   WORKSPACE_ORGANIZATION_HEADER,
   WORKSPACE_VERSION_HEADER,
+  WORKSPACE_ACCESS_REVOKED,
   type StaffWorkspace,
 } from '../../contracts/workspaceAccess';
 import { OrganizationRole, UserRole } from '../../types';
@@ -53,6 +54,17 @@ export interface WorkspaceSelection {
   organizationId?: string;
 }
 
+// Only a previously selected explicit grant can invalidate a client screen.
+// Ordinary scope denials and canonical (version zero) role failures stay 403.
+const revoked = (identity: DbUserRow, workspace: StaffWorkspace, selection: WorkspaceSelection): HttpError => {
+  if (!selection.grantVersion || selection.grantVersion < 1) return denied();
+  return new HttpError(403, '業務画面の権限が更新されました。自分の画面に戻って確認してください。', {
+    errorCode: WORKSPACE_ACCESS_REVOKED,
+    workspaceContext: { uid: identity.id, workspace, organizationId: selection.organizationId || null,
+      grantVersion: selection.grantVersion },
+  });
+};
+
 export const projectStaffWorkspace = async (
   env: AppEnv,
   identity: DbUserRow,
@@ -63,7 +75,7 @@ export const projectStaffWorkspace = async (
   if (grant) {
     const allowed = availableWorkspaces(grant);
     if (!allowed.includes(workspace)
-      || (selection.grantVersion !== undefined && selection.grantVersion !== grant.grant_version)) throw denied();
+      || (selection.grantVersion !== undefined && selection.grantVersion !== grant.grant_version)) throw revoked(identity, workspace, selection);
     const organizationId = workspace === 'service-admin' ? undefined : grant.staff_organization_id;
     if (selection.organizationId !== undefined && selection.organizationId !== organizationId) throw denied();
     return {
@@ -78,7 +90,7 @@ export const projectStaffWorkspace = async (
     };
   }
 
-  if (selection.grantVersion !== undefined && selection.grantVersion !== 0) throw denied();
+  if (selection.grantVersion !== undefined && selection.grantVersion !== 0) throw revoked(identity, workspace, selection);
   if (workspace === 'service-admin') {
     if (identity.role !== UserRole.ADMIN || selection.organizationId !== undefined) throw denied();
     return { ...identity, server_workspace: { workspace, grantVersion: 0, availableWorkspaces: [workspace], source: 'CANONICAL' } };

@@ -1,5 +1,9 @@
 import { expect, test } from './diagnostics';
 import type { Page } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const localTarget = !process.env.PLAYWRIGHT_BASE_URL || ['localhost', '127.0.0.1'].includes(new URL(process.env.PLAYWRIGHT_BASE_URL).hostname);
 const selector = (page: Page) => page.getByRole('combobox', { name: '業務画面を切り替える' });
@@ -22,6 +26,99 @@ const checkLayout = async (page: Page) => {
   expect(select!.x).toBeGreaterThanOrEqual(0);
   expect(select!.x + select!.width).toBeLessThanOrEqual(metrics.width);
 };
+
+// This helper cannot reach a deployed database: only the runner's private
+// mkdtemp generation, --local SQL and matching runtime/source SHA are allowed.
+const disposableD1 = async (page: Page) => {
+  const stateFile = process.env.PLAYWRIGHT_LOCAL_D1_STATE_FILE;
+  if (!localTarget || process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1' || !stateFile) throw new Error('Disposable local D1 test bridge is unavailable.');
+  const stats = statSync(stateFile);
+  if (!stats.isFile() || (stats.mode & 0o077) !== 0) throw new Error('Local D1 metadata must be private.');
+  const { persistDir, sourceSha } = JSON.parse(readFileSync(stateFile, 'utf8'));
+  const actualDir = realpathSync(persistDir);
+  if (path.dirname(actualDir) !== realpathSync(os.tmpdir()) || !/^medace-smoke-[a-zA-Z0-9]+$/.test(path.basename(actualDir))) throw new Error('Local D1 generation is invalid.');
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  if (sourceSha !== head || sourceSha !== process.env.DEPLOYMENT_SHA) throw new Error('Local D1 source differs from the tested source.');
+  const session = await page.request.get('/api/session');
+  if (session.headers()['x-deployment-sha'] !== sourceSha) throw new Error('Served runtime differs from the local D1 source.');
+  if (session.headers()['x-medace-smoke-generation'] !== path.basename(actualDir)) throw new Error('Served runtime differs from the disposable D1 generation.');
+  const query = (sql: string) => JSON.parse(execFileSync(process.execPath, [
+    'node_modules/wrangler/bin/wrangler.js', 'd1', 'execute', 'medace-db', '--local', '--persist-to', actualDir, '--command', sql, '--json',
+  ], { encoding: 'utf8', env: { ...process.env, CI: '1' }, stdio: ['ignore', 'pipe', 'pipe'] }));
+  const marker = query('SELECT generation, source_sha FROM smoke_runtime_identity;');
+  expect(marker[0].results).toEqual([{ generation: path.basename(actualDir), source_sha: sourceSha }]);
+  return query;
+};
+
+const openOwnerDraft = async (page: Page) => {
+  await page.route('**/api/writing/ai-capabilities?*', async route => {
+    const response = await route.fetch(); const payload = await response.json();
+    await route.fulfill({ response, json: { ...payload, gradingEnabled: false } });
+  });
+  await page.getByTestId('workspace-tab-writing').click();
+  await page.getByRole('button', { name: '印刷 / 配布', exact: true }).click();
+  await page.getByRole('button', { name: /OWNER-REVOKE/ }).click();
+  await page.getByRole('button', { name: '答案の下書き / GPT補助', exact: true }).click();
+  const manual = page.getByTestId('writing-teacher-draft-manual');
+  await expect(manual).toBeEditable();
+  return manual;
+};
+
+for (const change of ['revoke', 'version'] as const) {
+  test(`owner ${change} clears confirmed staff PII and unsaved answers after a real local D1 grant change`, async ({ page }, testInfo) => {
+    test.skip(!localTarget || process.env.PLAYWRIGHT_LOCAL_SYNTHETIC_RUNTIME !== '1', 'Disposable local D1 only');
+    await page.setViewportSize(change === 'revoke' ? { width: 390, height: 844 } : { width: 1366, height: 900 });
+    await login(page);
+    const query = await disposableD1(page);
+    try {
+      await expect(teacher(page)).toContainText('Synthetic revoke pupil');
+      const manual = await openOwnerDraft(page);
+      await manual.fill('Synthetic unsaved private answer before access loss.');
+      await page.getByTestId('writing-teacher-draft-files').setInputFiles({ name: 'private-unsaved-answer.png', mimeType: 'image/png', buffer: Buffer.from('synthetic-local-answer') });
+      await page.screenshot({ path: testInfo.outputPath(`owner-${change}-before.png`), animations: 'disabled' });
+      query(change === 'revoke'
+        ? "UPDATE workspace_access_grants SET status='REVOKED', grant_version=8 WHERE user_id='long-term-ui-320' AND grant_version=7;"
+        : "UPDATE workspace_access_grants SET grant_version=8 WHERE user_id='long-term-ui-320' AND grant_version=7;");
+      await page.getByRole('button', { name: '下書きを再取得', exact: true }).click();
+      await expect(page.getByTestId('student-dashboard')).toBeVisible();
+      await expect(page.getByTestId('workspace-switch-error')).toContainText('権限が更新');
+      await expect(page.getByTestId('workspace-switch-error')).toBeFocused();
+      await expect(teacher(page)).toHaveCount(0); await expect(manual).toHaveCount(0);
+      await expect(page.getByText('Synthetic revoke pupil', { exact: true })).toHaveCount(0);
+      await expect(page.getByText(/private-unsaved-answer/)).toHaveCount(0);
+      await expect(page).toHaveURL(/\/dashboard$/);
+      const identity = await page.request.get('/api/session');
+      expect(await identity.json()).toMatchObject({ uid: 'long-term-ui-320', role: 'STUDENT' });
+      await page.screenshot({ path: testInfo.outputPath(`owner-${change}-after.png`), animations: 'disabled' });
+      await page.reload(); await expect(page.getByTestId('student-dashboard')).toBeVisible();
+      query("UPDATE workspace_access_grants SET status='ACTIVE', grant_version=7 WHERE user_id='long-term-ui-320';");
+      await page.goto('/teacher'); await page.getByTestId('staff-entry-open-home').click();
+      await expect(teacher(page)).toBeVisible();
+      const reopened = await openOwnerDraft(page);
+      await expect(reopened).toHaveValue('');
+      await expect(page.getByText(/private-unsaved-answer/)).toHaveCount(0);
+    } finally {
+      query("UPDATE workspace_access_grants SET status='ACTIVE', grant_version=7 WHERE user_id='long-term-ui-320';");
+    }
+  });
+}
+
+test('ordinary staff 403 and network failure retain confirmed PII and the unsaved answer', async ({ page }) => {
+  test.skip(!localTarget, 'Disposable local identity only');
+  await login(page); await expect(teacher(page)).toContainText('Synthetic revoke pupil');
+  const manual = await openOwnerDraft(page); const text = 'Synthetic answer preserved during temporary failure.';
+  await manual.fill(text);
+  await page.route('**/api/writing/input-draft?*', route => route.fulfill({ status: 403, json: { error: '担当外の合成403' } }));
+  await page.getByRole('button', { name: '下書きを再取得', exact: true }).click();
+  await expect(page.getByTestId('writing-teacher-draft-error')).toBeVisible();
+  await expect(manual).toHaveValue(text); await expect(teacher(page)).toBeVisible();
+  await page.unroute('**/api/writing/input-draft?*');
+  await page.route('**/api/writing/input-draft?*', route => route.abort('failed'));
+  await page.getByRole('button', { name: '下書きを再取得', exact: true }).click();
+  await expect(page.getByTestId('writing-teacher-draft-error')).toBeVisible();
+  await expect(manual).toHaveValue(text); await expect(teacher(page)).toBeVisible();
+  await expect(page.getByTestId('workspace-switch-error')).toHaveCount(0);
+});
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
   test(`owner workspace switch preserves scope and focus at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
