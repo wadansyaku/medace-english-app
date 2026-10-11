@@ -430,27 +430,105 @@ describe('owner-grant upload capabilities use the issuer context and current aut
     expect(f.uploads).toEqual([]);
   });
 
-  it('rejects a grant revocation racing between authorization and the lease INSERT', async () => {
+  it.each([
+    "UPDATE workspace_access_grants SET status = 'REVOKED' WHERE user_id = 'grant-owner'",
+    "UPDATE workspace_access_grants SET grant_version = 8 WHERE user_id = 'grant-owner'",
+    "UPDATE workspace_access_grants SET teacher_access = 0 WHERE user_id = 'grant-owner'",
+    "UPDATE organizations SET status = 'INACTIVE' WHERE id = 'staff-org-a'",
+    "DELETE FROM workspace_access_grants WHERE user_id = 'grant-owner'",
+  ])('returns a scoped loss of access for a grant change before lease INSERT: %s', async mutation => {
     const f = await setupUpload();
+    const usersBefore = f.authority().users;
+    const membershipsBefore = f.authority().memberships;
     f.beforeRun((sql) => {
       if (sql.includes('INSERT INTO writing_submission_assets')) {
-        f.sqlite.exec("UPDATE workspace_access_grants SET status = 'REVOKED' WHERE user_id = 'grant-owner'");
+        f.sqlite.exec(mutation);
       }
     });
-    await expect(f.mint()).rejects.toMatchObject({ status: 409 });
+    const cause = await f.mint().catch(error => error);
+    expect(cause).toMatchObject({ status: 403, details: { errorCode: WORKSPACE_ACCESS_REVOKED,
+      workspaceContext: { uid: 'grant-owner', workspace: 'instructor', organizationId: 'staff-org-a', grantVersion: 7 } } });
     expect(f.sqlite.prepare('SELECT COUNT(*) AS n FROM writing_submission_assets').get()!.n).toBe(0);
     expect(f.uploads).toEqual([]);
+    expect(f.authority().users).toEqual(usersBefore);
+    expect(f.authority().memberships).toEqual(membershipsBefore);
   });
 
-  it('does not accept an original when the grant changes during the object PUT', async () => {
+  it.each([
+    "UPDATE workspace_access_grants SET status = 'REVOKED' WHERE user_id = 'grant-owner'",
+    "UPDATE workspace_access_grants SET grant_version = 8 WHERE user_id = 'grant-owner'",
+    "UPDATE workspace_access_grants SET teacher_access = 0 WHERE user_id = 'grant-owner'",
+    "UPDATE organizations SET status = 'INACTIVE' WHERE id = 'staff-org-a'",
+    "DELETE FROM workspace_access_grants WHERE user_id = 'grant-owner'",
+  ])('cleans an unaccepted original before returning scoped access loss during object PUT: %s', async mutation => {
     const f = await setupUpload();
     const upload = await f.mint();
-    f.state.duringPut = () => f.sqlite.exec("UPDATE workspace_access_grants SET grant_version = 8 WHERE user_id = 'grant-owner'");
-    await expect(handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders))).rejects.toMatchObject({ status: 409 });
+    const usersBefore = f.authority().users;
+    const membershipsBefore = f.authority().memberships;
+    f.state.duringPut = () => f.sqlite.exec(mutation);
+    const cause = await handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders)).catch(error => error);
+    expect(cause).toMatchObject({ status: 403, details: { errorCode: WORKSPACE_ACCESS_REVOKED,
+      workspaceContext: { uid: 'grant-owner', workspace: 'instructor', organizationId: 'staff-org-a', grantVersion: 7 } } });
+    expect(await handleError(cause).json()).toMatchObject({ errorCode: WORKSPACE_ACCESS_REVOKED });
     expect(f.asset(upload.assetId)).toMatchObject({ uploaded_at: null, uploaded_etag: null, uploaded_sha256_base64: null, byte_size: 0 });
+    expect(f.asset(upload.assetId).upload_consumed_at).not.toBeNull();
     expect(f.deleted).toEqual(f.uploads);
     expect(f.objects.size).toBe(0);
     expect(f.sqlite.prepare('SELECT COUNT(*) AS n FROM writing_submissions').get()!.n).toBe(0);
+    expect(f.authority().users).toEqual(usersBefore);
+    expect(f.authority().memberships).toEqual(membershipsBefore);
+  });
+
+  it('retains ordinary409 when a consumed-row CAS is lost but the grant stays current', async () => {
+    const f = await setupUpload();
+    const upload = await f.mint();
+    const authorityBefore = f.authority();
+    f.state.duringPut = () => f.sqlite.exec(`UPDATE writing_submission_assets
+      SET upload_consumed_at = upload_consumed_at + 1 WHERE id = '${upload.assetId}'`);
+    const cause = await handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders)).catch(error => error);
+    expect(cause).toMatchObject({ status: 409 });
+    expect(cause.details).toBeUndefined();
+    expect(f.asset(upload.assetId)).toMatchObject({ uploaded_at: null, uploaded_etag: null, uploaded_sha256_base64: null, byte_size: 0 });
+    expect(f.asset(upload.assetId).upload_consumed_at).not.toBeNull();
+    expect(f.deleted).toEqual(f.uploads);
+    expect(f.objects.size).toBe(0);
+    expect(f.authority()).toEqual(authorityBefore);
+  });
+
+  it('keeps cleanup failure as its real error without forging a revocation marker', async () => {
+    const f = await setupUpload();
+    const upload = await f.mint();
+    f.state.duringPut = () => f.sqlite.exec("UPDATE workspace_access_grants SET status='REVOKED' WHERE user_id='grant-owner'");
+    const cleanupFailure = new Error('Synthetic object cleanup failure');
+    f.env.WRITING_ASSETS!.delete = async () => { throw cleanupFailure; };
+    const cause = await handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders)).catch(error => error);
+    expect(cause).toBe(cleanupFailure);
+    expect(f.asset(upload.assetId)).toMatchObject({ uploaded_at: null, uploaded_etag: null, uploaded_sha256_base64: null, byte_size: 0 });
+    // The existing release-on-cleanup-failure behavior is preserved.
+    expect(f.asset(upload.assetId).upload_consumed_at).toBeNull();
+    expect(f.objects.size).toBe(1);
+  });
+
+  it('propagates a failed fresh authority read after cleanup without guessing revocation or releasing the lease', async () => {
+    const f = await setupUpload();
+    const upload = await f.mint();
+    const readFailure = new Error('Synthetic authority read failure');
+    let failRead = false;
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = (sql: string) => {
+      if (failRead && sql === 'SELECT * FROM users WHERE id = ?') throw readFailure;
+      return prepare(sql);
+    };
+    f.state.duringPut = () => {
+      f.sqlite.exec("UPDATE workspace_access_grants SET status='REVOKED' WHERE user_id='grant-owner'");
+      failRead = true;
+    };
+    const cause = await handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders)).catch(error => error);
+    expect(cause).toBe(readFailure);
+    expect(f.asset(upload.assetId)).toMatchObject({ uploaded_at: null, uploaded_etag: null, uploaded_sha256_base64: null, byte_size: 0 });
+    expect(f.asset(upload.assetId).upload_consumed_at).not.toBeNull();
+    expect(f.deleted).toEqual(f.uploads);
+    expect(f.objects.size).toBe(0);
   });
 
   it('preserves cookie-free original student leases and idempotent same-body confirmation', async () => {

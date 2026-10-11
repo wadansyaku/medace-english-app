@@ -500,6 +500,7 @@ export const handleCreateWritingUploadUrl = async (
     workspace?.workspace || null,
   ).run();
   if ((insertResult.meta.changes ?? 0) !== 1) {
+    if (workspace) await revalidateWorkspaceContext(env, user);
     throw new HttpError(409, '別のアップロード予約が先に更新されました。ファイルを確認してやり直してください。');
   }
 
@@ -535,8 +536,9 @@ export const handleWritingAssetUpload = async (
       || context.grantVersion !== assetRow.workspace_grant_version) {
       throw new HttpError(403, 'この原本は発行した業務画面からアップロードしてください。');
     }
+    return actor;
   };
-  await assertLeaseAccess();
+  const leaseActor = await assertLeaseAccess();
   const now = Date.now();
   if (Number(assetRow.upload_expires_at || 0) <= now) {
     throw new HttpError(410, 'アップロードURLの有効期限が切れています。再度アップロードURLを取得してください。');
@@ -638,6 +640,7 @@ export const handleWritingAssetUpload = async (
       // it must never become an accepted original or a selectable submission.
       if (assetRow.workspace_user_id) await env.WRITING_ASSETS.delete(assetRow.r2_key);
       releaseReservation = false;
+      if (leaseActor) await revalidateWorkspaceContext(env, leaseActor);
       throw new HttpError(409, 'アップロード状態が別の操作で更新されました。');
     }
     releaseReservation = false;
