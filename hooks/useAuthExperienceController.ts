@@ -37,8 +37,9 @@ export const shouldPreserveCurrentRoute = (
     case 'resetPassword':
       return true;
     case 'publicRole':
+      return restoringSession && isStaffLoginEntry(navigationState.publicRole);
     case 'publicInfo':
-      return restoringSession;
+      return false;
     default:
       return false;
   }
@@ -127,6 +128,15 @@ export const useAuthExperienceController = ({
 
     void initSession();
   }, [dispatchNavigation]);
+
+  useEffect(() => {
+    if (authLoading || !user || staffLoginCompletionPending) return;
+    // A public history entry can predate login; keep its URL aligned with the rendered home.
+    if (navigationState.currentView === 'publicInfo'
+      || (navigationState.currentView === 'publicRole' && !isStaffLoginEntry(navigationState.publicRole))) {
+      dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(user), historyMode: 'replace' });
+    }
+  }, [authLoading, user, staffLoginCompletionPending, navigationState.currentView, navigationState.publicRole, dispatchNavigation]);
 
   useEffect(() => {
     applyDisplayPreferences(getStoredDisplayPreferences(user?.uid));

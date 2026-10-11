@@ -25,6 +25,12 @@ import { navigationReducer, parseNavigationPath, type AppNavigationAction } from
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 
 const user: UserProfile = { uid: 'synthetic-user', role: UserRole.STUDENT, displayName: '架空生徒', email: 'synthetic@example.invalid' };
+const restoredAccounts = [
+  { label: 'student', profile: user, home: 'dashboard' },
+  { label: 'teacher', profile: { ...user, role: UserRole.INSTRUCTOR, organizationRole: OrganizationRole.INSTRUCTOR }, home: 'instructor' },
+  { label: 'school-admin', profile: { ...user, role: UserRole.INSTRUCTOR, organizationRole: OrganizationRole.GROUP_ADMIN }, home: 'instructor' },
+  { label: 'service-admin', profile: { ...user, role: UserRole.ADMIN }, home: 'admin' },
+] as const;
 const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; };
 const event = () => ({ preventDefault: vi.fn() }) as any;
 const flushEffects = () => { const effects = [...harness.effects.values()]; harness.effects.clear(); effects.forEach(effect => effect()); };
@@ -44,6 +50,46 @@ beforeEach(() => {
 });
 
 describe('authentication keeps one focused task through pending and recovery states', () => {
+  it.each(restoredAccounts.flatMap(account => ['/public', '/student', '/public/roles/student'].map(path => ({ ...account, path }))))(
+    'normalizes restored $label at $path to its own home without changing the session', async ({ profile, home, path }) => {
+      api.getSession.mockResolvedValueOnce(profile);
+      const f = fixture(path, ''); await ready(f);
+      expect(f.state.currentView).toBe(home);
+      expect(f.state.publicRole).toBeNull();
+      expect(f.render().user).toEqual(profile);
+      expect(f.dispatch).toHaveBeenCalledWith({ type: 'go-home', view: home, historyMode: 'replace' });
+      expect(api.login).not.toHaveBeenCalled(); expect(api.clearSession).not.toHaveBeenCalled();
+    },
+  );
+  it.each(restoredAccounts.flatMap(account => ['/teacher', '/school-admin', '/service-admin', '/admin-access', '/public/roles/instructor', '/public/roles/group-admin', '/public/roles/service-admin'].map(path => ({ ...account, path }))))(
+    'retains the dedicated $path entry for restored $label without changing the session', async ({ profile, path }) => {
+      api.getSession.mockResolvedValueOnce(profile);
+      const f = fixture(path, ''); await ready(f);
+      expect(f.state.currentView).toBe('publicRole'); expect(f.render().user).toEqual(profile);
+      expect(f.dispatch).not.toHaveBeenCalled();
+      expect(api.login).not.toHaveBeenCalled(); expect(api.clearSession).not.toHaveBeenCalled();
+    },
+  );
+  it.each(restoredAccounts.flatMap(account => ['/public', '/student', '/public/roles/student'].map(path => ({ ...account, path }))))(
+    'normalizes a public history entry $path for authenticated $label', async ({ profile, home, path }) => {
+      api.getSession.mockResolvedValueOnce(profile);
+      const f = fixture(home === 'dashboard' ? '/dashboard' : `/${home}`, ''); await ready(f);
+      f.setState(parseNavigationPath(path, '')); f.render(); flushEffects();
+      expect(f.state.currentView).toBe(home); expect(f.render().user).toEqual(profile);
+      expect(api.clearSession).not.toHaveBeenCalled(); expect(api.authenticate).not.toHaveBeenCalled();
+    },
+  );
+  it('preserves a public location after late staff authentication until the explicit home action', async () => {
+    const f = fixture('/teacher', ''); await ready(f); enterLogin(f);
+    const request = deferred<UserProfile>(); api.authenticate.mockReturnValueOnce(request.promise);
+    const submit = f.render().authExperienceProps.onSubmitEmailAuth(event());
+    f.setState(parseNavigationPath('/public', '')); f.render(); flushEffects();
+    request.resolve({ ...user, role: UserRole.INSTRUCTOR, organizationRole: OrganizationRole.INSTRUCTOR }); await submit;
+    f.render(); flushEffects();
+    expect(f.state.currentView).toBe('publicInfo'); expect(f.render().staffLoginCompletionPending).toBe(true);
+    expect(f.dispatch).not.toHaveBeenCalled();
+    f.render().openAuthenticatedHome(); expect(f.state.currentView).toBe('instructor');
+  });
   it.each(['/teacher', '/school-admin', '/service-admin'])('keeps a signed-in public role entry without changing the session: %s', async (path) => {
     api.getSession.mockResolvedValueOnce(user);
     const f = fixture(path, ''); await ready(f);

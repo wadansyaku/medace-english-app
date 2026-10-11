@@ -9,6 +9,75 @@ const entries = [
 ] as const;
 const fixturePassword = 'local-only-staff-login';
 const localTarget = !process.env.PLAYWRIGHT_BASE_URL || ['localhost', '127.0.0.1'].includes(new URL(process.env.PLAYWRIGHT_BASE_URL).hostname);
+const existingAccounts = [
+  { role: 'student', home: '/dashboard', workspace: 'student-dashboard', email: undefined },
+  ...entries,
+] as const;
+
+const loginExistingFixture = async (page: Parameters<typeof loginBusinessStudentDemo>[0], account: typeof existingAccounts[number]) => {
+  if (account.role === 'student') await loginBusinessStudentDemo(page);
+  else {
+    await page.goto(account.path);
+    await page.getByTestId('auth-email-input').fill(account.email);
+    await page.getByTestId('auth-password-input').fill(fixturePassword);
+    await page.getByTestId('auth-submit').click();
+  }
+  await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+  await expect(page.getByTestId(account.workspace)).toBeVisible();
+};
+
+for (const account of existingAccounts) {
+  test(`staff route restoration normalizes public URLs for ${account.role} without changing identity`, async ({ page }, testInfo) => {
+    test.skip(!localTarget, 'Existing disposable local accounts only');
+    const runtimeErrors: string[] = [];
+    page.on('pageerror', error => runtimeErrors.push(error.message));
+    await page.setViewportSize(account.role === 'student' ? { width: 390, height: 844 } : { width: 1366, height: 900 });
+    await loginExistingFixture(page, account);
+    const before = await (await page.request.get('/api/session')).json();
+    for (const path of ['/public', '/student', '/public/roles/student']) {
+      await page.goto(path); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+      await expect(page.getByTestId(account.workspace)).toBeVisible();
+      await page.reload(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+      await expect(page.getByTestId(account.workspace)).toBeVisible();
+      expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
+    }
+    await page.screenshot({ path: testInfo.outputPath(`${account.role}-restored-home.png`), animations: 'disabled' });
+    // A browser-history entry can predate authentication. It must not retain a public URL over a private home.
+    await page.evaluate(home => {
+      window.history.pushState({}, '', '/public'); window.history.pushState({}, '', home);
+    }, account.home);
+    await page.goBack(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+    await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await page.goForward(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+    expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test(`staff route restoration keeps dedicated entries and Back/Forward for ${account.role} without account switching`, async ({ page }) => {
+    test.skip(!localTarget, 'Existing disposable local accounts only');
+    await loginExistingFixture(page, account);
+    const before = await (await page.request.get('/api/session')).json();
+    for (const path of ['/teacher', '/school-admin', '/service-admin', '/admin-access', '/public/roles/instructor', '/public/roles/group-admin', '/public/roles/service-admin']) {
+      await page.goto(path);
+      await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
+      await expect(page.getByTestId('auth-email-input')).toHaveCount(0);
+      await page.reload(); await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
+      const directPath = path === '/admin-access' || path.endsWith('/service-admin') ? '/service-admin'
+        : path.endsWith('/instructor') ? '/teacher' : path.endsWith('/group-admin') ? '/school-admin' : path;
+      await expect(page).toHaveURL(new RegExp(`${directPath}$`));
+      expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
+    }
+    await page.getByTestId('staff-entry-open-home').click();
+    await expect(page).toHaveURL(new RegExp(`${account.home}$`)); await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await page.evaluate(() => { window.history.pushState({}, '', '/teacher'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
+    await page.goBack(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
+    await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await page.goForward(); await expect(page).toHaveURL(/\/teacher$/);
+    await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
+    expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
+  });
+}
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
   for (const entry of entries) {
@@ -114,6 +183,9 @@ test('staff pending login blocks duplicate submission and respects browser Back 
   await page.getByTestId('auth-email-input').fill(entries[0].email); await page.getByTestId('auth-password-input').fill(fixturePassword);
   await page.getByTestId('auth-submit').click(); await expect(page.getByTestId('auth-submit')).toBeDisabled();
   await page.keyboard.press('Enter'); await page.keyboard.press('Escape'); await expect(page).toHaveURL(/\/teacher$/);
+  await page.goBack(); await expect(page).toHaveURL(/\/$/);
+  await page.goForward(); await expect(page).toHaveURL(/\/teacher$/);
+  await expect(page.getByTestId('auth-submit')).toBeDisabled();
   await page.goBack(); await expect(page).toHaveURL(/\/$/); release();
   await expect(page.getByRole('heading', { name: 'ログインが完了しました', exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/$/); expect(requests).toBe(1);
