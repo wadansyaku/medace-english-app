@@ -304,6 +304,7 @@ const cloudflareFiles = [
   'tests/smoke/quiz-pronunciation.smoke.spec.ts',
   'tests/smoke/aichi-exam-badge.smoke.spec.ts',
   'tests/smoke/product-feedback.smoke.spec.ts',
+  'tests/smoke/product-support.smoke.spec.ts',
   'tests/smoke/admin-example-preparation.smoke.spec.ts',
   'tests/smoke/guest-trial.smoke.spec.ts',
   'tests/smoke/guest-learning.smoke.spec.ts',
