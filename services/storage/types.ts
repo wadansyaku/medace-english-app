@@ -85,8 +85,8 @@ export interface CatalogStorageService {
 }
 
 export interface LearningStorageService {
-  getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
-  getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]>;
+  getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]>;
+  getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]>;
   getBookStudyOverview(uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview>;
   getDueCount(uid: string): Promise<number>;
   saveSRSHistory(

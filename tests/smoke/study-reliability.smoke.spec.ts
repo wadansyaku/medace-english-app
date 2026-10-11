@@ -73,6 +73,47 @@ const expectFrontOnlyAfterAdvance = async (page: Page) => {
 test.describe('study reliability', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  test('committed study start survives response loss, reload and history return with the same start ID', async ({ page }) => {
+    const bookId = await prepareStudy(page);
+    const starts: Array<{ clientSessionId: string }> = [];
+    let lostResponse = false;
+    await page.route('**/api/storage', async route => {
+      const body = route.request().postDataJSON();
+      if (body?.action === 'getBookSession') {
+        starts.push(body.payload);
+        if (!lostResponse) {
+          lostResponse = true;
+          const response = await route.fetch();
+          expect(response.ok()).toBeTruthy();
+          await route.abort('failed');
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await expect(page.getByTestId('study-load-error')).toBeVisible();
+    await page.getByRole('button', { name: 'もう一度読み込む', exact: true }).click();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    expect(starts).toHaveLength(2);
+    expect(starts[0].clientSessionId).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(starts[1].clientSessionId).toBe(starts[0].clientSessionId);
+    await page.reload();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    expect(starts.at(-1)?.clientSessionId).toBe(starts[0].clientSessionId);
+    await page.goto('/dashboard');
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await page.goBack();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    expect(starts.at(-1)?.clientSessionId).toBe(starts[0].clientSessionId);
+    await page.goto('/dashboard');
+    await expect(page.getByTestId('student-dashboard')).toBeVisible();
+    await openDashboardReference(page, 'library');
+    await page.getByTestId(`book-study-${bookId}`).click();
+    await expect(page.getByTestId('study-card-front')).toBeVisible();
+    expect(starts.at(-1)?.clientSessionId).not.toBe(starts[0].clientSessionId);
+  });
+
   test('failed lesson load is distinct from an empty lesson and can be retried', async ({ page }) => {
     const bookId = await prepareStudy(page);
     let fail = true;

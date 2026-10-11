@@ -12,6 +12,7 @@ import { getRemainingStudyRatingFeedbackMs } from '../shared/studyPresentation';
 import { calculateStudySessionXp } from '../shared/xp';
 import { buildWeaknessSessionSummary } from '../shared/weakness';
 import { createStudyCardOperations, type StudyCardOperation } from '../utils/studyCardOperations';
+import { getStudySessionStartId } from '../utils/studySessionStart';
 import useIsMobileViewport from './useIsMobileViewport';
 import { useWordPronunciation } from './useWordPronunciation';
 
@@ -203,9 +204,16 @@ export const useStudyModeController = ({
       try {
         const smartSession = getSmartSessionConfig(bookId);
         const limit = normalizeStudySessionLimit(taskIntent?.limit, smartSession?.limit ?? 10);
+        // Parent navigation effects finish the history entry first. A retry,
+        // StrictMode remount or refresh then reuses its opaque start ID.
+        await Promise.resolve();
+        if (cancelled || generation !== sessionGenerationRef.current) return;
+        const clientSessionId = getStudySessionStartId(user.uid, {
+          action: smartSession ? 'daily' : 'book', bookId, limit, taskIntent,
+        });
         const data = smartSession
-          ? await learningService.getDailySessionWords(user.uid, limit, taskIntent || undefined)
-          : await learningService.getBookSession(user.uid, bookId, limit, taskIntent || undefined);
+          ? await learningService.getDailySessionWords(user.uid, limit, taskIntent || undefined, clientSessionId)
+          : await learningService.getBookSession(user.uid, bookId, limit, taskIntent || undefined, clientSessionId);
         if (cancelled || generation !== sessionGenerationRef.current) return;
         setQueue(data);
         setSessionWordCount(data.length);

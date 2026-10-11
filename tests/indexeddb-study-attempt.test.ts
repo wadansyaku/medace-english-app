@@ -10,7 +10,7 @@ import {
   type StoredStudyAttemptReceipt,
 } from '../services/storage/idb-support';
 import { studyAttemptFingerprint } from '../shared/srs';
-import { LearningTaskIntentType, type WordData } from '../types';
+import { LearningTaskIntentType, UserRole, type WordData } from '../types';
 
 const word: WordData = {
   id: 'word-1', bookId: 'book-1', number: 1, word: 'learn', definition: '学ぶ', searchKey: 'learn',
@@ -102,9 +102,17 @@ const queueFreshAttempt = (
   transaction: ReturnType<typeof controlledTransaction>,
   existing?: StoredLearningHistoryRecord,
 ) => {
-  transaction.reads[0].control.succeed(undefined);
-  transaction.reads[1].control.succeed(existing);
+  queueAuthorization(transaction);
+  transaction.reads[3].control.succeed(undefined);
+  transaction.reads[4].control.succeed(existing);
   transaction.writes.forEach(({ control }) => control.succeed('saved'));
+};
+
+const queueAuthorization = (transaction: ReturnType<typeof controlledTransaction>) => {
+  transaction.reads[0].control.succeed({ key: 'current', user: { uid: 'learner-1', role: UserRole.STUDENT } });
+  transaction.reads[1].control.succeed({ id: word.bookId, title: 'Synthetic owned book', wordCount: 1,
+    description: JSON.stringify({ createdBy: 'learner-1' }) });
+  transaction.reads[2].control.succeed(word);
 };
 
 beforeEach(() => {
@@ -122,6 +130,7 @@ describe('atomic IndexedDB study attempts', () => {
     const transaction = harness.transactions[0];
     expect(harness.db.transaction).toHaveBeenCalledWith([
       STORES.HISTORY, STORES.INTERACTION_EVENTS, STORES.STUDY_ATTEMPT_RECEIPTS,
+      STORES.SESSION, STORES.BOOKS, STORES.WORDS,
     ], 'readwrite');
     queueFreshAttempt(transaction);
     expect(transaction.writes.map(({ name }) => name)).toEqual([
@@ -190,8 +199,9 @@ describe('atomic IndexedDB study attempts', () => {
     const retry = saveSrsHistory(harness.context, 'learner-1', word, 2, 15, 'mission-1', LearningTaskIntentType.TODAY_FOCUS, 'attempt-3');
     await flushTasks();
     const duplicate = harness.transactions[1];
-    duplicate.reads[0].control.succeed(receipt);
-    expect(duplicate.reads).toHaveLength(1);
+    queueAuthorization(duplicate);
+    duplicate.reads[3].control.succeed(receipt);
+    expect(duplicate.reads).toHaveLength(4);
     expect(duplicate.writes).toHaveLength(0);
     duplicate.complete();
     await flushTasks();
@@ -209,7 +219,8 @@ describe('atomic IndexedDB study attempts', () => {
     const rejected = expect(saved).rejects.toThrow('異なる解答');
     await flushTasks();
     const transaction = harness.transactions[0];
-    transaction.reads[0].control.succeed({
+    queueAuthorization(transaction);
+    transaction.reads[3].control.succeed({
       fingerprint: studyAttemptFingerprint({ wordId: word.id, bookId: word.bookId, rating: 0, responseTimeMs: 15 }),
     });
     await rejected;
@@ -223,8 +234,9 @@ describe('atomic IndexedDB study attempts', () => {
     const rejected = expect(saved).rejects.toThrow('history unreadable');
     await flushTasks();
     const transaction = harness.transactions[0];
-    transaction.reads[0].control.succeed(undefined);
-    transaction.reads[1].control.fail(new Error('history unreadable'));
+    queueAuthorization(transaction);
+    transaction.reads[3].control.succeed(undefined);
+    transaction.reads[4].control.fail(new Error('history unreadable'));
     await rejected;
     expect(transaction.writes).toHaveLength(0);
   });

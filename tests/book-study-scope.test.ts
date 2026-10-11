@@ -119,7 +119,7 @@ describe('book scope production SQL and local selection', () => {
   it('counts real scoped words and only this user’s strict SRS, including future/graduated without making them due', async () => {
     const fixture = setup(); const range = { start: 11, end: 20 };
     const expected = { bookId: 'book', totalCount: 10, studiedCount: 4, newCount: 6, dueCount: 1 };
-    expect(await handleGetBookStudyOverview(fixture.env, fixture.user, 'book', range)).toEqual(expected);
+    expect(await handleGetBookStudyOverview(fixture.env, fixture.user, 'book', range)).toEqual({ ...expected, longTermReviewAvailableCount: 1 });
     expect(await getBookStudyOverview(fixture.context, 'student-1', 'book', range)).toEqual(expected);
     const intent = task('BOOK_NEW_ONLY', range);
     expect(await handleGetBookSession(fixture.env, fixture.user, 'book', 100, intent)).toHaveLength(expected.newCount);

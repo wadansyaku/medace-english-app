@@ -3,6 +3,7 @@ import type { StorageActionDefinitionMap } from '../storage-action-runtime';
 import { defineStorageAction } from '../storage-action-runtime';
 import { expectEmptyPayload, expectNumber, expectObject, expectOptionalObject, expectString, expectTrimmedString } from '../request-validation';
 import { normalizeStudyWordRange } from '../../../shared/studyScope';
+import { normalizeStudySessionStartId } from '../../../shared/studySessionStart';
 import { HttpError } from '../http';
 import { UserRole } from '../../../types';
 import {
@@ -18,6 +19,11 @@ import {
   handleUpdateWord,
 } from '../storage-book-actions';
 import { handleGenerateWordHintAsset } from '../word-hint-assets';
+
+const parseStudySessionStartId = (input: unknown): string | undefined => {
+  try { return normalizeStudySessionStartId(input); }
+  catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '学習開始の識別子が不正です。'); }
+};
 
 export const catalogStorageActionDefinitions = {
   batchImportWords: defineStorageAction({
@@ -96,9 +102,10 @@ export const catalogStorageActionDefinitions = {
       return {
         limit: expectNumber(record, 'limit'),
         taskIntent: expectOptionalObject(record.taskIntent, 'taskIntent') as never,
+        clientSessionId: parseStudySessionStartId(record.clientSessionId),
       };
     },
-    execute: ({ env, user }, payload) => handleGetDailySessionWords(env, user, payload.limit, payload.taskIntent),
+    execute: ({ env, user }, payload) => handleGetDailySessionWords(env, user, payload.limit, payload.taskIntent, payload.clientSessionId),
   }),
   getBookSession: defineStorageAction({
     parse: (payload) => {
@@ -108,9 +115,10 @@ export const catalogStorageActionDefinitions = {
         bookId: expectString(record, 'bookId'),
         limit: expectNumber(record, 'limit'),
         taskIntent: expectOptionalObject(record.taskIntent, 'taskIntent') as never,
+        clientSessionId: parseStudySessionStartId(record.clientSessionId),
       };
     },
-    execute: ({ env, user }, payload) => handleGetBookSession(env, user, payload.bookId, payload.limit, payload.taskIntent),
+    execute: ({ env, user }, payload) => handleGetBookSession(env, user, payload.bookId, payload.limit, payload.taskIntent, payload.clientSessionId),
   }),
   getBookStudyOverview: defineStorageAction({
     parse: (payload) => {

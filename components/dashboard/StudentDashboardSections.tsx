@@ -321,6 +321,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
           generatingPlan={controller.generatingPlan}
           remainingWords={viewModel.remainingWords}
           dueCount={viewModel.dueCount}
+          longTermReviewAvailableCount={viewModel.longTermReviewAvailableCount}
           estimatedMinutes={viewModel.estimatedMinutes}
           todayCount={viewModel.todayCount}
           todayWordGoal={viewModel.todayWordGoal}
@@ -337,6 +338,7 @@ export const StudentDashboardSections: React.FC<StudentDashboardSectionsProps> =
             ? () => onSelectBook(viewModel.primaryRecommendedBook!.id, 'study')
             : undefined}
           onStartQuest={handlePrimaryTaskAction}
+          onOpenLongTermReview={() => scrollToTaskSection('library')}
           onSelectPracticeLane={onSelectPracticeLane}
           onOpenPlan={() => onSelectTask('plan')}
           onGeneratePlan={controller.handleGeneratePlan}

@@ -4,6 +4,7 @@ import type { BookStudyOverview, LearningTaskIntent, UserProfile } from '../../t
 import { learningService } from '../../services/learning';
 import { NARU_BOOK_ID, NARU_RANGE_PRESETS, type NaruRangePreset } from '../../shared/naruBook';
 import { createNaruChapterTask, type NaruStudyKind } from '../../shared/naruStudy';
+import { getGraduatedReviewSessionQuota } from '../../shared/graduatedReview';
 
 interface Props {
   user: UserProfile;
@@ -36,7 +37,9 @@ const NaruStudySetup: React.FC<Props> = ({ user, chapter, kind, invalidSelection
   }, [user.uid, chapter.start, chapter.end, requestKey, attempt, invalidSelection]);
   const current = overview.key === requestKey ? overview : { key: requestKey, status: 'loading' as const };
   const data = !invalidSelection && current.status === 'ready' ? current.data : null;
-  const count = data ? (kind === 'due' ? data.dueCount : data.newCount) : null;
+  const longTermCount = data?.longTermReviewAvailableCount;
+  const sessionLongTermCount = Math.min(longTermCount ?? 0, getGraduatedReviewSessionQuota(10));
+  const count = data ? (kind === 'due' ? data.dueCount + sessionLongTermCount : data.newCount) : null;
   const canStart = count !== null && count > 0 && !invalidSelection;
 
   return (
@@ -84,6 +87,7 @@ const NaruStudySetup: React.FC<Props> = ({ user, chapter, kind, invalidSelection
           </div>
         ) : <p role="status" className="mt-3 py-5 text-center text-sm text-slate-600">学習記録を確認しています…</p>}
         {data && <p className="mt-3 text-xs leading-relaxed text-slate-500">この章は全{data.totalCount}語。小テストだけの記録は、カード学習の記録に含めません。</p>}
+        {kind === 'due' && data && longTermCount !== undefined && longTermCount > 0 && <p data-testid="naru-study-long-term-available" className="mt-3 text-sm leading-relaxed text-slate-600">この章の長期復習は、今回最大{sessionLongTermCount}語を追加できます。ほかの章の単語は混ぜません。</p>}
       </section>}
       <fieldset>
         <legend className="mb-3 text-base font-bold text-steady-ink">進め方</legend>
@@ -94,13 +98,14 @@ const NaruStudySetup: React.FC<Props> = ({ user, chapter, kind, invalidSelection
               className={`min-h-12 rounded-2xl border px-3 py-3 text-sm font-bold ${kind === value ? 'border-medace-500 bg-medace-50 text-steady-ink' : 'border-slate-200 bg-white text-slate-600'}`}>{label}</button>
           ))}
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-slate-600">{kind === 'due' ? '保存した評価から復習時期が決まります。期限前の単語は混ぜません。' : 'まだカードで学習していない単語を、番号順に進めます。'}</p>
+        <p className="mt-2 text-xs leading-relaxed text-slate-600">{kind === 'due' ? '保存した自己評価から復習時期が決まります。期限前の単語は混ぜません。10語の設定枠のうち、長期復習は最大2語。今日新しく加えるのは全教材合わせて5語までです。' : 'まだカードで学習していない単語を、番号順に進めます。'}</p>
+        {kind === 'due' && <p className="mt-2 text-xs leading-relaxed text-slate-600">長期復習期は自己評価による区分です。記憶の定着を保証する判定ではありません。</p>}
       </fieldset>
-      {count === 0 && <p role="status" data-testid="naru-study-empty" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{kind === 'due' ? 'この章で期限が来た復習はありません。新しい単語を進めるか、あとで戻ってきましょう。' : 'この章には新しい単語がありません。期限が来た復習や、別の章を選べます。'}</p>}
+      {count === 0 && <p role="status" data-testid="naru-study-empty" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">{kind === 'due' ? 'この章で今、新しく始められる復習はありません。長期復習には一日の少量枠があります。新しい単語を進めるか、あとで戻ってきましょう。' : 'この章には新しい単語がありません。期限が来た復習や、別の章を選べます。'}</p>}
       <button type="button" data-testid="naru-study-start" disabled={!canStart}
         onClick={() => { if (canStart) onSelect(createNaruChapterTask(chapter, kind, true)); }}
         className="flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-steady-action px-5 py-4 font-bold text-steady-on-action hover:bg-steady-action-hover disabled:bg-slate-200 disabled:text-slate-500">
-        <BookOpen className="h-5 w-5" /> {kind === 'due' ? '復習' : '新しい単語'}を{count === null ? '最大10' : Math.min(10, count)}語{kind === 'due' ? '確認する' : '学習する'}
+        <BookOpen className="h-5 w-5" /> {kind === 'due' ? '復習' : '新しい単語'}を{count === null ? '最大10' : `${kind === 'due' && sessionLongTermCount > 0 ? '最大' : ''}${Math.min(10, count)}`}語{kind === 'due' ? '確認する' : '学習する'}
       </button>
     </section>
   );

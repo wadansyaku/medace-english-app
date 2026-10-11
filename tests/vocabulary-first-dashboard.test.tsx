@@ -76,6 +76,16 @@ describe('vocabulary-first recommendation and rendered primary action',()=>{
   expect(markup).toContain('今日の学習目標');
   expect(markup).toContain('学習の設定を開く');
  });
+ it('keeps long-term availability out of today and weekly goals and renders an optional material choice',()=>{
+  const normal=view({dueCount:2});const v=view({dueCount:2,longTermReviewAvailableCount:5});
+  expect(v.todayWordGoal).toBe(normal.todayWordGoal);expect(v.weeklyGoal).toBe(normal.weeklyGoal);expect(v.remainingWords).toBe(normal.remainingWords);
+  expect(v.dueCount).toBe(2);expect(v.longTermReviewAvailableCount).toBe(5);expect(v.primaryTask?.command).toEqual(normal.primaryTask?.command);
+  const noop=()=>{};
+  const markup=renderToStaticMarkup(<DashboardHeroSection grade={UserGrade.JHS3} heroTitle={v.heroTitle} heroCopy={v.heroCopy} heroMetrics={v.heroMetrics} preferenceSummary={v.preferenceSummary} hasStudyBooks={v.hasStudyBooks} questButtonLabel={v.questButtonLabel} learningPlan={null} generatingPlan={false} remainingWords={v.remainingWords} dueCount={v.dueCount} longTermReviewAvailableCount={v.longTermReviewAvailableCount} estimatedMinutes={v.estimatedMinutes} todayCount={v.todayCount} todayWordGoal={v.todayWordGoal} todayProgressPercent={v.todayProgressPercent} primaryLearningRouteId={v.primaryLearningRouteId} practiceRecommendation={v.practiceRecommendation} onOpenSettings={noop} onStartQuest={noop} onOpenLongTermReview={noop} onSelectPracticeLane={noop} onOpenPlan={noop} onGeneratePlan={noop}/>);
+  expect(markup).toContain('dashboard-long-term-review');expect(markup).toContain('今日新しく加えられるのは最大5語');expect(markup).toContain('教材を選んで復習');
+  expect(markup).toContain('期限が来た復習 <strong class="text-steady-ink">2語');
+  expect(markup).not.toContain('期限が来た復習 <strong class="text-steady-ink">7語');
+ });
  it('keeps server suggested missions on default Naru but honors an explicit selected book',()=>{
   const input={user:{id:user.uid,grade:UserGrade.JHS3,english_level:EnglishLevel.B1},books:[{id:'other',title:'Other',word_count:120,is_priority:1},{id:NARU_BOOK_ID,title:'Naruシスト',word_count:1531}],now:1};
   expect(buildSuggestedDashboardPrimaryMission(input).sourceBookId).toBe(NARU_BOOK_ID);

@@ -21,6 +21,7 @@ interface DashboardHeroSectionProps {
   generatingPlan: boolean;
   remainingWords: number;
   dueCount: number;
+  longTermReviewAvailableCount?: number;
   estimatedMinutes: number;
   todayCount: number;
   todayWordGoal: number;
@@ -35,6 +36,7 @@ interface DashboardHeroSectionProps {
   onOpenSettings: () => void;
   onOpenRecommendedCourse?: () => void;
   onStartQuest: () => void;
+  onOpenLongTermReview?: () => void;
   onSelectPracticeLane: (lane: FocusedPracticeLane) => void;
   onOpenPlan: () => void;
   onGeneratePlan: () => void;
@@ -42,9 +44,9 @@ interface DashboardHeroSectionProps {
 
 const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
   heroTitle, heroCopy, heroEyebrow = '今日やること', heroMetrics,
-  hasStudyBooks, questButtonLabel, dueCount, todayCount, todayWordGoal, todayProgressPercent,
+  hasStudyBooks, questButtonLabel, dueCount, longTermReviewAvailableCount, todayCount, todayWordGoal, todayProgressPercent,
   primaryLearningRouteId, primaryPracticeLane, practiceRecommendation, practiceAnchorRef, practiceAnchorStyle,
-  onOpenSettings, onStartQuest, onSelectPracticeLane,
+  onOpenSettings, onStartQuest, onOpenLongTermReview, onSelectPracticeLane,
 }) => {
   const progress = Math.max(0, Math.min(100, Math.round(todayProgressPercent)));
   const isGrammarPrimary = primaryPracticeLane === 'grammar'
@@ -75,6 +77,12 @@ const DashboardHeroSection: React.FC<DashboardHeroSectionProps> = ({
         {importantMetrics.map(metric => <div key={metric.id} className="flex gap-2"><dt className="text-slate-600">{metric.label}</dt><dd className="font-bold text-steady-ink">{metric.value}{metric.id.endsWith('-due') && metric.helper === '期限超過' ? '（期限超過）' : ''}</dd></div>)}
       </dl>}
       {hasStudyBooks && <div role="progressbar" aria-label="今日の学習目標" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={`${todayWordGoal}語の目標に対して${todayCount}語、${progress}%`} className="mt-4 h-1.5 overflow-hidden rounded-full bg-medace-50"><div className="h-full rounded-full bg-medace-500" style={{width:`${progress}%`}} /></div>}
+      {hasStudyBooks && longTermReviewAvailableCount !== undefined && longTermReviewAvailableCount > 0 && (
+        <div data-testid="dashboard-long-term-review" className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+          <span>長期復習も少し。今日新しく加えられるのは最大{longTermReviewAvailableCount}語です。</span>
+          {onOpenLongTermReview && <button type="button" onClick={onOpenLongTermReview} className="min-h-11 rounded-lg px-2 font-bold text-medace-800 hover:bg-medace-50">教材を選んで復習 <ArrowRight className="ml-1 inline h-3.5 w-3.5" aria-hidden="true" /></button>}
+        </div>
+      )}
       <div ref={practiceAnchorRef} data-testid="dashboard-english-practice-entry" style={practiceAnchorStyle} className="mt-4">
         <div data-testid="dashboard-practice-dock">
           <p className="mb-1 text-xs text-slate-500">ほかの練習</p>

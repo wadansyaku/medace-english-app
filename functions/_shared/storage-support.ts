@@ -374,10 +374,10 @@ export const getVisibleDueCount = async (env: AppEnv, user: DbUserRow): Promise<
   const row = await readFirst<{ count: number }>(
     env,
     `SELECT COUNT(*) AS count
-     FROM learning_histories
-     WHERE user_id = ? AND next_review_date <= ? AND status != 'graduated'
-       AND ${getMasterySourceSql()}
-       AND book_id IN (${buildInClause(bookIds.length)})`,
+     FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
+     WHERE h.user_id = ? AND h.next_review_date <= ? AND h.status != 'graduated'
+       AND ${getMasterySourceSql('h')}
+       AND w.book_id IN (${buildInClause(bookIds.length)})`,
     user.id,
     Date.now(),
     ...bookIds,

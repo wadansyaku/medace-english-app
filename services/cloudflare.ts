@@ -196,19 +196,19 @@ export class CloudflareStorageService implements IStorageService {
     });
   }
 
-  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]> {
     assertNoDailyStudyWordRange(taskIntent);
     return this.callStorage({
       action: 'getDailySessionWords',
-      payload: { limit, taskIntent },
+      payload: { limit, taskIntent, clientSessionId },
     });
   }
 
-  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
+  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]> {
     getBookTaskWordRange(taskIntent, bookId);
     return this.callStorage({
       action: 'getBookSession',
-      payload: { bookId, limit, taskIntent },
+      payload: { bookId, limit, taskIntent, clientSessionId },
     });
   }
 

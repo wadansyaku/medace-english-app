@@ -156,6 +156,7 @@ describe('dashboard snapshot model helpers', () => {
 
     const snapshot = buildDashboardSnapshotModel({
       dueCount: 3,
+      longTermReviewAvailableCount: 5,
       officialBooks: [{ id: 'book-1', title: 'Book 1', wordCount: 10, isPriority: false }],
       myBooks: [],
       progressResults: [progress],
@@ -204,5 +205,6 @@ describe('dashboard snapshot model helpers', () => {
     expect(snapshot.progressMap).toEqual({ 'book-1': progress });
     expect(snapshot.officialBooks.map((book) => book.id)).toEqual(['book-1']);
     expect(snapshot.dueCount).toBe(3);
+    expect(snapshot.longTermReviewAvailableCount).toBe(5);
   });
 });

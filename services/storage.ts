@@ -139,6 +139,7 @@ import {
   getBookStudyOverview as getBookStudyOverviewFromHistory,
   getDailySessionWords as getDailySessionWordsFromHistory,
   getDueCount as getDueCountFromHistory,
+  getLongTermReviewAvailableCount,
   getStudiedWordIdsByBook as getStudiedWordIdsByBookFromHistory,
   recordQuizAttempt as recordQuizAttemptFromHistory,
   saveSrsHistory as saveSrsHistoryFromHistory,
@@ -236,6 +237,7 @@ export class IndexedDBStorageService implements IStorageService {
       getBooks: this.getBooks.bind(this),
       getBookProgress: this.getBookProgress.bind(this),
       getDueCount: this.getDueCount.bind(this),
+      getLongTermReviewAvailableCount: (uid) => getLongTermReviewAvailableCount(this.getLearningHistoryContext(), uid),
       getLearningPlan: this.getLearningPlan.bind(this),
       getLearningPreference: this.getLearningPreference.bind(this),
       getAllStudentsProgress: this.getAllStudentsProgress.bind(this),
@@ -338,12 +340,12 @@ export class IndexedDBStorageService implements IStorageService {
     return prepareBookExamplesLocal(this.getLocalCatalogStorageContext(), bookId);
   }
 
-  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
-    return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit, taskIntent);
+  async getDailySessionWords(uid: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]> {
+    return getDailySessionWordsFromHistory(this.getLearningHistoryContext(), uid, limit, taskIntent, clientSessionId);
   }
 
-  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent): Promise<WordData[]> {
-    return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit, taskIntent);
+  async getBookSession(uid: string, bookId: string, limit: number, taskIntent?: LearningTaskIntent, clientSessionId?: string): Promise<WordData[]> {
+    return getBookSessionFromHistory(this.getLearningHistoryContext(), uid, bookId, limit, taskIntent, clientSessionId);
   }
 
   async getBookStudyOverview(uid: string, bookId: string, wordRange?: StudyWordRange): Promise<BookStudyOverview> {

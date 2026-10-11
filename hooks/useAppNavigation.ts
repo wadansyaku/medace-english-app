@@ -387,9 +387,11 @@ export const useAppNavigation = () => {
   );
   const pendingHistoryModeRef = useRef<NavigationHistoryMode>('replace');
   const hasBoundHistoryRef = useRef(false);
+  const explicitStudyStartRef = useRef(false);
 
   const dispatchNavigation = useCallback((action: AppNavigationAction) => {
     pendingHistoryModeRef.current = action.historyMode ?? getDefaultHistoryMode(action);
+    explicitStudyStartRef.current = action.type === 'open-task' && action.task.mode === 'study';
     baseDispatchNavigation(action);
   }, []);
 
@@ -399,16 +401,18 @@ export const useAppNavigation = () => {
     const nextPath = buildNavigationPath(navigationState);
     const currentPath = `${normalizePathname(window.location.pathname)}${window.location.search}`;
     const historyMode = hasBoundHistoryRef.current ? pendingHistoryModeRef.current : 'replace';
+    const explicitStudyStart = explicitStudyStartRef.current;
 
     hasBoundHistoryRef.current = true;
     pendingHistoryModeRef.current = 'none';
+    explicitStudyStartRef.current = false;
 
     if (historyMode === 'none') return;
     if (historyMode === 'replace') {
-      window.history.replaceState(null, '', nextPath);
+      window.history.replaceState(window.history.state, '', nextPath);
       return;
     }
-    if (currentPath !== nextPath) {
+    if (currentPath !== nextPath || explicitStudyStart) {
       window.history.pushState(null, '', nextPath);
     }
   }, [navigationState]);

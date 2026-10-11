@@ -331,4 +331,25 @@ describe('storage read model helpers', () => {
     expect(snapshot.primaryMission?.blockers).toContain('指定教材を確認してください');
     expect(snapshot.primaryMission?.nextTaskIntent).toBeNull();
   });
+
+  it('keeps bounded long-term availability separate from ordinary due and mission targets', async () => {
+    const user = makeStudent();
+    const context = createDashboardReadModelContext({ user, books: [makeDashboardBook('approved-book', 'Approved', true)] });
+    context.getDueCount = async () => 2;
+    const before = await getDashboardSnapshot(context, user.uid);
+    expect(before.longTermReviewAvailableCount).toBeUndefined();
+    context.getLongTermReviewAvailableCount = async () => 5;
+    const withLongTerm = await getDashboardSnapshot(context, user.uid);
+    expect(withLongTerm.dueCount).toBe(2);
+    expect(withLongTerm.longTermReviewAvailableCount).toBe(5);
+    expect(withLongTerm.primaryMission?.newWordsTarget).toBe(before.primaryMission?.newWordsTarget);
+    expect(withLongTerm.primaryMission?.reviewWordsTarget).toBe(before.primaryMission?.reviewWordsTarget);
+  });
+
+  it('propagates a failed long-term availability read instead of publishing zero', async () => {
+    const user = makeStudent();
+    const context = createDashboardReadModelContext({ user, books: [] });
+    context.getLongTermReviewAvailableCount = async () => { throw new Error('synthetic long-term read failure'); };
+    await expect(getDashboardSnapshot(context, user.uid)).rejects.toThrow('synthetic long-term read failure');
+  });
 });

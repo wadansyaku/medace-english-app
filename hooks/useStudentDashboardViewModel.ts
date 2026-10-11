@@ -189,6 +189,7 @@ export const useStudentDashboardViewModel = ({
   englishPracticeRecommendation,
 }: UseStudentDashboardViewModelParams) => {
   const dueCount = snapshot?.dueCount ?? 0;
+  const longTermReviewAvailableCount = snapshot?.longTermReviewAvailableCount;
   const books = snapshot?.officialBooks ?? [];
   const myBooks = snapshot?.myBooks ?? [];
   const progressMap = snapshot?.progressMap ?? {};
@@ -763,6 +764,7 @@ export const useStudentDashboardViewModel = ({
 
   return {
     dueCount,
+    longTermReviewAvailableCount,
     books,
     myBooks,
     progressMap,
