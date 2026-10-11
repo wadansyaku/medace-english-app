@@ -26,6 +26,7 @@ export interface ProductSupportKnowledgeSource {
 
 const allRoles: readonly ProductSupportRole[] = ['GUEST', 'STUDENT', 'INSTRUCTOR', 'GROUP_ADMIN', 'ADMIN'];
 const learnerRoles: readonly ProductSupportRole[] = ['GUEST', 'STUDENT'];
+const staffEntryRoles: readonly ProductSupportRole[] = ['GUEST', 'INSTRUCTOR', 'GROUP_ADMIN', 'ADMIN'];
 const sources: ProductSupportKnowledgeSource[] = [
   {
     sourceId: 'guest-naru-records', sourceURL: getProductSupportSourceURL('guest-naru-records'), roles: learnerRoles,
@@ -88,7 +89,7 @@ const sources: ProductSupportKnowledgeSource[] = [
     checkedAt: '2026-10-11', targetVersion: PRODUCT_SUPPORT_TARGET_VERSION,
   },
   {
-    sourceId: 'staff-login-entry', sourceURL: getProductSupportSourceURL('staff-login-entry'), roles: allRoles,
+    sourceId: 'staff-login-entry', sourceURL: getProductSupportSourceURL('staff-login-entry'), roles: staffEntryRoles,
     verifiedFrom: ['shared/publicBusinessRoles.ts:PUBLIC_ROLE_DIRECT_PATHS', 'components/PublicInfoPage.tsx:PublicInfoPage'],
     topic: 'staff-login', title: '講師・学校管理者の入口',
     content: '講師は/teacher、学校管理者は/school-admin、サービス管理者は/service-adminから登録済みアカウントでログインします。'

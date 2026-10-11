@@ -52,6 +52,8 @@ describe('public product support knowledge provenance', () => {
   it('resolves only canonical, deduplicated, role- and version-scoped references', () => {
     expect(resolveProductSupportSources(['my-wordbook-create'], 'STUDENT')?.[0]).toBe(PRODUCT_SUPPORT_KNOWLEDGE.find(source => source.sourceId === 'my-wordbook-create'));
     expect(resolveProductSupportSources(['my-wordbook-create'], 'INSTRUCTOR')).toBeNull();
+    expect(resolveProductSupportSources(['staff-login-entry'], 'STUDENT')).toBeNull();
+    expect(resolveProductSupportSources(['staff-login-entry'], 'INSTRUCTOR')?.[0].sourceId).toBe('staff-login-entry');
     expect(resolveProductSupportSources(['my-wordbook-create'], 'STUDENT', 'old-version')).toBeNull();
     expect(resolveProductSupportSources(['word-pronunciation', 'word-pronunciation'], 'GUEST')).toBeNull();
     expect(resolveProductSupportSources(['https://attacker.invalid/help'], 'GUEST')).toBeNull();

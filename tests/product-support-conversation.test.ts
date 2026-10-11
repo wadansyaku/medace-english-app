@@ -18,7 +18,6 @@ describe('conversation retrieval without generation', () => {
     ['音が勝手に出るのを止めたい', 'word-pronunciation'],
     ['学習のAI自動生成は使えますか', 'learning-ai-status'],
     ['忘れた単語は復習に戻りますか', 'study-recall'],
-    ['先生のログイン入口はどこですか', 'staff-login-entry'],
   ])('retrieves paraphrased free text: %s', (question, expected) => {
     const result = ask(question);
     expect(result.kind).toBe('grounded');
@@ -31,6 +30,36 @@ describe('conversation retrieval without generation', () => {
     expect(result.kind).toBe('grounded');
     expect(ids(result)).toEqual(['guest-naru-records']);
     expect(result.kind === 'grounded' && result.usedHistory).toBe(true);
+  });
+
+  it.each(['じゃあCSVは必要？', '一語ずつ入れられる？', '単語帳は何語まで？'])('keeps guest wordbook context for a format follow-up: %s', question => {
+    const result = ask(question, ['ゲストの単語帳を作りたい'], 'GUEST');
+    expect(result).toMatchObject({ kind: 'grounded', usedHistory: true });
+    expect(ids(result)).toEqual(['guest-local-wordbooks']);
+  });
+
+  it('keeps My limits through short turns and honors explicit topic changes in either direction', () => {
+    expect(ids(ask('じゃあCSVは必要？', ['My単語帳を作りたい', '一語ずつ入れたい']))).toEqual(['my-wordbook-create']);
+    expect(ids(ask('ログイン後のMy単語帳ではCSVは必要？', ['ゲストの単語帳を作りたい']))).toEqual(['my-wordbook-create']);
+    expect(ids(ask('ゲストの単語帳ではCSVは必要？', ['My単語帳を作りたい']))).toEqual(['guest-local-wordbooks']);
+  });
+
+  it('retains both record and book sources in a compound question', () => {
+    const result = ask('Naruの回答の引継ぎとMy単語帳の作り方は？');
+    expect(result.kind).toBe('grounded');
+    expect(ids(result)).toEqual(['guest-naru-records', 'my-wordbook-create']);
+    expect(ask('ゲストの単語帳とMy単語帳の違いは？').kind).toBe('clarification');
+  });
+
+  it.each(['My単語帳はどう作る？量子力学をどこで学べる？', 'Naruの記録は残る？量子力学の資料は保存できますか？'])('does not hide an unsupported subject behind a follow-up word: %s', question => {
+    expect(ask(question)).toMatchObject({ kind: 'unknown', reason: 'uncovered-question' });
+  });
+
+  it('keeps staff evidence outside the student role, including a carried staff question', () => {
+    expect(ask('先生のログイン入口はどこですか')).toMatchObject({ kind: 'unknown', reason: 'role-mismatch', sources: [] });
+    expect(ask('ではどこから？', ['先生のログイン入口はどこですか'])).toMatchObject({ kind: 'unknown', reason: 'role-mismatch', sources: [] });
+    expect(ids(ask('先生のログイン入口はどこですか', [], 'GUEST'))).toEqual(['staff-login-entry']);
+    expect(ids(ask('講師のログイン入口は？', [], 'INSTRUCTOR'))).toEqual(['staff-login-entry']);
   });
 
   it('cannot reach beyond the three-turn window', () => {
@@ -80,6 +109,14 @@ describe('conversation retrieval without generation', () => {
   it('does not mistake a correct AI-stop premise for an enabled generation promise', () => {
     expect(ask('AIは停止済みなのに発音は出ますか').kind).toBe('grounded');
     expect(ask('AIは利用可能ではないはずですが発音は使えますか').kind).toBe('grounded');
+  });
+
+  it.each([
+    'ログインだけではNaruの回答は自動保存されないですよね',
+    'AIは停止済みですが発音は使えるはずですよね',
+    'Naruの回答を手動で保存済み。発音は自動再生ですよね？',
+  ])('binds an asserted premise to its own feature and respects correct negation: %s', question => {
+    expect(ask(question).kind).toBe('grounded');
   });
 
   it('does not let a public feature hide a request for individual student data', () => {
@@ -138,6 +175,10 @@ describe('canonical response evidence validation', () => {
     expect(validate({ ...answer, sourceIds: ['my-wordbook-create'] }, input, decision)).toMatchObject({ valid: false, reason: 'missing-evidence' });
     const forged: ProductSupportSearchResult = { kind: 'grounded', sources: [PRODUCT_SUPPORT_KNOWLEDGE.find(source => source.sourceId === 'guest-naru-records')!], usedHistory: false };
     expect(validate({ ...answer, sourceIds: ['guest-naru-records'] }, input, forged)).toMatchObject({ valid: false, reason: 'decision-conflict' });
+  });
+
+  it('rejects a staff path smuggled into otherwise valid student evidence', () => {
+    expect(validate({ ...answer, answer: 'My単語帳を作れます。講師は /teacher からログインできます。' }, input, decision)).toMatchObject({ valid: false, reason: 'unsafe-content' });
   });
 
   it.each([

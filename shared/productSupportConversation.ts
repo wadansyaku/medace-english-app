@@ -34,18 +34,24 @@ const unsafeRequest = (text: string) => has(text, /(?:指示|命令|ルール|�
 const privateInput = (text: string) => has(text, /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|\b(?:sk-[a-z0-9_-]{12,}|bearer\s+[a-z0-9._-]{12,})|(?:電話番号|パスワード|apiキー|api key)\s*[:=：]\s*\S+/i);
 const unsupportedTopic = (text: string) => has(text, /料金|課金|請求|解約|退会|返金|クレジットカード|決済|成績|答案|学籍|個人情報|(?:生徒|他人).{0,8}(?:氏名|連絡先)|\b(?:billing|refund|subscription price|cancel subscription|student grades)\b/);
 const followUp = (text: string) => has(text, /それ|その|さっき|では|じゃあ|いつまで|何日|どこ(?:で|から|に)|保存|どうやって|上限|登録後|ログイン後|自動|引き継|引継|\b(?:it|that|then|how long|where|xp)\b/);
+const explicitGuestBook = (text: string) => has(text, /(?:ゲスト|登録なし|登録不要|登録前|ログインなし|ログイン前).{0,10}(?:単語帳|自作)|\bguest\s*(?:wordbook|word book)\b/);
+const explicitMyBook = (text: string) => has(text, /my\s*単語帳|マイ単語帳|ログイン後.{0,8}単語帳|\bmy\s*(?:wordbook|word book)\b/);
+const genericBookFollowUp = (text: string) => !explicitGuestBook(text) && !explicitMyBook(text)
+  && has(text, /単語帳|csv|直接入力|手入力|一語ずつ|単語と意味|\b(?:manually|type words)\b/);
 
 const topicsIn = (text: string): ProductSupportTopic[] => {
   const topics: ProductSupportTopic[] = [];
-  const guest = has(text, /ゲスト|登録(?:なし|不要|前)|ログイン(?:なし|前)|\bguest\b/);
+  const guest = explicitGuestBook(text);
   const book = has(text, /単語帳|自作|自分の単語|単語と意味|一語ずつ|\b(?:wordbook|word book|csv|type words)\b/);
-  const my = has(text, /my\s*単語帳|マイ単語帳|ログイン後.{0,8}単語帳|\bmy\s*(?:wordbook|word book)\b/);
+  const my = explicitMyBook(text);
   if (book) {
-    if (guest && !my) topics.push('guest-wordbooks');
+    if (guest && my) topics.push('guest-wordbooks', 'my-wordbooks');
+    else if (guest) topics.push('guest-wordbooks');
     else if (my || has(text, /直接入力|手入力|一語ずつ|csv.{0,8}(?:必要|必須|なし|不要)|\b(?:manually|type words)\b/)) topics.push('my-wordbooks');
     else topics.push('guest-wordbooks', 'my-wordbooks');
   }
-  if (has(text, /naru|ナル|登録前の(?:記録|回答)|ゲストの(?:記録|回答)|(?:記録|回答).{0,8}(?:引き継|引継)|\bimport guest\b/) && !book) topics.push('guest-records');
+  if (has(text, /登録前の(?:記録|回答)|ゲストの(?:記録|回答)|(?:記録|回答).{0,8}(?:引き継|引継)|\bimport guest\b/)
+    || has(text, /naru|ナル/) && (!book || has(text, /記録|回答|引き継|引継/))) topics.push('guest-records');
   if (has(text, /発音|読み上げ|音声|再生|音が|声が|音を|聞く|聴く|\b(?:audio|pronunciation|mute)\b/)) topics.push('pronunciation');
   if (has(text, /\bai\b|自動生成|生成ai|例文.{0,6}生成/)) topics.push('learning-ai');
   if (has(text, /理解度|復習|忘れた|意味を思い出|学習.{0,4}(?:方法|進め)|勉強.{0,4}進め|\bstudy\b/)) topics.push('study');
@@ -54,12 +60,25 @@ const topicsIn = (text: string): ProductSupportTopic[] => {
 };
 
 const falsePremise = (text: string, topics: readonly ProductSupportTopic[]) => {
-  const assumed = has(text, /はず|なのに|ですよね|だよね|前提|済み|必ず|\b(?:since|already|guaranteed)\b/);
-  if (!assumed) return false;
-  return topics.includes('guest-wordbooks') && has(text, /(?:クラウド|アカウント).{0,8}(?:保存済|保存される|保存できる|同期済|引継済|引き継がれる|引き継げる)|(?:同期|cloud).{0,6}(?:済|はず)/)
-    || topics.includes('guest-records') && has(text, /自動|永久|ずっと|期限なし|\b(?:automatic|forever)\b/)
-    || topics.includes('learning-ai') && has(text, /(?:生成できる|生成済み|使える|利用可能なはず|動くはず|有効なはず)|\b(?:enabled|generates)\b/)
-    || has(text, /(?:他|別).{0,8}アプリ.{0,8}(?:効果|優れ|高い)|効果.{0,8}(?:実証|保証)/);
+  // Match a claim to its own feature clause. A correct negation or another
+  // feature's predicate must not become an asserted unsupported premise.
+  const positiveClaim = (clause: string, pattern: RegExp) => {
+    const match = pattern.exec(clause);
+    if (!match) return false;
+    const suffix = clause.slice(match.index + match[0].length, match.index + match[0].length + 14);
+    return !/^(?:では|じゃ|で|され|し|する|でき|になって)?(?:ない|ません|なく|なかった)|^\s*(?:is\s+)?not\b/.test(suffix);
+  };
+  return text.split(/[?？。;；\n]+|ですが|けれど|けど|なのに|\bbut\b/).some(clause => {
+    if (!has(clause, /はず|ですよね|だよね|前提|済み|必ず|\b(?:since|already|guaranteed)\b/)) return false;
+    const clauseTopics = topicsIn(clause);
+    return topics.includes('guest-wordbooks') && clauseTopics.includes('guest-wordbooks')
+      && positiveClaim(clause, /(?:クラウド|アカウント).{0,8}(?:保存済|保存される|保存できる|同期済|引継済|引き継がれる|引き継げる)|(?:同期|cloud).{0,6}(?:済|はず)/)
+      || topics.includes('guest-records') && clauseTopics.includes('guest-records')
+      && positiveClaim(clause, /自動(?:で)?保存|自動で(?:引き継|引継)|永久|ずっと|期限なし|\b(?:automatic|forever)\b/)
+      || topics.includes('learning-ai') && clauseTopics.includes('learning-ai')
+      && positiveClaim(clause, /生成できる|生成済み|使える|利用可能|動く|有効|\b(?:enabled|generates)\b/)
+      || positiveClaim(clause, /(?:他|別).{0,8}アプリ.{0,8}(?:効果|優れ|高い)|効果.{0,8}(?:実証|保証)/);
+  });
 };
 
 /** Retrieve context for a future generator. This function never generates an answer. */
@@ -78,15 +97,19 @@ export const searchProductSupportConversation = (input: ProductSupportSearchInpu
   // Only the user's most recent three turns can supply a missing subject.
   // Follow-up and social turns can retain a subject; a newer unsupported or
   // unsafe subject clears it. Nothing before this three-turn window is used.
-  if (!topics.length && followUp(question)) {
+  if (!topics.length && followUp(question) || genericBookFollowUp(question)) {
+    let previousTopics: ProductSupportTopic[] = [];
     for (const turn of input.history?.slice(-3) ?? []) {
       const text = normalize(turn.userText);
-      if (text.length > 2000 || unsafeRequest(text) || privateInput(text) || unsupportedTopic(text)) { topics = []; continue; }
+      if (text.length > 2000 || unsafeRequest(text) || privateInput(text) || unsupportedTopic(text)) { previousTopics = []; continue; }
       const next = topicsIn(text);
-      if (next.length) topics = next;
-      else if (!followUp(text) && !/^(?:ありがとう|ありがとうございます|なるほど|はい|ok|thanks|thank you)[。.!！]*$/.test(text)) topics = [];
+      if (next.length && !(genericBookFollowUp(text) && previousTopics.length === 1 && ['guest-wordbooks', 'my-wordbooks'].includes(previousTopics[0]))) previousTopics = next;
+      else if (!next.length && !followUp(text) && !/^(?:ありがとう|ありがとうございます|なるほど|はい|ok|thanks|thank you)[。.!！]*$/.test(text)) previousTopics = [];
     }
-    usedHistory = topics.length > 0;
+    if (!topics.length || topics.every(topic => topic === 'guest-wordbooks' || topic === 'my-wordbooks')
+      && previousTopics.length > 0 && previousTopics.every(topic => topic === 'guest-wordbooks' || topic === 'my-wordbooks')) {
+      if (previousTopics.length) { topics = previousTopics; usedHistory = true; }
+    }
   }
   const sources = sourcesFor(topics);
   if (!topics.length) return followUp(question)
@@ -101,7 +124,8 @@ export const searchProductSupportConversation = (input: ProductSupportSearchInpu
   };
   if (falsePremise(question, topics)) return { kind: 'unknown', sources, reason: 'unsupported-premise' };
   const clauses = question.split(/[?？。;；\n]+|それと|それから|あと、|\band\b/).map(value => value.trim()).filter(Boolean);
-  if (clauses.length > 1 && clauses.some(clause => !topicsIn(clause).length && !followUp(clause))) return { kind: 'unknown', sources, reason: 'uncovered-question' };
+  const bareFollowUp = (clause: string) => /^(?:(?:それ|その|では|じゃあ)[はの、,\s]*)?(?:いつまで|何日|何語まで|どこ(?:で|から|に)|保存(?:できる|される|する)?|どうやって|上限|xp)(?:ですか|できますか|できる|です|は|\s)*$/.test(clause);
+  if (clauses.length > 1 && clauses.some(clause => !topicsIn(clause).length && !bareFollowUp(clause))) return { kind: 'unknown', sources, reason: 'uncovered-question' };
   return { kind: 'grounded', sources, usedHistory };
 };
 
@@ -132,6 +156,7 @@ export const validateProductSupportAnswer = (value: unknown, input: ProductSuppo
   const text = normalize(`${candidate.answer} ${candidate.clarification ?? ''}`);
   const urls = text.match(/https?:\/\/[^\s<>"'）)]+/g) ?? [];
   if (privateInput(text) || unsafeRequest(text) || /<\/?[a-z][^>]*>|javascript:|data:|\]\s*\(/i.test(text)
+    || input.role === 'STUDENT' && /\/(?:teacher|school-admin|service-admin|admin-access)\b/.test(text)
     || !PRODUCT_SUPPORT_SOURCE_LINKS_READY && urls.length > 0
     || urls.some(url => !sources.some(source => source.sourceURL.toLowerCase() === url))) return { valid: false, reason: 'unsafe-content' };
   if (decision.kind !== 'grounded' && !candidate.unknown || decision.kind === 'clarification' && candidate.clarification === null
