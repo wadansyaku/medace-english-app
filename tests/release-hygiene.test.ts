@@ -98,6 +98,26 @@ describe('release hygiene contracts', () => {
     expect(sync).toContain('...REQUIRED_GITHUB_SCHEDULED_SECRETS.map');
   });
 
+  it('disables business demos in the production runtime and artifact while keeping preview/local gates separate', () => {
+    const production = readText('.github/workflows/deploy-pages.yml');
+    const preview = readText('.github/workflows/deploy-pages-preview.yml');
+    const localBuild = production.split('name: Build app for local integration tests')[1].split('name: API integration tests')[0];
+    const artifactBuild = production.split('name: Build deploy artifact')[1].split('name: Capture production D1 recovery bookmark')[0];
+    expectTextInOrder(production, [
+      'name: Verify GitHub and Cloudflare configuration',
+      'name: Disable production business demos on all deployment URLs',
+      "printf '%s\\n' 'false'",
+      'pages secret put ENABLE_PUBLIC_BUSINESS_DEMO --project-name "$CF_PAGES_PROJECT"',
+      'name: Build deploy artifact',
+      "VITE_ENABLE_PUBLIC_BUSINESS_DEMO: 'false'",
+      'name: Deploy to Cloudflare Pages',
+    ]);
+    expect(artifactBuild).toContain("VITE_ENABLE_PUBLIC_BUSINESS_DEMO: 'false'");
+    expect(localBuild).not.toContain('VITE_ENABLE_PUBLIC_BUSINESS_DEMO');
+    expect(preview).not.toContain('VITE_ENABLE_PUBLIC_BUSINESS_DEMO');
+    expect(preview).not.toContain('pages secret put ENABLE_PUBLIC_BUSINESS_DEMO');
+  });
+
   it('documents cf:doctor error=0 as the release gate used by deploy workflows', () => {
     const doctor = readText('scripts/cf-doctor.mjs');
     const readme = readText('README.md');

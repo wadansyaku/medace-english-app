@@ -71,7 +71,15 @@ jobs:
         run: |
           printf '%s\n' "$VITE_ENABLE_ADMIN_DEMO" | node node_modules/wrangler/bin/wrangler.js pages secret put ENABLE_ADMIN_DEMO --project-name "$CF_PAGES_PROJECT"
 
+      - name: Disable production business demos on all deployment URLs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: printf '%s\n' 'false' | node node_modules/wrangler/bin/wrangler.js pages secret put ENABLE_PUBLIC_BUSINESS_DEMO --project-name "$CF_PAGES_PROJECT"
+
       - name: Build deploy artifact
+        env:
+          VITE_ENABLE_PUBLIC_BUSINESS_DEMO: 'false'
         run: npm run build
 
       - name: Capture production D1 recovery bookmark

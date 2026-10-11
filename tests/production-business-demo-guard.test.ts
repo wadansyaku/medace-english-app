@@ -68,6 +68,16 @@ describe('production business demo guard before D1 work', () => {
     });
   }
 
+  it.each(businessCases)('production deployment URL rejects $label with the production runtime flag before any data operation', async ({ body }) => {
+    const { promise } = run('21e7a505.medace-english-app.pages.dev', body, 'false');
+    await expect(promise).rejects.toMatchObject({ name: 'HttpError', status: 403, message: '学校・教室向けデモは preview / 個別案内のみです。' });
+    expect(mocks.ensureDemoUser).not.toHaveBeenCalled();
+    expect(mocks.createSession).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    expect(batch).not.toHaveBeenCalled();
+    expect(exec).not.toHaveBeenCalled();
+  });
+
   it('still permits the ordinary student demo without an organizationRole on production', async () => {
     const { promise, env } = run('medace-english-app.pages.dev', { role: UserRole.STUDENT });
     const result = await promise;
