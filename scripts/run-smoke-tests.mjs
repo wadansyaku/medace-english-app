@@ -1,6 +1,6 @@
 import { access, mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 import { getAvailablePort } from './_shared/ports.mjs';
 import {
@@ -393,12 +393,22 @@ for (const suite of suites) {
   const baseUrl = isExternalTarget ? externalBaseUrl : `http://127.0.0.1:${port}`;
   const outputDir = path.join(cwd, 'test-results', `smoke-${suite.name}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
+  const localSourceSha = !isExternalTarget ? execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim() : '';
+  if (!isExternalTarget && ((baseEnv.DEPLOYMENT_SHA && baseEnv.DEPLOYMENT_SHA !== localSourceSha)
+    || (baseEnv.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA && baseEnv.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA !== localSourceSha))) {
+    throw new Error('The local smoke runtime requires the exact checked-out source SHA.');
+  }
 
   console.log(`\n[smoke:${suite.name}] port=${port} output=${outputDir}`);
 
   const suiteEnv = {
     ...baseEnv,
     ...(suite.env || {}),
+    ...(!isExternalTarget ? {
+      DEPLOYMENT_SHA: localSourceSha,
+      PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: localSourceSha,
+      PLAYWRIGHT_LOCAL_D1_STATE_FILE: path.join(outputDir, 'local-d1-state.json'),
+    } : { PLAYWRIGHT_LOCAL_D1_STATE_FILE: '' }),
   };
   if (isFilteredRun) {
     try {
