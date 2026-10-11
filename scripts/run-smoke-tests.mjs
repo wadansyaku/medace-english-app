@@ -1,4 +1,4 @@
-import { access, mkdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
@@ -407,7 +407,9 @@ for (const suite of suites) {
     ...(!isExternalTarget ? {
       DEPLOYMENT_SHA: localSourceSha,
       PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: localSourceSha,
-      PLAYWRIGHT_LOCAL_D1_STATE_FILE: path.join(outputDir, 'local-d1-state.json'),
+      // Playwright clears its output directory before running. Keep the private
+      // runner bridge next to that directory, then remove this exact file.
+      PLAYWRIGHT_LOCAL_D1_STATE_FILE: `${outputDir}-local-d1-state.json`,
     } : { PLAYWRIGHT_LOCAL_D1_STATE_FILE: '' }),
   };
   if (isFilteredRun) {
@@ -494,6 +496,7 @@ for (const suite of suites) {
   } finally {
     serverMonitor?.dispose();
     await stopChildProcess(server);
+    if (!isExternalTarget && suiteEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE) await rm(suiteEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE, { force: true });
   }
 }
 
