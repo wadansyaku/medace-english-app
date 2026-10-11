@@ -30,10 +30,10 @@ export type LearningService =
 
 export const learningService: LearningService = {
   addXP: (user, amount) => sessionClient.addXP(user, amount),
-  getBookSession: (uid, bookId, limit, taskIntent) => learningClient.getBookSession(uid, bookId, limit, taskIntent),
+  getBookSession: (uid, bookId, limit, taskIntent, clientSessionId) => learningClient.getBookSession(uid, bookId, limit, taskIntent, clientSessionId),
   getBookStudyOverview: (uid, bookId, wordRange) => learningClient.getBookStudyOverview(uid, bookId, wordRange),
   getBooks: () => catalogClient.getBooks(),
-  getDailySessionWords: (uid, limit, taskIntent) => learningClient.getDailySessionWords(uid, limit, taskIntent),
+  getDailySessionWords: (uid, limit, taskIntent, clientSessionId) => learningClient.getDailySessionWords(uid, limit, taskIntent, clientSessionId),
   getDashboardSnapshot: (uid) => dashboardClient.getDashboardSnapshot(uid),
   getStudiedWordIdsByBook: (uid, bookId) => learningClient.getStudiedWordIdsByBook(uid, bookId),
   listAiGeneratedProblemReviewQueue: (payload) => learningClient.listAiGeneratedProblemReviewQueue(payload),

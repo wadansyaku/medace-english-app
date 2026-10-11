@@ -157,7 +157,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
     >
       <div>
         <div className="text-sm font-bold text-slate-900">くわしい学習記録</div>
-        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{isGameMode ? '週間記録・定着状況・ランキングを確認' : '週間記録と単語の定着状況を確認'}</div>
+        <div className={`mt-1 text-slate-500 ${isCompact ? 'text-[13px]' : 'text-sm'}`}>{isGameMode ? '週間記録・復習段階・ランキングを確認' : '週間記録と単語の復習段階を確認'}</div>
       </div>
       {open ? <ChevronUp className="h-5 w-5 text-slate-500" /> : <ChevronDown className="h-5 w-5 text-slate-500" />}
     </button>
@@ -171,6 +171,7 @@ const DashboardProgressSection: React.FC<DashboardProgressSectionProps> = ({
             <h3 className="mb-6 flex items-center gap-2 text-lg font-bold text-slate-800">
               <Activity className="h-5 w-5 text-medace-500" /> 学習ステータス
             </h3>
+            <p className="mb-4 text-xs leading-relaxed text-slate-600">保存した自己評価に応じた復習段階です。長期復習期でも、記憶の定着を保証する判定ではありません。</p>
             {masteryDist ? (
               <div className="flex flex-col items-center justify-around gap-6 sm:flex-row">
                 <div className="relative h-40 w-40 flex-shrink-0">

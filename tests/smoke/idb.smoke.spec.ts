@@ -130,6 +130,13 @@ test('native idb preserves concurrent answers and rolls back an interrupted rece
     const db = await support.initStorageDb();
     const uid = 'native-idb-learner';
     const word = { id: 'native-word', bookId: 'native-book', word: 'learn', definition: '学ぶ', number: 1, searchKey: 'learn' };
+    const seed = db.transaction([support.STORES.SESSION, support.STORES.BOOKS, support.STORES.WORDS], 'readwrite');
+    const seeded = support.waitForTransaction(seed);
+    seed.objectStore(support.STORES.SESSION).put({ key: 'current', user: { uid, role: 'STUDENT' } });
+    seed.objectStore(support.STORES.BOOKS).put({ id: word.bookId, title: 'Synthetic owned book', wordCount: 1,
+      description: JSON.stringify({ createdBy: uid }) });
+    seed.objectStore(support.STORES.WORDS).put(word);
+    await seeded;
     const storage: import('../../services/storage/learning-history').LearningHistoryContext = {
       getDb: async () => db,
       getStore: (name, mode) => support.getObjectStore(Promise.resolve(db), name, mode),

@@ -1,4 +1,5 @@
 import { handlePersonalCatalogImport } from './personal-catalog-import';
+import { allocateGraduatedReviewSession, getVisibleLongTermReviewAvailableCount, replayGraduatedReviewSession } from './graduated-review-assignments';
 import type {
   CatalogImportRequest,
   CatalogImportResult,
@@ -592,17 +593,18 @@ export const handlePrepareBookExamples = async (
   throw new HttpError(410, '有料AIによる例文準備は終了しました。校正済みの例文を承認待ちデータとして取り込んでください。');
 };
 
-export const handleGetDailySessionWords = async (
+const getOrdinaryDailySessionWords = async (
   env: AppEnv,
   user: DbUserRow,
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
+  resolvedPreferredBookIds?: string[],
 ): Promise<WordData[]> => {
   validateStudyScope(() => assertNoDailyStudyWordRange(taskIntent));
   const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
-  const requestedBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const requestedBookIds = resolvedPreferredBookIds ?? await resolvePreferredDailyBookIds(env, user.id, taskIntent);
   const preferredBookIds = requestedBookIds.length === 0 && allVisibleBookRows.some(row => row.id === NARU_BOOK_ID)
     ? [NARU_BOOK_ID]
     : requestedBookIds;
@@ -664,7 +666,7 @@ export const handleGetDailySessionWords = async (
     env,
     `SELECT w.*
      FROM learning_histories h
-     JOIN words w ON w.id = h.word_id
+     JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
      WHERE h.user_id = ? AND h.status != 'graduated' AND h.next_review_date <= ?
        AND ${getMasterySourceSql('h')}
        AND w.book_id IN (${buildInClause(visibleBookIds.length)})
@@ -686,7 +688,7 @@ export const handleGetDailySessionWords = async (
      FROM words w
      WHERE NOT EXISTS (
        SELECT 1 FROM learning_histories h
-       WHERE h.user_id = ? AND h.word_id = w.id
+       WHERE h.user_id = ? AND h.word_id = w.id AND h.book_id = w.book_id
          AND ${getMasterySourceSql('h')}
      )
        AND w.book_id IN (${buildInClause(visibleBookIds.length)})
@@ -724,7 +726,7 @@ export const handleGetDailySessionWords = async (
   return [...dueRows.map(toWordData), ...rankedNewWords.slice(0, limit - dueRows.length)];
 };
 
-export const handleGetBookSession = async (
+const getOrdinaryBookSession = async (
   env: AppEnv,
   user: DbUserRow,
   bookId: string,
@@ -739,7 +741,8 @@ export const handleGetBookSession = async (
   await assertBookLearningAccess(env, user, bookId);
   const selectionPolicy = taskIntent?.selectionPolicy || 'BOOK_DEFAULT';
   const historyCondition = range !== undefined || selectionPolicy === 'BOOK_DUE_ONLY'
-    ? getMasteryProgressSql('h') : getMasterySourceSql('h');
+    ? `(${getMasteryProgressSql('h')} OR (${getMasterySourceSql('h')} AND h.status = 'graduated'))`
+    : getMasterySourceSql('h');
 
   if (selectionPolicy === 'BOOK_NEW_ONLY') {
     const newRows = await readAll<DbWordRow>(
@@ -848,6 +851,52 @@ export const handleGetBookSession = async (
   return result.map(toWordData);
 };
 
+export const handleGetDailySessionWords = async (
+  env: AppEnv, user: DbUserRow, limitInput: unknown, taskIntent?: LearningTaskIntent, clientSessionId?: string,
+): Promise<WordData[]> => {
+  validateStudyScope(() => assertNoDailyStudyWordRange(taskIntent));
+  const limit = normalizeStudySessionLimit(limitInput);
+  const replay = await replayGraduatedReviewSession(env, user, { action: 'daily', limit, taskIntent, clientSessionId });
+  if (replay !== undefined) return replay;
+  if (!clientSessionId || taskIntent?.mode === 'quiz' || taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY') {
+    return getOrdinaryDailySessionWords(env, user, limit, taskIntent);
+  }
+  const allBooks = (await readVisibleBookRows(env, user)).filter(row => isBookSelectableForToday(toBookMetadata(row)));
+  const requested = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const preferred = requested.length === 0 && allBooks.some(row => row.id === NARU_BOOK_ID) ? [NARU_BOOK_ID] : requested;
+  const preferredBooks = filterBookRowsByPreferredIds(allBooks, preferred);
+  if (requested.length > 0 && preferredBooks.length === 0) {
+    throw new HttpError(403, 'この学習で指定した教材を現在利用できません。教材を選び直してください。');
+  }
+  const scopedBookIds = (requested.length > 0
+    ? preferredBooks
+    : preferred.length > 0 && preferredBooks.length === 0 ? allBooks : preferredBooks).map(row => row.id);
+  const normalWords = await getOrdinaryDailySessionWords(env, user, limit, taskIntent, requested);
+  const scopedNormalWords = normalWords.filter(word => scopedBookIds.includes(word.bookId));
+  const dueCount = scopedBookIds.length === 0 ? null : await readFirst<{ count: number }>(env,
+    `SELECT COUNT(*) AS count FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
+     WHERE h.user_id = ? AND h.status != 'graduated' AND h.next_review_date <= ? AND ${getMasterySourceSql('h')}
+       AND w.book_id IN (${buildInClause(scopedBookIds.length)})`, user.id, Date.now(), ...scopedBookIds);
+  return allocateGraduatedReviewSession(env, user, { action: 'daily', limit, taskIntent, clientSessionId,
+    normalWords: scopedNormalWords, ordinaryDueCount: Number(dueCount?.count || 0), scopedBookIds });
+};
+
+export const handleGetBookSession = async (
+  env: AppEnv, user: DbUserRow, bookId: string, limitInput: unknown, taskIntent?: LearningTaskIntent, clientSessionId?: string,
+): Promise<WordData[]> => {
+  const range = validateStudyScope(() => getBookTaskWordRange(taskIntent, bookId));
+  const limit = normalizeStudySessionLimit(limitInput);
+  const normalWords = await getOrdinaryBookSession(env, user, bookId, limit, taskIntent);
+  if (!clientSessionId || taskIntent?.mode === 'quiz' || taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY') return normalWords;
+  const dueCount = await readFirst<{ count: number }>(env,
+    `SELECT COUNT(*) AS count FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
+     WHERE h.user_id = ? AND w.book_id = ? AND h.status != 'graduated' AND h.next_review_date <= ?
+       AND ${range || taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' ? getMasteryProgressSql('h') : getMasterySourceSql('h')}
+       ${range ? 'AND w.word_number BETWEEN ? AND ?' : ''}`, user.id, bookId, Date.now(), ...(range ? [range.start, range.end] : []));
+  return allocateGraduatedReviewSession(env, user, { action: 'book', bookId, limit, taskIntent, clientSessionId,
+    normalWords, ordinaryDueCount: Number(dueCount?.count || 0), scopedBookIds: [bookId], wordRange: range });
+};
+
 export const handleGetBookStudyOverview = async (
   env: AppEnv,
   user: DbUserRow,
@@ -862,11 +911,12 @@ export const handleGetBookStudyOverview = async (
        COALESCE(SUM(CASE WHEN h.word_id IS NOT NULL AND h.status != 'graduated' AND h.next_review_date <= ? THEN 1 ELSE 0 END), 0) AS due_count
      FROM words w
      LEFT JOIN learning_histories h ON h.word_id = w.id AND h.book_id = w.book_id
-       AND h.user_id = ? AND ${getMasteryProgressSql('h')}
+       AND h.user_id = ? AND (${getMasteryProgressSql('h')} OR (${getMasterySourceSql('h')} AND h.status = 'graduated'))
      WHERE w.book_id = ? ${range ? 'AND w.word_number BETWEEN ? AND ?' : ''}`,
     Date.now(), user.id, bookId, ...(range ? [range.start, range.end] : []));
   if (!row) throw new Error('教材の学習状況を取得できませんでした。');
   const totalCount = Number(row.total_count);
   const studiedCount = Number(row.studied_count);
-  return { bookId, totalCount, studiedCount, newCount: totalCount - studiedCount, dueCount: Number(row.due_count) };
+  const longTermReviewAvailableCount = await getVisibleLongTermReviewAvailableCount(env, user, bookId, range);
+  return { bookId, totalCount, studiedCount, newCount: totalCount - studiedCount, dueCount: Number(row.due_count), longTermReviewAvailableCount };
 };

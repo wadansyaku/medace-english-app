@@ -324,11 +324,11 @@ export interface StorageActionMap {
     response: PrepareBookExamplesResult;
   };
   getDailySessionWords: {
-    payload: { limit: number; taskIntent?: LearningTaskIntent };
+    payload: { limit: number; taskIntent?: LearningTaskIntent; clientSessionId?: string };
     response: WordData[];
   };
   getBookSession: {
-    payload: { bookId: string; limit: number; taskIntent?: LearningTaskIntent };
+    payload: { bookId: string; limit: number; taskIntent?: LearningTaskIntent; clientSessionId?: string };
     response: WordData[];
   };
   getBookStudyOverview: {

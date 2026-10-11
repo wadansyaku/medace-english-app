@@ -117,7 +117,7 @@ describe('Naru setup acquisition and controlled choices', () => {
   it('keeps due zero separate from new words and starts at most ten from the chosen chapter', async () => {
     props.kind = 'due'; api.overview.mockResolvedValue(overview({ dueCount: 0, newCount: 17 }));
     let tree = await settle();
-    expect(renderToStaticMarkup(tree)).toContain('この章で期限が来た復習はありません');
+    expect(renderToStaticMarkup(tree)).toContain('この章で今、新しく始められる復習はありません');
     expect(button(tree, 'naru-study-start').disabled).toBe(true);
     button(tree, 'naru-study-start').onClick!(); expect(props.onSelect).not.toHaveBeenCalled();
     button(tree, 'naru-study-kind-new').onClick!();
@@ -130,6 +130,49 @@ describe('Naru setup acquisition and controlled choices', () => {
     expect(props.onSelect).toHaveBeenLastCalledWith(createNaruChapterTask(props.chapter, 'new', true));
     button(tree, 'naru-study-chapter-all').onClick!();
     expect(props.onSelect).toHaveBeenLastCalledWith(expect.objectContaining({ wordRange: { start: 1, end: 1531 }, autoStart: false }));
+  });
+
+  it('starts a graduate-only chosen chapter with at most two available long-term words and leaves new-only unchanged', async () => {
+    props.kind = 'due';
+    api.overview.mockResolvedValue(overview({ dueCount: 0, newCount: 0, longTermReviewAvailableCount: 5 }));
+    let tree = await settle();
+    let markup = renderToStaticMarkup(tree);
+    expect(markup).toContain('今回最大2語');
+    expect(markup).toContain('復習を最大2語確認する');
+    expect(markup).not.toContain('naru-study-empty');
+    expect(markup).toContain('記憶の定着を保証する判定ではありません');
+    expect(button(tree, 'naru-study-start').disabled).toBe(false);
+    button(tree, 'naru-study-start').onClick!();
+    expect(props.onSelect).toHaveBeenLastCalledWith(createNaruChapterTask(props.chapter, 'due', true));
+    props.kind = 'new'; tree = render(); markup = renderToStaticMarkup(tree);
+    expect(button(tree, 'naru-study-start').disabled).toBe(true);
+    expect(markup).toContain('この章には新しい単語がありません');
+    expect(markup).not.toContain('naru-study-long-term-available');
+  });
+
+  it('does not let the previous chapter’s long-term count enable a newly selected empty chapter', async () => {
+    props.kind = 'due';
+    api.overview.mockResolvedValueOnce(overview({ dueCount: 0, longTermReviewAvailableCount: 5 }))
+      .mockResolvedValueOnce(overview({ dueCount: 0, longTermReviewAvailableCount: 0 }));
+    let tree = await settle(); expect(button(tree, 'naru-study-start').disabled).toBe(false);
+    props.chapter = NARU_RANGE_PRESETS[1]; tree = render();
+    expect(button(tree, 'naru-study-start').disabled).toBe(true);
+    expect(renderToStaticMarkup(tree)).not.toContain('naru-study-long-term-available');
+    tree = await settle();
+    expect(button(tree, 'naru-study-start').disabled).toBe(true);
+    expect(renderToStaticMarkup(tree)).toContain('この章で今、新しく始められる復習はありません');
+    expect(renderToStaticMarkup(tree)).toContain('長期復習には一日の少量枠があります');
+    expect(renderToStaticMarkup(tree)).not.toContain('この章で期限が来た復習はありません');
+  });
+
+  it('keeps failed graduate-only refresh unknown instead of reporting completion or zero', async () => {
+    props.kind = 'due';
+    api.overview.mockRejectedValue(new Error('synthetic allocation read failed'));
+    const tree = await settle(); const markup = renderToStaticMarkup(tree);
+    expect(button(tree, 'naru-study-start').disabled).toBe(true);
+    expect(markup).toContain('naru-study-overview-error');
+    expect(markup).not.toContain('naru-study-empty');
+    expect(markup).not.toContain('naru-study-count-');
   });
 
   it.each(['success', 'failure'] as const)('ignores the previous chapter’s late %s after selection changes', async outcome => {
@@ -179,6 +222,24 @@ describe('Naru setup acquisition and controlled choices', () => {
 describe('StudyMode chapter setup boundary', () => {
   const outerProps = (taskIntent?: LearningTaskIntent): React.ComponentProps<typeof StudyMode> => ({ user,
     bookId: NARU_BOOK_ID, taskIntent, onBack: vi.fn(), onSessionComplete: vi.fn(), onStartTask: vi.fn() });
+  it.each(['BOOK_DUE_ONLY', 'BOOK_DEFAULT', 'BOOK_NEW_ONLY'] as const)('describes an empty %s start without claiming all due graduates are gone or answers saved', policy => {
+    api.controller.mockReturnValue({ loading: false, queue: [], loadError: null });
+    const task = { ...createNaruChapterTask(NARU_RANGE_PRESETS[2], 'due', true), bookId: 'synthetic-book', selectionPolicy: policy };
+    const session = StudyMode({ ...outerProps(task), bookId: 'synthetic-book' });
+    if (!React.isValidElement<React.ComponentProps<typeof StudyMode>>(session)) throw new Error('Missing session');
+    const rendered = (session.type as (input: React.ComponentProps<typeof StudyMode>) => React.ReactElement)(session.props);
+    const markup = renderToStaticMarkup(rendered);
+    if (policy === 'BOOK_NEW_ONLY') {
+      expect(markup).toContain('学習対象の単語はありません');
+      expect(markup).not.toContain('study-empty-long-term-note');
+    } else {
+      expect(markup).toContain('今、新しく始められる');
+      expect(markup).toContain('長期復習には一日の少量枠があります');
+      expect(markup).not.toContain('期限が来た復習はありません');
+    }
+    expect(markup).not.toContain('保存済み');
+  });
+
   it('uses setup for the initial route and blocks an unrecognized explicit auto-start range', () => {
     const initial = StudyMode(outerProps());
     expect(React.isValidElement(initial) && initial.type).toBe(NaruStudySetup);

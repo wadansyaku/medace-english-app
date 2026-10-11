@@ -46,6 +46,7 @@ export interface DashboardReadModelContext {
   getBooks: () => Promise<BookMetadata[]>;
   getBookProgress: (uid: string, bookId: string) => Promise<BookProgress>;
   getDueCount: (uid: string) => Promise<number>;
+  getLongTermReviewAvailableCount?: (uid: string) => Promise<number>;
   getLearningPlan: (uid: string) => Promise<LearningPlan | null>;
   getLearningPreference: (uid: string) => Promise<LearningPreference | null>;
   getAllStudentsProgress: () => Promise<StudentSummary[]>;
@@ -209,6 +210,7 @@ export const getDashboardSnapshot = async (
 
   const [
     dueCount,
+    longTermReviewAvailableCount,
     learningPlan,
     learningPreference,
     weaknessProfile,
@@ -219,6 +221,7 @@ export const getDashboardSnapshot = async (
     coachNotifications,
   ] = await Promise.all([
     context.getDueCount(uid),
+    context.getLongTermReviewAvailableCount?.(uid),
     context.getLearningPlan(uid),
     context.getLearningPreference(uid),
     getWeaknessProfile(context, uid),
@@ -239,6 +242,7 @@ export const getDashboardSnapshot = async (
 
   return {
     dueCount,
+    ...(longTermReviewAvailableCount === undefined ? {} : { longTermReviewAvailableCount }),
     officialBooks: accessibleOfficial,
     myBooks,
     progressMap,

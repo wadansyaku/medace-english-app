@@ -323,6 +323,7 @@ const cloudflareFiles = [
   'tests/smoke/writing.smoke.spec.ts',
   'tests/smoke/mobile.smoke.spec.ts',
   'tests/smoke/study-reliability.smoke.spec.ts',
+  'tests/smoke/graduated-review-ui.smoke.spec.ts',
   'tests/smoke/quiz-receipts.smoke.spec.ts',
   'tests/smoke/quiz-controller-receipts.smoke.spec.ts',
 ];
@@ -347,7 +348,7 @@ const suites = suiteMode === 'sentinel'
           ? []
           : [{
             name: 'idb',
-            files: ['tests/smoke/idb.smoke.spec.ts', 'tests/smoke/quiz-receipts-idb.smoke.spec.ts', 'tests/smoke/personal-wordbook-idb.smoke.spec.ts'],
+            files: ['tests/smoke/idb.smoke.spec.ts', 'tests/smoke/quiz-receipts-idb.smoke.spec.ts', 'tests/smoke/personal-wordbook-idb.smoke.spec.ts', 'tests/smoke/graduated-review-idb.smoke.spec.ts'],
             env: {
               VITE_STORAGE_MODE: 'idb',
             },

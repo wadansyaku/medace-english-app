@@ -127,7 +127,7 @@ export const STATUS_LABELS: Record<string, string> = {
   new: '未学習',
   learning: '習得中', // "学習中" よりプロセス感がある表現へ
   review: '復習期',
-  graduated: '定着済' // "習得済" より完了感が強い表現へ
+  graduated: '長期復習期'
 };
 
 export enum EnglishLevel {
@@ -478,6 +478,8 @@ export interface WordData {
   number: number;
   word: string;
   definition: string;
+  /** Session-only presentation flag; never grants access or changes SRS. */
+  longTermReview?: boolean;
   partOfSpeech?: WordPartOfSpeech;
   inflections?: string;
   pronunciation?: string;
@@ -549,6 +551,8 @@ export interface BookStudyOverview {
   studiedCount: number;
   newCount: number;
   dueCount: number;
+  /** Due long-term words within this range and the remaining daily allocation cap. */
+  longTermReviewAvailableCount?: number;
 }
 
 export interface CsvRow {
@@ -1211,6 +1215,8 @@ export interface ProductAnnouncementFeed {
 
 export interface DashboardSnapshot {
   dueCount: number;
+  /** Separate optional review opportunity, excluded from the ordinary daily goal. */
+  longTermReviewAvailableCount?: number;
   officialBooks: BookMetadata[];
   myBooks: BookMetadata[];
   progressMap: Record<string, BookProgress>;

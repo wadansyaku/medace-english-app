@@ -34,6 +34,9 @@ const api = vi.hoisted(() => ({ getBookSession: vi.fn(), getBooks: vi.fn(), save
 vi.mock('../services/learning', () => ({ learningService: api }));
 vi.mock('../services/productEvents', () => ({ recordClientProductEvent: api.recordClientProductEvent }));
 vi.mock('../hooks/useIsMobileViewport', () => ({ default: () => false }));
+// History-entry persistence is verified separately; this harness exercises
+// accepted-card timing, save retries and the rendered long-term label.
+vi.mock('../utils/studySessionStart', () => ({ getStudySessionStartId: () => 'synthetic-study-start' }));
 // Audio has its own real-browser acceptance; this controller harness has no DOM.
 vi.mock('../hooks/useWordPronunciation', () => ({ useWordPronunciation: () => ({
   muted: false, status: 'idle', message: null, speak: vi.fn(), stop: vi.fn(), toggleMuted: vi.fn(),
@@ -82,6 +85,20 @@ afterEach(() => {
 });
 
 describe('accepted study rating feedback', () => {
+  it('labels an automatically allocated long-term card without calling it objectively retained and clears the label on the next card', async () => {
+    api.getBookSession.mockResolvedValue([{ ...words[0], longTermReview: true }, words[1]]);
+    await load();
+    expect(renderToStaticMarkup(find(view(), 'study-long-term-review-badge')!)).toContain('長期復習');
+    expect(renderToStaticMarkup(find(view(), 'study-long-term-review-note')!)).toContain('保存した自己評価');
+    expect(renderToStaticMarkup(find(view(), 'study-long-term-review-note')!)).toContain('記憶の定着を保証する判定ではありません');
+    const pending = controller().handleRating(3);
+    await settle(); await vi.advanceTimersByTimeAsync(400); await pending;
+    await vi.advanceTimersByTimeAsync(1);
+    expect(controller().currentIndex).toBe(1);
+    expect(find(view(), 'study-long-term-review-badge')).toBeUndefined();
+    expect(find(view(), 'study-long-term-review-note')).toBeUndefined();
+  });
+
   it('keeps translation provenance on the meaning face and clears it when advancing to an original word', async () => {
     api.getBookSession.mockResolvedValue([{ ...words[0], aichiExamAppeared: true, definitionSupplemented: true }, words[1]]);
     await load();

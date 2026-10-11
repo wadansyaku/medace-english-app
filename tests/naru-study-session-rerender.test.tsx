@@ -43,6 +43,8 @@ const api = vi.hoisted(() => ({ getBookSession: vi.fn(), getBooks: vi.fn(), save
 vi.mock('../services/learning', () => ({ learningService: api }));
 vi.mock('../services/productEvents', () => ({ recordClientProductEvent: api.event }));
 vi.mock('../hooks/useIsMobileViewport', () => ({ default: () => false }));
+// Native navigation acceptance covers the browser history identity separately.
+vi.mock('../utils/studySessionStart', () => ({ getStudySessionStartId: () => 'synthetic-rerender-start' }));
 // Audio has its own real-browser acceptance; this controller harness has no DOM.
 vi.mock('../hooks/useWordPronunciation', () => ({ useWordPronunciation: () => ({
   muted: false, status: 'idle', message: null, speak: vi.fn(), stop: vi.fn(), toggleMuted: vi.fn(),

@@ -83,6 +83,14 @@ test.beforeEach(async ({ context, page }) => {
     try { modules = await import(url); } finally { URL.revokeObjectURL(url); }
     const { support, learning } = modules;
     const fixture = { support, learning, db: await support.initStorageDb() } as QuizIdbFixture;
+    const seed = fixture.db.transaction([support.STORES.SESSION, support.STORES.BOOKS, support.STORES.WORDS], 'readwrite');
+    const seeded = support.waitForTransaction(seed);
+    seed.objectStore(support.STORES.SESSION).put({ key: 'current', user: { uid: 'quiz-native-learner', role: 'STUDENT' } });
+    seed.objectStore(support.STORES.BOOKS).put({ id: 'quiz-book', title: 'Synthetic owned book', wordCount: 2,
+      description: JSON.stringify({ createdBy: 'quiz-native-learner' }) });
+    seed.objectStore(support.STORES.WORDS).put({ id: 'quiz-word', bookId: 'quiz-book', word: 'learn', definition: '学ぶ', number: 1 });
+    seed.objectStore(support.STORES.WORDS).put({ id: 'srs-word', bookId: 'quiz-book', word: 'review', definition: '復習する', number: 2 });
+    await seeded;
     fixture.context = {
       getDb: async () => fixture.db,
       getStore: (name, mode) => support.getObjectStore(Promise.resolve(fixture.db), name, mode),

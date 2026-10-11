@@ -19,6 +19,7 @@ import {
   ENGLISH_PRACTICE_LANE_IDS,
   type EnglishPracticeRouteLaneId,
 } from '../utils/englishPracticeProgress';
+import { isNaruChapterStudyTask, resolveNaruStudyChapter } from '../shared/naruStudy';
 
 export type AppRoute = 'login' | 'guestLearning' | 'guestTrial' | 'resetPassword' | 'dashboard' | 'study' | 'quiz' | 'englishPractice' | 'instructor' | 'admin' | 'publicInfo' | 'publicRole';
 export type HomeAppRoute = Extract<AppRoute, 'dashboard' | 'instructor' | 'admin'>;
@@ -387,9 +388,18 @@ export const useAppNavigation = () => {
   );
   const pendingHistoryModeRef = useRef<NavigationHistoryMode>('replace');
   const hasBoundHistoryRef = useRef(false);
+  const explicitStudyStartRef = useRef(false);
 
   const dispatchNavigation = useCallback((action: AppNavigationAction) => {
     pendingHistoryModeRef.current = action.historyMode ?? getDefaultHistoryMode(action);
+    explicitStudyStartRef.current = false;
+    if (action.type === 'open-task' && action.task.mode === 'study') {
+      const task = action.task;
+      const isChapterStudy = isNaruChapterStudyTask(getTaskRouteBookId(task), task);
+      const startsChapter = task.autoStart && resolveNaruStudyChapter(task.wordRange)
+        && (task.selectionPolicy === 'BOOK_NEW_ONLY' || task.selectionPolicy === 'BOOK_DUE_ONLY');
+      explicitStudyStartRef.current = !isChapterStudy || Boolean(startsChapter);
+    }
     baseDispatchNavigation(action);
   }, []);
 
@@ -399,16 +409,18 @@ export const useAppNavigation = () => {
     const nextPath = buildNavigationPath(navigationState);
     const currentPath = `${normalizePathname(window.location.pathname)}${window.location.search}`;
     const historyMode = hasBoundHistoryRef.current ? pendingHistoryModeRef.current : 'replace';
+    const explicitStudyStart = explicitStudyStartRef.current;
 
     hasBoundHistoryRef.current = true;
     pendingHistoryModeRef.current = 'none';
+    explicitStudyStartRef.current = false;
 
     if (historyMode === 'none') return;
     if (historyMode === 'replace') {
-      window.history.replaceState(null, '', nextPath);
+      window.history.replaceState(window.history.state, '', nextPath);
       return;
     }
-    if (currentPath !== nextPath) {
+    if (currentPath !== nextPath || explicitStudyStart) {
       window.history.pushState(null, '', nextPath);
     }
   }, [navigationState]);

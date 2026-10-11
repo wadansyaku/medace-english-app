@@ -52,6 +52,7 @@ import { handleGetAllStudentsProgress } from './organization-student-read-model'
 import { handleGetActivityLogs, handleGetLearningPlan, handleGetLearningPreference } from './storage-learning-actions';
 import { readMissionAssignmentsByStudent } from './storage-mission-actions';
 import { readWeaknessProfile } from './weakness-actions';
+import { getVisibleLongTermReviewAvailableCount } from './graduated-review-assignments';
 import type { AppEnv, DbUserRow } from './types';
 import { HttpError } from './http';
 import {
@@ -1002,6 +1003,7 @@ export const handleGetPublicMotivationSnapshot = async (env: AppEnv): Promise<Pu
 interface DashboardSnapshotReadParts {
   progressResults: BookProgress[];
   dueCount: DashboardSnapshot['dueCount'];
+  longTermReviewAvailableCount: number;
   learningPlan: DashboardSnapshot['learningPlan'];
   learningPreference: DashboardSnapshot['learningPreference'];
   weaknessProfile: DashboardSnapshot['weaknessProfile'];
@@ -1032,6 +1034,7 @@ const readDashboardSnapshotParts = async (
   const [
     progressResults,
     dueCount,
+    longTermReviewAvailableCount,
     learningPlan,
     learningPreference,
     weaknessProfile,
@@ -1046,6 +1049,7 @@ const readDashboardSnapshotParts = async (
   ] = await Promise.all([
     Promise.all(progressBooks.map((book) => getBookProgress(env, user.id, book.id))),
     getVisibleDueCount(env, user),
+    getVisibleLongTermReviewAvailableCount(env, user),
     handleGetLearningPlan(env, user),
     handleGetLearningPreference(env, user),
     readWeaknessProfile(env, user.id),
@@ -1062,6 +1066,7 @@ const readDashboardSnapshotParts = async (
   return {
     progressResults,
     dueCount,
+    longTermReviewAvailableCount,
     learningPlan,
     learningPreference,
     weaknessProfile,
@@ -1083,6 +1088,7 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
   const {
     progressResults,
     dueCount,
+    longTermReviewAvailableCount,
     learningPlan,
     learningPreference,
     weaknessProfile,
@@ -1107,6 +1113,7 @@ export const handleGetDashboardSnapshot = async (env: AppEnv, user: DbUserRow): 
 
   return buildDashboardSnapshotModel({
     dueCount,
+    longTermReviewAvailableCount,
     officialBooks,
     myBooks,
     progressResults,

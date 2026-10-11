@@ -398,9 +398,9 @@ const StudyCompanion: React.FC<StudyCompanionProps> = ({
                     <div className="mt-1 text-xs text-slate-500">/ {dailyGoal} 語</div>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">定着ゾーン</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">復習段階</div>
                     <div className="mt-2 text-xl font-black text-slate-950">{stabilizedWords}</div>
-                    <div className="mt-1 text-xs text-slate-500">復習期 + 定着済</div>
+                    <div className="mt-1 text-xs text-slate-500">復習期 + 長期復習期（自己評価）</div>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-4">
                     <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">今週の学習</div>

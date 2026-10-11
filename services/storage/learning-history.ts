@@ -1,6 +1,5 @@
 import {
   LearningTaskIntentType,
-  UserRole,
 } from '../../types';
 import type {
   BookMetadata,
@@ -31,6 +30,7 @@ import {
 import { buildSrsHistory, studyAttemptFingerprint, validateStudyAttempt } from '../../shared/srs';
 import { quizAttemptFingerprint, validateQuizAttempt, type QuizAttemptReceipt } from '../../shared/quizAttempt';
 import { normalizeStudySessionLimit } from '../../shared/studySession';
+import { normalizeStudySessionStartId, studySessionStartFingerprint } from '../../shared/studySessionStart';
 import { NARU_BOOK_ID } from '../../shared/naruBook';
 import { assertNoDailyStudyWordRange, getBookTaskWordRange, isWordInStudyRange, normalizeStudyWordRange } from '../../shared/studyScope';
 import { selectColdStartSessionWords } from '../../shared/coldStartSession';
@@ -66,9 +66,13 @@ import {
   type StoredWeaknessSignalRecord,
 } from './idb-support';
 import { getLocalMissionAssignmentByStudent } from './missions';
-import { normalizeLocalCatalogBook } from './catalog-local';
-import { isBookOwnedByUser } from './mockData';
-import { canAccessOfficialBook } from '../../utils/bookAccess';
+import {
+  allocateLocalGraduatedReviewSession,
+  getLocalStudyAccessibleBooks,
+  localStudySessionStartKey,
+  readLocalGraduatedReviewAvailableCount,
+  type LocalStudySnapshot,
+} from './graduated-review-assignments';
 
 export interface LearningHistoryContext {
   getDb?: () => Promise<IDBDatabase>;
@@ -83,6 +87,7 @@ const resolvePreferredBookIds = async (
   context: LearningHistoryContext,
   uid: string,
   taskIntent?: LearningTaskIntent,
+  propagatePlanError = false,
 ): Promise<string[]> => {
   const taskBookIds = normalizeTaskPreferredBookIds(taskIntent?.preferredBookIds);
   if (taskBookIds.length > 0) return taskBookIds;
@@ -91,7 +96,8 @@ const resolvePreferredBookIds = async (
   try {
     const plan = await context.getLearningPlan(uid);
     return normalizeTaskPreferredBookIds(plan?.selectedBookIds);
-  } catch {
+  } catch (error) {
+    if (propagatePlanError) throw error;
     return [];
   }
 };
@@ -196,7 +202,7 @@ export const buildBookSessionWords = ({
   const strictProgress = range !== undefined || selectionPolicy === 'BOOK_DUE_ONLY';
   const historyMap = new Map<string, LearningHistory>();
   histories.forEach((history) => {
-    if (strictProgress ? isMasteryProgressHistory(history) : isMasteryHistoryRecord(history)) {
+    if (strictProgress ? (isMasteryProgressHistory(history) || (isMasteryHistoryRecord(history) && history.status === 'graduated')) : isMasteryHistoryRecord(history)) {
       historyMap.set(history.wordId, history);
     }
   });
@@ -252,9 +258,42 @@ export const getDailySessionWords = async (
   uid: string,
   limit: number,
   taskIntent?: LearningTaskIntent,
+  clientSessionId?: string,
 ): Promise<WordData[]> => {
   assertNoDailyStudyWordRange(taskIntent);
   limit = normalizeStudySessionLimit(limit);
+  const startId = normalizeStudySessionStartId(clientSessionId);
+  if (startId && taskIntent?.mode !== 'quiz' && taskIntent?.selectionPolicy !== 'BOOK_NEW_ONLY') {
+    if (!context.getDb) throw new Error('学習開始の保存先を利用できません。');
+    // A persisted start retains its initial plan scope. This read only avoids
+    // fetching mutable planning inputs; the transaction below still performs
+    // current authorization, payload, word/book and review-date checks.
+    const startStore = await context.getStore(STORES.SESSION);
+    const previousStart = await requestToPromise(startStore.get(localStudySessionStartKey(uid, startId)));
+    const [requestedBookIds, weaknessProfile] = previousStart ? [[], null] : await Promise.all([
+      resolvePreferredBookIds(context, uid, taskIntent, true), getWeaknessProfile(context, uid),
+    ]);
+    const now = Date.now();
+    let preferredBookIds: string[] = [];
+    return allocateLocalGraduatedReviewSession({
+      getDb: context.getDb, uid, clientSessionId: startId,
+      fingerprint: studySessionStartFingerprint({ action: 'daily', limit, taskIntent }), limit, now,
+      selectionPolicy: taskIntent?.selectionPolicy,
+      // Only saved result IDs are returned on replay, so this does not expand
+      // the original scope or add words from a changed learning plan.
+      resolveReplayScope: (snapshot) => snapshot.words,
+      resolveScope: (snapshot) => {
+        if (previousStart) throw new Error('保存した学習開始を確認できません。もう一度学習を開始してください。');
+        preferredBookIds = requestedBookIds.length === 0 && snapshot.books.some((book) => book.id === NARU_BOOK_ID)
+          ? [NARU_BOOK_ID] : requestedBookIds;
+        if (preferredBookIds.length > 0 && !snapshot.books.some((book) => preferredBookIds.includes(book.id))) {
+          throw new Error('選択した教材を現在利用できません。教材を選び直してください。');
+        }
+        return sortWordsByPreferredBookOrder(filterWordsByPreferredIds(snapshot.words, preferredBookIds), preferredBookIds);
+      },
+      buildNormalWords: (snapshot, scopedWords) => buildLocalDailyNormalWords(snapshot, scopedWords, preferredBookIds, limit, now, taskIntent, weaknessProfile),
+    });
+  }
   const historyStore = await context.getStore(STORES.HISTORY);
   const historyRecords = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
   const userHistories = getUserLearningHistories(historyRecords, uid);
@@ -328,7 +367,7 @@ export const getDailySessionWords = async (
 
   for (const history of dueHistories.slice(0, limit)) {
     const word = await readStoreRecord<WordData>(wordsStore, history.wordId);
-    if (word) sessionWords.push(projectWordHintAssetsForLearner(word));
+    if (word && word.bookId === history.bookId && isInPreferredBookScope(word.bookId)) sessionWords.push(projectWordHintAssetsForLearner(word));
   }
 
   if (sessionWords.length < limit) {
@@ -372,6 +411,41 @@ export const getDailySessionWords = async (
   }
 
   return sessionWords;
+};
+
+const buildLocalDailyNormalWords = (
+  snapshot: LocalStudySnapshot,
+  scopedWords: WordData[],
+  preferredBookIds: string[],
+  limit: number,
+  now: number,
+  taskIntent?: LearningTaskIntent,
+  weaknessProfile?: StudentWeaknessProfile | null,
+): WordData[] => {
+  const wordsById = new Map(scopedWords.map((word) => [word.id, word]));
+  const scopedHistories = snapshot.histories.filter((history) => wordsById.get(history.wordId)?.bookId === history.bookId && isMasteryHistoryRecord(history));
+  const studiedIds = new Set(scopedHistories.map((history) => history.wordId));
+  const due = scopedHistories.filter((history) => isDueMasteryHistory(history, now))
+    .sort((left, right) => left.nextReviewDate - right.nextReviewDate || left.wordId.localeCompare(right.wordId))
+    .map((history) => wordsById.get(history.wordId)!).slice(0, limit);
+  const availableNewWords = scopedWords.filter((word) => !studiedIds.has(word.id));
+  if (!scopedHistories.some((history) => isStudyInteractionSource(history.interactionSource))) {
+    if (preferredBookIds.length > 0) return availableNewWords.slice(0, limit);
+    const selection = selectColdStartSessionWords({ uid: snapshot.user.uid, limit, grade: snapshot.user.grade,
+      level: snapshot.user.englishLevel, books: snapshot.books, words: scopedWords });
+    const selectedIds = new Set(selection.selectedWords.map((word) => word.id));
+    return [...selection.selectedWords, ...availableNewWords.filter((word) => !selectedIds.has(word.id)).slice(0, Math.max(0, limit - selection.selectedWords.length))];
+  }
+  const bookBandsById = Object.fromEntries(snapshot.books.map((book) => [book.id, getBookProgressionIndex(book)]));
+  const targeted = typeof taskIntent?.targetBandIndex === 'number'
+    ? availableNewWords.filter((word) => {
+      const band = bookBandsById[word.bookId];
+      return band === null || band === undefined || band >= taskIntent.targetBandIndex! - 1;
+    }) : availableNewWords;
+  const newWords = taskIntent?.intentType === LearningTaskIntentType.TODAY_FOCUS || preferredBookIds.length > 0
+    ? targeted : rankWeaknessFocusedWords({ uid: snapshot.user.uid, words: targeted, weaknessProfile,
+      grade: snapshot.user.grade, level: snapshot.user.englishLevel, dateKey: formatDateKey(now), bookBandsById });
+  return [...due, ...newWords.slice(0, Math.max(0, limit - due.length))].map((word) => projectWordHintAssetsForLearner(word));
 };
 
 const getInteractionEvents = async (
@@ -461,8 +535,28 @@ export const getBookSession = async (
   bookId: string,
   limit: number,
   taskIntent?: LearningTaskIntent,
+  clientSessionId?: string,
 ): Promise<WordData[]> => {
   const range = getBookTaskWordRange(taskIntent, bookId);
+  const startId = normalizeStudySessionStartId(clientSessionId);
+  if (startId && taskIntent?.mode !== 'quiz' && taskIntent?.selectionPolicy !== 'BOOK_NEW_ONLY') {
+    if (!context.getDb) throw new Error('学習開始の保存先を利用できません。');
+    limit = normalizeStudySessionLimit(limit);
+    const now = Date.now();
+    return allocateLocalGraduatedReviewSession({
+      getDb: context.getDb, uid, clientSessionId: startId,
+      fingerprint: studySessionStartFingerprint({ action: 'book', bookId, limit, taskIntent }), limit, now,
+      selectionPolicy: taskIntent?.selectionPolicy,
+      allowAdminQualityBypass: true,
+      resolveScope: (snapshot) => {
+        if (!snapshot.books.some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
+        return snapshot.words.filter((word) => word.bookId === bookId && isWordInStudyRange(word, range))
+          .sort((left, right) => left.number - right.number || left.id.localeCompare(right.id));
+      },
+      buildNormalWords: (snapshot, words) => buildBookSessionWords({ words, histories: snapshot.histories.filter((history) => history.bookId === bookId),
+        limit, now, selectionPolicy: taskIntent?.selectionPolicy, wordRange: range }),
+    });
+  }
   const strictScope = range !== undefined || taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY';
   if (strictScope) await assertLocalBookStudyAccess(context, uid, bookId);
   const words = strictScope ? await readLocalStudyWords(context, bookId) : await context.getWordsByBook(bookId);
@@ -493,13 +587,7 @@ const assertLocalBookStudyAccess = async (context: LearningHistoryContext, uid: 
   const store = await context.getStore(STORES.BOOKS);
   const rawBook = await requestToPromise(store.get(bookId) as IDBRequest<BookMetadata | undefined>);
   if (!rawBook) throw new Error('この教材を利用できません。');
-  const book = normalizeLocalCatalogBook(rawBook, user.uid);
-  if (user.role !== UserRole.ADMIN && !isBookOwnedByUser(book, uid) && !canAccessOfficialBook(user.subscriptionPlan, book)) {
-    throw new Error('この教材を利用できません。');
-  }
-  if (user.role !== UserRole.ADMIN && !isBookSelectableForToday(book)) {
-    throw new Error('この教材は確認中のため、学習やテストにはまだ使えません。');
-  }
+  if (!getLocalStudyAccessibleBooks([rawBook], user, true).some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
 };
 
 const readLocalStudyWords = async (context: LearningHistoryContext, bookId: string): Promise<WordData[]> => {
@@ -521,7 +609,8 @@ export const getBookStudyOverview = async (
     context.getStore(STORES.HISTORY).then(store => requestToPromise(store.getAll() as IDBRequest<StoredLearningHistoryRecord[]>)),
   ]);
   const histories = new Map(getBookHistories(records, uid, bookId)
-    .filter(isMasteryProgressHistory).map(history => [history.wordId, history]));
+    .filter((history) => isMasteryProgressHistory(history) || (isMasteryHistoryRecord(history) && history.status === 'graduated'))
+    .map(history => [history.wordId, history]));
   const scopedWords = words.filter(word => word.bookId === bookId && isWordInStudyRange(word, range));
   let studiedCount = 0;
   let dueCount = 0;
@@ -532,13 +621,32 @@ export const getBookStudyOverview = async (
     studiedCount += 1;
     if (isDueMasteryHistory(history, now)) dueCount += 1;
   }
-  return { bookId, totalCount: scopedWords.length, studiedCount, newCount: scopedWords.length - studiedCount, dueCount };
+  const longTermReviewAvailableCount = context.getDb
+    ? await getLongTermReviewAvailableCount(context, uid, bookId, range) : undefined;
+  return { bookId, totalCount: scopedWords.length, studiedCount, newCount: scopedWords.length - studiedCount, dueCount,
+    ...(longTermReviewAvailableCount === undefined ? {} : { longTermReviewAvailableCount }) };
+};
+
+export const getLongTermReviewAvailableCount = async (
+  context: LearningHistoryContext, uid: string, bookId?: string, range?: StudyWordRange,
+): Promise<number> => {
+  if (!context.getDb) throw new Error('長期復習の保存先を利用できません。');
+  return readLocalGraduatedReviewAvailableCount(context.getDb, uid, Date.now(), bookId, normalizeStudyWordRange(range));
 };
 
 export const getDueCount = async (context: LearningHistoryContext, uid: string): Promise<number> => {
-  const historyStore = await context.getStore(STORES.HISTORY);
-  const records = await readAllStoreRecords<StoredLearningHistoryRecord>(historyStore);
-  return getDueCountFromHistoryRecords(records, uid, Date.now());
+  const user = await context.getSession();
+  if (!user || user.uid !== uid) throw new Error('学習者のセッションを確認してください。');
+  const [books, words, records] = await Promise.all([
+    context.getBooks(),
+    context.getStore(STORES.WORDS).then((store) => requestToPromise(store.getAll() as IDBRequest<WordData[]>)),
+    context.getStore(STORES.HISTORY).then((store) => requestToPromise(store.getAll() as IDBRequest<StoredLearningHistoryRecord[]>)),
+  ]);
+  const bookIds = new Set(getLocalStudyAccessibleBooks(books, user).map((book) => book.id));
+  const wordsById = new Map(words.filter((word) => bookIds.has(word.bookId)).map((word) => [word.id, word]));
+  const now = Date.now();
+  return records.filter((record) => record.id === buildUserScopedRecordId(uid, record.data.wordId)
+    && wordsById.get(record.data.wordId)?.bookId === record.data.bookId && isDueMasteryHistory(record.data, now)).length;
 };
 
 export const saveSrsHistory = async (
@@ -560,13 +668,13 @@ export const saveSrsHistory = async (
   if (!context.getDb) throw new Error('学習記録の保存先を利用できません。');
   const db = await context.getDb();
   if (!db) throw new Error('学習記録の保存先を利用できません。');
-  const books = await context.getBooks().catch(() => []);
-  const book = books.find((candidate) => candidate.id === word.bookId);
+  let book: BookMetadata | undefined;
   const attemptId = clientAttemptId || crypto.randomUUID();
   const receiptId = `study:${JSON.stringify([uid, attemptId])}`;
   const fingerprint = studyAttemptFingerprint(input);
   const transaction = db.transaction([
     STORES.HISTORY, STORES.INTERACTION_EVENTS, STORES.STUDY_ATTEMPT_RECEIPTS,
+    STORES.SESSION, STORES.BOOKS, STORES.WORDS,
   ], 'readwrite');
   const complete = waitForTransaction(transaction);
   const historyStore = transaction.objectStore(STORES.HISTORY);
@@ -577,6 +685,7 @@ export const saveSrsHistory = async (
       reject(error);
       try { transaction.abort(); } catch { /* The transaction may already have aborted. */ }
     };
+    const queueAuthorizedReceipt = () => {
     const receiptRequest = receiptStore.get(receiptId) as IDBRequest<StoredStudyAttemptReceipt | undefined>;
     receiptRequest.onerror = () => fail(receiptRequest.error || new Error('学習記録の照合に失敗しました。'));
     receiptRequest.onsuccess = () => {
@@ -621,6 +730,31 @@ export const saveSrsHistory = async (
         }
       };
     };
+    };
+    const authorizationReads = [
+      transaction.objectStore(STORES.SESSION).get('current'),
+      transaction.objectStore(STORES.BOOKS).get(word.bookId),
+      transaction.objectStore(STORES.WORDS).get(word.id),
+    ];
+    const authorization: unknown[] = [];
+    let pendingAuthorization = authorizationReads.length;
+    authorizationReads.forEach((request, index) => {
+      request.onerror = () => fail(request.error || new Error('学習記録の利用権限を確認できません。'));
+      request.onsuccess = () => {
+        authorization[index] = request.result;
+        if (--pendingAuthorization !== 0) return;
+        try {
+          const session = authorization[0] as { user?: UserProfile } | undefined;
+          const rawBook = authorization[1] as BookMetadata | undefined;
+          const actualWord = authorization[2] as WordData | undefined;
+          if (session?.user?.uid !== uid) throw new Error('学習者のセッションを確認してください。');
+          if (!rawBook || !actualWord || actualWord.id !== word.id || actualWord.bookId !== word.bookId) throw new Error('この単語を利用できません。');
+          book = getLocalStudyAccessibleBooks([rawBook], session.user, true)[0];
+          if (!book) throw new Error('この教材を利用できません。');
+          queueAuthorizedReceipt();
+        } catch (error) { fail(error); }
+      };
+    });
   });
   await Promise.all([mutationsQueued, complete]);
 

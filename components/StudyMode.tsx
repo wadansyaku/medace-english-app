@@ -240,7 +240,8 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
   if (controller.queue.length === 0) {
     return (
       <div className="p-10 text-center">
-        <p className="mb-2 text-lg font-bold text-slate-700">{taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' ? '期限が来た復習はありません' : '学習対象の単語はありません'}</p>
+        <p className="mb-2 text-lg font-bold text-slate-700">{taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY' ? '学習対象の単語はありません' : taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY' || taskIntent?.selectionPolicy === 'BOOK_REVIEW_ONLY' ? '今、新しく始められる復習はありません' : '今、新しく始められる学習はありません'}</p>
+        {taskIntent?.selectionPolicy !== 'BOOK_NEW_ONLY' && <p data-testid="study-empty-long-term-note" className="mb-4 text-sm leading-relaxed text-slate-600">長期復習には一日の少量枠があります。あとで戻るか、教材や進め方を選び直せます。</p>}
         <button onClick={onBack} className="rounded-lg bg-medace-600 px-6 py-2 font-bold text-slate-950">{backLabel}</button>
       </div>
     );
@@ -445,11 +446,14 @@ const StudySession: React.FC<StudyModeProps> = ({ user, bookId, taskIntent, onBa
           <ArrowLeft className="h-4 w-4" /> <span className="hidden sm:inline">中断</span>
         </button>
         <div className="flex items-center gap-2">
+          {controller.currentWord.longTermReview && <span data-testid="study-long-term-review-badge" className="rounded-full bg-medace-50 px-3 py-1 text-xs font-bold text-medace-800">長期復習</span>}
           <span className="rounded-full bg-medace-50 px-3 py-1 font-mono text-sm text-medace-700">
             {controller.currentIndex + 1} / {controller.queue.length}
           </span>
         </div>
       </div>
+
+      {controller.currentWord.longTermReview && <p data-testid="study-long-term-review-note" className="mb-2 text-xs leading-relaxed text-slate-600">保存した自己評価から長期復習へ移りました。記憶の定着を保証する判定ではありません。</p>}
 
       <div
         ref={controller.shellRef}
