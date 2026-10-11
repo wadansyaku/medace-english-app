@@ -128,7 +128,7 @@ export const searchProductSupportConversation = (input: ProductSupportSearchInpu
     kind: 'clarification', sources, reason: 'ambiguous-topic', clarification: '直前に複数の機能が出ています。どの機能についての続きですか？',
   };
   if (falsePremise(question, topics)) return { kind: 'unknown', sources, reason: 'unsupported-premise' };
-  const clauses = question.split(/[?？。;；\n]+|それと|それから|あと、|(?<!こ)(?<!単語)と(?!意味|いう|いった|の|して|き)|\band\b/).map(value => value.trim()).filter(Boolean);
+  const clauses = question.split(/[?？。;；\n]+|それと|それから|あと、|(?<=(?:方|方法|手順|仕様|上限|単語帳|回答|記録|音声|発音|復習|入力|引継ぎ|引き継ぎ))と(?!いう|いった|の|して|き)|\band\b/).map(value => value.trim()).filter(Boolean);
   const bareFollowUp = (clause: string) => /^(?:(?:それ|その|では|じゃあ)[はの、,\s]*)?(?:いつまで|何日|何語まで|どこ(?:で|から|に)|保存(?:できる|される|する)?|どうやって|上限|xp)(?:ですか|できますか|できる|です|は|\s)*$/.test(clause);
   if (clauses.length > 1 && clauses.some(clause => !topicsIn(clause).length && !bareFollowUp(clause))) return { kind: 'unknown', sources, reason: 'uncovered-question' };
   return { kind: 'grounded', sources, usedHistory };

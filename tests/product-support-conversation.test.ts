@@ -55,6 +55,10 @@ describe('conversation retrieval without generation', () => {
     expect(ask('ゲストの単語帳とMy単語帳の違いは？').kind).toBe('clarification');
   });
 
+  it.each(['「あとで復習」はどう使いますか？', '単語と意味を一語ずつMy単語帳に入れるには？'])('does not split a feature label or a word-and-meaning pair as a compound question: %s', question => {
+    expect(ask(question).kind).toBe('grounded');
+  });
+
   it.each(['My単語帳はどう作る？量子力学をどこで学べる？', 'Naruの記録は残る？量子力学の資料は保存できますか？', 'My単語帳の作り方と量子力学の資料の保存方法は？'])('does not hide an unsupported subject behind a follow-up word: %s', question => {
     expect(ask(question)).toMatchObject({ kind: 'unknown', reason: 'uncovered-question' });
   });
