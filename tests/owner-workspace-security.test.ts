@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { AppEnv, DbUserRow, R2Bucket } from '../functions/_shared/types';
 import { createSession } from '../functions/_shared/auth';
+import { authProfileRoutes } from '../functions/_shared/api-routes/auth-profile';
+import { storageRoutes } from '../functions/_shared/api-routes/storage';
 import { handleCreateWritingUploadUrl, handleWritingAssetUpload } from '../functions/_shared/writing-actions/mutations';
 import {
   projectStaffWorkspace,
@@ -435,5 +437,96 @@ describe('owner-grant upload capabilities use the issuer context and current aut
     await expect(handleWritingAssetUpload(f.env, f.token(upload), f.request())).resolves.toMatchObject({ status: 204 });
     expect(f.asset(upload.assetId)).toEqual(receipt);
     expect(f.uploads).toHaveLength(1);
+  });
+});
+
+const sessionRoute = (env: AppEnv, request: Request) => authProfileRoutes.find((route) => route.matches({ env, request, pathname: 'session' }))!
+  .handle({ env, request, pathname: 'session' });
+const sessionRequest = (headers: Record<string, string>, method = 'GET') => new Request('https://local.example.invalid/api/session', {
+  method, headers: { Origin: 'https://local.example.invalid', ...headers },
+});
+const dataRequest = (headers: Record<string, string>) => new Request('https://local.example.invalid/api/storage', {
+  method: 'POST', headers: { Origin: 'https://local.example.invalid', 'Content-Type': 'application/json', ...headers },
+  body: JSON.stringify({ action: 'getAllStudentsProgress' }),
+});
+const workspaceSessionHeaders = (workspace: 'instructor' | 'group-admin' | 'service-admin', cookie: string) => ({
+  Cookie: cookie, 'X-MedAce-Workspace': workspace, 'X-MedAce-Workspace-Version': '7', 'X-MedAce-Workspace-Identity': 'grant-owner',
+  ...(workspace === 'service-admin' ? {} : { 'X-MedAce-Workspace-Org': 'staff-org-a' }),
+});
+const invalidModernCookies = (cookie: string) => {
+  const rawToken = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1));
+  const sessionId = rawToken.slice(0, rawToken.indexOf('.'));
+  return [`medace_session=${encodeURIComponent(sessionId)}`, `medace_session=${encodeURIComponent(`${sessionId}.synthetic-wrong-secret`)}`];
+};
+const sessionRowsJson = (f: ReturnType<typeof setup>) => JSON.stringify(f.sqlite.prepare('SELECT * FROM sessions ORDER BY token').all());
+const readRouteData = async (env: AppEnv, headers: Record<string, string>) => {
+  const request = dataRequest(headers);
+  return (await storageRoutes[0].handle({ env, request, pathname: 'storage' })).response.json();
+};
+
+describe('modern session credentials cannot be downgraded or remotely invalidated', () => {
+  it.each(['instructor', 'group-admin', 'service-admin'] as const)('rejects shortened and wrong-secret %s cookies without deleting the real session, authority or upload', async (workspace) => {
+    const f = await setupUpload();
+    const upload = await f.mint();
+    const validHeaders = workspaceSessionHeaders(workspace, f.staffHeaders.Cookie);
+    const initialSession = await sessionRoute(f.env, sessionRequest(validHeaders));
+    expect(initialSession.response.status).toBe(200);
+    const initialProfile = JSON.stringify(await initialSession.response.json());
+    const initialData = JSON.stringify(await readRouteData(f.env, validHeaders));
+    const authorityBefore = JSON.stringify(f.authority());
+    const sessionsBefore = sessionRowsJson(f);
+    const assetBefore = JSON.stringify(f.asset(upload.assetId));
+    for (const cookie of invalidModernCookies(f.staffHeaders.Cookie)) {
+      const headers = { ...validHeaders, Cookie: cookie };
+      const rejectedSession = await sessionRoute(f.env, sessionRequest(headers));
+      expect(rejectedSession.response.status).toBe(204);
+      expect(rejectedSession.response.headers.has('Set-Cookie')).toBe(false);
+      await expect(readRouteData(f.env, headers)).rejects.toMatchObject({ status: 401 });
+      await expect(handleWritingAssetUpload(f.env, f.token(upload), f.request(headers))).rejects.toMatchObject({ status: 401 });
+      const rejectedLogout = await sessionRoute(f.env, sessionRequest(headers, 'DELETE'));
+      expect(rejectedLogout.response.status).toBe(204);
+      expect(rejectedLogout.response.headers.get('Set-Cookie')).toContain('medace_session=;');
+      expect(rejectedLogout.response.headers.get('Set-Cookie')).toContain('Max-Age=0');
+      // Compare opaque session material internally so failure output cannot dump it.
+      expect(sessionRowsJson(f) === sessionsBefore).toBe(true);
+      expect(JSON.stringify(f.authority()) === authorityBefore).toBe(true);
+      expect(JSON.stringify(f.asset(upload.assetId)) === assetBefore).toBe(true);
+      const restored = await sessionRoute(f.env, sessionRequest(validHeaders));
+      expect(restored.response.status).toBe(200);
+      expect(JSON.stringify(await restored.response.json()) === initialProfile).toBe(true);
+      expect(JSON.stringify(await readRouteData(f.env, validHeaders)) === initialData).toBe(true);
+    }
+    expect(f.uploads).toEqual([]);
+    await expect(handleWritingAssetUpload(f.env, f.token(upload), f.request(f.staffHeaders))).resolves.toMatchObject({ status: 204 });
+    expect(f.uploads).toHaveLength(1);
+  });
+
+  it('deletes only the authenticated modern session on a valid logout', async () => {
+    const f = await setupUpload();
+    const beforeCount = f.sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()!.n as number;
+    const result = await sessionRoute(f.env, sessionRequest(f.staffHeaders, 'DELETE'));
+    expect(result.response.status).toBe(204);
+    expect(f.sqlite.prepare('SELECT COUNT(*) AS n FROM sessions').get()!.n).toBe(beforeCount - 1);
+    expect((await sessionRoute(f.env, sessionRequest(f.staffHeaders))).response.status).toBe(204);
+    await expect(readRouteData(f.env, f.staffHeaders)).rejects.toMatchObject({ status: 401 });
+    expect((await sessionRoute(f.env, sessionRequest({ Cookie: f.otherCookie }))).response.status).toBe(200);
+  });
+
+  it.each(['instructor', 'group-admin', 'service-admin'] as const)('retains a genuine null-hash legacy %s session and its authenticated logout', async (workspace) => {
+    const f = await setupUpload();
+    const legacyId = 'synthetic-true-legacy-session';
+    f.sqlite.prepare('INSERT INTO sessions (token, token_hash, user_id, expires_at, created_at) VALUES (?, NULL, ?, ?, ?)')
+      .run(legacyId, 'grant-owner', Date.now() + 60_000, Date.now());
+    const headers = workspaceSessionHeaders(workspace, `medace_session=${legacyId}`);
+    const restored = await sessionRoute(f.env, sessionRequest(headers));
+    expect(restored.response.status).toBe(200);
+    expect(await restored.response.json()).toMatchObject({ uid: 'grant-owner', workspaceAccess: { workspace, grantVersion: 7 } });
+    await expect(readRouteData(f.env, headers)).resolves.toBeInstanceOf(Array);
+    const authorityBefore = JSON.stringify(f.authority());
+    expect((await sessionRoute(f.env, sessionRequest(headers, 'DELETE'))).response.status).toBe(204);
+    expect(Boolean(f.sqlite.prepare('SELECT token FROM sessions WHERE token = ?').get(legacyId))).toBe(false);
+    expect(JSON.stringify(f.authority()) === authorityBefore).toBe(true);
+    expect((await sessionRoute(f.env, sessionRequest(headers))).response.status).toBe(204);
+    expect((await sessionRoute(f.env, sessionRequest(f.staffHeaders))).response.status).toBe(200);
   });
 });

@@ -3,6 +3,13 @@ import { createHash, pbkdf2Sync } from 'node:crypto';
 const assert = (condition, message) => { if (!condition) throw new Error(`Owner workspace regression: ${message}`); };
 const quote = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const sha256 = (body) => createHash('sha256').update(body).digest('base64');
+const invalidModernCookies = (cookie) => {
+  const rawToken = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1));
+  const delimiter = rawToken.indexOf('.');
+  assert(delimiter > 0, 'the modern fixture cookie must contain its secret');
+  const sessionId = rawToken.slice(0, delimiter);
+  return [`medace_session=${encodeURIComponent(sessionId)}`, `medace_session=${encodeURIComponent(`${sessionId}.synthetic-wrong-secret`)}`];
+};
 const headersFor = (workspace, orgId, version, uid) => ({
   'X-MedAce-Workspace': workspace,
   'X-MedAce-Workspace-Version': String(version),
@@ -25,6 +32,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
   const workspaceHeaders = (workspace, organizationId = orgId, version = 7) => headersFor(workspace, organizationId, version, owner.uid);
   const otherOrgId = 'api-owner-workspace-other-org';
   const otherCohortId = 'api-owner-workspace-other-cohort';
+  const legacySessionId = 'api-owner-workspace-true-legacy-session';
   // The existing demo UID is retained. A local-only non-demo email makes the
   // explicit staff roster test meaningful; it is restored in finally.
   const localOwnerEmail = 'owner-grant-fixture@workspace.example.invalid';
@@ -42,6 +50,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
     'owner fixture must keep its canonical student membership');
   assert((await query(`SELECT id FROM organizations WHERE id = ${quote(otherOrgId)}`)).length === 0, 'other-org fixture identifier must be unused');
   assert((await query(`SELECT id FROM users WHERE email = ${quote(localOwnerEmail)}`)).length === 0, 'local-only owner fixture email must be unused');
+  assert((await query(`SELECT token FROM sessions WHERE token = ${quote(legacySessionId)}`)).length === 0, 'local legacy session identifier must be unused');
   const assignmentIds = ['api-owner-workspace-assignment-a', 'api-owner-workspace-assignment-b'];
   const protectedSql = `
     SELECT 'user' AS authority_table, id, email, password_hash, role, subscription_plan,
@@ -58,6 +67,10 @@ export const verifyOwnerWorkspaceRegressions = async ({
     SELECT 'import_receipt' AS learning_table, * FROM personal_catalog_import_receipts WHERE user_id = ${quote(owner.uid)} ORDER BY client_import_id;
   `;
   const learningBefore = await query(learningSql);
+  const sessionsSql = `SELECT token, token_hash, user_id, expires_at, created_at FROM sessions WHERE user_id = ${quote(owner.uid)} ORDER BY token`;
+  const sessionSnapshot = async () => JSON.stringify(await query(sessionsSql));
+  const insertLegacySession = () => execute(`INSERT INTO sessions (token, token_hash, user_id, expires_at, created_at)
+    VALUES (${quote(legacySessionId)}, NULL, ${quote(owner.uid)}, ${Date.now() + 60_000}, ${Date.now()})`);
   const teacher = new SessionClient(baseUrl, 'owner-teacher');
   const school = new SessionClient(baseUrl, 'owner-school');
   const service = new SessionClient(baseUrl, 'owner-service');
@@ -122,6 +135,47 @@ export const verifyOwnerWorkspaceRegressions = async ({
       requireStatus(session, 200, `${workspace} session restore`);
       assert(session.data.role === role && session.data.workspaceAccess?.workspace === workspace, 'session restore must retain the explicit workspace projection');
     }
+    const originalSessions = await sessionSnapshot();
+    for (const [client, workspace] of [[teacher, 'instructor'], [school, 'group-admin'], [service, 'service-admin']]) {
+      const headers = workspaceHeaders(workspace);
+      const baselineData = JSON.stringify(await students(client, headers));
+      for (const cookie of invalidModernCookies(client.cookie)) {
+        const rejected = new SessionClient(baseUrl, 'invalid-modern-cookie');
+        rejected.cookie = cookie;
+        const invalidSession = await rejected.request('/api/session', { method: 'GET', headers });
+        requireStatus(invalidSession, 204, `${workspace} shortened/wrong-secret session`);
+        assert(invalidSession.setCookies.length === 0, 'invalid session read must not issue or clear a cookie');
+        requireStatus(await storage(rejected, headers, 'getAllStudentsProgress'), 401, `${workspace} shortened/wrong-secret data`);
+        const invalidLogout = await rejected.request('/api/session', { method: 'DELETE', headers });
+        requireStatus(invalidLogout, 204, `${workspace} shortened/wrong-secret logout`);
+        assert(invalidLogout.setCookies.length === 1 && invalidLogout.setCookies[0].includes('Max-Age=0'),
+          'rejected credential logout may clear only its own request cookie');
+        assert(await sessionSnapshot() === originalSessions, 'invalid secret or bare session ID must not delete or change any authenticated owner session');
+        assert(JSON.stringify(await query(protectedSql)) === JSON.stringify(initialAuthority), 'rejected credentials must not change authority or credentials');
+        requireStatus(await client.request('/api/session', { method: 'GET', headers }), 200, `${workspace} valid cookie recovery`);
+        assert(JSON.stringify(await students(client, headers)) === baselineData, 'the original cookie must retain the same current workspace data after rejection');
+      }
+    }
+    const logoutClient = new SessionClient(baseUrl, 'valid-modern-logout');
+    requireStatus(await auth(logoutClient, owner, 'instructor'), 200, 'valid modern logout setup');
+    const beforeValidLogout = await query(sessionsSql);
+    requireStatus(await logoutClient.request('/api/session', { method: 'DELETE', headers: teacherHeaders }), 204, 'authenticated modern logout');
+    assert((await query(sessionsSql)).length === beforeValidLogout.length - 1 && await sessionSnapshot() === originalSessions,
+      'valid modern logout must delete only its newly authenticated session');
+    requireStatus(await logoutClient.request('/api/session', { method: 'GET', headers: teacherHeaders }), 204, 'logged-out modern session');
+    requireStatus(await storage(logoutClient, teacherHeaders, 'getAllStudentsProgress'), 401, 'logged-out modern data');
+    await insertLegacySession();
+    const legacy = new SessionClient(baseUrl, 'true-null-hash-legacy');
+    legacy.cookie = `medace_session=${legacySessionId}`;
+    for (const workspace of ['instructor', 'group-admin', 'service-admin']) {
+      const result = await legacy.request('/api/session', { method: 'GET', headers: workspaceHeaders(workspace) });
+      requireStatus(result, 200, `${workspace} genuine legacy session`);
+      assert(result.data.uid === owner.uid && result.data.workspaceAccess?.workspace === workspace, 'only a genuine null-hash legacy token retains compatibility');
+      await students(legacy, workspaceHeaders(workspace));
+    }
+    requireStatus(await legacy.request('/api/session', { method: 'DELETE', headers: teacherHeaders }), 204, 'authenticated true legacy logout');
+    assert(await sessionSnapshot() === originalSessions, 'true legacy logout must delete its own row and preserve all modern owner sessions');
+    requireStatus(await teacher.request('/api/session', { method: 'GET', headers: teacherHeaders }), 200, 'modern session after legacy logout');
     const personal = await teacher.request('/api/session', { method: 'GET' });
     requireStatus(personal, 200, 'personal session restore');
     assert(personal.data.role === 'STUDENT' && !personal.data.workspaceAccess && personal.data.organizationRole === 'STUDENT',
@@ -265,6 +319,30 @@ export const verifyOwnerWorkspaceRegressions = async ({
     const completed = await assetSnapshot(uploaded.assetId);
     requireStatus(await putAsset(teacher, uploaded, body), 204, 'same-body owner PUT confirmation');
     assert(JSON.stringify(await assetSnapshot(uploaded.assetId)) === JSON.stringify(completed), 'successful confirmation must not rewrite the original upload receipt');
+    const sessionsBeforeInvalidUpload = await sessionSnapshot();
+    const unusedBeforeInvalidUpload = await assetSnapshot(unused.assetId);
+    for (const [client, workspace] of [[teacher, 'instructor'], [school, 'group-admin'], [service, 'service-admin']]) {
+      const headers = workspaceHeaders(workspace);
+      const baselineData = JSON.stringify(await students(client, headers));
+      for (const cookie of invalidModernCookies(client.cookie)) {
+        const rejected = new SessionClient(baseUrl, 'invalid-modern-upload-cookie');
+        rejected.cookie = cookie;
+        requireStatus(await putAsset(rejected, unused, body, headers), 401, `${workspace} shortened/wrong-secret unused upload`);
+        requireStatus(await putAsset(rejected, uploaded, body, headers), 401, `${workspace} shortened/wrong-secret original confirmation`);
+        assert(await sessionSnapshot() === sessionsBeforeInvalidUpload, 'rejected upload credentials must not destroy the valid owner session');
+        assert(JSON.stringify(await assetSnapshot(unused.assetId)) === JSON.stringify(unusedBeforeInvalidUpload)
+          && JSON.stringify(await assetSnapshot(uploaded.assetId)) === JSON.stringify(completed), 'rejected upload credentials must not consume or rewrite any original receipt');
+        requireStatus(await client.request('/api/session', { method: 'GET', headers }), 200, `${workspace} upload cookie recovery`);
+        assert(JSON.stringify(await students(client, headers)) === baselineData, 'current workspace data must survive invalid upload credentials');
+      }
+    }
+    await insertLegacySession();
+    const legacyUpload = new SessionClient(baseUrl, 'true-legacy-original-confirmation');
+    legacyUpload.cookie = `medace_session=${legacySessionId}`;
+    requireStatus(await putAsset(legacyUpload, uploaded, body, teacherHeaders), 204, 'genuine legacy issuer original confirmation');
+    assert(JSON.stringify(await assetSnapshot(uploaded.assetId)) === JSON.stringify(completed), 'true legacy confirmation must retain the immutable original receipt');
+    requireStatus(await legacyUpload.request('/api/session', { method: 'DELETE', headers: teacherHeaders }), 204, 'genuine legacy issuer logout');
+    assert(await sessionSnapshot() === sessionsBeforeInvalidUpload, 'legacy upload logout must leave every modern session intact');
     for (const [sql, label] of [
       [`UPDATE workspace_access_grants SET grant_version = 8 WHERE user_id = ${quote(owner.uid)}`, 'version change'],
       [`UPDATE workspace_access_grants SET status = 'REVOKED' WHERE user_id = ${quote(owner.uid)}`, 'revocation'],
@@ -287,6 +365,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
     console.log('Owner workspace native D1 regression passed: same student UID/password, explicit grant, request scope/version, teacher assignment, school classroom, service global, shared-cookie isolation, profile injection denied, bound upload/replay/revocation, raw authority and learning retained.');
   } finally {
     await execute(`DELETE FROM writing_assignments WHERE id IN (${assignmentIds.map(quote).join(',')});
+      DELETE FROM sessions WHERE token = ${quote(legacySessionId)};
       DELETE FROM student_instructor_assignments WHERE student_user_id = ${quote(assignedStudent.uid)};
       DELETE FROM organization_cohort_instructors WHERE instructor_user_id = ${quote(owner.uid)};
       ${createdCohortId ? `DELETE FROM organization_cohorts WHERE id = ${quote(createdCohortId)};` : ''}

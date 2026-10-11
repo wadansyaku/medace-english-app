@@ -542,7 +542,11 @@ export const clearSession = async (env: AppEnv, request: Request): Promise<strin
   const cookies = parseCookies(request);
   const credential = parseSessionCredential(cookies[SESSION_COOKIE_NAME]);
   if (credential) {
-    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
+    const session = await env.DB.prepare('SELECT token_hash FROM sessions WHERE token = ?').bind(credential.sessionId)
+      .first<{ token_hash: string | null }>();
+    const valid = session && (credential.isLegacy ? session.token_hash === null
+      : Boolean(session.token_hash) && session.token_hash === await hashSessionToken(credential.rawToken));
+    if (valid) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
   }
 
   return buildCookie(request, '', 0);
@@ -567,10 +571,14 @@ export const getSessionUser = async (env: AppEnv, request: Request): Promise<DbU
     return null;
   }
 
-  if (!credential.isLegacy) {
+  if (credential.isLegacy) {
+    // A bare ID is compatible only with a genuinely pre-hash session. Never
+    // let truncating a modern signed cookie downgrade credential validation.
+    if (row.session_token_hash !== null) return null;
+  } else {
     const expectedHash = row.session_token_hash;
     if (!expectedHash || expectedHash !== await hashSessionToken(credential.rawToken)) {
-      await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
+      // An invalid secret cannot invalidate someone else's valid session.
       return null;
     }
   }
