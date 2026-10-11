@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, apiPost } from '../services/apiClient';
-import { acceptWorkspaceProfile, clearWorkspaceContext, prepareWorkspaceRestore, selectWorkspaceForSession } from '../services/workspaceContext';
+import { acceptWorkspaceProfile, clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore, selectWorkspaceForSession } from '../services/workspaceContext';
 import { getWorkspaceContextKey } from '../contracts/workspaceAccess';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 
@@ -95,6 +95,18 @@ describe('tab-scoped explicit workspace requests', () => {
     expect(getWorkspaceContextKey(teacher.uid, profile('group-admin').workspaceAccess)).not.toBe(key);
     expect(getWorkspaceContextKey(teacher.uid, { ...teacher.workspaceAccess!, organizationId: 'other-org' })).not.toBe(key);
     expect(getWorkspaceContextKey(teacher.uid, profile('instructor', 8).workspaceAccess)).not.toBe(key);
+  });
+  it('rejects a delayed profile callback from any previous workspace context', () => {
+    const teacher = profile('instructor');
+    acceptWorkspaceProfile(teacher);
+    expect(isCurrentWorkspaceProfile(teacher)).toBe(true);
+    for (const old of [profile('service-admin'), profile('instructor', 6),
+      { ...teacher, uid: 'another-owner' },
+      { ...teacher, workspaceAccess: { ...teacher.workspaceAccess!, organizationId: 'other-org' } }]) {
+      expect(isCurrentWorkspaceProfile(old)).toBe(false);
+    }
+    clearWorkspaceContext();
+    expect(isCurrentWorkspaceProfile(teacher)).toBe(false);
   });
   it('does not store a cookie, password or staff selection for the personal workspace', () => {
     acceptWorkspaceProfile({ ...profile('instructor'), role: UserRole.STUDENT, workspaceAccess: undefined });

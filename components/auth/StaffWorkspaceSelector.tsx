@@ -11,7 +11,7 @@ interface Props {
 
 const StaffWorkspaceSelector = ({ user, switching, onSwitch }: Props) => {
   const access = user.workspaceAccess;
-  if (user.role === UserRole.STUDENT || !access || access.availableWorkspaces.length < 2) return null;
+  if (user.role === UserRole.STUDENT || !access || (access.grantVersion === 0 && access.availableWorkspaces.length < 2)) return null;
   return <section aria-label="業務画面の切替" className="mb-4 rounded-2xl border border-medace-200 bg-medace-50 p-3 text-medace-950" data-testid="staff-workspace-selector">
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">

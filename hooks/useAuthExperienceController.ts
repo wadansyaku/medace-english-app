@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { sessionService } from '../services/session';
-import { clearWorkspaceContext, prepareWorkspaceRestore } from '../services/workspaceContext';
+import { clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore } from '../services/workspaceContext';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
@@ -416,7 +416,9 @@ export const useAuthExperienceController = ({
 
   return {
     user,
-    setCurrentUser: setUser,
+    setCurrentUser: (next: UserProfile | null) => {
+      if (!next || isCurrentWorkspaceProfile(next)) setUser(next);
+    },
     authLoading,
     staffLoginCompletionPending,
     openAuthenticatedHome: () => {

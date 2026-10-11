@@ -8,18 +8,22 @@ import { BUSINESS_ADMIN_WORKSPACE_SECTIONS, INSTRUCTOR_WORKSPACE_SECTIONS } from
 import { Loader2 } from 'lucide-react';
 import AuthExperienceScreen from './components/auth/AuthExperienceScreen';
 import StaffEntryStatus from './components/auth/StaffEntryStatus';
+import StaffWorkspaceSelector from './components/auth/StaffWorkspaceSelector';
 import { isStaffLoginEntry } from './shared/staffLogin';
 import AdminDemoPrompt from './components/auth/AdminDemoPrompt';
 import PasswordResetScreen from './components/auth/PasswordResetScreen';
 import AnnouncementOverlay from './components/announcements/AnnouncementOverlay';
 import {
   canAccessAppView,
+  getHomeAppRoute,
   isHomeAppRoute,
   useAppNavigation,
   parseNavigationPath,
 } from './hooks/useAppNavigation';
 import { useAnnouncementFeed } from './hooks/useAnnouncementFeed';
 import { useAuthExperienceController } from './hooks/useAuthExperienceController';
+import { useStaffWorkspaceSwitch } from './hooks/useStaffWorkspaceSwitch';
+import { getWorkspaceContextKey } from './contracts/workspaceAccess';
 import { recordDashboardStartTaskEvent } from './services/productEvents';
 import { createTaskIntentFromBookSelection, getTaskRouteBookId } from './shared/learningTask';
 import { NARU_BOOK_ID } from './shared/naruBook';
@@ -74,14 +78,33 @@ const App: React.FC = () => {
       setBusinessAdminWorkspaceView(BusinessAdminWorkspaceView.OVERVIEW);
     },
   });
-  const announcementFeed = useAnnouncementFeed(Boolean(user));
+  const workspaceContextKey = getWorkspaceContextKey(user?.uid || 'guest', user?.workspaceAccess);
+  const workspaceSwitch = useStaffWorkspaceSwitch({ user, onUserChange: setCurrentUser, onComplete: next => {
+    supportDialogRef.current = null;
+    setSupportDialog(null); setSupportDraft(null); setSupportSource(null);
+    setInstructorWorkspaceView(InstructorWorkspaceView.OVERVIEW);
+    setBusinessAdminWorkspaceView(BusinessAdminWorkspaceView.OVERVIEW);
+    dispatchNavigation({ type: 'go-home', view: getHomeAppRoute(next), historyMode: 'replace' });
+  } });
+  const wasWorkspaceSwitching = useRef(false);
+  useEffect(() => {
+    const finished = wasWorkspaceSwitching.current && !workspaceSwitch.switching;
+    wasWorkspaceSwitching.current = workspaceSwitch.switching;
+    if (!finished) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.querySelector<HTMLElement>('[data-testid="workspace-switch-error"], [data-testid="staff-workspace-selector"] select, #study-main-content');
+      target?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [workspaceSwitch.switching, workspaceContextKey]);
+  const announcementFeed = useAnnouncementFeed(Boolean(user), workspaceContextKey);
   const suppressAnnouncementModal = Boolean(user && user.role === UserRole.STUDENT && user.needsOnboarding);
   const isGroupAdminUser = isGroupAdmin(user);
   const supportRole: ProductSupportRole = !user ? 'GUEST' : isGroupAdminUser ? 'GROUP_ADMIN' : user.role;
   const feedbackContextKey = JSON.stringify([user?.uid ?? 'guest', supportRole, user?.organizationId, user?.organizationRole,
-    user?.role === UserRole.ADMIN ? 'admin' : isGroupAdminUser ? 'business-admin' : 'instructor']);
+    user?.role === UserRole.ADMIN ? 'admin' : isGroupAdminUser ? 'business-admin' : 'instructor', workspaceContextKey]);
   const supportContextKey = JSON.stringify([user?.uid ?? 'guest', supportRole, user?.organizationId, user?.organizationRole,
-    currentView, instructorWorkspaceView, businessAdminWorkspaceView, supportSource]);
+    currentView, instructorWorkspaceView, businessAdminWorkspaceView, supportSource, workspaceContextKey]);
   const feedbackDraft = supportDraft?.contextKey === feedbackContextKey ? supportDraft.question : undefined;
   const isInstructorWorkspace = Boolean(user && currentView === 'instructor' && !supportSource);
   const workspaceSections = isInstructorWorkspace
@@ -114,7 +137,7 @@ const App: React.FC = () => {
   }, [authLoading, supportContextKey, feedbackContextKey]);
 
   const openSupportDialog = () => {
-    if (authLoading || supportDialogRef.current) return;
+    if (authLoading || workspaceSwitch.switching || supportDialogRef.current) return;
     const historyId = crypto.randomUUID();
     const prior = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
     window.history.pushState({ ...prior, productSupportDialog: historyId }, '', `${window.location.pathname}${window.location.search}`);
@@ -336,11 +359,11 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (authLoading) {
+    if (authLoading || workspaceSwitch.switching) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <Loader2 className="w-12 h-12 text-medace-500 animate-spin mb-4" />
-          <p className="text-slate-500">認証中...</p>
+          <p role="status" className="text-slate-500">{workspaceSwitch.switching ? '業務画面の権限を確認中...' : '認証中...'}</p>
         </div>
       );
     }
@@ -400,9 +423,10 @@ const App: React.FC = () => {
         onSelectWorkspaceSection={workspaceSections.length > 0 ? handleSelectWorkspaceSection : undefined}
         forceNoIndex={currentView === 'publicRole'}
         immersiveContent={currentView === 'resetPassword'}
-        onOpenProductSupport={!authLoading && currentView !== 'resetPassword' ? openSupportDialog : undefined}
+        onOpenProductSupport={!authLoading && !workspaceSwitch.switching && currentView !== 'resetPassword' ? openSupportDialog : undefined}
       >
         <Suspense
+          key={workspaceContextKey}
           fallback={
             <div className="flex min-h-[50vh] flex-col items-center justify-center text-slate-500">
               <Loader2 className="h-10 w-10 animate-spin text-medace-500" />
@@ -410,6 +434,9 @@ const App: React.FC = () => {
             </div>
           }
         >
+          {workspaceSwitch.error && <p role="alert" tabIndex={-1} data-testid="workspace-switch-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{workspaceSwitch.error}</p>}
+          {user && !authLoading && !workspaceSwitch.switching && !supportSource && <StaffWorkspaceSelector user={user}
+            switching={workspaceSwitch.switching} onSwitch={workspace => { void workspaceSwitch.switchWorkspace(workspace); }} />}
           {user && !authLoading && logoutError && <div role="alert" data-testid="logout-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
             <p>{logoutError}</p>
             <button type="button" onClick={logoutAndCloseSupport} className="mt-2 min-h-11 rounded-lg border border-red-300 px-3 font-bold">ログアウトを再試行</button>
