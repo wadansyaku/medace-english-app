@@ -24,18 +24,24 @@ export const verifyOwnerWorkspaceRegressions = async ({
   const orgId = groupAdminUser.organizationId;
   const workspaceHeaders = (workspace, organizationId = orgId, version = 7) => headersFor(workspace, organizationId, version, owner.uid);
   const otherOrgId = 'api-owner-workspace-other-org';
+  const otherCohortId = 'api-owner-workspace-other-cohort';
+  // The existing demo UID is retained. A local-only non-demo email makes the
+  // explicit staff roster test meaningful; it is restored in finally.
+  const localOwnerEmail = 'owner-grant-fixture@workspace.example.invalid';
   const localPassword = 'local-only-owner-workspace-password';
   const salt = Buffer.from('owner-workspace-local-fixture');
   const passwordHash = `pbkdf2$100000$${salt.toString('base64')}$${pbkdf2Sync(localPassword, salt, 100000, 32, 'sha256').toString('base64')}`;
   const originalUsers = await query(`SELECT * FROM users WHERE id IN (${quote(owner.uid)}, ${quote(otherStudent.uid)}) ORDER BY id`);
   const originalMemberships = await query(`SELECT * FROM organization_memberships WHERE user_id = ${quote(otherStudent.uid)} ORDER BY organization_id`);
   const originalAssignment = await query(`SELECT * FROM student_instructor_assignments WHERE student_user_id = ${quote(assignedStudent.uid)}`);
+  const originalInstructorCohorts = await query(`SELECT * FROM organization_cohort_instructors WHERE instructor_user_id = ${quote(owner.uid)} ORDER BY cohort_id`);
   const originalGrant = await query(`SELECT * FROM workspace_access_grants WHERE user_id = ${quote(owner.uid)}`);
   assert(originalUsers.length === 2 && originalUsers.every((user) => user.role === 'STUDENT'), 'reuse two existing raw student identities');
   assert(originalGrant.length === 0, 'disposable owner fixture must start without a grant');
   assert((await query(`SELECT role, status FROM organization_memberships WHERE user_id = ${quote(owner.uid)} AND organization_id = ${quote(orgId)}`))[0]?.role === 'STUDENT',
     'owner fixture must keep its canonical student membership');
   assert((await query(`SELECT id FROM organizations WHERE id = ${quote(otherOrgId)}`)).length === 0, 'other-org fixture identifier must be unused');
+  assert((await query(`SELECT id FROM users WHERE email = ${quote(localOwnerEmail)}`)).length === 0, 'local-only owner fixture email must be unused');
   const assignmentIds = ['api-owner-workspace-assignment-a', 'api-owner-workspace-assignment-b'];
   const protectedSql = `
     SELECT 'user' AS authority_table, id, email, password_hash, role, subscription_plan,
@@ -60,7 +66,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
   const schoolHeaders = workspaceHeaders('group-admin');
   const serviceHeaders = workspaceHeaders('service-admin');
   const auth = (client, user, loginEntry, overrides = {}) => client.request('/api/auth', {
-    method: 'POST', body: JSON.stringify({ action: 'email-auth', email: user.email, password: localPassword,
+    method: 'POST', body: JSON.stringify({ action: 'email-auth', email: user.uid === owner.uid ? localOwnerEmail : user.email, password: localPassword,
       isSignUp: false, loginEntry, ...overrides }),
   });
   const storage = (client, headers, action, payload) => client.request('/api/storage', {
@@ -79,11 +85,15 @@ export const verifyOwnerWorkspaceRegressions = async ({
   });
   const assetSnapshot = (assetId) => query(`SELECT * FROM writing_submission_assets WHERE id = ${quote(assetId)}`);
   let initialAuthority;
+  let createdCohortId;
   try {
     await execute(`
       UPDATE users SET password_hash = ${quote(passwordHash)} WHERE id IN (${quote(owner.uid)}, ${quote(otherStudent.uid)});
+      UPDATE users SET email = ${quote(localOwnerEmail)} WHERE id = ${quote(owner.uid)};
       INSERT INTO organizations (id, display_name, name_key, subscription_plan, status, created_at, updated_at)
       VALUES (${quote(otherOrgId)}, 'Synthetic other classroom only', 'api-owner-workspace-other-org', 'TOB_PAID', 'ACTIVE', 1, 1);
+      INSERT INTO organization_cohorts (id, organization_id, name, created_at, updated_at)
+      VALUES (${quote(otherCohortId)}, ${quote(otherOrgId)}, 'Synthetic other classroom cohort only', 1, 1);
       UPDATE organization_memberships SET status = 'INACTIVE' WHERE user_id = ${quote(otherStudent.uid)};
       INSERT INTO organization_memberships (user_id, organization_id, role, status, created_at, updated_at)
       VALUES (${quote(otherStudent.uid)}, ${quote(otherOrgId)}, 'STUDENT', 'ACTIVE', 1, 1);
@@ -151,6 +161,34 @@ export const verifyOwnerWorkspaceRegressions = async ({
     requireStatus(settings, 200, 'school settings');
     assert(settings.data.organizationId === orgId && settings.data.members.every((member) => member.userUid !== otherStudent.uid),
       'settings must use the grant classroom and exclude the other classroom');
+    const classroom = await storage(school, schoolHeaders, 'upsertOrganizationCohort', { name: 'Synthetic owner grant class only' });
+    requireStatus(classroom, 200, 'grant classroom cohort creation');
+    createdCohortId = classroom.data.id;
+    assert(typeof createdCohortId === 'string' && createdCohortId.length > 0, 'new local classroom cohort must have a real stored ID');
+    requireStatus(await storage(school, schoolHeaders, 'setInstructorCohorts', {
+      instructorUid: owner.uid, cohortIds: [createdCohortId],
+    }), 204, 'granted teacher must be assignable to its classroom cohort');
+    const settingsWithCohort = await storage(school, schoolHeaders, 'getOrganizationSettingsSnapshot');
+    requireStatus(settingsWithCohort, 200, 'settings with granted teacher cohort');
+    assert((settingsWithCohort.data.instructorCohorts[owner.uid] || []).join(',') === createdCohortId,
+      'settings must expose the owner teacher cohort assignment');
+    const canonicalOwnerMember = settingsWithCohort.data.members.find((member) => member.userUid === owner.uid);
+    assert(canonicalOwnerMember?.userRole === 'STUDENT' && canonicalOwnerMember.organizationRole === 'STUDENT',
+      'the canonical membership roster must retain the original student authority');
+    const dashboardRoster = await storage(school, schoolHeaders, 'getOrganizationDashboardSnapshot');
+    requireStatus(dashboardRoster, 200, 'dashboard staff roster');
+    const grantedTeachers = dashboardRoster.data.instructors.filter((instructor) => instructor.uid === owner.uid);
+    assert(grantedTeachers.length === 1 && grantedTeachers[0].organizationRole === 'INSTRUCTOR',
+      'the operational instructor roster must include the explicit granted teacher once');
+    const cohortRowsSql = `SELECT * FROM organization_cohort_instructors WHERE instructor_user_id = ${quote(owner.uid)} ORDER BY cohort_id`;
+    const beforeForeignCohort = await query(cohortRowsSql);
+    requireStatus(await storage(school, schoolHeaders, 'setInstructorCohorts', {
+      instructorUid: owner.uid, cohortIds: [createdCohortId, otherCohortId],
+    }), 404, 'a foreign classroom cohort must not be assigned to the granted teacher');
+    assert(JSON.stringify(await query(cohortRowsSql)) === JSON.stringify(beforeForeignCohort),
+      'denied foreign cohort update must retain every existing owner cohort assignment');
+    assert(JSON.stringify(await query(protectedSql)) === JSON.stringify(initialAuthority),
+      'teacher cohort assignment and roster reads must preserve raw student role, canonical student membership, plan and hash');
     const mutationSql = `
       SELECT 'assignment' AS mutation_table, * FROM student_instructor_assignments ORDER BY student_user_id;
       SELECT 'notification' AS mutation_table, * FROM instructor_notifications ORDER BY id;
@@ -250,11 +288,13 @@ export const verifyOwnerWorkspaceRegressions = async ({
   } finally {
     await execute(`DELETE FROM writing_assignments WHERE id IN (${assignmentIds.map(quote).join(',')});
       DELETE FROM student_instructor_assignments WHERE student_user_id = ${quote(assignedStudent.uid)};
+      DELETE FROM organization_cohort_instructors WHERE instructor_user_id = ${quote(owner.uid)};
+      ${createdCohortId ? `DELETE FROM organization_cohorts WHERE id = ${quote(createdCohortId)};` : ''}
       DELETE FROM workspace_access_grants WHERE user_id = ${quote(owner.uid)};
       UPDATE organizations SET status = 'ACTIVE' WHERE id = ${quote(orgId)};
       DELETE FROM organization_memberships WHERE user_id = ${quote(otherStudent.uid)};
       DELETE FROM organizations WHERE id = ${quote(otherOrgId)};`);
-    for (const user of originalUsers) await execute(`UPDATE users SET password_hash = ${user.password_hash === null ? 'NULL' : quote(user.password_hash)},
+    for (const user of originalUsers) await execute(`UPDATE users SET email = ${quote(user.email)}, password_hash = ${user.password_hash === null ? 'NULL' : quote(user.password_hash)},
       role = ${quote(user.role)}, subscription_plan = ${user.subscription_plan === null ? 'NULL' : quote(user.subscription_plan)},
       organization_id = ${user.organization_id === null ? 'NULL' : quote(user.organization_id)},
       organization_name = ${user.organization_name === null ? 'NULL' : quote(user.organization_name)},
@@ -265,5 +305,8 @@ export const verifyOwnerWorkspaceRegressions = async ({
     for (const assignment of originalAssignment) await execute(`INSERT INTO student_instructor_assignments
       (student_user_id, instructor_user_id, created_at, updated_at) VALUES
       (${quote(assignment.student_user_id)}, ${quote(assignment.instructor_user_id)}, ${assignment.created_at}, ${assignment.updated_at})`);
+    for (const cohort of originalInstructorCohorts) await execute(`INSERT INTO organization_cohort_instructors
+      (cohort_id, instructor_user_id, created_at, updated_at) VALUES
+      (${quote(cohort.cohort_id)}, ${quote(cohort.instructor_user_id)}, ${cohort.created_at}, ${cohort.updated_at})`);
   }
 };
