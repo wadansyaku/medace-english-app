@@ -1,4 +1,4 @@
-2026-10-11 長期復習の接続: 開始時の原子的な日枠、同開始の再送、Cloud/IDBと章・日次の表示を統一する。[実装・検証・復旧の境界](./analysis/2026-10-11-bounded-long-term-review.md)。
+2026-10-11 長期復習の接続: PR69は13:06:48 UTCにmain `4e70b66`へ統合済み。production workflow `38141884879`は進行中で、本番受入完了は未確定。開始時の原子的な日枠、同開始の再送、Cloud/IDBと章・日次の表示を統一する。[実装・検証・復旧の境界](./analysis/2026-10-11-bounded-long-term-review.md)。
 
 2026-10-10 専用ログイン改善: 生徒の入口・学習案内から他役へのリンクを外し、講師 `/teacher`・学校管理者 `/school-admin`・サービス管理者 `/service-admin` を既存アカウントの入力へ直接つなぐ。新サンプル/権限付与は追加せず、無効所属の上書き復活も防ぐ。実Macの5幅・認証/戻る25browserと関連72unit成功。最終SHAの全gateと正式公開受入は別工程で記録する。 [今回の変更・検証境界](./analysis/2026-10-10-staff-login-entrypoints.md)。
 
@@ -34,9 +34,9 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 - [Naru公開後レビューの修正候補](./analysis/2026-10-07-naru-postrelease-review.md): 公開済み182ba3dと追加候補を分離。学習sessionの再描画、旧quiz章、原本変更時の出題失効、標準import分類gate。
 
-- [GPT下書き・永続予算台帳の公開候補](./analysis/2026-10-06-writing-gpt-budget-release.md): 本人の公開承認。未評価原本の永続保存、OpenAI adapter、D1 global月枠とusage、管理者表示。GPTは初期無効、外部実送信/キー設定は別の実行承認が必要。
+- [GPT下書き・永続予算台帳の公開記録](./analysis/2026-10-06-writing-gpt-budget-release.md): 当時の公開候補・承認と検証の記録。未評価原本、OpenAI adapter、D1 global月枠とusage、管理者表示。現在のflag・data policy・課題/操作別D1承認・講師scope・予算条件は[環境構築](./environment-setup.md#aiの稼働境界)を参照。設定/外部実送信の承認をBotへ流用しない。
 
-- [Gemini停止・AIなし運用のローカル候補](./analysis/2026-10-05-ai-exit-local-candidate.md): b7e0c0c基準の非公開候補。Writing安全、標準プラン/通知、事前準備下書き、disabled provider、合成mock予算と未接続条件。
+- [Gemini停止・AIなし運用の当時の候補記録](./analysis/2026-10-05-ai-exit-local-candidate.md): b7e0c0c基準のWriting安全、標準プラン/通知、disabled provider、合成mock予算と当時の未接続条件。旧live生成の現在の固定停止と別経路の作文GPTは[環境構築](./environment-setup.md#aiの稼働境界)で確認。
 
 - [登録不要Naru版の公開候補](./analysis/2026-10-05-guest-public-release.md): 本人承認に基づくゲスト版の通常PR/CI・0048・配備と、AI送信なしの公開gate。
 
@@ -44,7 +44,7 @@ This directory keeps operational docs and historical design notes for Steady Stu
 
 - [登録なしNaru基本学習とカード表示改善](./analysis/2026-10-05-guest-naru-basic-learning.md): 非公開候補。匿名学習・端末記録・本人への保存境界、0048、回転と評価表示。
 
-- [本番FAQ・製品改善と有料単語生成廃止](./analysis/2026-10-04-production-feedback-loop.md): 実装済み・最終gate/公開待ち。権限・D1保存・費用・移行と検証欄。
+- [本番FAQ・製品改善と有料単語生成廃止](./analysis/2026-10-04-production-feedback-loop.md): PR55/main `915f4f7`へ統合済みの実装記録。権限・D1保存・移行、merge前検証と2026-10-11の後続注記。当時のproduction run・0046/0047・bookmarkの証跡は今回未収集。
 
 目的別に正本を分けます。過去の分析結果は現在の本番状態を示しません。
 
@@ -58,7 +58,7 @@ This directory keeps operational docs and historical design notes for Steady Stu
 - [Quiz receipt candidate 2026-10-03](./analysis/2026-10-03-quiz-attempt-receipts.md): 小テスト保存再送の独立候補、合成データ検証、Cloudflare/IDBの保証境界。
 - [Quiz receipt integration 2026-10-03](./analysis/2026-10-03-quiz-attempt-receipts-integration.md): UI・一冊公開版へ重ねた未公開候補、統合回帰と配備前の境界。
 - [Architecture](./architecture.md): 依存方向、取得/行動/保存の契約と未完の境界。
-- [Environment setup](./environment-setup.md): ローカル教材投入、AI/R2、環境変数と設定の詳細。
+- [Environment setup](./environment-setup.md): ローカル教材投入、R2、環境変数と設定。旧AI固定停止、条件付き作文GPT、準備中・実生成OFFのBotを区別。
 - [Deployment operations runbook](./deployment-ops-runbook.md): release gate、preview/prod、rollback。
 - [Material source ledger minimum ops](./material-source-ledger-minimum-ops.md): 公式教材の承認・権利台帳。
 - [Brand and PWA principles](./phase-0-brand-pwa-copy.md): 正式名称、色、学習ホームの方針。

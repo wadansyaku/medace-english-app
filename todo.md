@@ -1,4 +1,4 @@
-2026-10-11 長期復習接続: 純粋selectorの現行base再検証、Cloud/IDB開始割当・同開始再送・最新認可、通常dueと分けた章/日次表示を実装。最終候補の全gate・独立レビュー・正式配備の状態は[受入と復旧の記録](./docs/analysis/2026-10-11-bounded-long-term-review.md)とrelease receiptで確定する。
+2026-10-11 長期復習接続: PR69は13:06:48 UTCにmain `4e70b66`へ統合済み。production workflow `38141884879`は進行中で、本番受入のreceiptは未確定。純粋selectorの現行base再検証、Cloud/IDB開始割当・同開始再送・最新認可、通常dueと分けた章/日次表示を実装。[受入と復旧の記録](./docs/analysis/2026-10-11-bounded-long-term-review.md)とrelease receiptで正式配備・公開先の受入を確定する。
 
 2026-10-11 PR #68: 公開案内・生徒入口の再読込/履歴でURLと本人ホームを一致させた。講師・学校管理者の専用入口は正本ACTIVE所属のみを許可し、全status所属履歴ゼロの旧staffも403にする仕様を確定。サービス管理者は既存ADMIN権限を確認する。確認先の一般案内と使い捨て実D1の補完なし回帰を追加。本番集計の該当候補は観測時点0件。本人の本番反映指示に従い作業上の公開禁止は解除し、最終同一SHAの独立レビュー・CI/preview・保全ゲートで公開を進める。通常認証/セッションの従来補完は別の範囲。[対応範囲](./docs/analysis/2026-10-10-staff-login-entrypoints.md)。
 
@@ -126,15 +126,16 @@ PR #51の本番反映・実操作確認と、PR #52の配備手順補修まで�
 
 ## 2026-10-04 本番FAQ・製品改善と有料単語生成廃止
 
-実装済み・最終gate/公開待ち。[範囲・保存契約・検証と公開状態](./docs/analysis/2026-10-04-production-feedback-loop.md)。本人の本番開発・PR/merge/deploy承認済み。本番反映済みとはまだ記さない。
+PR55/main `915f4f7`への統合を現在のmain `4e70b66`の祖先として確認済み。[範囲・保存契約・当時の検証と後続状態](./docs/analysis/2026-10-04-production-feedback-loop.md)。未統合/公開待ちの候補として扱わず、未収集の当時の本番証跡は別に残す。
 
-- [x] 有料単語画像/学習中例文生成・旧API・有料再監査を撤去。管理者の最大10件・概算上限1.2円・明示確認・承認待ち保存と0046 claimを保持。
+- [x] 有料単語画像/学習中例文生成・旧API・有料再監査を撤去。当時残した管理者の有料事前準備も後続で固定停止し、現在は410で終了。0046 claimは履歴・互換のため保持し、新規教材は校正済みの承認待ちimportを使う。
 - [x] D1のFAQ未回答/製品報告、優先度・受入条件、手動JSON引継ぎ、修正版、再テスト成功/失敗と履歴を実装。自動外部送信なし。
 - [x] 講師の自分の報告＋ACTIVE組織、ADMIN全報告のサーバー認可、revision/CAS、操作ID再送を実装。氏名・答案を含めない手順を案内。
 - [x] 講師の日数を教材/権限とJST7暦日で集計。0046/0047は追加migration、利用者/組織削除との互換を維持。
-- [ ] 最終候補の型/unit/API/build/full browser/audit、read-only gateを確認し、検証結果を正本へ追記。
-- [ ] PR必須verify/preview、0046/0047適用、main merge、production deployと公開版確認を完了し、SHA/URL/bookmarkを記録。
-- [ ] 人手承認・結果不明claim回復・和訳欠損を運用で整備。
+- [x] 当時の型/unit/API/build/browser/auditとread-only gate、PR55のverify/preview結果を正本に記録済み。検証値は当時の結果であり、今回の文書整理で再実行したものではない。
+- [x] PR55をmain `915f4f7`へ統合。現在のmainへの祖先関係を2026-10-11に再確認。
+- [ ] 当時のproduction run、公開SHA/URL、0046/0047適用、recovery bookmarkの証跡を収集し追記。Git統合確認だけでは本番証跡を補完しない。
+- [ ] 校正済みimportの人手承認・和訳欠損を運用で整備。旧結果不明claimの扱いは履歴を確認し、新規live生成を再開しない。
 - [ ] 母数/期間を固定して継続率・再テスト成績・遅延定着を測定。競争優位性は未実証。
 
 [有料生成廃止の独立候補](./docs/analysis/2026-10-04-paid-generation-only.md)は分離時点の歴史的証拠として保持する。
