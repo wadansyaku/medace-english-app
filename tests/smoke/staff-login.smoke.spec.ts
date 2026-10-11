@@ -14,6 +14,13 @@ const existingAccounts = [
   ...entries,
 ] as const;
 
+const expectOwnWorkspace = async (page: Parameters<typeof loginBusinessStudentDemo>[0], account: typeof existingAccounts[number]) => {
+  const workspace = account.role === 'service-admin'
+    ? page.getByRole('heading', { name: 'Steady Study 運営ダッシュボード', exact: true })
+    : page.getByTestId(account.workspace);
+  await expect(workspace).toBeVisible();
+};
+
 const loginExistingFixture = async (page: Parameters<typeof loginBusinessStudentDemo>[0], account: typeof existingAccounts[number]) => {
   if (account.role === 'student') await loginBusinessStudentDemo(page);
   else {
@@ -23,7 +30,7 @@ const loginExistingFixture = async (page: Parameters<typeof loginBusinessStudent
     await page.getByTestId('auth-submit').click();
   }
   await expect(page).toHaveURL(new RegExp(`${account.home}$`));
-  await expect(page.getByTestId(account.workspace)).toBeVisible();
+  await expectOwnWorkspace(page, account);
 };
 
 for (const account of existingAccounts) {
@@ -36,9 +43,9 @@ for (const account of existingAccounts) {
     const before = await (await page.request.get('/api/session')).json();
     for (const path of ['/public', '/student', '/public/roles/student']) {
       await page.goto(path); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
-      await expect(page.getByTestId(account.workspace)).toBeVisible();
+      await expectOwnWorkspace(page, account);
       await page.reload(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
-      await expect(page.getByTestId(account.workspace)).toBeVisible();
+      await expectOwnWorkspace(page, account);
       expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
     }
     await page.screenshot({ path: testInfo.outputPath(`${account.role}-restored-home.png`), animations: 'disabled' });
@@ -47,7 +54,7 @@ for (const account of existingAccounts) {
       window.history.pushState({}, '', '/public'); window.history.pushState({}, '', home);
     }, account.home);
     await page.goBack(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
-    await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await expectOwnWorkspace(page, account);
     await page.goForward(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
     expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
     expect(runtimeErrors).toEqual([]);
@@ -68,11 +75,11 @@ for (const account of existingAccounts) {
       expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
     }
     await page.getByTestId('staff-entry-open-home').click();
-    await expect(page).toHaveURL(new RegExp(`${account.home}$`)); await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${account.home}$`)); await expectOwnWorkspace(page, account);
     await page.evaluate(() => { window.history.pushState({}, '', '/teacher'); window.dispatchEvent(new PopStateEvent('popstate')); });
     await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
     await page.goBack(); await expect(page).toHaveURL(new RegExp(`${account.home}$`));
-    await expect(page.getByTestId(account.workspace)).toBeVisible();
+    await expectOwnWorkspace(page, account);
     await page.goForward(); await expect(page).toHaveURL(/\/teacher$/);
     await expect(page.getByTestId('staff-entry-open-home')).toBeVisible();
     expect((await (await page.request.get('/api/session')).json()).uid).toBe(before.uid);
