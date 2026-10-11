@@ -2,6 +2,9 @@ import type { ProductSupportRole } from '../shared/productSupportKnowledge';
 
 export type { ProductSupportRole } from '../shared/productSupportKnowledge';
 export const PRODUCT_SUPPORT_MAX_QUESTION_CHARS = 600;
+/** This HTTP request was rejected before reservation/dispatch. It does not
+ * describe earlier requests that reused an ID. New asks always use fresh IDs. */
+export const PRODUCT_SUPPORT_NOT_ADMITTED = 'NOT_ADMITTED';
 export interface ProductSupportReference {
   sourceId: string;
   title: string;

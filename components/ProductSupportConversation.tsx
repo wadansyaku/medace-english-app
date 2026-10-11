@@ -5,6 +5,7 @@ import {
 } from '../shared/productSupportKnowledge';
 import { searchProductSupportConversation, validateProductSupportAnswer } from '../shared/productSupportConversation';
 import { buildProductSupportSourcePath } from './ProductSupportSourcePage';
+import { ProductSupportNotAdmittedError } from '../services/productSupport';
 
 export interface ProductSupportConversationProps {
   role: ProductSupportRole;
@@ -73,6 +74,9 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
       latestAnswer.current?.scrollIntoView({ block: 'nearest' });
     }
   }, [turns]);
+  useEffect(() => {
+    if (inputError && !busy && !pending) input.current?.focus();
+  }, [inputError, busy, pending]);
 
   const clear = () => {
     ++sequence.current; controller.current?.abort(); controller.current = null;
@@ -122,8 +126,17 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
       }].slice(-3));
       setPending(null);
       if (!unknown) setQuestion(previous => previous.trim() === original.question ? '' : previous);
-    } catch {
-      if (currentResponse()) setPending({ request: original, status: 'CONNECTION_FAILED', recheckAllowed: true });
+    } catch (error) {
+      if (!currentResponse()) return;
+      if (request.action === 'ask' && error instanceof ProductSupportNotAdmittedError && error.requestId === original.requestId) {
+        // Every new ask below uses a fresh ID; this rejected request never
+        // entered the receipt ledger. Preserve the
+        // question for correction. A rejected recheck says nothing about the
+        // original dispatch and must keep that original question locked.
+        setPending(null); setInputError(error.message);
+      } else {
+        setPending({ request: original, status: 'CONNECTION_FAILED', recheckAllowed: true });
+      }
     } finally {
       if (currentResponse()) {
         controller.current = null; busyRef.current = false; setBusy(false);

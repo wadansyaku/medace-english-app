@@ -161,14 +161,37 @@ describe('public-guide conversation server with live generation disabled', () =>
   it('enforces same-origin, streamed body limit and no-store before authentication', async () => {
     const { env } = setup();
     const cross = new Request('https://app.test/api/product-support', { method: 'POST', headers: { Origin: 'https://attacker.test', 'Content-Type': 'application/json' }, body: JSON.stringify(request()) });
-    await expect(productSupportRoutes[0].handle({ env, request: cross, pathname: 'product-support' })).rejects.toMatchObject({ status: 403 });
+    const crossResult = await productSupportRoutes[0].handle({ env, request: cross, pathname: 'product-support' });
+    expect(crossResult.response.status).toBe(403);
+    expect(await crossResult.response.json()).toMatchObject({ productSupportAdmission: 'NOT_ADMITTED' });
     const sameSite = new Request('https://app.test/api/product-support', { method: 'POST', headers: { 'Sec-Fetch-Site': 'same-site', 'Content-Type': 'application/json' }, body: JSON.stringify(request()) });
-    await expect(productSupportRoutes[0].handle({ env, request: sameSite, pathname: 'product-support' })).rejects.toMatchObject({ status: 403 });
+    const siteResult = await productSupportRoutes[0].handle({ env, request: sameSite, pathname: 'product-support' });
+    expect(siteResult.response.status).toBe(403);
     const oversized = new Request('https://app.test/api/product-support', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'x'.repeat(13 * 1024) });
     await expect(readProductSupportBody(oversized)).rejects.toMatchObject({ status: 413 });
     const valid = new Request('https://app.test/api/product-support', { method: 'POST', headers: { Origin: 'https://app.test', 'Content-Type': 'application/json' }, body: JSON.stringify(request()) });
     const result = await productSupportRoutes[0].handle({ env, request: valid, pathname: 'product-support' });
     expect(result.response.headers.get('Cache-Control')).toBe('no-store'); expect(result.logUser).toBeNull();
+  });
+
+  it.each([
+    { change: { question: 'synthetic@example.test の記録は？' }, status: 400, message: '個人情報や秘密情報を取り除いて、操作だけを入力してください。' },
+    { change: { targetVersion: 'old-guide-version' }, status: 409, message: '操作案内の版が変わりました。画面を再読み込みしてください。' },
+  ])('marks only a proven pre-admission rejection without reserving a receipt: $status', async ({ change, status, message }) => {
+    const { env, sqlite } = setup();
+    const incoming = new Request('https://app.test/api/product-support', { method: 'POST', headers: { Origin: 'https://app.test', 'Content-Type': 'application/json' }, body: JSON.stringify(request(change)) });
+    const result = await productSupportRoutes[0].handle({ env, request: incoming, pathname: 'product-support' });
+    expect(result.response.status).toBe(status);
+    expect(await result.response.json()).toEqual({ error: message, message, productSupportAdmission: 'NOT_ADMITTED' });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM bot_product_support_requests').get()).toMatchObject({ count: 0 });
+  });
+
+  it('leaves an existing same-ID receipt conflict unmarked and retains that receipt', async () => {
+    const { env, sqlite } = setup();
+    const incoming = (question: string) => new Request('https://app.test/api/product-support', { method: 'POST', headers: { Origin: 'https://app.test', 'Content-Type': 'application/json' }, body: JSON.stringify(request({ question })) });
+    await productSupportRoutes[0].handle({ env, request: incoming('単語の発音を聞くには？'), pathname: 'product-support' });
+    await expect(productSupportRoutes[0].handle({ env, request: incoming('登録前のNaruの記録は？'), pathname: 'product-support' })).rejects.toMatchObject({ status: 409 });
+    expect(sqlite.prepare('SELECT COUNT(*) AS count FROM bot_product_support_requests').get()).toMatchObject({ count: 1 });
   });
 
   it('resolves an existing student grant per request and rejects stale or forged workspace authority without writes', async () => {

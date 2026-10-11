@@ -1,6 +1,7 @@
-import { HttpError } from '../http';
+import { PRODUCT_SUPPORT_NOT_ADMITTED, type ProductSupportRequest } from '../../../contracts/productSupport';
+import { handleError, HttpError } from '../http';
 import { assertSameOriginMutation } from '../request-guards';
-import { handleProductSupport, PRODUCT_SUPPORT_BODY_LIMIT_BYTES, resolveProductSupportActor } from '../product-support-actions';
+import { handleProductSupport, PRODUCT_SUPPORT_BODY_LIMIT_BYTES, resolveProductSupportActor, validateProductSupportRequest, type ProductSupportActor } from '../product-support-actions';
 import { createJsonResponse, type ApiRouteDefinition } from './runtime';
 
 export const readProductSupportBody = async (request: Request): Promise<unknown> => {
@@ -28,17 +29,30 @@ export const readProductSupportBody = async (request: Request): Promise<unknown>
 export const productSupportRoutes: ApiRouteDefinition[] = [{
   matches: ({ pathname, request }) => pathname === 'product-support' && request.method === 'POST',
   handle: async ({ env, request }) => {
-    assertSameOriginMutation(request);
-    // The existing guard also allows same-site/none provenance. This public
-    // endpoint accepts only exact browser origin/referrer or same-origin.
-    const origin = request.headers.get('Origin'); const referer = request.headers.get('Referer');
-    const expected = new URL(request.url).origin;
-    if (!(origin === expected || !origin && referer && new URL(referer).origin === expected
-      || !origin && !referer && request.headers.get('Sec-Fetch-Site') === 'same-origin')) {
-      throw new HttpError(403, '同じサイトの画面から質問してください。');
+    let body: ProductSupportRequest;
+    let actor: ProductSupportActor;
+    try {
+      assertSameOriginMutation(request);
+      // The existing guard also allows same-site/none provenance. This public
+      // endpoint accepts only exact browser origin/referrer or same-origin.
+      const origin = request.headers.get('Origin'); const referer = request.headers.get('Referer');
+      const expected = new URL(request.url).origin;
+      if (!(origin === expected || !origin && referer && new URL(referer).origin === expected
+        || !origin && !referer && request.headers.get('Sec-Fetch-Site') === 'same-origin')) {
+        throw new HttpError(403, '同じサイトの画面から質問してください。');
+      }
+      body = validateProductSupportRequest(await readProductSupportBody(request));
+      actor = await resolveProductSupportActor(env, request);
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status < 400 || error.status >= 500) throw error;
+      const response = handleError(error);
+      // Preserve other server machine codes (including workspace revocation).
+      const payload = await response.json() as Record<string, unknown>;
+      return { logUser: null, response: createJsonResponse({ ...payload,
+        productSupportAdmission: PRODUCT_SUPPORT_NOT_ADMITTED }, { status: error.status }) };
     }
-    const body = await readProductSupportBody(request);
-    const actor = await resolveProductSupportActor(env, request);
+    // Receipt conflicts and all failures after admission stay unmarked: they
+    // cannot prove that an earlier ask with this ID was never dispatched.
     return { logUser: null, response: createJsonResponse(await handleProductSupport(env, actor, body)) };
   },
 }];

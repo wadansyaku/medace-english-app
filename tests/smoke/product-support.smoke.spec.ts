@@ -52,6 +52,37 @@ const attachGeometry = async (page: Page, info: TestInfo, name: string) => {
   return geometry;
 };
 
+test('real safe input rejection preserves the question and focus for an explicit corrected ask', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginBusinessStudentDemo(page);
+  const bodies: ProductSupportRequest[] = [];
+  const rejectedResponses: unknown[] = [];
+  await page.route('**/api/product-support', async route => {
+    bodies.push(route.request().postDataJSON());
+    const response = await route.fetch();
+    if (!response.ok()) rejectedResponses.push(await response.json());
+    await route.fulfill({ response });
+  });
+  await open(page);
+  const rejectedText = 'synthetic@example.test のNaru記録は？';
+  await ask(page, rejectedText);
+  await expect(dialog(page).getByRole('alert')).toHaveText('個人情報や秘密情報を取り除いて、操作だけを入力してください。');
+  await expect(question(page)).toHaveValue(rejectedText);
+  await expect(question(page)).toBeEditable(); await expect(question(page)).toBeFocused();
+  await expect(dialog(page).getByTestId('support-pending')).toHaveCount(0);
+  await expect(consent(page)).toBeChecked();
+  expect(bodies).toHaveLength(1);
+  expect(rejectedResponses).toEqual([expect.objectContaining({ productSupportAdmission: 'NOT_ADMITTED' })]);
+  await attachGeometry(page, info, 'support-safe-rejection-390');
+  await question(page).fill('理解度を選んだ後の復習方法は？');
+  await dialog(page).getByTestId('support-submit').click();
+  await expect(latestTurn(page).getByTestId('support-answer')).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[0].action).toBe('ask'); expect(bodies[1].action).toBe('ask');
+  expect(bodies[1].requestId).not.toBe(bodies[0].requestId);
+  await attachGeometry(page, info, 'support-corrected-question-390');
+});
+
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 },
   { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
   test(`support input, evidence and keyboard remain usable at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {

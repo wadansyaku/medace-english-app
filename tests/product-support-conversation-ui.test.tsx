@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductSupportRequest, ProductSupportResponse } from '../contracts/productSupport';
 import { PRODUCT_SUPPORT_TARGET_VERSION } from '../shared/productSupportKnowledge';
 import { searchProductSupportConversation } from '../shared/productSupportConversation';
+import { ProductSupportNotAdmittedError } from '../services/productSupport';
 
 // Render the real component and its asynchronous state transitions with the
 // repository's existing network-free React hook harness. Browser QA is separate.
@@ -199,6 +200,40 @@ describe('product conversation UI and safe state inquiry', () => {
     expect(html()).toContain('自動で作り直しません'); submit(); expect(props.onAsk).toHaveBeenCalledTimes(2);
     find(render()!, 'support-new-question').props.onClick(); fill('発音が聞こえない時は？'); submit();
     expect(lastAsk().action).toBe('ask'); expect(lastAsk().requestId).not.toBe(sent.requestId); await settle();
+  });
+
+  it.each([
+    '個人情報や秘密情報を取り除いて、操作だけを入力してください。',
+    '同じサイトの画面から質問してください。',
+    '操作案内の版が変わりました。画面を再読み込みしてください。',
+  ])('preserves an editable new ask and the exact safe rejection: %s', async message => {
+    (props.onAsk as any).mockImplementationOnce(async (request: Ask) => { throw new ProductSupportNotAdmittedError(message, request.requestId); });
+    await settle(); agree(); fill('synthetic@example.test のNaru記録は？'); submit(); await settle();
+    const rejected = lastAsk();
+    expect(html()).toContain(message); expect(html()).not.toContain('support-pending');
+    expect(field(render()!).props.value).toBe(rejected.question);
+    expect(field(render()!).props.readOnly).toBe(false); expect(field(render()!).props.disabled).toBe(false);
+    expect(consent(render()!).props.checked).toBe(true); expect(props.onAsk).toHaveBeenCalledTimes(1);
+    fill('登録前のNaruの記録は？'); submit();
+    expect(lastAsk().requestId).not.toBe(rejected.requestId); await settle();
+    expect(html()).toContain('support-answer'); expect(props.onAsk).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the original unknown ask locked when a state inquiry is rejected before admission', async () => {
+    (props.onAsk as any).mockRejectedValueOnce(new Error('response lost'));
+    await settle(); agree(); fill('登録前のNaruの記録は？'); submit(); await settle();
+    const original = lastAsk();
+    (props.onAsk as any).mockRejectedValueOnce(new ProductSupportNotAdmittedError('状態照会が拒否されました。', original.requestId));
+    find(render()!, 'support-recheck').props.onClick(); await settle();
+    expect(field(render()!).props.readOnly).toBe(true); expect(field(render()!).props.value).toBe(original.question);
+    expect(html()).toContain('通信が完了せず'); submit(); expect(props.onAsk).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not unlock an ask on a rejection for a different request', async () => {
+    (props.onAsk as any).mockRejectedValueOnce(new ProductSupportNotAdmittedError('synthetic stale response', 'different-request'));
+    await settle(); agree(); fill('登録前のNaruの記録は？'); submit(); await settle();
+    expect(field(render()!).props.readOnly).toBe(true); expect(html()).toContain('通信が完了せず');
+    submit(); expect(props.onAsk).toHaveBeenCalledTimes(1);
   });
 
   it.each(['DISABLED', 'CAPACITY_REACHED'] as const)('shows %s without zero/done or automatic retries and retains input', async status => {
