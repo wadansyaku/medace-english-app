@@ -92,6 +92,16 @@ export const verifyOwnerWorkspaceRegressions = async ({
     assert(Array.isArray(result.data), 'progress response must be a list');
     return result.data;
   };
+  const denyOrganizationDashboard = async (client, headers, label) => {
+    const result = await storage(client, headers, 'getOrganizationDashboardSnapshot');
+    requireStatus(result, 403, label);
+    const body = JSON.stringify(result.data);
+    for (const marker of ['assignmentEvents', 'instructors', 'instructorBacklog', 'trend',
+      'totalMembers', 'activationState', hiddenStudent.uid, otherStudent.uid,
+      hiddenStudent.displayName, otherStudent.displayName].filter(Boolean)) {
+      assert(!body.includes(marker), `${label} must not return organization-wide payload or unauthorized identities`);
+    }
+  };
   const putAsset = (client, upload, body, headers = teacherHeaders) => fetch(`${baseUrl}${upload.uploadUrl}`, {
     method: 'PUT', headers: { Origin: baseUrl, 'Content-Type': 'image/png', 'X-Content-SHA256': sha256(body),
       ...(client?.cookie ? { Cookie: client.cookie } : {}), ...headers }, body,
@@ -215,6 +225,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
     requireStatus(await storage(teacher, { ...teacherHeaders, 'X-MedAce-Workspace-Identity': otherStudent.uid }, 'getAllStudentsProgress'), 403, 'workspace identity must match the cookie identity');
     requireStatus(await storage(service, { ...serviceHeaders, 'X-MedAce-Workspace-Org': orgId }, 'getAllStudentsProgress'), 403, 'service mode must not accept a classroom organization hint');
     assert((await students(teacher, teacherHeaders)).length === 0, 'teacher without assignment or cohort must remain empty');
+    await denyOrganizationDashboard(teacher, teacherHeaders, 'unassigned teacher direct organization dashboard');
     const schoolStudents = await students(school, schoolHeaders);
     assert(schoolStudents.some((student) => student.uid === assignedStudent.uid)
       && schoolStudents.some((student) => student.uid === hiddenStudent.uid)
@@ -226,6 +237,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
       'grant-holder with raw student identity must be eligible for its teacher assignment');
     assert((await students(teacher, teacherHeaders)).map((student) => student.uid).join(',') === assignedStudent.uid,
       'teacher must see exactly its assigned student in A');
+    await denyOrganizationDashboard(teacher, teacherHeaders, 'assigned teacher direct organization dashboard');
     const settings = await storage(school, schoolHeaders, 'getOrganizationSettingsSnapshot');
     requireStatus(settings, 200, 'school settings');
     assert(settings.data.organizationId === orgId && settings.data.members.every((member) => member.userUid !== otherStudent.uid),
@@ -249,6 +261,8 @@ export const verifyOwnerWorkspaceRegressions = async ({
     const grantedTeachers = dashboardRoster.data.instructors.filter((instructor) => instructor.uid === owner.uid);
     assert(grantedTeachers.length === 1 && grantedTeachers[0].organizationRole === 'INSTRUCTOR',
       'the operational instructor roster must include the explicit granted teacher once');
+    assert(!JSON.stringify(dashboardRoster.data).includes(otherStudent.uid),
+      'every school dashboard field must exclude the other classroom identity');
     const cohortRowsSql = `SELECT * FROM organization_cohort_instructors WHERE instructor_user_id = ${quote(owner.uid)} ORDER BY cohort_id`;
     const beforeForeignCohort = await query(cohortRowsSql);
     requireStatus(await storage(school, schoolHeaders, 'setInstructorCohorts', {
@@ -366,6 +380,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
       await execute(sql);
       const beforeUnused = await assetSnapshot(unused.assetId);
       requireStatus(await storage(teacher, teacherHeaders, 'getAllStudentsProgress'), 403, `teacher after ${label}`);
+      await denyOrganizationDashboard(school, schoolHeaders, `school organization dashboard after ${label}`);
       requireStatus(await storage(service, serviceHeaders, 'getAllStudentsProgress'), label === 'inactive organization' ? 200 : 403,
         `global service permission after ${label}`);
       requireStatus(await putAsset(teacher, unused, body), 403, `unused owner PUT after ${label}`);

@@ -21,7 +21,9 @@ export const handleGetOrganizationDashboardSnapshot = async (
   env: AppEnv,
   user: DbUserRow,
 ): Promise<OrganizationDashboardSnapshot> => {
-  const organization = await requireActiveOrganizationContext(env, user);
+  // This school-admin read model includes organization-wide names, event
+  // history and aggregates. Authorize the entire payload before any reads.
+  const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
 
   const [
     students,
