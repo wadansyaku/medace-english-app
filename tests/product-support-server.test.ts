@@ -171,6 +171,46 @@ describe('public-guide conversation server with live generation disabled', () =>
     expect(result.response.headers.get('Cache-Control')).toBe('no-store'); expect(result.logUser).toBeNull();
   });
 
+  it('resolves an existing student grant per request and rejects stale or forged workspace authority without writes', async () => {
+    const { env, sqlite } = setup();
+    sqlite.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,role TEXT,organization_role TEXT);
+      CREATE TABLE sessions(token TEXT PRIMARY KEY,token_hash TEXT,user_id TEXT,expires_at INTEGER);
+      CREATE TABLE organizations(id TEXT PRIMARY KEY,status TEXT,display_name TEXT,subscription_plan TEXT);
+      CREATE TABLE organization_memberships(user_id TEXT,organization_id TEXT,role TEXT,status TEXT);
+      CREATE TABLE workspace_access_grants(user_id TEXT PRIMARY KEY,staff_organization_id TEXT,teacher_access INTEGER,
+        school_admin_access INTEGER,service_admin_access INTEGER,status TEXT,grant_version INTEGER);
+      INSERT INTO users VALUES('synthetic_owner','STUDENT','STUDENT');
+      INSERT INTO organizations VALUES('synthetic_org','ACTIVE','Synthetic classroom','TOB_PAID');
+      INSERT INTO organization_memberships VALUES('synthetic_owner','synthetic_org','STUDENT','ACTIVE');
+      INSERT INTO workspace_access_grants VALUES('synthetic_owner','synthetic_org',1,1,1,'ACTIVE',7);`);
+    const credential = 'synthetic_owner_session.secret';
+    sqlite.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run('synthetic_owner_session', await hashOpaqueToken(credential), 'synthetic_owner', Date.now() + 60_000);
+    const requestFor = (workspace: string, extra: Record<string, string> = {}) => new Request('https://app.test/api/product-support', {
+      method: 'POST', headers: { Cookie: `medace_session=${credential}`, 'X-MedAce-Workspace': workspace,
+        'X-MedAce-Workspace-Version': '7', 'X-MedAce-Workspace-Identity': 'synthetic_owner',
+        ...(workspace === 'service-admin' || workspace === 'personal' ? {} : { 'X-MedAce-Workspace-Org': 'synthetic_org' }), ...extra },
+    });
+    const snapshot = () => JSON.stringify(['users', 'sessions', 'organizations', 'organization_memberships', 'workspace_access_grants']
+      .map(table => sqlite.prepare(`SELECT * FROM ${table}`).all()));
+    const before = snapshot();
+    const actorHash = await hashProductSupportMetadata('bot-support:actor:v1:synthetic_owner');
+    for (const [workspace, role] of [['personal', 'STUDENT'], ['instructor', 'INSTRUCTOR'], ['group-admin', 'GROUP_ADMIN'], ['service-admin', 'ADMIN']]) {
+      expect(await resolveProductSupportActor(env, requestFor(workspace))).toEqual({ role, actorHash });
+    }
+    for (const extra of [{ 'X-MedAce-Workspace-Identity': 'other-synthetic-user' }, { 'X-MedAce-Workspace-Version': '6' },
+      { 'X-MedAce-Workspace-Org': 'another-synthetic-org' }]) {
+      await expect(resolveProductSupportActor(env, requestFor('instructor', extra))).rejects.toMatchObject({ status: 403 });
+    }
+    expect((await resolveProductSupportActor(env, requestFor('service-admin', { Cookie: 'medace_session=synthetic_owner_session' }))).role).toBe('GUEST');
+    expect(snapshot()).toBe(before);
+    sqlite.exec("UPDATE organizations SET status='INACTIVE'");
+    await expect(resolveProductSupportActor(env, requestFor('instructor'))).rejects.toMatchObject({ status: 403 });
+    expect((await resolveProductSupportActor(env, requestFor('service-admin'))).role).toBe('ADMIN');
+    sqlite.exec("UPDATE workspace_access_grants SET status='REVOKED'");
+    await expect(resolveProductSupportActor(env, requestFor('service-admin'))).rejects.toMatchObject({ status: 403 });
+    expect((await resolveProductSupportActor(env, requestFor('personal'))).role).toBe('STUDENT');
+  });
+
   it('reads modern cookie authority without side effects or trusting shadow/body roles', async () => {
     const { env, sqlite } = setup();
     sqlite.exec(`CREATE TABLE users(id TEXT PRIMARY KEY,role TEXT,organization_role TEXT);

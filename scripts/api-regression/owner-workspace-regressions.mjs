@@ -134,6 +134,15 @@ export const verifyOwnerWorkspaceRegressions = async ({
       const session = await client.request('/api/session', { method: 'GET', headers: workspaceHeaders(workspace) });
       requireStatus(session, 200, `${workspace} session restore`);
       assert(session.data.role === role && session.data.workspaceAccess?.workspace === workspace, 'session restore must retain the explicit workspace projection');
+      const userBeforeSupport = JSON.stringify(await query(`SELECT * FROM users WHERE id = ${quote(owner.uid)}`));
+      const sessionsBeforeSupport = await sessionSnapshot();
+      const support = await client.request('/api/product-support', { method: 'POST', headers: workspaceHeaders(workspace),
+        body: JSON.stringify({ action: 'ask', requestId: `api_owner_support_${workspace}`, question: '講師や学校管理者のログイン入口は？', history: [], privacyConsent: true }) });
+      requireStatus(support, 200, `${workspace} public support authority`);
+      assert(support.data.status === 'ANSWERED' && support.data.providerUsed === false
+        && support.data.sourceIds.includes('staff-login-entry'), 'support must use the verified selected staff role with generation disabled');
+      assert(JSON.stringify(await query(`SELECT * FROM users WHERE id = ${quote(owner.uid)}`)) === userBeforeSupport
+        && await sessionSnapshot() === sessionsBeforeSupport, 'support role resolution must not mutate the identity, profile or sessions');
     }
     const originalSessions = await sessionSnapshot();
     for (const [client, workspace] of [[teacher, 'instructor'], [school, 'group-admin'], [service, 'service-admin']]) {
@@ -180,6 +189,12 @@ export const verifyOwnerWorkspaceRegressions = async ({
     requireStatus(personal, 200, 'personal session restore');
     assert(personal.data.role === 'STUDENT' && !personal.data.workspaceAccess && personal.data.organizationRole === 'STUDENT',
       'the shared identity cookie must retain the underlying personal student');
+    const personalSupport = await teacher.request('/api/product-support', { method: 'POST',
+      body: JSON.stringify({ action: 'ask', requestId: 'api_owner_support_personal', question: '講師や学校管理者のログイン入口は？', history: [], privacyConsent: true }) });
+    requireStatus(personalSupport, 200, 'personal support stays student scoped');
+    assert(personalSupport.data.status === 'ANSWERED' && personalSupport.data.providerUsed === false
+      && personalSupport.data.kind === 'CLARIFICATION' && personalSupport.data.sourceIds.length === 0,
+    'a staff grant must not expose staff evidence while the owner is in personal learning');
     const discovered = await teacher.request('/api/session', { method: 'GET', headers: { 'X-MedAce-Workspace': 'instructor' } });
     requireStatus(discovered, 200, 'session workspace discovery');
     assert(discovered.data.workspaceAccess?.grantVersion === 7 && discovered.data.organizationId === orgId,

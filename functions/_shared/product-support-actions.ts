@@ -5,6 +5,8 @@ import { hashOpaqueToken } from './auth';
 import { HttpError } from './http';
 import { createProductSupportBudget, hashProductSupportMetadata, type ProductSupportReceipt } from './product-support-budget';
 import { buildProductSupportPrompt, decodeProductSupportProviderOutput, getProductSupportProvider, type ProductSupportEnv, type ProductSupportProvider } from './product-support-provider';
+import type { DbUserRow } from './types';
+import { projectRequestWorkspace } from './workspace-access';
 
 export const PRODUCT_SUPPORT_BODY_LIMIT_BYTES = 12 * 1024;
 export const PRODUCT_SUPPORT_TIMEOUT_MS = 10_000;
@@ -53,19 +55,22 @@ export const resolveProductSupportActor = async (env: ProductSupportEnv, request
   const publicActor = async (): Promise<ProductSupportActor> => ({ role: 'GUEST', actorHash: await hashProductSupportMetadata('bot-support:shared-public-bucket:v1') });
   if (!credential || credential.length > 500) return publicActor();
   const sessionId = credential.split('.')[0];
-  const row = await env.DB.prepare(`SELECT u.id,u.role,s.token_hash FROM sessions s JOIN users u ON u.id=s.user_id
-    WHERE s.token=? AND s.expires_at>?`).bind(sessionId, Date.now()).first<{ id: string; role: string; token_hash: string | null }>();
+  const row = await env.DB.prepare(`SELECT u.*,s.token_hash AS session_token_hash FROM sessions s JOIN users u ON u.id=s.user_id
+    WHERE s.token=? AND s.expires_at>?`).bind(sessionId, Date.now()).first<DbUserRow & { session_token_hash: string | null }>();
   if (!row || (credential.includes('.')
-    ? row.token_hash !== await hashOpaqueToken(credential)
-    : row.token_hash !== null)) return publicActor();
-  let role: ProductSupportRole = row.role === 'ADMIN' ? 'ADMIN' : row.role === 'STUDENT' ? 'STUDENT' : 'GUEST';
-  if (row.role === 'INSTRUCTOR') {
+    ? row.session_token_hash !== await hashOpaqueToken(credential)
+    : row.session_token_hash !== null)) return publicActor();
+  const identity = await projectRequestWorkspace(env, row, request);
+  let role: ProductSupportRole = identity.role === 'ADMIN' ? 'ADMIN' : identity.role === 'STUDENT' ? 'STUDENT' : 'GUEST';
+  if (identity.role === 'INSTRUCTOR' && identity.server_workspace) {
+    role = identity.organization_role === 'GROUP_ADMIN' ? 'GROUP_ADMIN' : 'INSTRUCTOR';
+  } else if (identity.role === 'INSTRUCTOR') {
     const membership = await env.DB.prepare(`SELECT m.role FROM organization_memberships m JOIN organizations o ON o.id=m.organization_id
       WHERE m.user_id=? AND m.status='ACTIVE' AND o.status='ACTIVE' AND m.role IN ('INSTRUCTOR','GROUP_ADMIN')
-      ORDER BY CASE m.role WHEN 'GROUP_ADMIN' THEN 0 ELSE 1 END,m.organization_id LIMIT 1`).bind(row.id).first<{ role: ProductSupportRole }>();
+      ORDER BY CASE m.role WHEN 'GROUP_ADMIN' THEN 0 ELSE 1 END,m.organization_id LIMIT 1`).bind(identity.id).first<{ role: ProductSupportRole }>();
     if (membership) role = membership.role;
   }
-  return { role, actorHash: await hashProductSupportMetadata(`bot-support:actor:v1:${row.id}`) };
+  return { role, actorHash: await hashProductSupportMetadata(`bot-support:actor:v1:${identity.id}`) };
 };
 const references = (sources: readonly ProductSupportKnowledgeSource[]): ProductSupportReference[] => sources.map(source => ({
   sourceId: source.sourceId, title: source.title, excerpt: source.content, version: source.targetVersion, checkedAt: source.checkedAt,
