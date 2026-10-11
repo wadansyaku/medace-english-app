@@ -112,6 +112,21 @@ export const handleProductFeedback = async (env: AppEnv, user: DbUserRow, raw: u
   let next: ProductFeedbackReport;
   try { next = advanceFeedback(report,body.change,user.role as 'ADMIN' | 'INSTRUCTOR',Date.now()); } catch(error) { throw new HttpError(400,(error as Error).message); }
   const event = next.history.at(-1)!;
+  if (body.change.type === 'retest') {
+    const actualRevision = env.DEPLOYMENT_SHA?.trim() || null;
+    const versionMatches = actualRevision !== null && actualRevision === row.fix_revision;
+    // Replay committed receipts above before checking the current deployment: a
+    // deployment change must not invalidate an already accepted mutation.
+    if (body.change.passed && !versionMatches) {
+      throw new HttpError(409, actualRevision
+        ? '現在の公開版と修正版が一致していません。画面を再読み込みし、公開版を確認してから再テストしてください。'
+        : '現在の公開版をサーバーで確認できません。画面を再読み込みし、公開版を確認してから再テストしてください。');
+    }
+    // Failure reports remain useful on older/unknown deployments, but must not
+    // imply verification of the recorded fix. Record server facts separately
+    // from the user's description, without trusting client-supplied metadata.
+    event.note += `。サーバー確認の公開版: ${actualRevision ?? '不明'}。修正版との照合: ${versionMatches ? '一致' : actualRevision ? '不一致' : '未確認'}。${body.change.passed ? '結果は本人の操作報告。' : '失敗報告を保存（修正版の成功確認ではありません）。'}`;
+  }
   const { history: _history, ...responseSnapshot } = next;
   await env.DB.batch([
     env.DB.prepare(`INSERT OR IGNORE INTO product_feedback_receipts(report_id,mutation_id,actor_user_id,fingerprint,response_json) SELECT id,?,?,?,? FROM product_feedback_reports WHERE id=? AND revision=?`).bind(body.mutationId,user.id,fingerprint,JSON.stringify(responseSnapshot),body.id,body.expectedRevision),
