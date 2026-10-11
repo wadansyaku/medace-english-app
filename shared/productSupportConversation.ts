@@ -66,9 +66,9 @@ const falsePremise = (text: string, topics: readonly ProductSupportTopic[]) => {
     const match = pattern.exec(clause);
     if (!match) return false;
     const suffix = clause.slice(match.index + match[0].length, match.index + match[0].length + 14);
-    return !/^(?:では|じゃ|で|され|し|する|でき|になって)?(?:ない|ません|なく|なかった)|^\s*(?:is\s+)?not\b/.test(suffix);
+    return !/^(?:では|じゃ|で|され|し|する|でき|になって|ことは|ことが|わけでは|とは限ら)?(?:ない|ません|なく|なかった)|^\s*(?:is\s+)?not\b/.test(suffix);
   };
-  return text.split(/[?？。;；\n]+|ですが|けれど|けど|なのに|\bbut\b/).some(clause => {
+  return text.split(/[?？。;；\n]+|ですが|けれど|けど|なのに|でも|\bbut\b/).some(clause => {
     if (!has(clause, /はず|ですよね|だよね|前提|済み|必ず|\b(?:since|already|guaranteed)\b/)) return false;
     const clauseTopics = topicsIn(clause);
     return topics.includes('guest-wordbooks') && clauseTopics.includes('guest-wordbooks')
@@ -103,7 +103,11 @@ export const searchProductSupportConversation = (input: ProductSupportSearchInpu
       const text = normalize(turn.userText);
       if (text.length > 2000 || unsafeRequest(text) || privateInput(text) || unsupportedTopic(text)) { previousTopics = []; continue; }
       const next = topicsIn(text);
-      if (next.length && !(genericBookFollowUp(text) && previousTopics.length === 1 && ['guest-wordbooks', 'my-wordbooks'].includes(previousTopics[0]))) previousTopics = next;
+      if (next.length) {
+        previousTopics = genericBookFollowUp(text) && previousTopics.length === 1 && ['guest-wordbooks', 'my-wordbooks'].includes(previousTopics[0])
+          ? [...new Set([...previousTopics, ...next.filter(topic => topic !== 'guest-wordbooks' && topic !== 'my-wordbooks')])]
+          : next;
+      }
       else if (!next.length && !followUp(text) && !/^(?:ありがとう|ありがとうございます|なるほど|はい|ok|thanks|thank you)[。.!！]*$/.test(text)) previousTopics = [];
     }
     if (!topics.length || topics.every(topic => topic === 'guest-wordbooks' || topic === 'my-wordbooks')
@@ -123,7 +127,7 @@ export const searchProductSupportConversation = (input: ProductSupportSearchInpu
     kind: 'clarification', sources, reason: 'ambiguous-topic', clarification: '直前に複数の機能が出ています。どの機能についての続きですか？',
   };
   if (falsePremise(question, topics)) return { kind: 'unknown', sources, reason: 'unsupported-premise' };
-  const clauses = question.split(/[?？。;；\n]+|それと|それから|あと、|\band\b/).map(value => value.trim()).filter(Boolean);
+  const clauses = question.split(/[?？。;；\n]+|それと|それから|あと、|(?<!こ)(?<!単語)と(?!意味|いう|いった|の|して|き)|\band\b/).map(value => value.trim()).filter(Boolean);
   const bareFollowUp = (clause: string) => /^(?:(?:それ|その|では|じゃあ)[はの、,\s]*)?(?:いつまで|何日|何語まで|どこ(?:で|から|に)|保存(?:できる|される|する)?|どうやって|上限|xp)(?:ですか|できますか|できる|です|は|\s)*$/.test(clause);
   if (clauses.length > 1 && clauses.some(clause => !topicsIn(clause).length && !bareFollowUp(clause))) return { kind: 'unknown', sources, reason: 'uncovered-question' };
   return { kind: 'grounded', sources, usedHistory };
@@ -156,7 +160,7 @@ export const validateProductSupportAnswer = (value: unknown, input: ProductSuppo
   const text = normalize(`${candidate.answer} ${candidate.clarification ?? ''}`);
   const urls = text.match(/https?:\/\/[^\s<>"'）)]+/g) ?? [];
   if (privateInput(text) || unsafeRequest(text) || /<\/?[a-z][^>]*>|javascript:|data:|\]\s*\(/i.test(text)
-    || input.role === 'STUDENT' && /\/(?:teacher|school-admin|service-admin|admin-access)\b/.test(text)
+    || input.role === 'STUDENT' && /\/(?:teacher|school-admin|service-admin|admin-access)\b|\/public\/roles\/(?:instructor|group-admin|service-admin)\b/.test(text)
     || !PRODUCT_SUPPORT_SOURCE_LINKS_READY && urls.length > 0
     || urls.some(url => !sources.some(source => source.sourceURL.toLowerCase() === url))) return { valid: false, reason: 'unsafe-content' };
   if (decision.kind !== 'grounded' && !candidate.unknown || decision.kind === 'clarification' && candidate.clarification === null

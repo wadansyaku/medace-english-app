@@ -44,6 +44,10 @@ describe('conversation retrieval without generation', () => {
     expect(ids(ask('ゲストの単語帳ではCSVは必要？', ['My単語帳を作りたい']))).toEqual(['guest-local-wordbooks']);
   });
 
+  it('does not discard a second topic when a book-format follow-up adds pronunciation', () => {
+    expect(ask('それはどうやって？', ['ゲストの単語帳を作りたい', 'CSVの入れ方と発音について'], 'GUEST').kind).toBe('clarification');
+  });
+
   it('retains both record and book sources in a compound question', () => {
     const result = ask('Naruの回答の引継ぎとMy単語帳の作り方は？');
     expect(result.kind).toBe('grounded');
@@ -51,7 +55,7 @@ describe('conversation retrieval without generation', () => {
     expect(ask('ゲストの単語帳とMy単語帳の違いは？').kind).toBe('clarification');
   });
 
-  it.each(['My単語帳はどう作る？量子力学をどこで学べる？', 'Naruの記録は残る？量子力学の資料は保存できますか？'])('does not hide an unsupported subject behind a follow-up word: %s', question => {
+  it.each(['My単語帳はどう作る？量子力学をどこで学べる？', 'Naruの記録は残る？量子力学の資料は保存できますか？', 'My単語帳の作り方と量子力学の資料の保存方法は？'])('does not hide an unsupported subject behind a follow-up word: %s', question => {
     expect(ask(question)).toMatchObject({ kind: 'unknown', reason: 'uncovered-question' });
   });
 
@@ -114,6 +118,8 @@ describe('conversation retrieval without generation', () => {
   it.each([
     'ログインだけではNaruの回答は自動保存されないですよね',
     'AIは停止済みですが発音は使えるはずですよね',
+    'AIは停止済みでも発音は使えるはずですよね',
+    'ゲスト単語帳はクラウドに保存されることはないですよね',
     'Naruの回答を手動で保存済み。発音は自動再生ですよね？',
   ])('binds an asserted premise to its own feature and respects correct negation: %s', question => {
     expect(ask(question).kind).toBe('grounded');
@@ -177,8 +183,8 @@ describe('canonical response evidence validation', () => {
     expect(validate({ ...answer, sourceIds: ['guest-naru-records'] }, input, forged)).toMatchObject({ valid: false, reason: 'decision-conflict' });
   });
 
-  it('rejects a staff path smuggled into otherwise valid student evidence', () => {
-    expect(validate({ ...answer, answer: 'My単語帳を作れます。講師は /teacher からログインできます。' }, input, decision)).toMatchObject({ valid: false, reason: 'unsafe-content' });
+  it.each(['/teacher', '/school-admin', '/service-admin', '/admin-access', '/public/roles/instructor', '/public/roles/group-admin', '/public/roles/service-admin'])('rejects a staff path smuggled into otherwise valid student evidence: %s', path => {
+    expect(validate({ ...answer, answer: `My単語帳を作れます。講師は ${path} からログインできます。` }, input, decision)).toMatchObject({ valid: false, reason: 'unsafe-content' });
   });
 
   it.each([
