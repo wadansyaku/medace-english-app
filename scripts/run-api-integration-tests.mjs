@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNodeToolCommand } from './_shared/tooling.mjs';
 import { createLocalWranglerProject } from './_shared/local-wrangler-project.mjs';
+import { verifyOwnerWorkspaceRegressions } from './api-regression/owner-workspace-regressions.mjs';
 import {
   nounWorkbookFixtureBookDescription,
   nounWorkbookFixtureBookTitle,
@@ -896,6 +897,9 @@ const main = async () => {
 
     console.log('Verifying real staff entry authentication against local D1...');
     await verifyRealStaffEntryAuthentication({ persistDir, baseUrl, adminUser, groupAdminUser, instructorUser, student: freeStudent });
+
+    await verifyOwnerWorkspaceRegressions({ persistDir, baseUrl, SessionClient, executeLocalSql, queryLocalSql,
+      orgStudentUser, freeStudentUser, cohortStudentUser, otherCohortStudentUser, groupAdminUser });
 
     console.log('Verifying student entry provisioning preserves identity, history and authorization...');
     const entryStudent = new SessionClient(baseUrl, 'role-entry-student');

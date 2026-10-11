@@ -1,3 +1,5 @@
+import type { WorkspaceAccess } from '../../contracts/workspaceAccess';
+
 export interface D1ResultMeta {
   changed_db?: boolean;
   changes?: number;
@@ -105,4 +107,6 @@ export interface DbUserRow {
   stats_last_login_date: string | null;
   created_at: number;
   updated_at: number;
+  // Created only after server-side identity, grant and scope validation.
+  server_workspace?: WorkspaceAccess & { source: 'EXPLICIT_GRANT' | 'CANONICAL' };
 }

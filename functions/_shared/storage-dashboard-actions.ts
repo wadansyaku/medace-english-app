@@ -38,7 +38,7 @@ import { buildPublicMotivationSnapshot } from './public-motivation';
 import { handleGetCommercialRequestStatus } from './commercial-actions';
 import { buildDashboardPrimaryMission } from '../../shared/dashboardPrimaryMission';
 import { buildDashboardBookCollections, buildDashboardSnapshotModel } from './dashboard-snapshot-model';
-import { readActiveOrganizationContextForUser } from './organization-memberships';
+import { readActiveActorOrganizationContext } from './organization-memberships';
 import { handleGetCoachNotifications } from './organization-notification-actions';
 import {
   buildActivationFunnel,
@@ -795,7 +795,7 @@ export const handleGetAiUsageSummary = async (env: AppEnv, user: DbUserRow): Pro
 };
 
 export const handleGetAccountOverview = async (env: AppEnv, user: DbUserRow): Promise<AccountOverview> => {
-  const activeOrganizationContext = await readActiveOrganizationContextForUser(env, user.id);
+  const activeOrganizationContext = await readActiveActorOrganizationContext(env, user);
   const plan = getSubscriptionPolicy(activeOrganizationContext?.subscriptionPlan || getUserSubscriptionPlan(user));
   return {
     subscriptionPlan: plan.plan,
@@ -848,7 +848,7 @@ export const handleGetMasteryDistribution = async (env: AppEnv, userId: string):
 
 export const handleGetMotivationSnapshot = async (env: AppEnv, user: DbUserRow): Promise<MotivationSnapshot> => {
   const [activeOrganizationContext, personalTotals, globalTotals, globalRegisteredRow] = await Promise.all([
-    readActiveOrganizationContextForUser(env, user.id),
+    readActiveActorOrganizationContext(env, user),
     readMotivationTotals(
       env,
       `SELECT

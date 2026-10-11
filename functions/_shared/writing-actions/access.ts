@@ -19,7 +19,7 @@ import { classifyWritingEvaluation, classifyWritingTranscript } from '../../../s
 import { HttpError } from '../http';
 import {
   type ActiveOrganizationContext,
-  readActiveOrganizationContextForUser,
+  readActiveActorOrganizationContext,
 } from '../organization-memberships';
 import {
   readVisibleStudentIds,
@@ -70,7 +70,7 @@ export const requireWritingOrganizationContext = async (
   user: DbUserRow,
 ): Promise<ActiveOrganizationContext> => {
   guardWritingAccess(user);
-  const organization = await readActiveOrganizationContextForUser(env, user.id);
+  const organization = await readActiveActorOrganizationContext(env, user);
   if (!organization) {
     throw new HttpError(403, '組織所属が確認できないため自由英作文を利用できません。');
   }

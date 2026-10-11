@@ -1,4 +1,6 @@
 
+import type { WorkspaceAccess } from './contracts/workspaceAccess';
+
 export enum UserRole {
   STUDENT = 'STUDENT',
   INSTRUCTOR = 'INSTRUCTOR',
@@ -468,6 +470,7 @@ export interface UserProfile {
   subscriptionPlan?: SubscriptionPlan;
   organizationName?: string;
   studyMode?: UserStudyMode;
+  workspaceAccess?: WorkspaceAccess;
 }
 
 export type WordPartOfSpeech = 'verb' | 'noun' | 'adverb' | 'adjective';

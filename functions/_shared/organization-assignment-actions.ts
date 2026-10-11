@@ -15,7 +15,7 @@ import {
 import { recordProductEventForUser } from './product-events';
 import type { AppEnv, DbUserRow } from './types';
 import { readFirst, toTokyoDateKey } from './storage-support';
-import { readActiveOrganizationMember } from './organization-support';
+import { readActiveOrganizationMember, readEligibleOrganizationInstructor } from './organization-support';
 
 export const handleAssignStudentInstructor = async (
   env: AppEnv,
@@ -46,12 +46,12 @@ export const handleAssignStudentInstructor = async (
   }
 
   if (instructorUid) {
-    const instructor = await readActiveOrganizationMember(env, instructorUid);
-    if (!instructor || instructor.role !== UserRole.INSTRUCTOR) {
-      throw new HttpError(404, '担当講師が見つかりません。');
-    }
     if (!student.organization_id) {
       throw new HttpError(400, '組織に所属していない生徒には担当割当できません。');
+    }
+    const instructor = await readEligibleOrganizationInstructor(env, instructorUid, student.organization_id);
+    if (!instructor || instructor.role !== UserRole.INSTRUCTOR) {
+      throw new HttpError(404, '担当講師が見つかりません。');
     }
     if (instructor.organization_id !== student.organization_id) {
       throw new HttpError(400, '生徒と同じ組織の講師にのみ割り当てできます。');
@@ -294,7 +294,7 @@ export const handleSetInstructorCohorts = async (
   }
 
   const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
-  const instructor = await readActiveOrganizationMember(env, instructorUid);
+  const instructor = await readEligibleOrganizationInstructor(env, instructorUid, organization.organizationId);
   if (!instructor || instructor.role !== UserRole.INSTRUCTOR || instructor.organization_role !== OrganizationRole.INSTRUCTOR) {
     throw new HttpError(404, '対象講師が見つかりません。');
   }

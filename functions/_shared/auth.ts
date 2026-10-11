@@ -11,6 +11,7 @@ import {
 } from './organization-memberships';
 import { syncLearningPlanBooks } from './learning-plan-books';
 import { AppEnv, DbUserRow } from './types';
+import { projectRequestWorkspace } from './workspace-access';
 
 const SESSION_COOKIE_NAME = 'medace_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -198,6 +199,12 @@ export const mapUserRowToProfile = (row: DbUserRow): UserProfile => ({
   diagnosticDeferredAt: row.diagnostic_deferred_at || undefined,
   needsOnboarding: row.role === UserRole.STUDENT && !row.english_level && !row.diagnostic_deferred_at,
   stats: normalizeStats(row),
+  ...(row.server_workspace ? { workspaceAccess: {
+    workspace: row.server_workspace.workspace,
+    organizationId: row.server_workspace.organizationId,
+    grantVersion: row.server_workspace.grantVersion,
+    availableWorkspaces: row.server_workspace.availableWorkspaces,
+  } } : {}),
 });
 
 export const hashPassword = async (password: string): Promise<string> => {
@@ -570,7 +577,8 @@ export const getSessionUser = async (env: AppEnv, request: Request): Promise<DbU
 
   await maybeSyncBusinessMembershipFromUser(env, row);
   const hydrated = await hydrateUserOrganizationFromMembership(env, row);
-  return touchUserStreak(env, hydrated);
+  const identity = await touchUserStreak(env, hydrated);
+  return projectRequestWorkspace(env, identity, request);
 };
 
 export const requireUser = async (env: AppEnv, request: Request): Promise<DbUserRow> => {

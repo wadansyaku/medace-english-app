@@ -106,6 +106,10 @@ export interface DbWritingAssetRow {
   draft_retired_at?: number | null;
   uploaded_etag: string | null;
   uploaded_sha256_base64: string | null;
+  workspace_user_id?: string | null;
+  workspace_id?: string | null;
+  workspace_organization_id?: string | null;
+  workspace_grant_version?: number | null;
 }
 
 export interface DbWritingEvaluationRow {

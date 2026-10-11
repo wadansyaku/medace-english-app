@@ -27,6 +27,7 @@ import { getGrammarCurriculumScope } from '../../utils/grammarScope';
 import { mapUserRowToProfile } from './auth';
 import { readLearningPlanBookIds, syncLearningPlanBooks } from './learning-plan-books';
 import { readActiveOrganizationContextForUser } from './organization-memberships';
+import { revalidateWorkspaceContext } from './workspace-access';
 import {
   readMissionAssignmentsByStudent,
   touchWeeklyMissionProgressFromQuiz,
@@ -274,7 +275,7 @@ export const handleAddXP = async (
   if (!updated) throw new HttpError(500, 'XP更新後のユーザー取得に失敗しました。');
 
   return {
-    user: mapUserRowToProfile(updated),
+    user: mapUserRowToProfile(await revalidateWorkspaceContext(env, { ...updated, server_workspace: user.server_workspace })),
     leveledUp,
   };
 };
