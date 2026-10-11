@@ -3,6 +3,8 @@ import { ApiError, apiGet, apiPost } from '../services/apiClient';
 import { acceptWorkspaceProfile, clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore, selectWorkspaceForSession, subscribeWorkspaceRevocation } from '../services/workspaceContext';
 import { getWorkspaceContextKey, WORKSPACE_ACCESS_REVOKED } from '../contracts/workspaceAccess';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
+import { uploadWritingAsset } from '../services/writing';
+import type { CreateWritingUploadUrlResponse } from '../contracts/writing';
 
 const storage = new Map<string, string>();
 const profile = (workspace: 'instructor' | 'group-admin' | 'service-admin', version = 7): UserProfile => ({
@@ -30,6 +32,31 @@ beforeEach(() => {
 afterEach(() => { clearWorkspaceContext(); vi.unstubAllGlobals(); });
 
 describe('tab-scoped explicit workspace requests', () => {
+  it('also clears a matching grant loss returned by a raw answer upload PUT', async () => {
+    acceptWorkspaceProfile(profile('instructor'));
+    const details = revoked();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection(details)));
+    const upload = { uploadUrl: '/api/writing/upload/synthetic-only', method: 'PUT', headers: {} } as CreateWritingUploadUrlResponse;
+    await expect(uploadWritingAsset(upload, new File(['synthetic'], 'answer.png', { type: 'image/png' })))
+      .rejects.toMatchObject({ name: 'ApiError', status: 403, details });
+    expect(isCurrentWorkspaceProfile(profile('instructor'))).toBe(false);
+  });
+  it('retains the staff screen for ordinary upload 403 and ignores a late PUT error body', async () => {
+    const active = profile('instructor'); acceptWorkspaceProfile(active);
+    const upload = { uploadUrl: '/api/writing/upload/synthetic-only', method: 'PUT', headers: {} } as CreateWritingUploadUrlResponse;
+    const file = new File(['synthetic'], 'answer.png', { type: 'image/png' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejection({ error: 'Ordinary answer upload denial' })));
+    await expect(uploadWritingAsset(upload, file)).rejects.toThrow('アップロードに失敗しました: 403');
+    expect(isCurrentWorkspaceProfile(active)).toBe(true);
+    const body = deferred<unknown>(); const bodyStarted = deferred<void>();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403,
+      headers: new Headers({ 'Content-Type': 'application/json' }), json: () => { bodyStarted.resolve(); return body.promise; } }));
+    const old = uploadWritingAsset(upload, file); const denied = expect(old).rejects.toMatchObject({ name: 'AbortError' });
+    await bodyStarted.promise;
+    const next = profile('service-admin'); acceptWorkspaceProfile(next);
+    body.resolve(revoked()); await denied;
+    expect(isCurrentWorkspaceProfile(next)).toBe(true);
+  });
   it('invalidates only a matching verified grant and keeps the server payload on ApiError', async () => {
     acceptWorkspaceProfile(profile('instructor'));
     const notify = vi.fn(); const unsubscribe = subscribeWorkspaceRevocation(notify);

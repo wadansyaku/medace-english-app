@@ -15,8 +15,8 @@ import type {
   WritingTemplateListResponse,
 } from '../contracts/writing';
 import type { WritingExamCategory } from '../types';
-import { apiGet, apiPost } from './apiClient';
-import { captureWorkspaceRequest, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
+import { ApiError, apiGet, apiPost } from './apiClient';
+import { captureWorkspaceRequest, invalidateRevokedWorkspace, isWorkspaceRequestCurrent, releaseWorkspaceRequest } from './workspaceContext';
 
 const buildQuery = (params: Record<string, string | undefined>): string => {
   const search = new URLSearchParams();
@@ -88,6 +88,12 @@ export const uploadWritingAsset = async (
     });
     if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
     if (!response.ok) {
+      if (response.status === 403 && response.headers.get('content-type')?.includes('application/json')) {
+        const details: unknown = await response.json().catch(() => undefined);
+        if (!isWorkspaceRequestCurrent(context)) throw new DOMException('業務画面が切り替わりました。', 'AbortError');
+        if (invalidateRevokedWorkspace(context, details)) throw new ApiError('業務画面の権限が更新されました。', 403, details);
+        throw new ApiError('アップロードに失敗しました: 403', 403, details);
+      }
       if (response.status === 409) {
         throw new Error('このアップロードURLはすでに使用済みです。再度アップロードしてください。');
       }
