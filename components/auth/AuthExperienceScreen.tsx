@@ -81,13 +81,17 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
 
   return (
     <section data-testid="auth-focused-form" className={`rounded-panel border border-medace-200 bg-white p-5 shadow-xl sm:p-7 ${staffRole ? 'staff-login-card' : ''}`}>
-      <header className="mb-5 flex items-start justify-between gap-3">
+      <header className={`mb-5 flex items-start justify-between gap-3 ${staffRole ? 'relative' : ''}`}>
         <div className="min-w-0">
-          <p className="text-xs font-bold text-medace-700">{BRAND.shortName}</p>
-          <h2 id="auth-dialog-title" className="mt-1 text-2xl font-black text-steady-ink">{title}</h2>
+          <p className={`text-xs font-bold text-medace-700 ${staffRole ? 'pr-14' : ''}`}>{BRAND.shortName}</p>
+          <h2 id="auth-dialog-title" aria-label={staffRole ? title : undefined} className={`${staffRole ? 'mt-7 sm:mt-1' : 'mt-1'} text-2xl font-black text-steady-ink`}>
+            {staffRole && !showPasswordRecovery
+              ? <><span className="inline-block">{staffRole.title}</span><span className="inline-block">としてログイン</span></>
+              : title}
+          </h2>
         </div>
         <button type="button" data-testid="auth-close" onClick={onCloseAuth} disabled={busy}
-          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-medace-50 disabled:opacity-50" aria-label="認証画面を閉じる">
+          className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-medace-50 disabled:opacity-50 ${staffRole ? 'absolute right-0 top-0' : ''}`} aria-label="認証画面を閉じる">
           <X className="h-5 w-5" aria-hidden="true" />
         </button>
       </header>
