@@ -105,7 +105,7 @@ afterEach(() => { dispose(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe('product conversation UI and safe state inquiry', () => {
   it('renders a small chat and labelled input before optional sending details, with separate Bot consent', async () => {
     await settle(); const markup = html();
-    expect(markup.indexOf('<textarea')).toBeLessThan(markup.indexOf('Botへ送信する内容を確認'));
+    expect(markup.indexOf('<textarea')).toBeLessThan(markup.indexOf('送信内容と会話の使い方'));
     expect(markup).toContain('直近3回'); expect(markup).toContain('Cloudflare AI');
     expect(markup).toContain('英作文の外部送信同意と別');
     expect(markup).toContain('role="log"'); expect(markup).toContain('max-h-80');
@@ -140,7 +140,8 @@ describe('product conversation UI and safe state inquiry', () => {
     await settle(); const markup = html();
     expect(markup).toContain('根拠を読む: 登録前のNaru単語回答と引継ぎ');
     expect(markup).toContain('根拠ID: guest-naru-records'); expect(markup).toContain('確認日: 2026-10-11'); expect(markup).toContain(`仕様版: ${PRODUCT_SUPPORT_TARGET_VERSION}`);
-    expect(markup).not.toContain('untrusted'); expect(markup).not.toContain('href=');
+    expect(markup).not.toContain('untrusted'); expect(markup).not.toContain('invalid.test');
+    expect(markup).toContain('href="/public?supportSource=guest-naru-records"');
     expect(field(render()!).props.value).toBe('');
   });
 

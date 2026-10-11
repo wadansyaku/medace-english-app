@@ -38,7 +38,7 @@ describe('product support dialog integration', () => {
     props.open = false; expect(render()).toBeNull(); props.open = true;
     const tree = render()!;
     expect(tree.props).toMatchObject({ mobileBehavior: 'fullscreen', initialFocusSelector: '[data-support-dialog-close]', returnFocusSelector: '[data-product-support-trigger]', onClose: props.onClose });
-    expect(markup()).toContain('公開案内の会話（生成OFF）'); expect(markup()).toContain('AIによる回答生成は停止中');
+    expect(markup()).toContain('公開案内の会話'); expect(markup()).toContain('生成OFF · 確認済みの公開案内から答えます。');
     walk(tree).find(node => node.props['data-support-dialog-close'])!.props.onClick(); expect(props.onClose).toHaveBeenCalledTimes(1);
     expect(props.onAsk).not.toHaveBeenCalled();
   });

@@ -6,10 +6,10 @@ import {
 } from '../shared/productSupportKnowledge';
 
 describe('public product support knowledge provenance', () => {
-  it('provides stable IDs, explicit content versions, public route proposals, and verified code locations', () => {
+  it('provides stable IDs, explicit content versions, tested public routes, and verified code locations', () => {
     expect(new Set(PRODUCT_SUPPORT_KNOWLEDGE.map(source => source.sourceId)).size).toBe(PRODUCT_SUPPORT_KNOWLEDGE.length);
     expect(PRODUCT_SUPPORT_VERIFIED_SOURCE_SHA).toMatch(/^[a-f0-9]{40}$/);
-    expect(PRODUCT_SUPPORT_SOURCE_LINKS_READY).toBe(false);
+    expect(PRODUCT_SUPPORT_SOURCE_LINKS_READY).toBe(true);
     for (const source of PRODUCT_SUPPORT_KNOWLEDGE) {
       expect(source.targetVersion).toBe(PRODUCT_SUPPORT_TARGET_VERSION);
       expect(new Date(source.checkedAt).toISOString().slice(0, 10)).toBe(source.checkedAt);

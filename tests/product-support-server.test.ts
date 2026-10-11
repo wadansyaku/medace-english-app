@@ -23,14 +23,14 @@ const setup = () => {
 afterEach(() => { fixtures.splice(0).forEach(fixture => fixture.sqlite.close()); vi.restoreAllMocks(); });
 
 describe('public-guide conversation server with live generation disabled', () => {
-  it('answers from canonical inline KB with providerUsed=false, no URL and no stored text', async () => {
+  it('answers from canonical inline KB with providerUsed=false, a canonical evidence URL and no stored text', async () => {
     const { env, sqlite } = setup(); const run = vi.fn(); env.AI = { run };
     const result = await handleProductSupport(env, actor, request());
     expect(result).toMatchObject({ status: 'ANSWERED', kind: 'ANSWER', providerUsed: false, sourceIds: ['word-pronunciation'], version });
     if (result.status === 'ANSWERED') {
       expect(result.answer).toContain('ブラウザーの読み上げ');
       expect(result.references[0]).toMatchObject({ sourceId: 'word-pronunciation', checkedAt: '2026-10-11' });
-      expect(result.references[0]).not.toHaveProperty('url');
+      expect(result.references[0].url).toBe('https://medace-english-app.pages.dev/public?supportSource=word-pronunciation');
     }
     expect(run).not.toHaveBeenCalled();
     const rows = JSON.stringify(sqlite.prepare('SELECT * FROM bot_product_support_requests').all());

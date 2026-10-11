@@ -168,8 +168,9 @@ describe('canonical response evidence validation', () => {
     }
   });
 
-  it('does not publish a proposed evidence URL before its public UI handler is implemented', () => {
-    expect(validate({ ...answer, answer: `案内 ${getProductSupportSourceURL('my-wordbook-create')}` }, input, decision)).toMatchObject({ valid: false, reason: 'unsafe-content' });
+  it('allows only the canonical URL of a retrieved source whose public handler is implemented', () => {
+    expect(validate({ ...answer, answer: `案内 ${getProductSupportSourceURL('my-wordbook-create')}` }, input, decision).valid).toBe(true);
+    expect(validate({ ...answer, answer: `案内 ${getProductSupportSourceURL('guest-naru-records')}` }, input, decision)).toMatchObject({ valid: false, reason: 'unsafe-content' });
   });
 
   it.each([

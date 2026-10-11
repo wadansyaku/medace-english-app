@@ -4,6 +4,7 @@ import {
   PRODUCT_SUPPORT_TARGET_VERSION, type ProductSupportKnowledgeSource, type ProductSupportRole,
 } from '../shared/productSupportKnowledge';
 import { searchProductSupportConversation, validateProductSupportAnswer } from '../shared/productSupportConversation';
+import { buildProductSupportSourcePath } from './ProductSupportSourcePage';
 
 export interface ProductSupportConversationProps {
   role: ProductSupportRole;
@@ -145,13 +146,9 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
   };
 
   return <section aria-label="製品についての会話" className="min-w-0 rounded-2xl border border-medace-100 bg-white p-4 text-[#2F1609]">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="font-bold">Steady Studyの使い方を聞く</h3>
-      <button type="button" className={control} onClick={clear} data-testid="support-clear">会話を消す</button>
-    </div>
-    <p className="mt-2 text-sm leading-6">自分の言葉で質問できます。続きの質問には、直近3回のあなたの発言を使います。</p>
-    <div role="log" aria-label="質問と回答" aria-live="polite" aria-relevant="additions" className="mt-3 max-h-80 space-y-4 overflow-y-auto [overflow-wrap:anywhere]">
-      {!turns.length && !pending && <p className="text-sm text-[#75452E]">質問の後に、回答と確認できた根拠を表示します。</p>}
+    <h3 className="sr-only">Steady Studyの使い方を聞く</h3>
+    {(turns.length > 0 || pending) && <button type="button" className={control} onClick={clear} data-testid="support-clear">会話を消す</button>}
+    <div role="log" aria-label="質問と回答" aria-live="polite" aria-relevant="additions" className={`${turns.length || pending ? 'mt-3 ' : ''}max-h-80 space-y-4 overflow-y-auto [overflow-wrap:anywhere]`}>
       {turns.map((turn, index) => <article key={turn.id} className="min-w-0 space-y-2" data-testid="support-turn">
         <p className="whitespace-pre-wrap rounded-xl bg-[#FDF3ED] p-3 text-sm leading-6"><span className="font-bold">あなた: </span>{turn.question}</p>
         <p ref={index === turns.length - 1 ? latestAnswer : undefined} tabIndex={-1} className="whitespace-pre-wrap text-sm leading-6" data-testid="support-answer">{turn.answer}</p>
@@ -160,6 +157,8 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
           <summary className="min-h-11 cursor-pointer py-2 text-sm font-bold">根拠を読む: {source.title}</summary>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{source.content}</p>
           <p className="mt-2 text-xs leading-5">根拠ID: {source.sourceId} · 確認日: {source.checkedAt} · 仕様版: {source.targetVersion}</p>
+          <a href={buildProductSupportSourcePath({ sourceId: source.sourceId, targetVersion: source.targetVersion })}
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-bold underline">この根拠を別のページで読む</a>
         </details>)}
         {turn.unknown && <button type="button" className={control} onClick={() => onDraft(turn.question)} data-testid="support-draft">この質問を報告の下書きにする</button>}
       </article>)}
@@ -173,7 +172,7 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
         </div>
       </div>}
     </div>
-    <form className="mt-4 space-y-3" onSubmit={ask} aria-busy={busy} data-testid="support-form">
+    <form className={`${turns.length || pending ? 'mt-4 ' : ''}space-y-3`} onSubmit={ask} aria-busy={busy} data-testid="support-form">
       <label className="block text-sm font-bold">質問
         <textarea ref={input} aria-label="製品についての質問" rows={2} maxLength={PRODUCT_SUPPORT_MAX_QUESTION_CHARS} value={question}
           disabled={busy} readOnly={pending !== null} onChange={event => setQuestion(event.target.value)}
@@ -183,14 +182,15 @@ const ConversationSession: React.FC<ProductSupportConversationProps> = ({
       {!ready && <p role="status" className="text-sm leading-6" data-testid="support-disabled">{disabledReason || '会話の回答処理は停止しています。質問は入力できますが、送信しません。'}</p>}
       {inputError && <p role="alert" className="text-sm text-red-800">{inputError}</p>}
       <details className="text-sm leading-6">
-        <summary className="min-h-11 cursor-pointer py-2 font-bold">Botへ送信する内容を確認</summary>
+        <summary className="min-h-11 cursor-pointer py-2 font-bold">送信内容と会話の使い方</summary>
+        <p>自分の言葉で質問できます。続きの質問には、直近3回のあなたの発言を使います。分からない内容は確認をお願いするか、報告の下書きにできます。</p>
         <p>質問、直近3回のあなたの発言、公開の製品説明をCloudflare上のBot処理へ送ります。回答生成を有効にした場合は、同じ範囲をCloudflare AIにも渡します。AIが回答した本文は次の質問に送信しません。</p>
         <p className="mt-2">氏名・連絡先・答案・教材本文は入力しないでください。このBotの同意は英作文の外部送信同意と別です。</p>
       </details>
       <label className="flex min-h-11 items-start gap-3 text-sm leading-6">
         <input type="checkbox" aria-label="Bot専用のCloudflare送信に同意する" className="mt-1 h-5 w-5 shrink-0" checked={consent} disabled={busy}
           onChange={event => setConsent(event.target.checked)} />
-        <span>上記の内容を、このBot専用のCloudflare処理へ送信することに同意します。</span>
+        <span>質問・直近3発言・公開案内を、このBot専用のCloudflare処理へ送信することに同意します。個人情報は入力しないでください。</span>
       </label>
       <button type="submit" className={`${control} bg-[#F66D0B]`} disabled={!ready || !consent || !question.trim() || busy || pending !== null} data-testid="support-submit">{busy ? '確認中…' : '質問を送信する'}</button>
     </form>

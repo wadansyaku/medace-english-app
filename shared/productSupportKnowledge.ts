@@ -6,8 +6,9 @@ export type ProductSupportTopic = 'guest-records' | 'guest-wordbooks' | 'my-word
 // A content version, not this file's eventual commit (which would be circular).
 export const PRODUCT_SUPPORT_TARGET_VERSION = 'steady-study-public-2026-10-11-v1';
 export const PRODUCT_SUPPORT_VERIFIED_SOURCE_SHA = '85e2945c5cd0ea8c816de14c08c8d72997a6d350';
-// Proposed public evidence route. Its body/URL handler is not implemented here.
-export const PRODUCT_SUPPORT_SOURCE_LINKS_READY = false;
+// The public body/date/version handler is exercised for every source by the
+// disposable Pages browser suite; role and stale-version gates stay enforced.
+export const PRODUCT_SUPPORT_SOURCE_LINKS_READY = true;
 export const PRODUCT_SUPPORT_PUBLIC_SOURCE_BASE_URL = 'https://medace-english-app.pages.dev/public';
 export const getProductSupportSourceURL = (sourceId: string): string =>
   `${PRODUCT_SUPPORT_PUBLIC_SOURCE_BASE_URL}?supportSource=${encodeURIComponent(sourceId)}`;

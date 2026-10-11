@@ -65,9 +65,13 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     const initialUrl = page.url();
     // Two synchronous clicks must produce one history entry, not two dialogs.
     await trigger(page).evaluate(button => { (button as HTMLButtonElement).click(); (button as HTMLButtonElement).click(); });
-    await expect(dialog(page)).toBeVisible(); await expect(dialog(page).getByRole('heading', { name: '公開案内の会話（生成OFF）' })).toBeVisible();
+    await expect(dialog(page)).toBeVisible(); await expect(dialog(page).getByRole('heading', { name: '公開案内の会話', exact: true })).toBeVisible();
+    await expect(dialog(page)).toContainText('生成OFF · 確認済みの公開案内から答えます。');
     await expect(page.locator('[data-support-dialog-close]')).toBeFocused();
     await expect(question(page)).toHaveAttribute('maxlength', '600');
+    const initialInput = (await question(page).boundingBox())!;
+    expect(initialInput.y).toBeGreaterThanOrEqual(0);
+    expect(initialInput.y + initialInput.height).toBeLessThanOrEqual(viewport.height + 1);
     await attachGeometry(page, info, `support-initial-${viewport.width}x${viewport.height}`);
     await question(page).fill('理解度を選んだ後の復習方法は？');
     await expect(dialog(page).getByTestId('support-submit')).toBeDisabled(); expect(requests).toHaveLength(0);
@@ -78,6 +82,7 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
     await expect(latestTurn(page).getByTestId('support-answer')).toBeVisible(); await expectSources(latestTurn(page), ['study-recall']);
     await latestTurn(page).getByText('根拠を読む: 思い出す練習と復習', { exact: true }).click();
     await expect(latestTurn(page)).toContainText('確認日: 2026-10-11'); await expect(latestTurn(page)).toContainText(`仕様版: ${PRODUCT_SUPPORT_TARGET_VERSION}`);
+    await expect(latestTurn(page).getByRole('link', { name: 'この根拠を別のページで読む' })).toHaveAttribute('href', '/public?supportSource=study-recall');
     const geometry = await attachGeometry(page, info, `support-answer-${viewport.width}x${viewport.height}`);
     expect(geometry.close!.y).toBeGreaterThanOrEqual(0); expect(geometry.close!.y + geometry.close!.height).toBeLessThanOrEqual(viewport.height + 1);
     await page.locator('[data-support-dialog-close]').focus(); await page.keyboard.press('Shift+Tab');
