@@ -374,7 +374,7 @@ const Layout: React.FC<LayoutProps> = ({
       <main id="study-main-content" tabIndex={-1} className={immersiveContent
         ? 'flex-grow'
         : focusedLearning ? 'flex-grow w-full max-w-7xl mx-auto px-3 py-2 sm:px-4'
-        : `flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${compactStudentShell ? 'py-4 sm:py-8' : 'py-8 lg:py-10'}`
+        : `flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${currentView === 'publicRole' ? 'py-2 sm:py-8 lg:py-10' : compactStudentShell ? 'py-4 sm:py-8' : 'py-8 lg:py-10'}`
       }>
         {children}
       </main>

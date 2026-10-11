@@ -100,12 +100,14 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }
       expect(metrics.width).toBeLessThanOrEqual(metrics.viewport);
       const email = await page.getByTestId('auth-email-input').boundingBox();
       expect(email!.y).toBeGreaterThanOrEqual(0); expect(email!.y + email!.height).toBeLessThan(viewport.height);
-      if (viewport.height < 520) {
-        const password = await page.getByTestId('auth-password-input').boundingBox();
-        expect(password!.y + password!.height).toBeLessThan(viewport.height);
-      }
+      const password = await page.getByTestId('auth-password-input').boundingBox();
+      const submit = await page.getByTestId('auth-submit').boundingBox();
+      expect(password!.y).toBeGreaterThanOrEqual(0);
+      expect(password!.y + password!.height).toBeLessThan(viewport.height);
+      expect(submit!.y).toBeGreaterThanOrEqual(0);
+      expect(submit!.y + submit!.height).toBeLessThanOrEqual(viewport.height);
       await page.screenshot({ path: testInfo.outputPath(`${entry.role}-${viewport.width}x${viewport.height}.png`), animations: 'disabled' });
-      await writeFile(testInfo.outputPath('layout-metrics.json'), JSON.stringify({ entry: entry.path, viewport, metrics, email }, null, 2));
+      await writeFile(testInfo.outputPath('layout-metrics.json'), JSON.stringify({ entry: entry.path, viewport, metrics, email, password, submit }, null, 2));
       await page.getByTestId('auth-email-input').focus(); await page.keyboard.press('Tab');
       await expect(page.getByTestId('auth-password-input')).toBeFocused();
       await page.keyboard.press('Escape'); await expect(page).toHaveURL(/\/$/);

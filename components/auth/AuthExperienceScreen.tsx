@@ -105,7 +105,7 @@ export const AuthForm: React.FC<AuthExperienceScreenProps> = (props) => {
       <p id="auth-form-description" className="staff-login-description mb-5 text-sm leading-relaxed text-slate-600">
         {showPasswordRecovery
           ? '登録したメールアドレスを入力してください。再設定の依頼を受け付けます。'
-          : staffRole ? '案内された既存アカウントでログインしてください。この役割で登録されたアカウントのみ利用できます。'
+          : staffRole ? '案内された既存アカウントでログインしてください。'
           : authMode === 'LOGIN'
             ? '登録済みのアカウントでログインしてください。'
             : '生徒用アカウントを作ります。登録後すぐに単語学習を始められます。'}
