@@ -18,6 +18,8 @@
 
 ## 検証と公開前の残件
 
+既存教室の改名後に公開業務デモが旧名の別教室を再作成しないよう、学校・教室デモの既定値を本番だけ無効にする。既存の案内は招待・手動発行と画面構成を示し、本人の講師・管理者ログインは維持する。サーバーの既存403がユーザー・教室・session作成より先に動く。localhost／previewと明示設定、所属を指定しない普通の生徒デモ、通常認証、課金、本人grantは変更しない。実本番demo-loginで確認せず、実auth routeの合成要求でデータ処理へ到達しないことを検証する。
+
 独立cloneでNode22・型・focused unitを確認。実SQLite unitは3役の認可、旧Cookie互換、改ざん/失効、upload競合とreceipt保持を検証する。標準API runnerに同じ既存合成STUDENTへのgrant回帰を登録し、標準smokeに5viewport/切替/共有Cookie2タブ/履歴/失敗回復を登録する。ローカルfixtureは既存の合成学習者を再利用し、外部DBへ適用しない。最終実行結果・固定SHA・画像は独立deliveryへ記録し、親の正式CI/preview/productionの証拠と区別する。
 
 公開前に、対象教室の本人回答、独立レビュー、統合先Botのreadonly actor resolverへのworkspace投影接続、同一統合SHAの全gate、0063→0064の段階適用、明示UID grant設定と既存データ保持確認が必要。通常認証/sessionの従来補完やstreak更新を含め、全認証がread-onlyとは説明しない。一般の保存要求を受理した後の切替はサーバー処理の取り消しを保証せず、クライアントは旧応答を捨てる。原本uploadのgrant再確認は別途commitまで検証する。実教室運用・実AI・Safari/iPhone・本番本人操作は未受入。
