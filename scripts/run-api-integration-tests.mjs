@@ -507,6 +507,77 @@ const verifyRealStaffEntryAuthentication = async ({ persistDir, baseUrl, adminUs
       }
       assert((await client.get('/api/session')).uid === user.uid, 'inactive-organization rejection must preserve existing session identity');
     }
+    // Dedicated entries fail closed for legacy shadows. Ordinary auth/session
+    // restoration retains its separate compatibility writes and is not used here.
+    const legacyUsers = staff.filter(([entry]) => entry !== 'service-admin').map(([entry, user]) => [entry, {
+      ...user, uid: `staff-entry-no-history-${entry}`, email: `staff-entry-no-history-${entry}@example.invalid`,
+    }]);
+    const studentIdentityBeforeLegacyCheck = await student.get('/api/session');
+    const authorityTables = ['users', 'organization_memberships', 'organizations'];
+    const auditTriggers = authorityTables.flatMap(table => ['INSERT', 'UPDATE', 'DELETE'].map(operation => ({
+      name: `staff_login_authority_${table}_${operation.toLowerCase()}`, table, operation,
+    })));
+    const authoritySnapshotSql = `
+      SELECT 'users' AS kind, id AS object_id,
+             json_object('role', role, 'plan', subscription_plan, 'organizationId', organization_id,
+                         'organizationName', organization_name, 'organizationRole', organization_role) AS fields
+        FROM users
+      UNION ALL
+      SELECT 'memberships', user_id || ':' || organization_id,
+             json_object('role', role, 'status', status, 'createdAt', created_at, 'updatedAt', updated_at)
+        FROM organization_memberships
+      UNION ALL
+      SELECT 'organizations', id,
+             json_object('name', display_name, 'key', name_key, 'plan', subscription_plan, 'status', status,
+                         'createdAt', created_at, 'updatedAt', updated_at)
+        FROM organizations
+      ORDER BY kind, object_id`;
+    const studentCookieBeforeLegacyCheck = student.cookie;
+    try {
+      for (const [entry, legacy] of legacyUsers) {
+        const original = staff.find(([candidate]) => candidate === entry)[1];
+        await executeLocalSql(persistDir, `INSERT INTO users
+          (id, email, password_hash, display_name, role, subscription_plan, organization_id, organization_name, organization_role, created_at, updated_at)
+          SELECT ${quote(legacy.uid)}, ${quote(legacy.email)}, password_hash, 'Local zero-history staff', role,
+                 subscription_plan, organization_id, organization_name, organization_role, created_at, updated_at
+            FROM users WHERE id = ${quote(original.uid)}`);
+        const eligibility = (await queryLocalSql(persistDir, `SELECT u.role, u.subscription_plan, u.organization_role,
+          o.status AS organization_status,
+          (SELECT COUNT(*) FROM organization_memberships WHERE user_id = u.id) AS all_status_history,
+          (u.password_hash = (SELECT password_hash FROM users WHERE id = ${quote(original.uid)})) AS same_valid_password_hash
+          FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = ${quote(legacy.uid)}`))[0];
+        assert(eligibility?.role === 'INSTRUCTOR' && ['TOB_FREE', 'TOB_PAID'].includes(eligibility.subscription_plan)
+          && eligibility.organization_role === (entry === 'instructor' ? 'INSTRUCTOR' : 'GROUP_ADMIN')
+          && eligibility.organization_status === 'ACTIVE' && eligibility.all_status_history === 0
+          && eligibility.same_valid_password_hash === 1,
+        'legacy fixture must have an ACTIVE org, eligible staff shadow, the verified correct password, and zero membership history across ALL statuses');
+      }
+      await executeLocalSql(persistDir, `CREATE TABLE staff_login_authority_write_audit (table_name TEXT, operation TEXT);
+        ${auditTriggers.map(({ name, table, operation }) => `CREATE TRIGGER ${name} AFTER ${operation} ON ${table}
+          BEGIN INSERT INTO staff_login_authority_write_audit VALUES (${quote(table)}, ${quote(operation)}); END;`).join('\n')}`);
+      const beforeAuthority = await queryLocalSql(persistDir, authoritySnapshotSql);
+      const sessionsBeforeLegacyCheck = await sessionCount();
+      for (const [entry, legacy] of legacyUsers) {
+        const result = await auth(student, legacy, entry);
+        assert(result.status === 403 && result.setCookies.length === 0 && student.cookie === studentCookieBeforeLegacyCheck,
+          'zero-history legacy staff must fail closed without issuing, clearing, or replacing a session cookie');
+        assert(String(result.data?.error || result.data?.message || '').includes('案内元にアカウントの利用権限をご確認ください'),
+          'a denied dedicated login should explain where to confirm existing access without recommending ordinary-login supplementation');
+      }
+      assert(await sessionCount() === sessionsBeforeLegacyCheck, 'legacy rejection must not create or delete sessions');
+      assert((await queryLocalSql(persistDir, 'SELECT COUNT(*) AS n FROM staff_login_authority_write_audit'))[0].n === 0,
+        'dedicated legacy rejection must perform zero user, role, membership, or organization row writes');
+      assert(JSON.stringify(await queryLocalSql(persistDir, authoritySnapshotSql)) === JSON.stringify(beforeAuthority),
+        'legacy rejection must retain all authority rows exactly');
+    } finally {
+      await executeLocalSql(persistDir, `${auditTriggers.map(({ name }) => `DROP TRIGGER IF EXISTS ${name};`).join('\n')}
+        DROP TABLE IF EXISTS staff_login_authority_write_audit;
+        DELETE FROM users WHERE id IN (${legacyUsers.map(([, user]) => quote(user.uid)).join(',')});`);
+      student.cookie = studentCookieBeforeLegacyCheck;
+    }
+    assert((await student.get('/api/session')).uid === studentIdentityBeforeLegacyCheck.uid,
+      'after legacy rejection the original student session must still identify the same account');
+    console.log('Staff zero-history D1 regression passed: instructor/group-admin, ALL-status history=0, ACTIVE organization, correct password, 403, no Set-Cookie, no persisted authority writes, existing session retained.');
     const guest = new SessionClient(baseUrl, 'staff-entry-guest');
     for (const [client, status] of [[guest, 401], [student, 403]]) {
       const result = await client.storageRaw('getAdminDashboardSnapshot');

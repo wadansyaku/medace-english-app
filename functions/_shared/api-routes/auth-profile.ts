@@ -164,7 +164,7 @@ const handleEmailAuth = async (
 
   let authenticatedUser = existing;
   if (isStaffLoginEntry(loginEntry)) {
-    const denied = () => new HttpError(403, 'このログイン入口を利用する権限がありません。正しい入口をご確認ください。');
+    const denied = () => new HttpError(403, 'このログイン入口を利用する権限がありません。利用できない場合は、案内元にアカウントの利用権限をご確認ください。');
     if (loginEntry === 'service-admin') {
       if (!matchesStaffEntryRole(loginEntry, mapUserRowToProfile(existing))) throw denied();
     } else {

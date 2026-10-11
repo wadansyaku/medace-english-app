@@ -154,6 +154,7 @@ test('staff wrong-entry error preserves inputs and permits retry with the correc
   await page.goto('/school-admin');
   await page.getByTestId('auth-email-input').fill(entries[0].email); await page.getByTestId('auth-password-input').fill(fixturePassword);
   await page.getByTestId('auth-submit').click(); await expect(page.getByTestId('auth-error')).toContainText('権限');
+  await expect(page.getByTestId('auth-error')).toContainText('案内元にアカウントの利用権限をご確認ください');
   await expect(page.getByTestId('auth-error')).toBeFocused();
   await expect(page.getByTestId('auth-email-input')).toHaveValue(entries[0].email); await expect(page.getByTestId('auth-password-input')).toHaveValue(fixturePassword);
   const session = await page.request.get('/api/session'); expect([200, 204]).toContain(session.status());
