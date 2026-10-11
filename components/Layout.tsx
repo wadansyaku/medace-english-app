@@ -23,6 +23,7 @@ interface LayoutProps {
   activeWorkspaceSection?: string;
   onSelectWorkspaceSection?: (section: string) => void;
   immersiveContent?: boolean;
+  onOpenProductSupport?: () => void;
 }
 
 export const getManagedRobotsContent = ({
@@ -49,6 +50,7 @@ const Layout: React.FC<LayoutProps> = ({
   activeWorkspaceSection,
   onSelectWorkspaceSection,
   immersiveContent = false,
+  onOpenProductSupport,
 }) => {
   // Calculate progress to next level (Level * 100 XP)
   const stats = user?.stats || { xp: 0, level: 1, currentStreak: 0 };
@@ -325,6 +327,11 @@ const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
           )}
+          {onOpenProductSupport && <button type="button" onClick={onOpenProductSupport}
+            data-product-support-trigger aria-label="使い方について質問する" title="使い方について質問する"
+            className={`min-h-11 min-w-11 shrink-0 rounded-xl border border-medace-200 bg-[#FDF3ED] font-bold text-[#2F1609] ${compactHeader ? 'px-2 text-xs' : 'px-3 text-sm'}`}>
+            質問
+          </button>}
         </div>
         {user && workspaceSections.length > 0 && onSelectWorkspaceSection && activeWorkspaceSection && (
           <div className="border-t border-medace-200 bg-white/90 backdrop-blur-xl">

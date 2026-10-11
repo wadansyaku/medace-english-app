@@ -15,12 +15,15 @@ import { requireActiveOrganizationContext } from './organization-memberships';
 import { handleGetAllStudentsProgress } from './organization-student-read-model';
 import type { AppEnv, DbUserRow } from './types';
 import { DAY_MS, getMasteryProgressSql, readAll, readFirst, type DbAssignmentEventRow } from './storage-support';
+import { readOrganizationGrantedStaff } from './organization-granted-staff';
 
 export const handleGetOrganizationDashboardSnapshot = async (
   env: AppEnv,
   user: DbUserRow,
 ): Promise<OrganizationDashboardSnapshot> => {
-  const organization = await requireActiveOrganizationContext(env, user);
+  // This school-admin read model includes organization-wide names, event
+  // history and aggregates. Authorize the entire payload before any reads.
+  const organization = await requireActiveOrganizationContext(env, user, [OrganizationRole.GROUP_ADMIN]);
 
   const [
     students,
@@ -218,7 +221,10 @@ export const handleGetOrganizationDashboardSnapshot = async (
   ]);
   const trend = toOrganizationKpiTrendPoints(kpiSeries.dailySnapshots);
 
-  const instructors: OrganizationInstructorSummary[] = instructorRows.map((row) => ({
+  const grantedStaff = await readOrganizationGrantedStaff(env, organization.organizationId, Date.now() - 7 * DAY_MS);
+  const canonicalInstructorIds = new Set(instructorRows.map((row) => row.uid));
+  const additionalStaff = grantedStaff.filter((row) => !canonicalInstructorIds.has(row.uid));
+  const instructors: OrganizationInstructorSummary[] = [...instructorRows, ...additionalStaff].map((row) => ({
     uid: row.uid,
     displayName: row.display_name,
     email: row.email,
@@ -245,8 +251,8 @@ export const handleGetOrganizationDashboardSnapshot = async (
     organizationId: organization.organizationId,
     organizationName: organization.organizationName,
     subscriptionPlan: organization.subscriptionPlan,
-    totalMembers: Number(memberCountRow?.count || 0),
-    totalInstructors: Number(instructorCountRow?.count || 0),
+    totalMembers: Number(memberCountRow?.count || 0) + grantedStaff.filter((row) => !row.has_canonical_membership).length,
+    totalInstructors: Number(instructorCountRow?.count || 0) + additionalStaff.length,
     learningPlanCount: students.filter((student) => student.hasLearningPlan).length,
     cohortCount: Number(cohortCountRow?.count || 0),
     studentAssignmentCount: Number(assignmentCountRow?.count || 0),

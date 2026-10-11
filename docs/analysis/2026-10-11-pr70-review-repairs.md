@@ -1,0 +1,13 @@
+# PR70 独立レビューでの修正
+
+親の実操作レビューで5点を確認し、公開前に修正した候補。旧候補c492のローカル成功は新候補の成功へ読み替えない。同一新HEADの必須CI・preview・production gateと親再レビューを維持する。
+
+- 学校管理者用の組織dashboardはhandler入口でGROUP_ADMINを要求する。講師には組織全体の割当履歴・集計を返さず、講師専用の担当範囲APIを使う。raw roleだけで学校管理者を判定しない。
+- 設定APIは同組織の有効な講師membershipとteacher grantをdedicated eligibleInstructorsへ統合する。UIはその候補を使い、正本STUDENT membershipを変更しない。失効・teacher flagなし・別組織は候補と保存の両方で拒否する。
+- 以前選択した明示grantの失効・version変更は専用server codeとcaptured contextを返す。API clientが最新generation・UID・workspace・組織・versionの完全一致を確認してからcontextを破棄する。旧業務画面・回答・queue・下書きをunmountし本人画面を取り直す。通常403、ネットワーク失敗、別contextの遅延403は失効として扱わない。
+- Botは今回のHTTP質問が受付前に拒否されたことをserver markerで伝える。新規質問は毎回fresh UUIDを使い、同request IDの安全拒否だけ入力を保持して編集へ戻す。receipt conflict、通信不明、状態照会の拒否は元の質問のlockを保持する。markerは再利用IDの過去全履歴が未dispatchである証明ではない。
+- 成功retestはserver DEPLOYMENT_SHAが記録されたfix revisionと完全一致する場合だけ保存する。不明・不一致は409で再読み込みを案内する。server確認版を履歴へ記録し、既に保存した同payload receiptは配備変更後も再送結果を返す。旧版での失敗報告は成功確認と区別して保存する。
+
+旧previewではlocal runtimeにDEPLOYMENT_SHAが未設定だったため、必須の版照合テストが失敗した。local runnerは実git HEADをruntimeと期待値へ渡し、明示値の不一致を拒否する。external/deployedの版設定は維持する。使い捨てD1での失効テストはlocalhost・0600 metadata・persist generation・served SHA・database markerを照合し、--local固定のSQLだけを実行する。実本番データで失効を試さない。
+
+保存済みnative SQLite/D1、transport、UI state、実headless browserの根拠は専用deliveryへ記録する。Safari・実本人認証・実教室での効果をこの候補の合成検証で代替しない。

@@ -63,6 +63,7 @@ describe('product feedback authenticated atomic loop', () => {
     expect(await f.run({action:'list'},'admin')).toMatchObject({canManage:true});
     f.sqlite.exec("UPDATE organization_memberships SET role='GROUP_ADMIN' WHERE user_id='teacher'");
     expect(await f.run({action:'get',id:'report-1'})).toMatchObject({status:'FIXED',isOwnReport:true});
+    f.env.DEPLOYMENT_SHA='commit-1';
     expect(await f.run(advance(4,{type:'retest',passed:true,note:'Checked'}))).toMatchObject({status:'RETEST_PASS',revision:5});
     expect(await f.run(create('group-admin-report'))).toMatchObject({status:'NEW',isOwnReport:true});
     expect(await f.run({action:'list'})).toMatchObject({canManage:false,reports:expect.arrayContaining([expect.objectContaining({id:'group-admin-report'})])});
@@ -104,8 +105,46 @@ describe('product feedback authenticated atomic loop', () => {
     await expect(f.run(advance(4,{type:'retest',passed:false,note:'Still blank'}),'other')).rejects.toMatchObject({status:404});
     await f.run(advance(4,{type:'retest',passed:false,note:'Still blank'}));
     await f.run(advance(5,{type:'record-fix',revision:'commit-2',note:'Repair state'}),'admin');
+    f.env.DEPLOYMENT_SHA='commit-2';
     const result=await f.run(advance(6,{type:'retest',passed:true,note:'Next word shown'})) as ProductFeedbackReport;
     expect(result).toMatchObject({status:'RETEST_PASS',revision:7,fixRevision:'commit-2'}); expect(result.history).toHaveLength(7);
+  });
+  it.each([undefined, '', '   ', 'old-commit', 'commit', 'commit-1-suffix'])('blocks successful direct retest on unknown/mismatched deployment %s without writes',async(actualRevision)=>{
+    const f=setup();await f.run(create());await f.run(advance(1,triage),'admin');
+    await f.run(advance(2,{type:'prepare-handoff'}),'admin');
+    await f.run(advance(3,{type:'record-fix',revision:'commit-1',note:'Repair button'}),'admin');
+    f.env.DEPLOYMENT_SHA=actualRevision;
+    await expect(f.run(advance(4,{type:'retest',passed:true,note:'Client claims current public version: commit-1'}))).rejects.toMatchObject({status:409,message:expect.stringContaining('再読み込み')});
+    await expect(f.run(advance(4,{type:'retest',passed:true,note:'Admin direct call'},'admin-attempt'),'admin')).rejects.toMatchObject({status:409});
+    expect(await f.run({action:'get',id:'report-1'})).toMatchObject({status:'FIXED',revision:4});
+    expect(f.count('product_feedback_events')).toBe(4);expect(f.count('product_feedback_receipts')).toBe(3);
+  });
+  it('records the server verified audit revision and replays a successful receipt after deployment changes',async()=>{
+    const f=setup();await f.run(create());await f.run(advance(1,triage),'admin');
+    await f.run(advance(2,{type:'prepare-handoff'}),'admin');
+    await f.run(advance(3,{type:'record-fix',revision:'commit-1',note:'Repair button'}),'admin');
+    f.env.DEPLOYMENT_SHA='commit-1';
+    const body=advance(4,{type:'retest',passed:true,note:'Next word shown'});
+    const first=await f.run(body) as ProductFeedbackReport;
+    expect(first).toMatchObject({status:'RETEST_PASS',revision:5});
+    expect(first.history.at(-1)?.note).toContain('サーバー確認の公開版: commit-1。修正版との照合: 一致');
+    expect(f.sqlite.prepare('SELECT note FROM product_feedback_events WHERE revision=5').get()?.note).toBe(first.history.at(-1)?.note);
+    for(const deployment of ['commit-2',undefined]){
+      f.env.DEPLOYMENT_SHA=deployment;
+      expect(await f.run(body)).toEqual(first);
+      await expect(f.run({...body,change:{type:'retest',passed:true,note:'Different'}})).rejects.toMatchObject({status:409});
+    }
+    expect(f.count('product_feedback_events')).toBe(5);expect(f.count('product_feedback_receipts')).toBe(4);
+  });
+  it.each([undefined,'old-commit'])('retains failed reports on older/unknown deployments %s with explicit server audit',async(actualRevision)=>{
+    const f=setup();await f.run(create());await f.run(advance(1,triage),'admin');
+    await f.run(advance(2,{type:'prepare-handoff'}),'admin');
+    await f.run(advance(3,{type:'record-fix',revision:'commit-1',note:'Repair button'}),'admin');
+    f.env.DEPLOYMENT_SHA=actualRevision;
+    const result=await f.run(advance(4,{type:'retest',passed:false,note:'Still blank'})) as ProductFeedbackReport;
+    expect(result.status).toBe('RETEST_FAIL');
+    expect(result.history.at(-1)?.note).toContain(`サーバー確認の公開版: ${actualRevision ?? '不明'}。修正版との照合: ${actualRevision ? '不一致' : '未確認'}`);
+    expect(result.history.at(-1)?.note).toContain('失敗報告を保存（修正版の成功確認ではありません）');
   });
   it('uses stable updatedAt/id keyset pages of 100 and fails loudly on database reads',async()=>{
     const f=setup(); for(let i=0;i<103;i++)await f.run(create(`report-${i}`));

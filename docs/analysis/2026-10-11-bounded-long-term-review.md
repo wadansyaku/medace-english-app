@@ -2,6 +2,10 @@
 
 基点は公開済みmain `b53a1c46b39a59cf2b006bdd534e0955ad3694cd`。保存候補 `0ae5423946ba35a486b4eec0639fa5392cb7fa66` の純粋selectorを再利用し、開始時の割当をCloudとIDBへ接続した。公開の到達状態と最終候補SHA・検証結果はrelease receiptで記録する。
 
+2026-10-11の公開後更新: 最終候補 `85e2945c5cd0ea8c816de14c08c8d72997a6d350` を[PR69](https://github.com/wadansyaku/medace-english-app/pull/69)で通常の保護付きsquashによりmain `4e70b66e7ee9c4ca20e1aa421a96c649aa3ea85a`へ統合した。候補とmainのtreeは `db316f47bf9a33c0a9b595925215585b65a54144` で一致。[main CI](https://github.com/wadansyaku/medace-english-app/actions/runs/38141884890)と[本番配備](https://github.com/wadansyaku/medace-english-app/actions/runs/38141884879)が成功し、0062を適用済み。公開SHA・JS/CSS/PWA、GET/HEAD限定29項目、Naru1531語/638印の教材内容・ID/番号hash、学習記録集計の非減少、新しい保存制約・日上限を読み取り確認した。実生徒の回答を受入試験で作成していない。
+
+Macの固定候補では11工程・2718 unit・全334 Cloud browser＋25 native IDB（うち長期割当13ケース）・5画面幅を受入済み。最初のCloud全実行は331成功・3失敗で、そのログを保持した。同じ候補で失敗3件を各3回確認し9成功、その後の全334＋25と最終buildが成功した。自動retryは0。正式本番workflowも334＋25と配備後5件を通過した。移行前bookmark `00000627-00000000-00005101-57832973bc10915178e4e7fc7177e6c6` は成功したworkflowログから取得し、抽出元とhashを保存した。Naru訂正は `ALREADY_APPLIED_VERIFIED` で再適用していない。これらは実教室・物理端末・記憶保持効果の証明ではない。
+
 自己評価からSRS間隔が20日を超えた状態を「長期復習期」と呼ぶ。客観的な記憶測定や定着保証ではない。SRS式、既存語ID、履歴、評価尺度、回答receiptは保持する。
 
 ## 選択と量

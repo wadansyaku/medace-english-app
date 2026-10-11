@@ -11,6 +11,7 @@ import {
 } from './organization-memberships';
 import { syncLearningPlanBooks } from './learning-plan-books';
 import { AppEnv, DbUserRow } from './types';
+import { projectRequestWorkspace } from './workspace-access';
 
 const SESSION_COOKIE_NAME = 'medace_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -198,6 +199,12 @@ export const mapUserRowToProfile = (row: DbUserRow): UserProfile => ({
   diagnosticDeferredAt: row.diagnostic_deferred_at || undefined,
   needsOnboarding: row.role === UserRole.STUDENT && !row.english_level && !row.diagnostic_deferred_at,
   stats: normalizeStats(row),
+  ...(row.server_workspace ? { workspaceAccess: {
+    workspace: row.server_workspace.workspace,
+    organizationId: row.server_workspace.organizationId,
+    grantVersion: row.server_workspace.grantVersion,
+    availableWorkspaces: row.server_workspace.availableWorkspaces,
+  } } : {}),
 });
 
 export const hashPassword = async (password: string): Promise<string> => {
@@ -535,7 +542,11 @@ export const clearSession = async (env: AppEnv, request: Request): Promise<strin
   const cookies = parseCookies(request);
   const credential = parseSessionCredential(cookies[SESSION_COOKIE_NAME]);
   if (credential) {
-    await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
+    const session = await env.DB.prepare('SELECT token_hash FROM sessions WHERE token = ?').bind(credential.sessionId)
+      .first<{ token_hash: string | null }>();
+    const valid = session && (credential.isLegacy ? session.token_hash === null
+      : Boolean(session.token_hash) && session.token_hash === await hashSessionToken(credential.rawToken));
+    if (valid) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
   }
 
   return buildCookie(request, '', 0);
@@ -560,17 +571,22 @@ export const getSessionUser = async (env: AppEnv, request: Request): Promise<DbU
     return null;
   }
 
-  if (!credential.isLegacy) {
+  if (credential.isLegacy) {
+    // A bare ID is compatible only with a genuinely pre-hash session. Never
+    // let truncating a modern signed cookie downgrade credential validation.
+    if (row.session_token_hash !== null) return null;
+  } else {
     const expectedHash = row.session_token_hash;
     if (!expectedHash || expectedHash !== await hashSessionToken(credential.rawToken)) {
-      await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(credential.sessionId).run();
+      // An invalid secret cannot invalidate someone else's valid session.
       return null;
     }
   }
 
   await maybeSyncBusinessMembershipFromUser(env, row);
   const hydrated = await hydrateUserOrganizationFromMembership(env, row);
-  return touchUserStreak(env, hydrated);
+  const identity = await touchUserStreak(env, hydrated);
+  return projectRequestWorkspace(env, identity, request);
 };
 
 export const requireUser = async (env: AppEnv, request: Request): Promise<DbUserRow> => {

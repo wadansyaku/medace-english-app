@@ -1,5 +1,8 @@
-GEMINI_API_KEY="your-gemini-api-key"
-AI_GRAMMAR_PROVIDER="AUTO"
-CLOUDFLARE_AI_GRAMMAR_MODEL="@cf/meta/llama-3.1-8b-instruct"
-# CLOUDFLARE_AI_GATEWAY_ID="default"
+# 旧Gemini / Workers AIのlive生成はコード固定で停止中です。
+# key / provider / AI bindingを設定しても再開しません。
+# 標準学習プラン・静的問題・保存済み例文・校正済みimportを使います。
+# 作文GPTは別経路です。keyだけでは有効になりません。
+# 操作別D1承認・講師scope・flag / data policy・予算の条件は
+# docs/environment-setup.md「AIの稼働境界」を参照してください。
+# 自由会話Botは準備中で、実生成はOFFです。
 ADMIN_DEMO_PASSWORD="replace-this-in-production"

@@ -202,8 +202,8 @@ describe('public business role entrypoints', () => {
       label: '管理画面プレビューを見る',
     });
     expect(getPublicBusinessRolePrimaryAction('group-admin', productionFlags)).toMatchObject({
-      kind: 'demo',
-      label: 'この役割を試す',
+      kind: 'preview',
+      label: '画面構成を見る',
     });
     expect(getPublicBusinessRolePrimaryAction('service-admin', productionFlags)).toMatchObject({
       kind: 'preview',

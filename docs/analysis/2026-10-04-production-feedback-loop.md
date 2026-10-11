@@ -56,3 +56,15 @@ rollbackは追加0046/0047 schemaを残したコード復旧を優先する。�
 - 可読性の実画面修正: 組織管理パネルの白い説明・補助操作・バッジを暗色/クリームへ変更。背景色と操作は維持した。独立build、1366px/390pxの実Chromeで本文contrast4.84:1を実測し、報告入口・dialog、横overflowなし、画面errorなしを確認。レビュー修正版5c2aea8のCI/previewも成功し、このclass差分を含む最終HEADで必須gateを再実行する。
 - main SHA・production run/URL・0046/0047・recovery bookmark・公開版受入: merge後の正規production workflowとSHA付き受入で記録する。
 - 継続率・再テスト成績・遅延定着・優位性: 未測定/未実証。
+
+## 2026-10-11 後続確認
+
+PR55はmain `915f4f7de47620e8d3c2467b29a0953e07c45b17`へ統合済み。2026-10-11のmain `4e70b66e7ee9c4ca20e1aa421a96c649aa3ea85a`への祖先関係をローカルGitで再確認した。現行project/todo/文書索引の「未統合・公開待ち」表記を訂正した。上記のmerge前の承認・検証値・当時の残工程は履歴として保持している。
+
+当時のproduction run、公開SHA/URL、0046/0047の適用証拠、recovery bookmarkは今回未収集。Gitの祖先確認だけで成功として補完しない。この追記ではbuild、unit、API、browser、本番データ取得を再実行していない。
+
+後続の旧Gemini / Workers AI固定停止により、管理者の有料例文準備も現在は410で終了し、校正済み例文の承認待ちimportへ移った。上記の最大10件・概算上限1.2円の説明は2026-10-04時点の実装記録であり、現在の実行案内ではない。0046のclaimや0047の報告保存を含む既存migration・履歴は保持する。退役した `word-hint-audit.yml` はscheduleなし、手動実行も説明だけ。
+
+作文GPTは別経路として、flag・data policy・課題/操作別D1承認・現在の講師アクセス・D1予算予約を確認する。生成物は未評価の下書きで、正式成績を確定しない。月$5はアプリ内の計画枠で、provider請求書の保証ではない。[作文GPTの記録](./2026-10-06-writing-gpt-budget-release.md)と[現在の設定条件](../environment-setup.md#aiの稼働境界)を参照する。
+
+公開仕様を根拠にする自由会話Botは準備中で、実生成はOFF。固定FAQ・対話UI・根拠検索の準備を自然文AI回答の完成とは扱わず、作文GPTの同意や月$5枠をBotへ流用しない。既存feedbackの所有範囲・revision・receipt・手動引継ぎの境界は変更しない。

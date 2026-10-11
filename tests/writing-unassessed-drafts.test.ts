@@ -9,6 +9,7 @@ vi.mock('../functions/_shared/openai-writing-provider', async () => ({
 }));
 vi.mock('../functions/_shared/organization-memberships', async () => ({
   ...await vi.importActual('../functions/_shared/organization-memberships'), readActiveOrganizationContextForUser: mocks.organization,
+  readActiveActorOrganizationContext: (env: AppEnv, actor: DbUserRow) => mocks.organization(env, actor.id),
 }));
 vi.mock('../functions/_shared/student-visibility', async () => ({
   ...await vi.importActual('../functions/_shared/student-visibility'), readVisibleStudentIds: mocks.visible,

@@ -1,6 +1,8 @@
 import { InterventionKind, RecommendedActionType } from '../../types';
 import type { AppEnv } from './types';
 import { readFirst } from './storage-support';
+import { readGrantEligibleInstructor } from './workspace-access';
+import { UserRole } from '../../types';
 
 export interface ActiveOrganizationMemberRow {
   id: string;
@@ -39,3 +41,13 @@ export const readActiveOrganizationMember = async (
    WHERE u.id = ?`,
   userId,
 );
+
+export const readEligibleOrganizationInstructor = async (
+  env: AppEnv, userId: string, organizationId: string,
+): Promise<ActiveOrganizationMemberRow | null> => {
+  const canonical = await readActiveOrganizationMember(env, userId);
+  if (canonical?.role === UserRole.INSTRUCTOR && canonical.organization_id === organizationId) return canonical;
+  const granted = await readGrantEligibleInstructor(env, userId, organizationId);
+  return granted ? { id: granted.id, display_name: granted.display_name, role: granted.role,
+    organization_role: granted.organization_role, organization_id: granted.organization_id, organization_name: granted.organization_name } : null;
+};

@@ -94,6 +94,10 @@ const copyFunctionsWithWritingProviderMock = async (tempDir) => {
 };
 
 export const createLocalWranglerProject = async ({ writingProviderMock = false } = {}) => {
+  const deploymentSha = process.env.DEPLOYMENT_SHA?.trim() || '';
+  if (deploymentSha && !/^[a-f0-9]{40}$/.test(deploymentSha)) {
+    throw new Error('Local DEPLOYMENT_SHA must be a full 40-character commit SHA.');
+  }
   if (!writingProviderMock && process.env.MEDACE_LOCAL_AI_BINDING === '1') {
     return {
       cwd,
@@ -103,10 +107,13 @@ export const createLocalWranglerProject = async ({ writingProviderMock = false }
 
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'medace-wrangler-local-'));
   try {
-    const config = JSON.parse(await readFile(path.join(cwd, 'wrangler.jsonc'), 'utf8'));
+    const config = removeAiBindings(JSON.parse(await readFile(path.join(cwd, 'wrangler.jsonc'), 'utf8')));
+    // Explicit test-runner provenance only; the source/remote configuration is
+    // never changed, and the temporary project still has no AI binding.
+    if (deploymentSha) config.vars = { ...config.vars, DEPLOYMENT_SHA: deploymentSha };
     await writeFile(
       path.join(tempDir, 'wrangler.jsonc'),
-      `${JSON.stringify(removeAiBindings(config), null, 2)}\n`,
+      `${JSON.stringify(config, null, 2)}\n`,
     );
     await Promise.all(LOCAL_PROJECT_LINKS
       .filter((entry) => !writingProviderMock || entry !== 'functions')

@@ -1,4 +1,6 @@
 
+import type { WorkspaceAccess } from './contracts/workspaceAccess';
+
 export enum UserRole {
   STUDENT = 'STUDENT',
   INSTRUCTOR = 'INSTRUCTOR',
@@ -468,6 +470,7 @@ export interface UserProfile {
   subscriptionPlan?: SubscriptionPlan;
   organizationName?: string;
   studyMode?: UserStudyMode;
+  workspaceAccess?: WorkspaceAccess;
 }
 
 export type WordPartOfSpeech = 'verb' | 'noun' | 'adverb' | 'adjective';
@@ -1380,6 +1383,12 @@ export interface OrganizationMemberSummary {
   updatedAt: number;
 }
 
+export interface OrganizationEligibleInstructor {
+  userUid: string;
+  displayName: string;
+  email: string;
+}
+
 export interface OrganizationAuditEvent {
   id: number;
   organizationId: string;
@@ -1398,6 +1407,9 @@ export interface OrganizationSettingsSnapshot {
   nameKey: string;
   subscriptionPlan: SubscriptionPlan;
   members: OrganizationMemberSummary[];
+  // Separate operational eligibility from canonical membership and user roles.
+  // Older/local snapshots may omit this field; an explicit empty list is final.
+  eligibleInstructors?: OrganizationEligibleInstructor[];
   cohorts: OrganizationCohort[];
   instructorCohorts: Record<string, string[]>;
   auditEvents: OrganizationAuditEvent[];

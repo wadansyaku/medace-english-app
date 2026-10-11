@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -149,11 +149,43 @@ try {
     '--file', path.join(cwd, 'tests/fixtures/graduated-review-smoke.sql'),
   ]);
   await runCommand(graduatedFixture.command, graduatedFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+  const ownerFixture = createNodeToolCommand('wrangler', [
+    'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir,
+    '--file', path.join(cwd, 'tests/fixtures/owner-workspace-smoke.sql'),
+  ]);
+  await runCommand(ownerFixture.command, ownerFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+
+  // Test-only bridge for grant revocation against this disposable local D1.
+  // No account data or database identifier is written to this private file.
+  if (baseEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE) {
+    if (!/^[a-f0-9]{40}$/.test(baseEnv.DEPLOYMENT_SHA || '')) throw new Error('The local D1 test bridge requires the exact source SHA.');
+    const generation = path.basename(persistDir);
+    if (!/^medace-smoke-[a-zA-Z0-9]+$/.test(generation)) throw new Error('Invalid disposable D1 generation.');
+    const runtimeMarker = createNodeToolCommand('wrangler', [
+      'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir, '--command',
+      `CREATE TABLE smoke_runtime_identity (generation TEXT PRIMARY KEY, source_sha TEXT NOT NULL); INSERT INTO smoke_runtime_identity VALUES ('${generation}', '${baseEnv.DEPLOYMENT_SHA}');`,
+    ]);
+    await runCommand(runtimeMarker.command, runtimeMarker.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+    await writeFile(baseEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE, JSON.stringify({ persistDir, sourceSha: baseEnv.DEPLOYMENT_SHA }), { mode: 0o600, flag: 'wx' });
+  }
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
   // This disposable runtime exercises the live writing contract with a
   // network-free synthetic provider; it does not verify Gemini availability.
   localWranglerProject = await createLocalWranglerProject({ writingProviderMock: true });
+  if (baseEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE) {
+    // Add the random D1 generation to this private copied runtime only. The
+    // browser checks it before SQL, so another local runtime cannot be mutated.
+    const generation = path.basename(persistDir);
+    await writeFile(path.join(localWranglerProject.cwd, 'functions/_middleware.ts'), `
+export const onRequest = async ({ next }: { next: () => Promise<Response> }) => {
+  const response = await next();
+  const headers = new Headers(response.headers);
+  headers.set('X-MedAce-Smoke-Generation', '${generation}');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+};
+`, { mode: 0o600, flag: 'wx' });
+  }
   const wranglerPagesDev = createNodeToolCommand('wrangler', [
     '--cwd',
     localWranglerProject.cwd,

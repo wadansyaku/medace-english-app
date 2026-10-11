@@ -1,6 +1,6 @@
-import { access, mkdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 
 import { getAvailablePort } from './_shared/ports.mjs';
 import {
@@ -304,11 +304,13 @@ const cloudflareFiles = [
   'tests/smoke/quiz-pronunciation.smoke.spec.ts',
   'tests/smoke/aichi-exam-badge.smoke.spec.ts',
   'tests/smoke/product-feedback.smoke.spec.ts',
+  'tests/smoke/product-support.smoke.spec.ts',
   'tests/smoke/admin-example-preparation.smoke.spec.ts',
   'tests/smoke/guest-trial.smoke.spec.ts',
   'tests/smoke/guest-learning.smoke.spec.ts',
   'tests/smoke/auth-focused.smoke.spec.ts',
   'tests/smoke/staff-login.smoke.spec.ts',
+  'tests/smoke/owner-workspace.smoke.spec.ts',
   'tests/smoke/ui-audit.smoke.spec.ts',
   'tests/smoke/grammar-answer-isolation.smoke.spec.ts',
   'tests/smoke/worksheet-reliability.smoke.spec.ts',
@@ -374,7 +376,9 @@ const runBuildForEnv = async (suiteEnv, buildKey) => {
     return 0;
   }
 
-  const viteBuild = createNodeToolCommand('vite', ['build']);
+  const viteBuild = createNodeToolCommand('vite', ['build',
+    ...(suiteEnv.MEDACE_VITE_CONFIG_LOADER === 'runner' ? ['--configLoader', 'runner'] : []),
+  ]);
   const buildExitCode = await runCommand(viteBuild.command, viteBuild.args, suiteEnv);
   if (buildExitCode === 0) {
     buildCache.add(buildKey);
@@ -389,12 +393,24 @@ for (const suite of suites) {
   const baseUrl = isExternalTarget ? externalBaseUrl : `http://127.0.0.1:${port}`;
   const outputDir = path.join(cwd, 'test-results', `smoke-${suite.name}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
+  const localSourceSha = !isExternalTarget ? execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim() : '';
+  if (!isExternalTarget && ((baseEnv.DEPLOYMENT_SHA && baseEnv.DEPLOYMENT_SHA !== localSourceSha)
+    || (baseEnv.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA && baseEnv.PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA !== localSourceSha))) {
+    throw new Error('The local smoke runtime requires the exact checked-out source SHA.');
+  }
 
   console.log(`\n[smoke:${suite.name}] port=${port} output=${outputDir}`);
 
   const suiteEnv = {
     ...baseEnv,
     ...(suite.env || {}),
+    ...(!isExternalTarget ? {
+      DEPLOYMENT_SHA: localSourceSha,
+      PLAYWRIGHT_EXPECT_DEPLOYMENT_SHA: localSourceSha,
+      // Playwright clears its output directory before running. Keep the private
+      // runner bridge next to that directory, then remove this exact file.
+      PLAYWRIGHT_LOCAL_D1_STATE_FILE: `${outputDir}-local-d1-state.json`,
+    } : { PLAYWRIGHT_LOCAL_D1_STATE_FILE: '' }),
   };
   if (isFilteredRun) {
     try {
@@ -480,6 +496,7 @@ for (const suite of suites) {
   } finally {
     serverMonitor?.dispose();
     await stopChildProcess(server);
+    if (!isExternalTarget && suiteEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE) await rm(suiteEnv.PLAYWRIGHT_LOCAL_D1_STATE_FILE, { force: true });
   }
 }
 

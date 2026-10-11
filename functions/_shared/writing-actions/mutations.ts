@@ -32,6 +32,8 @@ import type { AiUsageLogContext } from '../ai-metering';
 import { HttpError, noContent } from '../http';
 import { readFirst } from '../storage-support';
 import type { AppEnv, DbUserRow } from '../types';
+import { requireUser } from '../auth';
+import { revalidateWorkspaceContext } from '../workspace-access';
 import {
   generateWritingPrompt,
   resolveWritingAiMode,
@@ -389,6 +391,7 @@ export const handleCreateWritingUploadUrl = async (
   request: CreateWritingUploadUrlRequest,
 ): Promise<CreateWritingUploadUrlResponse> => {
   guardWritingAccess(user);
+  user = await revalidateWorkspaceContext(env, user);
   const assignmentRow = await getAssignmentRowOrThrow(env, request.assignmentId);
   await ensureAssignmentAccess(env, user, assignmentRow);
 
@@ -423,12 +426,14 @@ export const handleCreateWritingUploadUrl = async (
   const expiresAt = now + WRITING_UPLOAD_URL_TTL_MS;
 
   const isPdfUpload = mimeType === WRITING_UPLOAD_PDF_MIME_TYPE ? 1 : 0;
+  const workspace = user.server_workspace?.source === 'EXPLICIT_GRANT' ? user.server_workspace : undefined;
   const insertResult = await env.DB.prepare(`
     INSERT INTO writing_submission_assets (
       id, assignment_id, submission_id, attempt_no, asset_order, file_name, mime_type, byte_size, expected_byte_size,
-      expected_sha256_base64, r2_key, upload_token, upload_expires_at, created_at, updated_at
+      expected_sha256_base64, r2_key, upload_token, upload_expires_at, created_at, updated_at,
+      workspace_user_id, workspace_id, workspace_organization_id, workspace_grant_version
     )
-    SELECT ?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?
+    SELECT ?, ?, NULL, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     FROM (
       SELECT
         COUNT(*) AS active_count,
@@ -454,6 +459,12 @@ export const handleCreateWritingUploadUrl = async (
           AND active.active_count < ?
         )
       )
+      AND (? IS NULL OR EXISTS (
+        SELECT 1 FROM workspace_access_grants g JOIN organizations o ON o.id = g.staff_organization_id
+         WHERE g.user_id = ? AND g.grant_version = ? AND g.status = 'ACTIVE' AND o.status = 'ACTIVE'
+           AND g.staff_organization_id = ?
+           AND ((? = 'instructor' AND g.teacher_access = 1) OR (? = 'group-admin' AND g.school_admin_access = 1))
+      ))
   `).bind(
     assetId,
     request.assignmentId,
@@ -468,6 +479,10 @@ export const handleCreateWritingUploadUrl = async (
     expiresAt,
     now,
     now,
+    workspace ? user.id : null,
+    workspace?.workspace || null,
+    workspace?.organizationId || null,
+    workspace?.grantVersion || null,
     WRITING_UPLOAD_PDF_MIME_TYPE,
     request.assignmentId,
     attemptNo,
@@ -477,8 +492,15 @@ export const handleCreateWritingUploadUrl = async (
     isPdfUpload,
     isPdfUpload,
     WRITING_UPLOAD_MAX_IMAGE_FILES,
+    workspace?.grantVersion || null,
+    user.id,
+    workspace?.grantVersion || null,
+    workspace?.organizationId || null,
+    workspace?.workspace || null,
+    workspace?.workspace || null,
   ).run();
   if ((insertResult.meta.changes ?? 0) !== 1) {
+    if (workspace) await revalidateWorkspaceContext(env, user);
     throw new HttpError(409, '別のアップロード予約が先に更新されました。ファイルを確認してやり直してください。');
   }
 
@@ -504,6 +526,19 @@ export const handleWritingAssetUpload = async (
   if (!assetRow) {
     throw new HttpError(404, 'アップロードトークンが無効です。');
   }
+  const assertLeaseAccess = async () => {
+    if (!assetRow.workspace_user_id) return;
+    const actor = await requireUser(env, request);
+    const context = actor.server_workspace;
+    if (actor.id !== assetRow.workspace_user_id || context?.source !== 'EXPLICIT_GRANT'
+      || context.workspace !== assetRow.workspace_id
+      || context.organizationId !== assetRow.workspace_organization_id
+      || context.grantVersion !== assetRow.workspace_grant_version) {
+      throw new HttpError(403, 'この原本は発行した業務画面からアップロードしてください。');
+    }
+    return actor;
+  };
+  const leaseActor = await assertLeaseAccess();
   const now = Date.now();
   if (Number(assetRow.upload_expires_at || 0) <= now) {
     throw new HttpError(410, 'アップロードURLの有効期限が切れています。再度アップロードURLを取得してください。');
@@ -568,6 +603,7 @@ export const handleWritingAssetUpload = async (
     ) {
       throw new HttpError(400, 'アップロードファイルのチェックサムが一致しません。');
     }
+    await assertLeaseAccess();
     const object = await env.WRITING_ASSETS.put(assetRow.r2_key, body, {
       httpMetadata: {
         contentType: assetRow.mime_type,
@@ -581,6 +617,15 @@ export const handleWritingAssetUpload = async (
       WHERE id = ?
         AND upload_consumed_at = ?
         AND uploaded_at IS NULL
+        AND (workspace_user_id IS NULL OR EXISTS (
+          SELECT 1 FROM workspace_access_grants g JOIN organizations o ON o.id = g.staff_organization_id
+           WHERE g.user_id = writing_submission_assets.workspace_user_id
+             AND g.grant_version = writing_submission_assets.workspace_grant_version
+             AND g.status = 'ACTIVE' AND o.status = 'ACTIVE'
+             AND g.staff_organization_id = writing_submission_assets.workspace_organization_id
+             AND ((writing_submission_assets.workspace_id = 'instructor' AND g.teacher_access = 1)
+               OR (writing_submission_assets.workspace_id = 'group-admin' AND g.school_admin_access = 1))
+        ))
     `).bind(
       body.byteLength,
       uploadedAt,
@@ -591,7 +636,11 @@ export const handleWritingAssetUpload = async (
       now,
     ).run();
     if ((finalizeResult.meta.changes ?? 0) !== 1) {
+      // A revoked grant may leave a temporary object after the remote put;
+      // it must never become an accepted original or a selectable submission.
+      if (assetRow.workspace_user_id) await env.WRITING_ASSETS.delete(assetRow.r2_key);
       releaseReservation = false;
+      if (leaseActor) await revalidateWorkspaceContext(env, leaseActor);
       throw new HttpError(409, 'アップロード状態が別の操作で更新されました。');
     }
     releaseReservation = false;

@@ -28,6 +28,23 @@ const sourceSnapshot = async () => {
 };
 
 describe('local writing provider mock isolation', () => {
+  it('binds explicitly supplied commit provenance only in the isolated local config', async () => {
+    vi.stubEnv('MEDACE_LOCAL_AI_BINDING', '0');
+    vi.stubEnv('DEPLOYMENT_SHA', '8e96cd7ed3a691f4a900608aa348122768861a57');
+    const sourceConfig = await readFile('wrangler.jsonc', 'utf8');
+    const project = await createProject();
+    const config = JSON.parse(await readFile(path.join(project.cwd, 'wrangler.jsonc'), 'utf8'));
+    expect(config.vars.DEPLOYMENT_SHA).toBe(process.env.DEPLOYMENT_SHA);
+    expect(config.ai).toBeUndefined();
+    expect(Object.values(config.env || {}).every(environment => !environment.ai)).toBe(true);
+    expect(await readFile('wrangler.jsonc', 'utf8')).toBe(sourceConfig);
+  });
+
+  it('rejects malformed provenance before creating a local runtime', async () => {
+    vi.stubEnv('DEPLOYMENT_SHA', 'synthetic-fix-v1');
+    await expect(createLocalWranglerProject()).rejects.toThrow('40-character commit SHA');
+  });
+
   it('keeps the default project linked to the unchanged production Functions', async () => {
     vi.stubEnv('MEDACE_LOCAL_AI_BINDING', '0');
     const project = await createProject();

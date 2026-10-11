@@ -3,14 +3,28 @@ import { readFile } from 'node:fs/promises';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './diagnostics';
 import { loginAdminDemo, loginBusinessStudentDemo, loginGroupAdminDemo, loginInstructorDemo } from './smoke-support';
+import type { ProductFeedbackList, ProductFeedbackReport, ProductFeedbackStatus } from '../../contracts/productFeedback';
 
 const input = (title: string) => ({ title, version: 'synthetic-review-v1', screen: '講師の担当生徒', steps: '匿名の講師でログインし、担当画面を開く', expected: '次の操作が見える', actual: '操作が見つからない', impact: '確認を続けられない' });
 const labels = { title: '件名', version: '試した版', screen: '画面・操作の場所', steps: '再現する手順', expected: '期待する動作', actual: '実際の動作', impact: '困ったこと・影響' };
-const open = async (page: Page) => { await page.getByRole('button', { name: 'FAQ・製品の報告', exact: true }).click(); await expect(page.getByRole('dialog', { name: 'FAQ・製品の報告' })).toBeVisible(); await expect(page.getByText('報告を取得しています…', { exact: true })).toHaveCount(0); };
+const open = async (page: Page) => { await page.getByRole('button', { name: 'FAQ・製品の報告', exact: true }).click(); await expect(page.getByRole('dialog', { name: 'FAQ・製品の報告' })).toBeVisible(); await expect(page.getByText('報告を取得しています…', { exact: false })).toHaveCount(0); };
 const fill = async (page: Page, title: string) => { await page.getByRole('button', { name: '報告を入力する', exact: true }).click(); const form = page.getByTestId('product-feedback-create'); for (const [key, value] of Object.entries(input(title))) await form.getByLabel(labels[key as keyof typeof labels], { exact: true }).fill(value); await form.getByRole('checkbox').check(); return form; };
 const card = (page: Page, title: string) => page.getByTestId('product-feedback-report').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
 const expand = async (report: Locator) => { const details = report.locator('details'); if (!(await details.getAttribute('open') !== null)) await report.getByText('内容と次の操作・履歴を確認', { exact: true }).click(); await expect(report.getByText('対応履歴を取得しています…')).toHaveCount(0); };
 const refresh = async (page: Page) => { await page.getByRole('button', { name: '一覧を更新', exact: true }).click(); await expect(page.getByText('報告を取得しています…', { exact: false })).toHaveCount(0); };
+const readPublishedRevision = async (page: Page): Promise<string> => {
+  const response = await page.request.post('/api/product-feedback', { data: { action: 'list' }, headers: { Origin: new URL(page.url()).origin } });
+  expect(response.ok()).toBe(true);
+  const result = await response.json() as ProductFeedbackList;
+  expect(typeof result.deploymentRevision, 'Local runtime must expose its configured DEPLOYMENT_SHA for the matching-version acceptance.').toBe('string');
+  expect(result.deploymentRevision).toMatch(/\S/);
+  return result.deploymentRevision!;
+};
+const readReport = async (page: Page, id: string): Promise<ProductFeedbackReport> => {
+  const response = await page.request.post('/api/product-feedback', { data: { action: 'get', id }, headers: { Origin: new URL(page.url()).origin } });
+  expect(response.ok()).toBe(true); return response.json();
+};
+const statusCounts = (status: ProductFeedbackStatus) => ({ NEW: 0, TRIAGED: 0, HANDOFF_PREPARED: 0, FIXED: 0, RETEST_PASS: 0, RETEST_FAIL: 0, [status]: 1 });
 
 test.beforeEach(async ({ baseURL }) => { test.skip(!baseURL || !['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname), 'Synthetic D1 writes are local-only.'); });
 
@@ -22,12 +36,14 @@ test('teacher report persists through owner triage, manual export, failed retest
   await expect(card(page, title)).toBeVisible(); await expect(page.getByText('サーバーへの報告保存を確認しました。', { exact: false })).toBeVisible();
   await page.reload(); await open(page); await expect(card(page, title)).toBeVisible();
   const summary = card(page, title).locator(':scope > details > summary');
-  await page.getByRole('button', { name: '一覧を更新', exact: true }).focus(); await page.keyboard.press('Tab'); await expect(summary).toBeFocused();
+  await page.getByRole('button', { name: '一覧を更新', exact: true }).focus(); await page.keyboard.press('Tab'); await expect(page.getByRole('combobox', { name: '報告の状態', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab'); await expect(summary).toBeFocused();
   await page.keyboard.press('Tab'); await expect(page.getByRole('button', { name: '戻る・閉じる' })).toBeFocused();
   await page.keyboard.press('Shift+Tab'); await expect(summary).toBeFocused(); await page.keyboard.press('Enter'); await expect(card(page, title).locator('ol li')).toHaveCount(1);
   const adminContext = await browser.newContext(); const admin = await adminContext.newPage();
   try {
     await admin.goto('/'); await loginAdminDemo(admin); await expect(admin.getByRole('button', { name: 'FAQ・製品の報告', exact: true })).toBeVisible(); await open(admin);
+    const deployedRevision = await readPublishedRevision(admin); expect(deployedRevision).not.toBe('synthetic-fix-v1');
     const report = card(admin, title); await expand(report);
     await report.getByRole('combobox', { name: /優先度/ }).selectOption('P1'); await report.getByLabel('受入条件', { exact: true }).fill('320pxで次の操作を確認できる'); await report.getByRole('button', { name: '優先度・受入条件を保存' }).click();
     await expect(report.getByRole('button', { name: '手動引継ぎを準備' })).toBeEnabled(); await report.getByRole('button', { name: '手動引継ぎを準備' }).click();
@@ -53,18 +69,72 @@ test('teacher report persists through owner triage, manual export, failed retest
     await expect(report.getByLabel('修正版・コミット')).toHaveValue('synthetic-fix-v1');
     await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue('操作入口を整理');
     await report.getByRole('button', { name: '修正版を記録して再テストへ' }).click();
-    await expect(report.getByText('再テスト対象版: synthetic-fix-v1')).toBeVisible();
+    await expect(report.getByText('記録された修正版（自己申告）: synthetic-fix-v1', { exact: true })).toBeVisible();
+    await expect(report.getByText(`現在の公開版（サーバー確認）: ${deployedRevision}`, { exact: true })).toBeVisible();
     await expect(report.getByLabel('再テストした条件と結果')).toHaveValue('');
     await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
     await expect(report.getByRole('button', { name: '再テスト失敗を記録' })).toBeDisabled();
-    await refresh(page); const own = card(page, title); await expand(own); await expect(own.getByLabel('優先度', { exact: true })).toHaveCount(0);
-    await own.getByLabel('再テストした条件と結果').fill('320pxで操作がまだ見えない'); await own.getByRole('button', { name: '再テスト失敗を記録' }).click(); await expect(own.getByText('次は管理者が修正を再記録し、もう一度再テストします。')).toBeVisible();
-    await refresh(admin); await expand(report); await expect(report.getByLabel('修正版・コミット')).toHaveValue(''); await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue(''); await report.getByLabel('修正版・コミット').fill('synthetic-fix-v1'); await report.getByLabel('修正内容', { exact: true }).fill('スマホで操作を表示'); await report.getByRole('button', { name: '修正版を記録して再テストへ' }).click(); await expect(admin.getByRole('button', { name: '同じ内容で再試行' })).toBeVisible(); await expect(report.getByLabel('修正版・コミット')).toHaveValue('synthetic-fix-v1'); await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue('スマホで操作を表示'); await admin.getByRole('button', { name: '同じ内容で再試行' }).click(); await expect(report.getByText('再テスト対象版: synthetic-fix-v1')).toBeVisible(); await expect(report.getByLabel('修正内容', { exact: true })).toHaveCount(0); expect(secondFixRequests).toHaveLength(2); expect(secondFixRequests[0]).toEqual(secondFixRequests[1]);
-    await refresh(page); await expand(own); await expect(own.getByLabel('再テストした条件と結果')).toHaveValue(''); await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled(); await own.getByLabel('再テストした条件と結果').fill('320pxと390pxで操作を確認'); await own.getByRole('button', { name: '再テスト成功を記録' }).click(); await expect(own.getByText('再テスト成功が記録されています。')).toBeVisible();
+    await page.reload(); await open(page); const own = card(page, title); await expand(own); await expect(own.getByLabel('優先度', { exact: true })).toHaveCount(0);
+    await expect(own.getByText('公開版と入力された修正版が一致していません。', { exact: false })).toBeVisible();
+    await own.getByLabel('再テストした条件と結果').fill('320pxで操作がまだ見えない');
+    await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled(); await expect(own.getByRole('button', { name: '再テスト失敗を記録' })).toBeEnabled();
+    await own.getByRole('button', { name: '再テスト失敗を記録' }).click(); await expect(own.getByText('次は管理者が修正を再記録し、もう一度再テストします。')).toBeVisible();
+    const failed = await readReport(page, payload.report.id); expect(failed.status).toBe('RETEST_FAIL'); expect(failed.history).toHaveLength(5);
+    expect(failed.history.at(-1)!.note).toContain(`現在の公開版: ${deployedRevision}`); expect(failed.history.at(-1)!.note).toContain('記録された修正版（自己申告）: synthetic-fix-v1'); expect(failed.history.at(-1)!.note).toContain('不一致');
+    await refresh(admin); await expand(report); await expect(report.getByLabel('修正版・コミット')).toHaveValue(''); await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue(''); await report.getByLabel('修正版・コミット').fill(deployedRevision); await report.getByLabel('修正内容', { exact: true }).fill('スマホで操作を表示'); await report.getByRole('button', { name: '修正版を記録して再テストへ' }).click(); await expect(admin.getByRole('button', { name: '同じ内容で再試行' })).toBeVisible(); await expect(report.getByLabel('修正版・コミット')).toHaveValue(deployedRevision); await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue('スマホで操作を表示'); await admin.getByRole('button', { name: '同じ内容で再試行' }).click(); await expect(report.getByText(`記録された修正版（自己申告）: ${deployedRevision}`, { exact: true })).toBeVisible(); await expect(report.getByLabel('修正内容', { exact: true })).toHaveCount(0); expect(secondFixRequests).toHaveLength(2); expect(secondFixRequests[0]).toEqual(secondFixRequests[1]);
+    await refresh(page); await expand(own); await expect(own.getByLabel('再テストした条件と結果')).toHaveValue(''); await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
+    await expect(own.getByText('入力文字列と公開版は一致しています。修正内容や再テスト結果をアプリが検証したものではありません。', { exact: true })).toBeVisible();
+    await own.getByLabel('再テストした条件と結果').fill('320pxと390pxで操作を確認'); await expect(own.getByRole('button', { name: '再テスト成功を記録' })).toBeEnabled(); await own.getByRole('button', { name: '再テスト成功を記録' }).click(); await expect(own.getByText('再テスト成功が記録されています。')).toBeVisible();
+    const passed = await readReport(page, payload.report.id); expect(passed.status).toBe('RETEST_PASS'); expect(passed.history).toHaveLength(7); expect(passed.history.at(-1)!.note).toContain(`現在の公開版: ${deployedRevision}`); expect(passed.history.at(-1)!.note).toContain('自動検証ではありません'); expect(passed.history.at(-1)!.note).toContain(`サーバー確認の公開版: ${deployedRevision}。修正版との照合: 一致`);
     await page.reload(); await open(page); await expand(card(page, title)); await expect(card(page, title).locator('ol li')).toHaveCount(7);
     await card(page, title).locator('ol').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('feedback-retest-history.png') });
     expect(errors).toEqual([]);
   } finally { await adminContext.close(); }
+});
+
+test('server rejects stale-tab and direct successful retests while unknown or mismatched UI metadata stays blocked', async ({ page }) => {
+  await page.goto('/'); await loginAdminDemo(page);
+  const origin = new URL(page.url()).origin;
+  const post = (data: unknown) => page.request.post('/api/product-feedback', { data, headers: { Origin: origin } });
+  const listResponse = await post({ action: 'list' }); expect(listResponse.ok()).toBe(true);
+  const deployedRevision = ((await listResponse.json()) as ProductFeedbackList).deploymentRevision;
+  const title = `版検証 ${randomUUID()}`; const id = randomUUID();
+  const created = await post({ action: 'create', id, input: input(title), privacyConfirmed: true }); expect(created.ok()).toBe(true);
+  const advance = async (expectedRevision: number, change: unknown) => {
+    const response = await post({ action: 'advance', id, expectedRevision, mutationId: randomUUID(), change }); expect(response.ok()).toBe(true);
+  };
+  await advance(1, { type: 'triage', priority: 'P1', acceptance: '対象の公開版で次の操作が見える' });
+  await advance(2, { type: 'prepare-handoff' });
+  const staleRevision = `old-${deployedRevision ?? 'unknown'}`;
+  await advance(3, { type: 'record-fix', revision: staleRevision, note: '旧版を使った合成回帰' });
+  let metadata: string | null = deployedRevision;
+  await page.route('**/api/product-feedback', async route => {
+    const body = route.request().postDataJSON();
+    if (body.action === 'list') {
+      const response = await route.fetch(); const result = await response.json();
+      await route.fulfill({ response, json: { ...result, deploymentRevision: metadata } }); return;
+    }
+    await route.continue();
+  });
+  await open(page); const report = card(page, title); await expand(report);
+  await report.getByLabel('再テストした条件と結果').fill('対象操作を確認');
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
+  await expect(report.getByText(deployedRevision
+    ? '公開版と入力された修正版が一致していません。対象版の成功としては記録できません。公開版を確認してから一覧を更新してください。'
+    : '公開版を確認できていません。対象版の成功としては記録できません。一覧を更新して公開版を確認してください。', { exact: true })).toBeVisible();
+  metadata = null; await refresh(page);
+  await expect(report.getByText('公開版を確認できていません。対象版の成功としては記録できません。一覧を更新して公開版を確認してください。', { exact: true })).toBeVisible();
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
+  // Simulate an old tab which still believes its fix is the public deployment.
+  // Only list metadata is intercepted; the actual mutation reaches real D1.
+  metadata = staleRevision; await refresh(page);
+  await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeEnabled();
+  const rejected = page.waitForResponse(response => response.url().endsWith('/api/product-feedback') && response.request().postDataJSON().action === 'advance');
+  await report.getByRole('button', { name: '再テスト成功を記録' }).click(); const rejectedResponse = await rejected; expect(rejectedResponse.status()).toBe(409); expect((await rejectedResponse.json()).error).toContain('再読み込み');
+  await expect(page.getByText('別の更新がありました。一覧を再取得しています。入力は保持しました。最新の状態を確認して、操作を再検討してください。', { exact: false })).toBeVisible();
+  const direct = await post({ action: 'advance', id, expectedRevision: 4, mutationId: randomUUID(), change: { type: 'retest', passed: true, note: 'Client claims matching public version' } });
+  expect(direct.status()).toBe(409); expect((await direct.json()).error).toContain('再読み込み');
+  const unchanged = await readReport(page, id); expect(unchanged.status).toBe('FIXED'); expect(unchanged.revision).toBe(4); expect(unchanged.history).toHaveLength(4);
 });
 
 test('lost create response retries the same report, while list failure stays unknown and keyboard close preserves draft', async ({ page }) => {
@@ -173,7 +243,8 @@ test('unobserved workflow loops reset both retest and fix drafts even with the s
   await page.route('**/api/product-feedback', async route => {
     const body = route.request().postDataJSON();
     const report = { ...input(title), id, revision, createdAt: 1, updatedAt: revision, status, priority: 'P1', acceptance: '対象版で匿名手順を再現', fixRevision: 'same-synthetic-sha', isOwnReport: true, historyLoaded: body.action === 'get', history: body.action === 'get' ? ['NEW', 'TRIAGED', 'HANDOFF_PREPARED', 'FIXED', 'RETEST_FAIL', 'FIXED', 'RETEST_FAIL', 'FIXED', 'RETEST_FAIL'].slice(0, revision).map((eventStatus, index) => ({ revision: index + 1, at: index + 1, status: eventStatus, actorRole: 'ADMIN', note: `匿名手順の履歴 revision ${index + 1}` })) : [] };
-    if (body.action === 'list') await route.fulfill({ json: { reports: [report], nextCursor: null, canManage: true, deploymentRevision: null } });
+    if (body.action === 'status-summary') await route.fulfill({ json: { counts: statusCounts(status as ProductFeedbackStatus), canManage: true, scope: 'all', actualDeploymentRevision: 'same-synthetic-sha', fetchedAt: 1 } });
+    else if (body.action === 'list') await route.fulfill({ json: { reports: [report], nextCursor: null, canManage: true, deploymentRevision: 'same-synthetic-sha' } });
     else if (body.action === 'get') await route.fulfill({ json: report });
     else throw new Error('This read-only target refresh regression must not save a retest.');
   });
@@ -182,7 +253,7 @@ test('unobserved workflow loops reset both retest and fix drafts even with the s
   await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeEnabled();
   revision = 6; await refresh(page);
   await expect(report.getByText('匿名手順の履歴 revision 6', { exact: true })).toBeVisible();
-  await expect(report.getByText('再テスト対象版: same-synthetic-sha', { exact: true })).toBeVisible();
+  await expect(report.getByText('記録された修正版（自己申告）: same-synthetic-sha', { exact: true })).toBeVisible();
   await expect(report.getByLabel('再テストした条件と結果')).toHaveValue('');
   await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled();
   await expect(report.getByRole('button', { name: '再テスト失敗を記録' })).toBeDisabled();
@@ -194,3 +265,38 @@ test('unobserved workflow loops reset both retest and fix drafts even with the s
   await expect(report.getByText('匿名手順の履歴 revision 9', { exact: true })).toBeVisible();
   await expect(report.getByLabel('修正版・コミット')).toHaveValue(''); await expect(report.getByLabel('修正内容', { exact: true })).toHaveValue('');
 });
+
+for (const publishedRevision of [null, 'different-synthetic-runtime']) {
+  test(`unknown or mismatched publication blocks success and retains failure version metadata: ${publishedRevision || 'unknown'}`, async ({ page }) => {
+    await page.goto('/'); await loginInstructorDemo(page);
+    const title = `公開版照合の合成報告 ${randomUUID()}`; const id = randomUUID();
+    const events: ProductFeedbackReport['history'] = ['NEW', 'TRIAGED', 'HANDOFF_PREPARED', 'FIXED'].map((status, index) => ({ revision: index + 1, at: index + 1, status: status as ProductFeedbackStatus, actorRole: index === 0 ? 'INSTRUCTOR' : 'ADMIN', note: `匿名の合成履歴 ${index + 1}` }));
+    let saved: ProductFeedbackReport = { ...input(title), id, revision: 4, createdAt: 1, updatedAt: 4, status: 'FIXED', priority: 'P1', acceptance: '入力対象版で匿名手順を確認', fixRevision: 'manual-synthetic-target', isOwnReport: true, historyLoaded: true, history: events };
+    const failures: { expectedRevision: number; mutationId: string; change: { passed: boolean; note: string } }[] = [];
+    await page.route('**/api/product-feedback', async route => {
+      const body = route.request().postDataJSON();
+      if (body.action === 'status-summary') await route.fulfill({ json: { counts: statusCounts(saved.status), canManage: false, scope: 'own-current-organization', actualDeploymentRevision: publishedRevision, fetchedAt: 1 } });
+      else if (body.action === 'list') await route.fulfill({ json: { reports: [{ ...saved, history: [], historyLoaded: false }], nextCursor: null, canManage: false, deploymentRevision: publishedRevision } });
+      else if (body.action === 'get') { expect(body.id).toBe(id); await route.fulfill({ json: saved }); }
+      else if (body.action === 'advance') {
+        expect(body.id).toBe(id); expect(body.expectedRevision).toBe(4); expect(body.change.type).toBe('retest'); expect(body.change.passed).toBe(false);
+        failures.push(body);
+        saved = { ...saved, revision: 5, updatedAt: 5, status: 'RETEST_FAIL', history: [...saved.history, { revision: 5, at: 5, status: 'RETEST_FAIL', actorRole: 'INSTRUCTOR', note: body.change.note }] };
+        await route.fulfill({ json: saved });
+      } else throw new Error('This publication-boundary fixture accepts only authorized reads and an explicit failed observation.');
+    });
+    await open(page); const report = card(page, title); await expand(report);
+    await expect(report.getByText('記録された修正版（自己申告）: manual-synthetic-target', { exact: true })).toBeVisible();
+    await expect(report.getByText(`現在の公開版（サーバー確認）: ${publishedRevision || '不明'}`, { exact: true })).toBeVisible();
+    await expect(report.getByText(publishedRevision ? '公開版と入力された修正版が一致していません。' : '公開版を確認できていません。', { exact: false })).toBeVisible();
+    await report.getByLabel('再テストした条件と結果').fill('この公開版では匿名手順を完了できない');
+    await expect(report.getByRole('button', { name: '再テスト成功を記録' })).toBeDisabled(); await expect(report.getByRole('button', { name: '再テスト失敗を記録' })).toBeEnabled(); expect(failures).toHaveLength(0);
+    await report.getByRole('button', { name: '再テスト失敗を記録' }).click();
+    await expect(report.getByText('次は管理者が修正を再記録し、もう一度再テストします。')).toBeVisible();
+    expect(failures).toHaveLength(1); expect(failures[0].mutationId).toBeTruthy();
+    expect(failures[0].change.note).toContain(`現在の公開版: ${publishedRevision || '不明'}`); expect(failures[0].change.note).toContain('記録された修正版（自己申告）: manual-synthetic-target');
+    expect(failures[0].change.note).toContain(publishedRevision ? '不一致' : '公開版は不明'); expect(failures[0].change.note).toContain('操作結果（自己申告）');
+    await expect(report.locator('ol li')).toHaveCount(5);
+    await expect(report.locator('ol li').last()).toContainText(`現在の公開版: ${publishedRevision || '不明'}`);
+  });
+}

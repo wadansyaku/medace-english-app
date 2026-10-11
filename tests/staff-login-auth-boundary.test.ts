@@ -5,7 +5,7 @@ import { authProfileRoutes } from '../functions/_shared/api-routes/auth-profile'
 import { authenticate } from '../services/storage/auth-session';
 import { IDB_MOCK_USERS } from '../services/storage/mockData';
 
-const mocks = vi.hoisted(() => ({ find: vi.fn(), rawFind: vi.fn(), verify: vi.fn(), session: vi.fn(), create: vi.fn(), membership: vi.fn(), clear: vi.fn(), put: vi.fn() }));
+const mocks = vi.hoisted(() => ({ find: vi.fn(), rawFind: vi.fn(), verify: vi.fn(), session: vi.fn(), create: vi.fn(), membership: vi.fn(), grant: vi.fn(), clear: vi.fn(), put: vi.fn() }));
 vi.mock('../services/storage/idb-support', async (original) => ({ ...await original<object>(), putStoreRecord: mocks.put }));
 vi.mock('../functions/_shared/auth', async (original) => ({ ...await original<object>(), findUserByEmail: mocks.find,
   verifyPassword: mocks.verify, createSession: mocks.session, createUser: mocks.create }));
@@ -19,9 +19,9 @@ const run = (loginEntry: unknown, extra: Record<string, unknown> = {}) => {
   const request = new Request('http://localhost/api/auth', { method: 'POST', headers: { Cookie: 'existing-session=preserved' },
     body: JSON.stringify({ action: 'email-auth', email: 'staff@example.invalid', password: 'valid-password', loginEntry, ...extra }) });
   const route = authProfileRoutes.find((candidate) => candidate.matches({ request, env: {} as never, pathname: 'auth' }))!;
-  return route.handle({ request, pathname: 'auth', env: { DB: { prepare: (sql: string) => ({ bind: () => ({ first: sql.includes('FROM users') ? mocks.rawFind : mocks.membership }) }) } } as never });
+  return route.handle({ request, pathname: 'auth', env: { DB: { prepare: (sql: string) => ({ bind: () => ({ first: sql.includes('FROM users') ? mocks.rawFind : sql.includes('workspace_access_grants') ? mocks.grant : mocks.membership }) }) } } as never });
 };
-beforeEach(() => { vi.clearAllMocks(); mocks.find.mockResolvedValue(row(UserRole.INSTRUCTOR)); mocks.rawFind.mockResolvedValue(row(UserRole.INSTRUCTOR)); mocks.verify.mockResolvedValue(true);
+beforeEach(() => { vi.clearAllMocks(); mocks.grant.mockResolvedValue(null); mocks.find.mockResolvedValue(row(UserRole.INSTRUCTOR)); mocks.rawFind.mockResolvedValue(row(UserRole.INSTRUCTOR)); mocks.verify.mockResolvedValue(true);
   mocks.session.mockResolvedValue('new-session=value'); mocks.membership.mockResolvedValue({ organization_id: 'active-org',
     organization_name: 'Existing org', subscription_plan: 'TOB_PAID', organization_role: OrganizationRole.INSTRUCTOR }); });
 

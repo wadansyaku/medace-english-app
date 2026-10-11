@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   acknowledgeAnnouncement,
   listProductAnnouncements,
@@ -25,8 +25,13 @@ export interface AnnouncementFeedController {
   acknowledge: (announcementId: string) => Promise<void>;
 }
 
-export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedController => {
-  const [feed, setFeed] = useState<ProductAnnouncementFeed>(EMPTY_FEED);
+export const useAnnouncementFeed = (enabled: boolean, contextKey = 'default'): AnnouncementFeedController => {
+  const [result, setResult] = useState({ contextKey, feed: EMPTY_FEED });
+  const scopeRef = useRef(contextKey);
+  scopeRef.current = contextKey;
+  const setFeed = (feed: ProductAnnouncementFeed) => {
+    if (scopeRef.current === contextKey) setResult({ contextKey, feed });
+  };
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -49,7 +54,7 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
     } finally {
       setLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, contextKey]);
 
   useEffect(() => {
     void refresh();
@@ -68,7 +73,7 @@ export const useAnnouncementFeed = (enabled: boolean): AnnouncementFeedControlle
   }, [refresh]);
 
   return {
-    feed,
+    feed: result.contextKey === contextKey && enabled ? result.feed : EMPTY_FEED,
     loading,
     refresh,
     markSeen,

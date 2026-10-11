@@ -1,4 +1,4 @@
-import { isStaffLoginEntry, matchesStaffEntryRole } from '../../../shared/staffLogin';
+import { isStaffLoginEntry } from '../../../shared/staffLogin';
 import {
   AuthRequest,
   DemoLoginRequest,
@@ -32,6 +32,7 @@ import { handlePasswordResetConfirm } from '../password-reset-actions';
 import { assertSameOriginMutation } from '../request-guards';
 import getServerRuntimeFlags from '../runtime';
 import type { DbUserRow } from '../types';
+import { projectRequestWorkspace, projectStaffWorkspace } from '../workspace-access';
 import {
   ApiRouteDefinition,
   ApiRouteResult,
@@ -164,25 +165,9 @@ const handleEmailAuth = async (
 
   let authenticatedUser = existing;
   if (isStaffLoginEntry(loginEntry)) {
-    const denied = () => new HttpError(403, 'このログイン入口を利用する権限がありません。利用できない場合は、案内元にアカウントの利用権限をご確認ください。');
-    if (loginEntry === 'service-admin') {
-      if (!matchesStaffEntryRole(loginEntry, mapUserRowToProfile(existing))) throw denied();
-    } else {
-      // Membership is authoritative; stale user shadow columns cannot authorize entry.
-      if (existing.role !== UserRole.INSTRUCTOR) throw denied();
-      const membership = await env.DB.prepare(`
-        SELECT o.id AS organization_id, o.display_name AS organization_name,
-               o.subscription_plan AS subscription_plan, m.role AS organization_role
-          FROM organization_memberships m JOIN organizations o ON o.id = m.organization_id
-         WHERE m.user_id = ? AND m.status = 'ACTIVE' AND o.status = 'ACTIVE'
-         LIMIT 1
-      `).bind(existing.id).first<Pick<DbUserRow, 'organization_id' | 'organization_name' | 'subscription_plan' | 'organization_role'>>();
-      if (!membership) throw denied();
-      authenticatedUser = { ...existing, ...membership };
-      if (!matchesStaffEntryRole(loginEntry, mapUserRowToProfile(authenticatedUser))) throw denied();
-      // An active student membership never supplies instructor permission.
-      if (membership.organization_role !== 'INSTRUCTOR' && membership.organization_role !== 'GROUP_ADMIN') throw denied();
-    }
+    // Explicit UID grants add a bounded workspace without mutating the identity.
+    // Without a grant, the existing canonical-only staff entry still applies.
+    authenticatedUser = await projectStaffWorkspace(env, existing, loginEntry);
   }
   await clearAuthFailures(env, authScopeKey);
   const sessionCookie = await createSession(env, request, existing.id);
@@ -310,7 +295,7 @@ const handleProfileUpdate = async (
   const updated = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(currentUser.id).first<DbUserRow>();
   return {
     logUser: currentUser,
-    response: createJsonResponse(mapUserRowToProfile(updated)),
+    response: createJsonResponse(mapUserRowToProfile(await projectRequestWorkspace(env, updated, request))),
   };
 };
 
@@ -338,7 +323,10 @@ export const authProfileRoutes: ApiRouteDefinition[] = [
   {
     matches: ({ pathname, request }) => pathname === 'session' && request.method === 'GET',
     handle: async ({ env, request }) => {
-      const user = await requireUser(env, request).catch(() => null);
+      const user = await requireUser(env, request).catch((error) => {
+        if (error instanceof HttpError && error.status === 401) return null;
+        throw error;
+      });
       return {
         logUser: user,
         response: createJsonResponse(user ? mapUserRowToProfile(user) : null),

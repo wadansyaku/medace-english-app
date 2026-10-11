@@ -6,6 +6,7 @@ import {
 import { HttpError } from './http';
 import { readFirst } from './storage-support';
 import type { AppEnv, DbUserRow } from './types';
+import { revalidateWorkspaceContext } from './workspace-access';
 
 export interface DbOrganizationRow {
   id: string;
@@ -130,12 +131,21 @@ export const hydrateUserOrganizationFromMembership = async (
   };
 };
 
+export const readActiveActorOrganizationContext = async (env: AppEnv, user: DbUserRow): Promise<ActiveOrganizationContext | null> => {
+  if (!user.server_workspace) return readActiveOrganizationContextForUser(env, user.id);
+  const actor = await revalidateWorkspaceContext(env, user);
+  if (actor.server_workspace?.workspace === 'service-admin') return null;
+  if (!actor.organization_id || !actor.organization_role || !actor.subscription_plan) return null;
+  return { organizationId: actor.organization_id, organizationName: actor.organization_name || '',
+    organizationRole: actor.organization_role as OrganizationRole, subscriptionPlan: actor.subscription_plan as SubscriptionPlan };
+};
+
 export const requireActiveOrganizationContext = async (
   env: AppEnv,
   user: DbUserRow,
   allowedRoles?: OrganizationRole[],
 ): Promise<ActiveOrganizationContext> => {
-  const context = await readActiveOrganizationContextForUser(env, user.id);
+  const context = await readActiveActorOrganizationContext(env, user);
   if (!context) {
     throw new HttpError(403, '組織情報が設定されていません。');
   }

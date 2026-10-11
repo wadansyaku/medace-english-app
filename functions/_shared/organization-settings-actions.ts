@@ -1,5 +1,6 @@
 import {
   type OrganizationAuditEvent,
+  type OrganizationEligibleInstructor,
   type OrganizationMemberSummary,
   OrganizationRole,
   type OrganizationSettingsSnapshot,
@@ -16,6 +17,7 @@ import {
 import { readInstructorCohortMap, readOrganizationCohorts } from './student-visibility';
 import type { AppEnv, DbUserRow } from './types';
 import { readAll, readFirst } from './storage-support';
+import { readEligibleOrganizationInstructor } from './organization-support';
 
 export const handleGetOrganizationSettingsSnapshot = async (
   env: AppEnv,
@@ -40,7 +42,7 @@ export const handleGetOrganizationSettingsSnapshot = async (
     throw new HttpError(404, '組織情報が見つかりません。');
   }
 
-  const [memberRows, auditRows, cohorts, instructorCohorts] = await Promise.all([
+  const [memberRows, auditRows, cohorts, instructorCohorts, grantedInstructorRows] = await Promise.all([
     readAll<{
       user_uid: string;
       display_name: string;
@@ -105,6 +107,20 @@ export const handleGetOrganizationSettingsSnapshot = async (
     ),
     readOrganizationCohorts(env, organization.organizationId),
     readInstructorCohortMap(env, organization.organizationId),
+    readAll<{ user_uid: string; display_name: string; email: string; grant_version: number }>(
+      env,
+      `SELECT u.id AS user_uid, u.display_name, u.email, g.grant_version
+       FROM workspace_access_grants g
+       JOIN users u ON u.id = g.user_id
+       JOIN organizations o ON o.id = g.staff_organization_id AND o.status = 'ACTIVE'
+       WHERE g.staff_organization_id = ?
+         AND g.status = 'ACTIVE'
+         AND g.teacher_access = 1
+         AND g.grant_version > 0
+         AND g.grant_version <= ?`,
+      organization.organizationId,
+      Number.MAX_SAFE_INTEGER,
+    ),
   ]);
 
   const members: OrganizationMemberSummary[] = memberRows.map((row) => ({
@@ -117,6 +133,32 @@ export const handleGetOrganizationSettingsSnapshot = async (
     joinedAt: Number(row.joined_at || 0),
     updatedAt: Number(row.updated_at || 0),
   }));
+
+  const instructorCandidates = new Map<string, OrganizationEligibleInstructor>();
+  for (const member of members) {
+    if (member.userRole === UserRole.INSTRUCTOR && member.organizationRole === OrganizationRole.INSTRUCTOR) {
+      instructorCandidates.set(member.userUid, {
+        userUid: member.userUid, displayName: member.displayName, email: member.email,
+      });
+    }
+  }
+  for (const row of grantedInstructorRows) {
+    if (Number.isSafeInteger(row.grant_version) && !instructorCandidates.has(row.user_uid)) {
+      instructorCandidates.set(row.user_uid, {
+        userUid: row.user_uid, displayName: row.display_name, email: row.email,
+      });
+    }
+  }
+  // Use the same fresh eligibility check as setInstructorCohorts. In particular,
+  // a canonical group administrator is not a cohort-scoped instructor.
+  const checkedInstructors = await Promise.all([...instructorCandidates.values()].map(async (candidate) => {
+    const instructor = await readEligibleOrganizationInstructor(env, candidate.userUid, organization.organizationId);
+    return instructor?.role === UserRole.INSTRUCTOR
+      && instructor.organization_role === OrganizationRole.INSTRUCTOR
+      && instructor.organization_id === organization.organizationId ? candidate : null;
+  }));
+  const eligibleInstructors = checkedInstructors.filter((candidate): candidate is OrganizationEligibleInstructor => candidate !== null)
+    .sort((left, right) => left.displayName.localeCompare(right.displayName, 'ja') || left.userUid.localeCompare(right.userUid));
 
   const auditEvents: OrganizationAuditEvent[] = auditRows.map((row) => ({
     id: Number(row.id || 0),
@@ -136,6 +178,7 @@ export const handleGetOrganizationSettingsSnapshot = async (
     nameKey: organizationRow.name_key,
     subscriptionPlan: organizationRow.subscription_plan as SubscriptionPlan,
     members,
+    eligibleInstructors,
     cohorts,
     instructorCohorts,
     auditEvents,

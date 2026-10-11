@@ -28,6 +28,8 @@ import {
 import { ActivityLog, AdminDashboardSnapshot, type AdminPasswordRecoveryRequest, type AiGeneratedProblemReviewQueueItem, type AiGeneratedProblemReviewQueueResponse, BookMetadata, BookProgress, type ClassroomWorksheetLifecycleEventResult, CommercialRequest, DashboardSnapshot, type GrammarCurriculumScopeId, InterventionKind, type JapaneseTranslationFeedback, LeaderboardEntry, LearningPlan, LearningPreference, LearningTaskIntent, LearningTaskIntentType, LearningTrack, MasteryDistribution, MissionAssignment, MissionProgressEventType, OrganizationCohort, OrganizationDashboardSnapshot, OrganizationRole, OrganizationSettingsSnapshot, ProductAnnouncement, ProductAnnouncementFeed, RecommendedActionType, StudentSummary, StudentWorksheetSnapshot, UserProfile, UserRole, WeeklyMission, WeeklyMissionBoard, WorksheetQuestionMode, WordData } from '../types';
 import { ApiError, apiDelete, apiGet, apiPost } from './apiClient';
 import type { IStorageService } from './storage/types';
+import { acceptWorkspaceProfile, clearWorkspaceContext, selectWorkspaceForSession } from './workspaceContext';
+import { getWorkspaceContextKey } from '../contracts/workspaceAccess';
 
 const SESSION_POLL_INTERVAL_MS = 150;
 const SESSION_POLL_TIMEOUT_MS = 4_000;
@@ -38,6 +40,7 @@ export class CloudflareStorageService implements IStorageService {
   private async waitForSession(
     expectedUid?: string,
     timeoutMs = SESSION_POLL_TIMEOUT_MS,
+    expectedProfile?: UserProfile,
   ): Promise<UserProfile | null> {
     const deadline = Date.now() + timeoutMs;
 
@@ -49,7 +52,9 @@ export class CloudflareStorageService implements IStorageService {
         throw error;
       })) ?? null;
 
-      if (sessionUser && (!expectedUid || sessionUser.uid === expectedUid)) {
+      if (sessionUser && (!expectedUid || sessionUser.uid === expectedUid)
+        && (!expectedProfile || getWorkspaceContextKey(sessionUser.uid, sessionUser.workspaceAccess)
+          === getWorkspaceContextKey(expectedProfile.uid, expectedProfile.workspaceAccess))) {
         return sessionUser;
       }
 
@@ -75,16 +80,19 @@ export class CloudflareStorageService implements IStorageService {
   }
 
   async login(role: UserRole, demoPassword?: string, organizationRole?: OrganizationRole): Promise<UserProfile | null> {
+    clearWorkspaceContext();
     const user = await apiPost<UserProfile | null>('/api/auth', {
       action: 'demo-login',
       role,
       demoPassword,
       organizationRole,
     });
-    return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
+    acceptWorkspaceProfile(user);
+    return user?.uid ? (await this.waitForSession(user.uid, SESSION_POLL_TIMEOUT_MS, user)) ?? user : user;
   }
 
   async authenticate(email: string, password: string, isSignUp: boolean, role?: UserRole, displayName?: string, loginEntry?: StaffLoginEntry): Promise<UserProfile | null> {
+    selectWorkspaceForSession(loginEntry || 'personal');
     const user = await apiPost<UserProfile | null>('/api/auth', {
       action: 'email-auth',
       email,
@@ -94,7 +102,8 @@ export class CloudflareStorageService implements IStorageService {
       displayName,
       ...(loginEntry !== undefined ? { loginEntry } : {}),
     });
-    return user?.uid ? (await this.waitForSession(user.uid)) ?? user : user;
+    acceptWorkspaceProfile(user);
+    return user?.uid ? (await this.waitForSession(user.uid, SESSION_POLL_TIMEOUT_MS, user)) ?? user : user;
   }
 
   async requestPasswordRecovery(email: string, source = 'login'): Promise<PasswordRecoveryResponse> {
@@ -124,10 +133,13 @@ export class CloudflareStorageService implements IStorageService {
 
   async clearSession(): Promise<void> {
     await apiDelete<void>('/api/session');
+    clearWorkspaceContext();
   }
 
   async getSession(): Promise<UserProfile | null> {
-    return (await apiGet<UserProfile | null>('/api/session')) ?? null;
+    const user = (await apiGet<UserProfile | null>('/api/session')) ?? null;
+    acceptWorkspaceProfile(user);
+    return user;
   }
 
   async addXP(user: UserProfile, amount: number): Promise<{ user: UserProfile; leveledUp: boolean; }> {

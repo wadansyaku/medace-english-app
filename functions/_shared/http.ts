@@ -1,7 +1,7 @@
 export class HttpError extends Error {
   status: number;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, readonly details?: Record<string, unknown>) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
@@ -62,7 +62,7 @@ export const readJson = async <T>(
 
 export const handleError = (error: unknown): Response => {
   if (error instanceof HttpError) {
-    return json({ error: error.message, message: error.message }, { status: error.status });
+    return json({ ...error.details, error: error.message, message: error.message }, { status: error.status });
   }
 
   console.error(error);

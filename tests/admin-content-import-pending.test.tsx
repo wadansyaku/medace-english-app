@@ -1,7 +1,7 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { BookCatalogSource } from '../types';
+import { BookCatalogSource, UserRole, type UserProfile } from '../types';
 import type { CatalogImportResult } from '../contracts/storage';
 
 const harness = vi.hoisted(() => ({
@@ -84,9 +84,10 @@ const find = (node: React.ReactNode, predicate: (element: Element) => boolean): 
   return predicate(element) ? element : find(element.props.children, predicate);
 };
 let tree: React.ReactNode;
+const admin: UserProfile = { uid: 'synthetic-admin', displayName: 'Synthetic admin', email: 'admin@example.invalid', role: UserRole.ADMIN };
 const render = () => {
   harness.cursor = 0;
-  tree = AdminPanel({});
+  tree = AdminPanel({ user: admin });
   if (!harness.mounted) {
     harness.mounted = true;
     harness.cleanups = harness.effects

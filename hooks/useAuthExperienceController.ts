@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
 import { sessionService } from '../services/session';
+import { clearWorkspaceContext, isCurrentWorkspaceProfile, prepareWorkspaceRestore } from '../services/workspaceContext';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
 import { applyDisplayPreferences, getStoredDisplayPreferences } from '../utils/displayPreferences';
 import { isDemoEmail } from '../utils/demo';
@@ -50,6 +51,12 @@ export const useAuthExperienceController = ({
   dispatchNavigation,
   onLogoutReset,
 }: UseAuthExperienceControllerParams) => {
+  // Navigation normalizes the URL in an earlier effect. Capture its original
+  // evidence query during render so session restore can revalidate this tab.
+  const startupLocationRef = useRef(typeof window !== 'undefined' ? {
+    pathname: window.location.pathname,
+    search: window.location.search,
+  } : null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
@@ -114,13 +121,23 @@ export const useAuthExperienceController = ({
   useEffect(() => {
     const initSession = async () => {
       try {
+        if (startupLocationRef.current) prepareWorkspaceRestore(startupLocationRef.current.pathname, startupLocationRef.current.search);
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);
           navigateAfterAuthentication(sessionUser, true);
         }
       } catch (error) {
-        console.error('Session restore failed', error);
+        // A denied workspace does not erase the existing personal identity.
+        clearWorkspaceContext();
+        if (error && typeof error === 'object' && 'status' in error && error.status === 403) {
+          try {
+            const identity = await sessionService.getSession();
+            if (identity) { setUser(identity); navigateAfterAuthentication(identity, true); }
+          } catch { setAuthError('ログイン情報を確認できませんでした。通信を確認して再試行してください。'); }
+        } else {
+          setAuthError('ログイン情報を確認できませんでした。通信を確認して再試行してください。');
+        }
       } finally {
         setAuthLoading(false);
       }
@@ -405,7 +422,9 @@ export const useAuthExperienceController = ({
 
   return {
     user,
-    setCurrentUser: setUser,
+    setCurrentUser: (next: UserProfile | null) => {
+      if (!next || isCurrentWorkspaceProfile(next)) setUser(next);
+    },
     authLoading,
     staffLoginCompletionPending,
     openAuthenticatedHome: () => {

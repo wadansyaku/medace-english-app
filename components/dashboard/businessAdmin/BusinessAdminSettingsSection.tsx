@@ -10,6 +10,7 @@ import {
 import {
   OrganizationRole,
   SUBSCRIPTION_PLAN_LABELS,
+  UserRole,
   type OrganizationSettingsSnapshot,
 } from '../../../types';
 import type { BusinessAdminDashboardController } from './shared';
@@ -23,7 +24,11 @@ interface BusinessAdminSettingsSectionProps {
 const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> = ({
   controller,
   settingsSnapshot,
-}) => (
+}) => {
+  const eligibleInstructors = settingsSnapshot.eligibleInstructors ?? settingsSnapshot.members.filter((member) => (
+    member.userRole === UserRole.INSTRUCTOR && member.organizationRole === OrganizationRole.INSTRUCTOR
+  ));
+  return (
   <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
     <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-center gap-3">
@@ -156,9 +161,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
           </div>
         </div>
         <div className="mt-5 space-y-3">
-          {settingsSnapshot.members
-            .filter((member) => member.organizationRole === OrganizationRole.INSTRUCTOR)
-            .map((member) => (
+          {eligibleInstructors.map((member) => (
               <div key={member.userUid} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -200,7 +203,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
                 )}
               </div>
             ))}
-          {settingsSnapshot.members.every((member) => member.organizationRole !== OrganizationRole.INSTRUCTOR) && (
+          {eligibleInstructors.length === 0 && (
             <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-5 text-sm text-slate-500">
               範囲設定対象の講師はまだいません。
             </div>
@@ -276,6 +279,7 @@ const BusinessAdminSettingsSection: React.FC<BusinessAdminSettingsSectionProps> 
       </div>
     </section>
   </div>
-);
+  );
+};
 
 export default BusinessAdminSettingsSection;
