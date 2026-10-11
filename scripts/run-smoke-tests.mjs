@@ -376,7 +376,9 @@ const runBuildForEnv = async (suiteEnv, buildKey) => {
     return 0;
   }
 
-  const viteBuild = createNodeToolCommand('vite', ['build']);
+  const viteBuild = createNodeToolCommand('vite', ['build',
+    ...(suiteEnv.MEDACE_VITE_CONFIG_LOADER === 'runner' ? ['--configLoader', 'runner'] : []),
+  ]);
   const buildExitCode = await runCommand(viteBuild.command, viteBuild.args, suiteEnv);
   if (buildExitCode === 0) {
     buildCache.add(buildKey);

@@ -136,7 +136,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
       assert(session.data.role === role && session.data.workspaceAccess?.workspace === workspace, 'session restore must retain the explicit workspace projection');
       const userBeforeSupport = JSON.stringify(await query(`SELECT * FROM users WHERE id = ${quote(owner.uid)}`));
       const sessionsBeforeSupport = await sessionSnapshot();
-      const support = await client.request('/api/product-support', { method: 'POST', headers: workspaceHeaders(workspace),
+      const support = await client.request('/api/product-support', { method: 'POST', headers: { Origin: baseUrl, ...workspaceHeaders(workspace) },
         body: JSON.stringify({ action: 'ask', requestId: `api_owner_support_${workspace}`, question: '講師や学校管理者のログイン入口は？', history: [], privacyConsent: true }) });
       requireStatus(support, 200, `${workspace} public support authority`);
       assert(support.data.status === 'ANSWERED' && support.data.providerUsed === false
@@ -189,7 +189,7 @@ export const verifyOwnerWorkspaceRegressions = async ({
     requireStatus(personal, 200, 'personal session restore');
     assert(personal.data.role === 'STUDENT' && !personal.data.workspaceAccess && personal.data.organizationRole === 'STUDENT',
       'the shared identity cookie must retain the underlying personal student');
-    const personalSupport = await teacher.request('/api/product-support', { method: 'POST',
+    const personalSupport = await teacher.request('/api/product-support', { method: 'POST', headers: { Origin: baseUrl },
       body: JSON.stringify({ action: 'ask', requestId: 'api_owner_support_personal', question: '講師や学校管理者のログイン入口は？', history: [], privacyConsent: true }) });
     requireStatus(personalSupport, 200, 'personal support stays student scoped');
     assert(personalSupport.data.status === 'ANSWERED' && personalSupport.data.providerUsed === false

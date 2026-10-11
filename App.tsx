@@ -427,6 +427,9 @@ const App: React.FC = () => {
         immersiveContent={currentView === 'resetPassword'}
         onOpenProductSupport={!authLoading && !workspaceSwitch.switching && currentView !== 'resetPassword' ? openSupportDialog : undefined}
       >
+        {workspaceSwitch.error && <p role="alert" tabIndex={-1} data-testid="workspace-switch-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{workspaceSwitch.error}</p>}
+        {user && !authLoading && !workspaceSwitch.switching && !supportSource && <StaffWorkspaceSelector user={user}
+          switching={workspaceSwitch.switching} onSwitch={workspace => { void workspaceSwitch.switchWorkspace(workspace); }} />}
         <Suspense
           key={workspaceContextKey}
           fallback={
@@ -436,9 +439,6 @@ const App: React.FC = () => {
             </div>
           }
         >
-          {workspaceSwitch.error && <p role="alert" tabIndex={-1} data-testid="workspace-switch-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{workspaceSwitch.error}</p>}
-          {user && !authLoading && !workspaceSwitch.switching && !supportSource && <StaffWorkspaceSelector user={user}
-            switching={workspaceSwitch.switching} onSwitch={workspace => { void workspaceSwitch.switchWorkspace(workspace); }} />}
           {user && !authLoading && logoutError && <div role="alert" data-testid="logout-error" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
             <p>{logoutError}</p>
             <button type="button" onClick={logoutAndCloseSupport} className="mt-2 min-h-11 rounded-lg border border-red-300 px-3 font-bold">ログアウトを再試行</button>
