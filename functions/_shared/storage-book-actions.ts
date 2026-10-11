@@ -1,5 +1,5 @@
 import { handlePersonalCatalogImport } from './personal-catalog-import';
-import { allocateGraduatedReviewSession, getVisibleLongTermReviewAvailableCount } from './graduated-review-assignments';
+import { allocateGraduatedReviewSession, getVisibleLongTermReviewAvailableCount, replayGraduatedReviewSession } from './graduated-review-assignments';
 import type {
   CatalogImportRequest,
   CatalogImportResult,
@@ -598,12 +598,13 @@ const getOrdinaryDailySessionWords = async (
   user: DbUserRow,
   limitInput: unknown,
   taskIntent?: LearningTaskIntent,
+  resolvedPreferredBookIds?: string[],
 ): Promise<WordData[]> => {
   validateStudyScope(() => assertNoDailyStudyWordRange(taskIntent));
   const limit = normalizeStudySessionLimit(limitInput);
   const allVisibleBookRows = (await readVisibleBookRows(env, user))
     .filter((row) => isBookSelectableForToday(toBookMetadata(row)));
-  const requestedBookIds = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
+  const requestedBookIds = resolvedPreferredBookIds ?? await resolvePreferredDailyBookIds(env, user.id, taskIntent);
   const preferredBookIds = requestedBookIds.length === 0 && allVisibleBookRows.some(row => row.id === NARU_BOOK_ID)
     ? [NARU_BOOK_ID]
     : requestedBookIds;
@@ -855,8 +856,11 @@ export const handleGetDailySessionWords = async (
 ): Promise<WordData[]> => {
   validateStudyScope(() => assertNoDailyStudyWordRange(taskIntent));
   const limit = normalizeStudySessionLimit(limitInput);
-  const normalWords = await getOrdinaryDailySessionWords(env, user, limit, taskIntent);
-  if (!clientSessionId || taskIntent?.mode === 'quiz' || taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY') return normalWords;
+  const replay = await replayGraduatedReviewSession(env, user, { action: 'daily', limit, taskIntent, clientSessionId });
+  if (replay !== undefined) return replay;
+  if (!clientSessionId || taskIntent?.mode === 'quiz' || taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY') {
+    return getOrdinaryDailySessionWords(env, user, limit, taskIntent);
+  }
   const allBooks = (await readVisibleBookRows(env, user)).filter(row => isBookSelectableForToday(toBookMetadata(row)));
   const requested = await resolvePreferredDailyBookIds(env, user.id, taskIntent);
   const preferred = requested.length === 0 && allBooks.some(row => row.id === NARU_BOOK_ID) ? [NARU_BOOK_ID] : requested;
@@ -867,6 +871,7 @@ export const handleGetDailySessionWords = async (
   const scopedBookIds = (requested.length > 0
     ? preferredBooks
     : preferred.length > 0 && preferredBooks.length === 0 ? allBooks : preferredBooks).map(row => row.id);
+  const normalWords = await getOrdinaryDailySessionWords(env, user, limit, taskIntent, requested);
   const scopedNormalWords = normalWords.filter(word => scopedBookIds.includes(word.bookId));
   const dueCount = scopedBookIds.length === 0 ? null : await readFirst<{ count: number }>(env,
     `SELECT COUNT(*) AS count FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id

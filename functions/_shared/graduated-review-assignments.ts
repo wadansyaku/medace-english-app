@@ -3,19 +3,22 @@ import { GRADUATED_REVIEW_DAILY_LIMIT, getGraduatedReviewDayKey } from '../../sh
 import { selectBoundedLongTermReviewCandidates } from '../../shared/studySession';
 import { normalizeStudySessionStartId, studySessionStartFingerprint } from '../../shared/studySessionStart';
 import { normalizeStudyWordRange } from '../../shared/studyScope';
+import { normalizeTaskPreferredBookIds } from '../../shared/learningTask';
 import { HttpError } from './http';
 import type { AppEnv, DbUserRow } from './types';
 import { assertBookLearningAccess, buildInClause, readAll, readFirst, toWordData, type DbWordRow } from './storage-support';
 
 // Re-evaluate access using the canonical current user, book and source ledger.
 // The same predicate is used inside the allocation transaction and on replay.
-const currentLearningAccessSql = `
+// Explicit book study follows assertBookLearningAccess's ADMIN quality exemption.
+// Daily/global automatic study keeps the approved-material gate for every role.
+const currentLearningAccessSql = (allowAdminQualityBypass = false): string => `
   (u.role = 'ADMIN' OR b.created_by = u.id OR (
     COALESCE(NULLIF(b.catalog_source, ''), CASE WHEN NULLIF(b.created_by, '') IS NOT NULL THEN 'USER_GENERATED' ELSE 'LICENSED_PARTNER' END) != 'USER_GENERATED'
     AND (COALESCE(NULLIF(b.access_scope, ''), CASE WHEN NULLIF(b.created_by, '') IS NOT NULL THEN 'ALL_PLANS' ELSE 'BUSINESS_ONLY' END) = 'ALL_PLANS'
       OR u.subscription_plan = 'TOB_PAID')
   ))
-  AND (COALESCE(NULLIF(b.catalog_source, ''), CASE WHEN NULLIF(b.created_by, '') IS NOT NULL THEN 'USER_GENERATED' ELSE 'LICENSED_PARTNER' END) = 'USER_GENERATED'
+  AND (${allowAdminQualityBypass ? "u.role = 'ADMIN' OR " : ''}COALESCE(NULLIF(b.catalog_source, ''), CASE WHEN NULLIF(b.created_by, '') IS NOT NULL THEN 'USER_GENERATED' ELSE 'LICENSED_PARTNER' END) = 'USER_GENERATED'
     OR (m.rights_status = 'approved' AND m.review_status = 'approved'
       AND m.qa_word_count > 0 AND b.word_count > 0
       AND m.qa_required_blank_rows <= 0 AND m.qa_rows_with_sentinel <= 0 AND m.qa_sentinel_value_count <= 0))`;
@@ -80,16 +83,21 @@ const readCurrentStartWords = async (
     await assertBookLearningAccess(env, currentUser, options.bookId);
   }
   const ids = parseIds(start.result_word_ids_json);
-  if (ids.length === 0 || options.scopedBookIds.length === 0) return [];
+  if (ids.length === 0) return [];
   const graduateIds = new Set(parseIds(start.graduate_word_ids_json));
-  const scope = scopeCondition(options.scopedBookIds, options.wordRange);
+  // A stored daily result already fixes its material scope. The implicit saved
+  // plan can change after commit and is not part of this start's fingerprint.
+  const fixedBookIds = options.action === 'book' ? [options.bookId!]
+    : normalizeTaskPreferredBookIds(options.taskIntent?.preferredBookIds);
+  const scope = fixedBookIds.length > 0 ? scopeCondition(fixedBookIds, options.wordRange)
+    : { sql: '1', bindings: [] };
   const rows = await readAll<DbWordRow & { current_status: string | null; current_source: string | null; current_due: number | null; current_last: number | null; current_attempts: number | null; current_interval: number | null }>(env,
     `SELECT w.*, h.status AS current_status, h.interaction_source AS current_source,
       h.next_review_date AS current_due, h.last_studied_at AS current_last,
       h.attempt_count AS current_attempts, h.interval_days AS current_interval
      FROM words w ${materialJoins}
      LEFT JOIN learning_histories h ON h.user_id = u.id AND h.word_id = w.id AND h.book_id = w.book_id
-     WHERE w.id IN (${buildInClause(ids.length)}) AND ${scope.sql} AND ${currentLearningAccessSql}`,
+     WHERE w.id IN (${buildInClause(ids.length)}) AND ${scope.sql} AND ${currentLearningAccessSql(options.action === 'book')}`,
     user.id, ...ids, ...scope.bindings);
   const now = Date.now();
   const byId = new Map(rows.map(row => [row.id, row]));
@@ -107,6 +115,25 @@ const readCurrentStartWords = async (
         || !(row.current_attempts! > 0 || row.current_interval! > 0))) return [];
     return [toWordData(row)];
   });
+};
+
+/** Look up an immutable start before fetching today's implicit plan or building
+ * a new queue. A committed response can be replayed even if plan retrieval now
+ * fails; it still revalidates current material access and canonical histories. */
+export const replayGraduatedReviewSession = async (
+  env: AppEnv, user: DbUserRow,
+  options: Pick<GraduatedReviewStartOptions, 'action' | 'bookId' | 'limit' | 'taskIntent' | 'clientSessionId' | 'wordRange'>,
+): Promise<WordData[] | undefined> => {
+  let clientSessionId: string | undefined;
+  try { clientSessionId = normalizeStudySessionStartId(options.clientSessionId); }
+  catch (error) { throw new HttpError(400, error instanceof Error ? error.message : '学習開始の識別子が不正です。'); }
+  if (!clientSessionId || options.taskIntent?.mode === 'quiz' || options.taskIntent?.selectionPolicy === 'BOOK_NEW_ONLY') return undefined;
+  const start = await readFirst<StartRow>(env,
+    'SELECT * FROM long_term_review_starts WHERE user_id = ? AND client_session_id = ?', user.id, clientSessionId);
+  if (!start) return undefined;
+  const fingerprint = studySessionStartFingerprint({ action: options.action, bookId: options.bookId, limit: options.limit, taskIntent: options.taskIntent });
+  if (start.request_fingerprint !== fingerprint) throw new HttpError(409, '同じ学習開始の識別子で異なる学習は開始できません。');
+  return readCurrentStartWords(env, user, start, { ...options, normalWords: [], ordinaryDueCount: 0, scopedBookIds: [] });
 };
 
 /** A new start and all of its assignments commit in one D1 batch. All writes
@@ -139,7 +166,7 @@ export const allocateGraduatedReviewSession = async (
     `SELECT w.*, h.next_review_date AS history_next_review_date, h.last_studied_at AS history_last_studied_at
      FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
      ${materialJoins}
-     WHERE h.user_id = u.id AND ${dueGraduateSql} AND ${scope.sql} AND ${currentLearningAccessSql}
+     WHERE h.user_id = u.id AND ${dueGraduateSql} AND ${scope.sql} AND ${currentLearningAccessSql(options.action === 'book')}
        AND NOT EXISTS (SELECT 1 FROM graduated_review_allocations a WHERE a.user_id = u.id AND a.day_key = ? AND a.word_id = w.id)
      ORDER BY h.next_review_date, h.last_studied_at, w.id LIMIT ?`,
     user.id, now, ...scope.bindings, dayKey, GRADUATED_REVIEW_DAILY_LIMIT);
@@ -176,7 +203,7 @@ export const allocateGraduatedReviewSession = async (
       JOIN learning_histories h ON h.user_id = u.id AND h.word_id = w.id AND h.book_id = w.book_id
       JOIN long_term_review_starts s ON s.user_id = u.id
       WHERE ${won} AND w.id = ? AND w.book_id = ? AND ${scope.sql}
-        AND ${dueGraduateSql} AND ${currentLearningAccessSql}
+        AND ${dueGraduateSql} AND ${currentLearningAccessSql(options.action === 'book')}
         AND (SELECT COUNT(*) FROM graduated_review_allocations a WHERE a.user_id = s.user_id AND a.client_session_id = s.client_session_id) < s.session_quota
         AND (SELECT COUNT(*) FROM graduated_review_allocations a WHERE a.user_id = s.user_id AND a.day_key = s.day_key) < 5
         AND NOT EXISTS (SELECT 1 FROM graduated_review_allocations a WHERE a.user_id = s.user_id AND a.day_key = s.day_key AND a.word_id = w.id)
@@ -215,7 +242,7 @@ export const getVisibleLongTermReviewAvailableCount = async (
       (SELECT COUNT(*) FROM (
         SELECT w.id FROM learning_histories h JOIN words w ON w.id = h.word_id AND w.book_id = h.book_id
         ${materialJoins}
-        WHERE h.user_id = u.id AND ${dueGraduateSql} AND ${currentLearningAccessSql}
+        WHERE h.user_id = u.id AND ${dueGraduateSql} AND ${currentLearningAccessSql(Boolean(bookId))}
           ${bookId ? 'AND w.book_id = ?' : ''} ${range ? 'AND w.word_number BETWEEN ? AND ?' : ''}
           AND NOT EXISTS (SELECT 1 FROM graduated_review_allocations a WHERE a.user_id = u.id AND a.day_key = ? AND a.word_id = w.id)
         LIMIT 5)))) AS count`,

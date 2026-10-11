@@ -52,11 +52,11 @@ const isExactlyOwnedBook = (book: BookMetadata, uid: string): boolean => {
   } catch { return false; }
 };
 
-export const getLocalStudyAccessibleBooks = (books: BookMetadata[], user: UserProfile): BookMetadata[] => (
+export const getLocalStudyAccessibleBooks = (books: BookMetadata[], user: UserProfile, allowAdminQualityBypass = false): BookMetadata[] => (
   books.map((rawBook) => isExactlyOwnedBook(rawBook, user.uid)
     ? { ...rawBook, catalogSource: BookCatalogSource.USER_GENERATED, accessScope: BookAccessScope.ALL_PLANS }
     : normalizeBookVisibilityPolicy(rawBook))
-    .filter((book) => isBookSelectableForToday(book)
+    .filter((book) => (isBookSelectableForToday(book) || (allowAdminQualityBypass && user.role === UserRole.ADMIN))
       && (user.role === UserRole.ADMIN || isExactlyOwnedBook(book, user.uid) || canAccessOfficialBook(user.subscriptionPlan, book)))
 );
 
@@ -66,9 +66,10 @@ const snapshotFromRecords = (
   books: BookMetadata[],
   words: WordData[],
   records: StoredLearningHistoryRecord[],
+  allowAdminQualityBypass = false,
 ): LocalStudySnapshot => {
   if (!session?.user || session.user.uid !== uid) throw new Error('学習者のセッションを確認してください。');
-  const accessibleBooks = getLocalStudyAccessibleBooks(books, session.user);
+  const accessibleBooks = getLocalStudyAccessibleBooks(books, session.user, allowAdminQualityBypass);
   const bookIds = new Set(accessibleBooks.map((book) => book.id));
   const scopedWords = words.filter((word) => bookIds.has(word.bookId));
   const wordsById = new Map(scopedWords.map((word) => [word.id, word]));
@@ -92,7 +93,7 @@ const assertDay = (day: LocalGraduatedReviewDay | undefined, uid: string, dayKey
 /** All authorization, selection, and receipt writes run synchronously from
  * native request callbacks. No external await can close the transaction. */
 export const allocateLocalGraduatedReviewSession = async ({
-  getDb, uid, clientSessionId, fingerprint, limit, now, selectionPolicy, resolveScope, buildNormalWords,
+  getDb, uid, clientSessionId, fingerprint, limit, now, selectionPolicy, allowAdminQualityBypass = false, resolveScope, resolveReplayScope, buildNormalWords,
 }: {
   getDb: () => Promise<IDBDatabase>;
   uid: string;
@@ -101,7 +102,9 @@ export const allocateLocalGraduatedReviewSession = async ({
   limit: number;
   now: number;
   selectionPolicy?: LearningTaskIntent['selectionPolicy'];
+  allowAdminQualityBypass?: boolean;
   resolveScope: (snapshot: LocalStudySnapshot) => WordData[];
+  resolveReplayScope?: (snapshot: LocalStudySnapshot) => WordData[];
   buildNormalWords: (snapshot: LocalStudySnapshot, scopedWords: WordData[]) => WordData[];
 }): Promise<WordData[]> => {
   const db = await getDb();
@@ -130,11 +133,11 @@ export const allocateLocalGraduatedReviewSession = async ({
         if (--pending !== 0) return;
         try {
           const snapshot = snapshotFromRecords(uid, values[0] as StoredSessionRecord | undefined,
-            values[1] as BookMetadata[], values[2] as WordData[], values[3] as StoredLearningHistoryRecord[]);
-          const scopedWords = resolveScope(snapshot);
+            values[1] as BookMetadata[], values[2] as WordData[], values[3] as StoredLearningHistoryRecord[], allowAdminQualityBypass);
+          const previous = values[4] as LocalStudySessionStart | undefined;
+          const scopedWords = previous && resolveReplayScope ? resolveReplayScope(snapshot) : resolveScope(snapshot);
           const wordsById = new Map(scopedWords.map((word) => [word.id, word]));
           const historiesById = new Map(snapshot.histories.map((history) => [history.wordId, history]));
-          const previous = values[4] as LocalStudySessionStart | undefined;
           if (previous) {
             if (previous.uid !== uid || previous.clientSessionId !== clientSessionId || previous.fingerprint !== fingerprint) {
               const error = new Error('この学習開始IDは別の内容で使用済みです。同じ内容で再送してください。');
@@ -209,7 +212,7 @@ export const readLocalGraduatedReviewAvailableCount = async (
     request.onerror = () => reject(request.error || new Error('長期復習の件数を取得できません。'));
   }))), complete]);
   const snapshot = snapshotFromRecords(uid, values[0] as StoredSessionRecord | undefined,
-    values[1] as BookMetadata[], values[2] as WordData[], values[3] as StoredLearningHistoryRecord[]);
+    values[1] as BookMetadata[], values[2] as WordData[], values[3] as StoredLearningHistoryRecord[], Boolean(bookId));
   if (bookId && !snapshot.books.some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
   const day = assertDay(values[4] as LocalGraduatedReviewDay | undefined, uid, dayKey);
   const allocated = new Set(day.allocatedWordIds);

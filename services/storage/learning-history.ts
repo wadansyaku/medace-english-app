@@ -69,6 +69,7 @@ import { getLocalMissionAssignmentByStudent } from './missions';
 import {
   allocateLocalGraduatedReviewSession,
   getLocalStudyAccessibleBooks,
+  localStudySessionStartKey,
   readLocalGraduatedReviewAvailableCount,
   type LocalStudySnapshot,
 } from './graduated-review-assignments';
@@ -264,7 +265,12 @@ export const getDailySessionWords = async (
   const startId = normalizeStudySessionStartId(clientSessionId);
   if (startId && taskIntent?.mode !== 'quiz' && taskIntent?.selectionPolicy !== 'BOOK_NEW_ONLY') {
     if (!context.getDb) throw new Error('学習開始の保存先を利用できません。');
-    const [requestedBookIds, weaknessProfile] = await Promise.all([
+    // A persisted start retains its initial plan scope. This read only avoids
+    // fetching mutable planning inputs; the transaction below still performs
+    // current authorization, payload, word/book and review-date checks.
+    const startStore = await context.getStore(STORES.SESSION);
+    const previousStart = await requestToPromise(startStore.get(localStudySessionStartKey(uid, startId)));
+    const [requestedBookIds, weaknessProfile] = previousStart ? [[], null] : await Promise.all([
       resolvePreferredBookIds(context, uid, taskIntent, true), getWeaknessProfile(context, uid),
     ]);
     const now = Date.now();
@@ -273,7 +279,11 @@ export const getDailySessionWords = async (
       getDb: context.getDb, uid, clientSessionId: startId,
       fingerprint: studySessionStartFingerprint({ action: 'daily', limit, taskIntent }), limit, now,
       selectionPolicy: taskIntent?.selectionPolicy,
+      // Only saved result IDs are returned on replay, so this does not expand
+      // the original scope or add words from a changed learning plan.
+      resolveReplayScope: (snapshot) => snapshot.words,
       resolveScope: (snapshot) => {
+        if (previousStart) throw new Error('保存した学習開始を確認できません。もう一度学習を開始してください。');
         preferredBookIds = requestedBookIds.length === 0 && snapshot.books.some((book) => book.id === NARU_BOOK_ID)
           ? [NARU_BOOK_ID] : requestedBookIds;
         if (preferredBookIds.length > 0 && !snapshot.books.some((book) => preferredBookIds.includes(book.id))) {
@@ -537,6 +547,7 @@ export const getBookSession = async (
       getDb: context.getDb, uid, clientSessionId: startId,
       fingerprint: studySessionStartFingerprint({ action: 'book', bookId, limit, taskIntent }), limit, now,
       selectionPolicy: taskIntent?.selectionPolicy,
+      allowAdminQualityBypass: true,
       resolveScope: (snapshot) => {
         if (!snapshot.books.some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
         return snapshot.words.filter((word) => word.bookId === bookId && isWordInStudyRange(word, range))
@@ -576,7 +587,7 @@ const assertLocalBookStudyAccess = async (context: LearningHistoryContext, uid: 
   const store = await context.getStore(STORES.BOOKS);
   const rawBook = await requestToPromise(store.get(bookId) as IDBRequest<BookMetadata | undefined>);
   if (!rawBook) throw new Error('この教材を利用できません。');
-  if (!getLocalStudyAccessibleBooks([rawBook], user).some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
+  if (!getLocalStudyAccessibleBooks([rawBook], user, true).some((book) => book.id === bookId)) throw new Error('この教材を利用できません。');
 };
 
 const readLocalStudyWords = async (context: LearningHistoryContext, bookId: string): Promise<WordData[]> => {
@@ -738,7 +749,7 @@ export const saveSrsHistory = async (
           const actualWord = authorization[2] as WordData | undefined;
           if (session?.user?.uid !== uid) throw new Error('学習者のセッションを確認してください。');
           if (!rawBook || !actualWord || actualWord.id !== word.id || actualWord.bookId !== word.bookId) throw new Error('この単語を利用できません。');
-          book = getLocalStudyAccessibleBooks([rawBook], session.user)[0];
+          book = getLocalStudyAccessibleBooks([rawBook], session.user, true)[0];
           if (!book) throw new Error('この教材を利用できません。');
           queueAuthorizedReceipt();
         } catch (error) { fail(error); }

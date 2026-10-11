@@ -51,7 +51,7 @@ test.afterEach(async ({ page }, testInfo) => {
   if (evidence) await testInfo.attach('native-idb-persistence.json', { body: JSON.stringify(evidence, null, 2), contentType: 'application/json' });
 });
 
-const setup = async (page: Page, context: BrowserContext, secondTab = false) => {
+const setup = async (page: Page, context: BrowserContext, secondTab = false, seed = true) => {
   await context.route('https://graduated-idb.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Native long-term review verification</title>' }));
   const initialize = async (target: Page, seed: boolean) => {
     await target.goto('https://graduated-idb.test/');
@@ -111,7 +111,7 @@ const setup = async (page: Page, context: BrowserContext, secondTab = false) => 
       (window as FixtureWindow).graduatedFixture = fixture;
     }, { supportCode, historyCode, seed });
   };
-  await initialize(page, true);
+  await initialize(page, seed);
   const other = secondTab ? await context.newPage() : undefined;
   if (other) await initialize(other, false);
   return other;
@@ -415,4 +415,172 @@ test('native IDB QUIZ-only graduation remains an ordinary new word on identical 
   expect(result.firstDaily).toEqual(result.firstBook);
   expect(result.replayDaily).toEqual(result.firstDaily);
   expect(result).toMatchObject({ bookReplayUnchanged: true, dailyReplayUnchanged: true });
+});
+
+test('native IDB ADMIN can explicitly inspect pending blocked and ledgerless books while automatic candidates and learner access remain gated', async ({ page, context }) => {
+  await setup(page, context);
+  const result = await page.evaluate(async () => {
+    const fixture = (window as FixtureWindow).graduatedFixture;
+    const uid = 'graduate-student';
+    const tx = fixture.db.transaction([fixture.support.STORES.SESSION, fixture.support.STORES.BOOKS, fixture.support.STORES.WORDS, fixture.support.STORES.HISTORY], 'readwrite');
+    const done = fixture.support.waitForTransaction(tx);
+    tx.objectStore(fixture.support.STORES.SESSION).put({ key: 'current', user: { uid, email: 'synthetic-admin@example.test', displayName: 'Synthetic admin', role: 'ADMIN', subscriptionPlan: 'TOC_FREE' } });
+    tx.objectStore(fixture.support.STORES.BOOKS).delete('book-a');
+    tx.objectStore(fixture.support.STORES.BOOKS).delete('book-b');
+    const bookIds = ['pending-official', 'blocked-official', 'ledgerless-official'];
+    bookIds.forEach((bookId, index) => {
+      tx.objectStore(fixture.support.STORES.BOOKS).put({ id: bookId, title: bookId, wordCount: 2,
+        catalogSource: 'STEADY_STUDY_ORIGINAL', accessScope: 'ALL_PLANS', ...(index < 2 ? { qualityGate: {
+          status: index === 0 ? 'source_review_required' : 'qa_blocked', label: 'Synthetic unchecked material', summary: '',
+          isApprovedForLearner: false, isSelectableForToday: false, blockingReasons: ['Synthetic review pending'], warnings: [],
+        } } : {}) });
+      for (const number of [1, 2]) {
+        const wordId = `${bookId}-${number}`;
+        tx.objectStore(fixture.support.STORES.WORDS).put({ id: wordId, bookId, number, word: `word${number}`, definition: 'meaning' });
+        tx.objectStore(fixture.support.STORES.HISTORY).put({ id: `${uid}_${wordId}`, data: {
+          wordId, bookId, status: number === 1 ? 'review' : 'graduated', interactionSource: 'STUDY', nextReviewDate: fixture.now - 1,
+          lastStudiedAt: fixture.now - 100_000, interval: number === 1 ? 4 : 30, easeFactor: 2.5, attemptCount: 5, correctCount: 5, totalResponseTimeMs: 50,
+        } });
+      }
+    });
+    await done;
+    const automatic = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'admin-automatic');
+    const globalLongCount = await fixture.learning.getLongTermReviewAvailableCount(fixture.context, uid);
+    const globalDueCount = await fixture.learning.getDueCount(fixture.context, uid);
+    const explicit: Array<{ bookId: string; words: string[]; overviewLong: number | undefined }> = [];
+    for (const bookId of bookIds) {
+      const overview = await fixture.learning.getBookStudyOverview(fixture.context, uid, bookId);
+      const words = await fixture.start(`admin-${bookId}`, bookId, 10);
+      explicit.push({ bookId, words: words.map((word) => word.id), overviewLong: overview.longTermReviewAvailableCount });
+      await fixture.learning.saveSrsHistory(fixture.context, uid, words[0], 0, 100, undefined, undefined, `admin-answer-${bookId}`);
+    }
+    const rejected: boolean[] = [];
+    for (const role of ['STUDENT', 'INSTRUCTOR']) {
+      const roleTx = fixture.db.transaction(fixture.support.STORES.SESSION, 'readwrite');
+      const roleDone = fixture.support.waitForTransaction(roleTx);
+      roleTx.objectStore(fixture.support.STORES.SESSION).put({ key: 'current', user: { uid, email: 'synthetic-learner@example.test', displayName: 'Synthetic learner', role, subscriptionPlan: 'TOC_FREE' } });
+      await roleDone;
+      for (const bookId of bookIds) {
+        rejected.push(await fixture.start(`${role}-${bookId}`, bookId, 10).then(() => false, () => true));
+        rejected.push(await fixture.learning.getBookStudyOverview(fixture.context, uid, bookId).then(() => false, () => true));
+        rejected.push(await fixture.learning.saveSrsHistory(fixture.context, uid,
+          { id: `${bookId}-1`, bookId, number: 1, word: 'word', definition: 'meaning' }, 2, 100, undefined, undefined, `${role}-answer-${bookId}`).then(() => false, () => true));
+      }
+    }
+    return { automatic: automatic.map((word) => word.id), globalLongCount, globalDueCount, explicit, rejected,
+      answerReceipts: (await fixture.snapshot()).receipts };
+  });
+  expect(result).toMatchObject({ automatic: [], globalLongCount: 0, globalDueCount: 0, answerReceipts: 3 });
+  expect(result.explicit.map((entry) => entry.words.length)).toEqual([2, 2, 2]);
+  expect(result.explicit.map((entry) => entry.overviewLong)).toEqual([1, 1, 1]);
+  expect(result.rejected).toHaveLength(18);
+  expect(result.rejected.every(Boolean)).toBe(true);
+});
+
+test('native IDB saved daily starts retain their original plan scope after plan changes reload and JST midnight while latest authorization and dates still apply', async ({ page, context }) => {
+  await setup(page, context);
+  const original = await page.evaluate(async () => {
+    const fixture = (window as FixtureWindow).graduatedFixture;
+    const uid = 'graduate-student';
+    fixture.context.getLearningPlan = async () => fixture.support.requestToPromise(fixture.db.transaction(fixture.support.STORES.PLANS).objectStore(fixture.support.STORES.PLANS).get(uid));
+    const putPlan = async (selectedBookIds: string[]) => {
+      const tx = fixture.db.transaction(fixture.support.STORES.PLANS, 'readwrite');
+      const done = fixture.support.waitForTransaction(tx);
+      tx.objectStore(fixture.support.STORES.PLANS).put({ uid, selectedBookIds }); await done;
+    };
+    await putPlan(['book-a']);
+    const first = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'frozen-plan');
+    await putPlan(['book-b']);
+    fixture.now = Date.parse('2026-10-11T15:01:00Z');
+    const beforeReplay = await fixture.snapshot();
+    const replay = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'frozen-plan');
+    const afterReplay = await fixture.snapshot();
+    const next = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'new-plan');
+    return { first: first.map((word) => ({ id: word.id, bookId: word.bookId, long: !!word.longTermReview })), replayIds: replay.map((word) => word.id),
+      nextBooks: next.map((word) => word.bookId), replayUnchanged: JSON.stringify(beforeReplay) === JSON.stringify(afterReplay) };
+  });
+  expect(original.first).toHaveLength(10);
+  expect(original.first.every((word) => word.bookId === 'book-a')).toBe(true);
+  expect(original.replayIds).toEqual(original.first.map((word) => word.id));
+  expect(original.nextBooks).toHaveLength(10);
+  expect(original.nextBooks.every((bookId) => bookId === 'book-b')).toBe(true);
+  expect(original.replayUnchanged).toBe(true);
+  await page.evaluate(() => (window as FixtureWindow).graduatedFixture.db.close());
+  await page.reload();
+  await setup(page, context, false, false);
+  const reloaded = await page.evaluate(async () => {
+    const fixture = (window as FixtureWindow).graduatedFixture;
+    const uid = 'graduate-student';
+    fixture.now = Date.parse('2026-10-11T15:01:00Z');
+    let planCalls = 0;
+    let weaknessCalls = 0;
+    const getStore = fixture.context.getStore;
+    fixture.context.getLearningPlan = async () => { planCalls += 1; throw new Error('Injected mutable planning failure'); };
+    fixture.context.getStore = async (name, mode) => {
+      if (name === fixture.support.STORES.WEAKNESS_SIGNALS) { weaknessCalls += 1; throw new Error('Injected weakness projection failure'); }
+      return getStore(name, mode);
+    };
+    const before = await fixture.snapshot();
+    const replay = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'frozen-plan');
+    const changedIntent = { mode: 'study', intentType: 'TODAY_FOCUS', label: 'Changed explicit preference', selectionPolicy: 'DUE_FIRST',
+      limit: 10, preferredBookIds: ['book-b'] } as import('../../types').LearningTaskIntent;
+    const conflict = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, changedIntent, 'frozen-plan').then(() => false, (error) => error.status === 409);
+    const after = await fixture.snapshot();
+    const graduate = replay.find((word) => word.longTermReview)!;
+    const historyTx = fixture.db.transaction(fixture.support.STORES.HISTORY, 'readwrite');
+    const historyDone = fixture.support.waitForTransaction(historyTx);
+    const store = historyTx.objectStore(fixture.support.STORES.HISTORY);
+    const request = store.get(`${uid}_${graduate.id}`);
+    request.onsuccess = () => { const record = request.result; record.data.nextReviewDate = fixture.now + 100_000; store.put(record); };
+    await historyDone;
+    const afterDateChange = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'frozen-plan');
+    const bookTx = fixture.db.transaction(fixture.support.STORES.BOOKS, 'readwrite');
+    const bookDone = fixture.support.waitForTransaction(bookTx);
+    bookTx.objectStore(fixture.support.STORES.BOOKS).put({ id: 'book-a', title: 'Now another owner', wordCount: 115,
+      catalogSource: 'USER_GENERATED', description: JSON.stringify({ createdBy: 'other-user' }) });
+    await bookDone;
+    const afterRevocation = await fixture.learning.getDailySessionWords(fixture.context, uid, 10, undefined, 'frozen-plan');
+    return { replayIds: replay.map((word) => word.id), conflict, planCalls, weaknessCalls,
+      unchanged: JSON.stringify(before) === JSON.stringify(after), removedFutureId: graduate.id, afterDateIds: afterDateChange.map((word) => word.id),
+      afterRevocationIds: afterRevocation.map((word) => word.id), starts: after.session.filter((record: any) => record.key.startsWith('long-term-review-start:')),
+      days: after.session.filter((record: any) => record.key.startsWith('long-term-review-day:')) };
+  });
+  expect(reloaded.replayIds).toEqual(original.first.map((word) => word.id));
+  expect(reloaded).toMatchObject({ conflict: true, planCalls: 0, weaknessCalls: 0, unchanged: true, afterRevocationIds: [] });
+  expect(reloaded.afterDateIds).toHaveLength(9);
+  expect(reloaded.afterDateIds).not.toContain(reloaded.removedFutureId);
+  expect(reloaded.starts).toHaveLength(2);
+  expect((reloaded.starts.find((record: any) => record.clientSessionId === 'frozen-plan') as any).dayKey).toBe('2026-10-11');
+  expect(reloaded.days).toHaveLength(2);
+});
+
+test('native IDB racing identical daily start IDs return one committed scope even when callers read different mutable plans', async ({ page, context }) => {
+  const other = await setup(page, context, true);
+  const waiting: import('@playwright/test').Route[] = [];
+  await context.route('https://graduated-idb.test/plan-race*', async (route) => {
+    waiting.push(route);
+    if (waiting.length === 2) await Promise.all(waiting.map((request) => request.fulfill({ contentType: 'application/json', body: '{}' })));
+  });
+  const start = (target: Page, bookId: string) => target.evaluate(async (selectedBookId) => {
+    const fixture = (window as FixtureWindow).graduatedFixture;
+    fixture.context.getLearningPlan = async () => {
+      await fetch(`https://graduated-idb.test/plan-race?book=${selectedBookId}`);
+      return { selectedBookIds: [selectedBookId] } as import('../../types').LearningPlan;
+    };
+    return (await fixture.learning.getDailySessionWords(fixture.context, 'graduate-student', 10, undefined, 'same-plan-race'))
+      .map((word) => ({ id: word.id, bookId: word.bookId, long: !!word.longTermReview }));
+  }, bookId);
+  const [first, second] = await Promise.all([start(page, 'book-a'), start(other!, 'book-b')]);
+  expect(waiting).toHaveLength(2);
+  expect(first).toHaveLength(10);
+  expect(second).toEqual(first);
+  expect(new Set(first.map((word) => word.bookId)).size).toBe(1);
+  expect(first.filter((word) => word.long)).toHaveLength(2);
+  const records = await page.evaluate(async () => (await (window as FixtureWindow).graduatedFixture.snapshot()).session);
+  const starts = records.filter((record: any) => record.key.startsWith('long-term-review-start:'));
+  const day = records.find((record: any) => record.key.startsWith('long-term-review-day:')) as any;
+  expect(starts).toHaveLength(1);
+  expect(day).toMatchObject({ startOrdinal: 1 });
+  expect(day.allocatedWordIds).toHaveLength(2);
+  await other!.close();
 });

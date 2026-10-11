@@ -287,6 +287,143 @@ describe('graduated review production SQL on real SQLite transactions', () => {
     expect(await handleGetDailySessionWords(f.env, f.user, 20)).toHaveLength(20);
   });
 
+  it('replays the committed daily IDs after implicit saved-plan A changes to B, while a new start follows B', async () => {
+    const f = setup();
+    f.sqlite.exec("INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','a',0,1,1)");
+    const first = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'saved-plan-start');
+    expect(first).toHaveLength(20); expect(first.every(word => word.bookId === 'a')).toBe(true);
+    const before = allocations(f);
+    f.sqlite.exec("UPDATE learning_plan_books SET book_id='b' WHERE user_id='student'");
+    const retry = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'saved-plan-start');
+    expect(ids(retry)).toEqual(ids(first)); expect(allocations(f)).toEqual(before);
+    f.sqlite.exec("DELETE FROM learning_plan_books WHERE user_id='student'");
+    expect(ids(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'saved-plan-start'))).toEqual(ids(first));
+    f.sqlite.exec("INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','b',0,1,1)");
+    const next = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'saved-plan-new-start');
+    expect(next).toHaveLength(20); expect(next.every(word => word.bookId === 'b')).toBe(true);
+    expect(count(f, 'graduated_review_allocations')).toBe(5);
+  });
+
+  it('returns the winning committed IDs to same-start callers that read different mutable plans concurrently', async () => {
+    const f = setup();
+    f.sqlite.exec("INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','a',0,1,1)");
+    const prepare = f.env.DB.prepare.bind(f.env.DB); let planReads = 0;
+    f.env.DB.prepare = sql => {
+      const statement = prepare(sql);
+      if (sql.includes('FROM learning_plan_books')) {
+        const all = statement.all.bind(statement);
+        statement.all = () => {
+          const result = all(); planReads += 1;
+          if (planReads === 1) f.sqlite.exec("UPDATE learning_plan_books SET book_id='b' WHERE user_id='student'");
+          return result;
+        };
+      }
+      return statement;
+    };
+    const [left, right] = await Promise.all([
+      handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-race'),
+      handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-race'),
+    ]);
+    expect(planReads).toBe(2); expect(left).toHaveLength(20); expect(right).toHaveLength(20);
+    const persisted = JSON.parse(String(f.sqlite.prepare("SELECT result_word_ids_json FROM long_term_review_starts WHERE client_session_id='plan-race'").get()!.result_word_ids_json));
+    expect(ids(left)).toEqual(persisted); expect(ids(right)).toEqual(persisted);
+    expect(new Set(left.map(word => word.bookId)).size).toBe(1);
+    expect(count(f, 'long_term_review_starts')).toBe(1); expect(count(f, 'graduated_review_allocations')).toBe(3);
+  });
+
+  it('rejects changed explicit daily preferences on the same start ID rather than returning a newly selected queue', async () => {
+    const f = setup(); const initialIntent = task('a', { preferredBookIds: ['a'] });
+    const first = await handleGetDailySessionWords(f.env, f.user, 20, initialIntent, 'explicit-plan');
+    const before = allocations(f);
+    await expect(handleGetDailySessionWords(f.env, f.user, 20, { ...initialIntent, preferredBookIds: ['b'] }, 'explicit-plan')).rejects.toMatchObject({ status: 409 });
+    expect(ids(await handleGetDailySessionWords(f.env, f.user, 20, initialIntent, 'explicit-plan'))).toEqual(ids(first));
+    expect(allocations(f)).toEqual(before);
+  });
+
+  it('replays existing daily IDs without weakness reads, while a new start propagates a weakness fetch failure', async () => {
+    const f = setup(0);
+    f.sqlite.exec("INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','a',0,1,1)");
+    const first = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'weakness-replay');
+    expect(graduated(first)).toHaveLength(3);
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = sql => {
+      if (sql.includes('FROM student_weakness_signals')) throw new Error('synthetic weakness fetch failure after commit');
+      return prepare(sql);
+    };
+    expect(ids(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'weakness-replay'))).toEqual(ids(first));
+    await expect(handleGetDailySessionWords(f.env, f.user, 20, undefined, 'new-with-failed-weakness')).rejects.toThrow('synthetic weakness fetch failure after commit');
+    expect(count(f, 'long_term_review_starts')).toBe(1); expect(count(f, 'graduated_review_allocations')).toBe(3);
+  });
+
+  it('does not replenish persisted daily IDs after actual word deletion, mismatched graduate book or material approval revocation', async () => {
+    const f = setup();
+    f.sqlite.exec(`UPDATE books SET created_by=NULL,catalog_source='STEADY_STUDY_ORIGINAL' WHERE id='a';
+      INSERT INTO material_source_ledger(source_id,book_id,catalog_source,book_title,edition,rights_status,review_status,source_file,extracted_at,transform_log,content_qa_report,qa_word_count,created_at,updated_at)
+      VALUES('daily-current-approval','a','STEADY_STUDY_ORIGINAL','A','Synthetic','approved','approved','Synthetic','Synthetic','Synthetic','Synthetic',120,1,1);
+      INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','a',0,1,1)`);
+    const first = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'approval-replay');
+    const before = allocations(f);
+    f.sqlite.exec("UPDATE learning_plan_books SET book_id='b' WHERE user_id='student'; DELETE FROM words WHERE id='a-001'; UPDATE words SET book_id='b' WHERE id='a-101'");
+    const retry = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'approval-replay');
+    expect(ids(retry)).toEqual(ids(first).filter(id => id !== 'a-001' && id !== 'a-101'));
+    expect(retry.every(word => word.bookId === 'a')).toBe(true); expect(allocations(f)).toEqual(before);
+    f.sqlite.exec("UPDATE material_source_ledger SET review_status='blocked' WHERE book_id='a'");
+    expect(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'approval-replay')).toEqual([]);
+    expect(allocations(f)).toEqual(before);
+  });
+
+  it('replays only existing daily IDs despite an unavailable or failed implicit plan, while enforcing current authorization', async () => {
+    const f = setup();
+    f.sqlite.exec("INSERT INTO learning_plan_books(user_id,book_id,sort_order,created_at,updated_at) VALUES('student','a',0,1,1)");
+    const first = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-replay');
+    const before = allocations(f);
+    f.sqlite.exec("UPDATE learning_plan_books SET book_id='private' WHERE user_id='student'");
+    expect(ids(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-replay'))).toEqual(ids(first));
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = sql => {
+      if (sql.includes('FROM learning_plan_books')) throw new Error('synthetic plan fetch failure after commit');
+      return prepare(sql);
+    };
+    expect(ids(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-replay'))).toEqual(ids(first));
+    await expect(handleGetDailySessionWords(f.env, f.user, 20, undefined, 'new-with-failed-plan')).rejects.toThrow('synthetic plan fetch failure after commit');
+    await expect(handleGetDailySessionWords(f.env, f.user, 10, undefined, 'plan-replay')).rejects.toMatchObject({ status: 409 });
+    f.sqlite.exec("UPDATE books SET created_by='other' WHERE id='a'");
+    expect(await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'plan-replay')).toEqual([]);
+    expect(allocations(f)).toEqual(before); expect(count(f, 'long_term_review_starts')).toBe(1);
+    await expect(handleSaveSrsHistory(f.env, f.user, first[0], 2, 0)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it.each(['missing-ledger', 'pending', 'blocked'] as const)('preserves ADMIN explicit book quality exemption for %s without adding unapproved daily/global candidates', async state => {
+    const f = setup();
+    f.sqlite.exec("UPDATE users SET role='ADMIN' WHERE id='student'; DELETE FROM learning_histories WHERE book_id!='unapproved'");
+    f.user.role = 'ADMIN';
+    if (state !== 'missing-ledger') {
+      f.sqlite.prepare(`INSERT INTO material_source_ledger(source_id,book_id,catalog_source,book_title,edition,rights_status,review_status,source_file,extracted_at,transform_log,content_qa_report,qa_word_count,created_at,updated_at)
+        VALUES('admin-quality','unapproved','STEADY_STUDY_ORIGINAL','Unchecked','Synthetic',?,?,'Synthetic','Synthetic','Synthetic','Synthetic',120,1,1)`)
+        .run(state === 'pending' ? 'pending' : 'approved', state === 'blocked' ? 'blocked' : 'approved');
+    }
+    expect(await getVisibleDueCount(f.env, f.user)).toBe(0);
+    expect(await getVisibleLongTermReviewAvailableCount(f.env, f.user)).toBe(0);
+    const daily = await handleGetDailySessionWords(f.env, f.user, 20, undefined, 'admin-automatic');
+    expect(daily.every(word => word.bookId !== 'unapproved')).toBe(true); expect(graduated(daily)).toHaveLength(0);
+    const explicit = await handleGetBookSession(f.env, f.user, 'unapproved', 20, task('unapproved'), 'admin-explicit');
+    expect(explicit).toHaveLength(20); expect(explicit.every(word => word.bookId === 'unapproved')).toBe(true);
+    expect(graduated(explicit)).toHaveLength(3);
+    expect(ids(await handleGetBookSession(f.env, f.user, 'unapproved', 20, task('unapproved'), 'admin-explicit'))).toEqual(ids(explicit));
+    expect(await handleGetBookStudyOverview(f.env, f.user, 'unapproved')).toMatchObject({ dueCount: 100, longTermReviewAvailableCount: 2 });
+    expect(await getVisibleLongTermReviewAvailableCount(f.env, f.user)).toBe(0);
+    await handleSaveSrsHistory(f.env, f.user, graduated(explicit)[0], 2, 0, undefined, undefined, 'admin-answer');
+    expect(count(f, 'study_attempt_receipts')).toBe(1);
+    for (const role of ['STUDENT', 'INSTRUCTOR']) {
+      f.sqlite.prepare("UPDATE users SET role=? WHERE id='student'").run(role);
+      const learner = f.sqlite.prepare("SELECT * FROM users WHERE id='student'").get() as unknown as DbUserRow;
+      await expect(handleGetBookSession(f.env, learner, 'unapproved', 20, task('unapproved'), `learner-${role}`)).rejects.toMatchObject({ status: 403 });
+      await expect(handleGetBookStudyOverview(f.env, learner, 'unapproved')).rejects.toMatchObject({ status: 403 });
+      await expect(handleSaveSrsHistory(f.env, learner, explicit[0], 2, 0)).rejects.toMatchObject({ status: 403 });
+      expect(await getVisibleLongTermReviewAvailableCount(f.env, learner, 'unapproved')).toBe(0);
+    }
+  });
+
   it('defensively excludes allocated graduate IDs and duplicate normal IDs from final persisted composition', async () => {
     const f = setup();
     const normalWords = await handleGetBookSession(f.env, f.user, 'a', 20, task());

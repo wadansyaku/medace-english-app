@@ -34,6 +34,20 @@ describe('local graduated-review authorization snapshot', () => {
     expect(getLocalStudyAccessibleBooks([officialBook('book', BookAccessScope.ALL_PLANS, false)], user)).toEqual([]);
   });
 
+  it('preserves ADMIN quality exemption only for explicit book access, never daily or global automatic candidates', () => {
+    const pending = officialBook('pending', BookAccessScope.ALL_PLANS, false);
+    pending.qualityGate!.status = 'source_review_required';
+    const blocked = officialBook('blocked', BookAccessScope.ALL_PLANS, false);
+    blocked.qualityGate!.status = 'qa_blocked';
+    const missing = { ...officialBook('missing', BookAccessScope.ALL_PLANS, false), qualityGate: undefined };
+    const books = [pending, blocked, missing];
+    const admin = { ...user, role: UserRole.ADMIN };
+    expect(getLocalStudyAccessibleBooks(books, admin, true).map((book) => book.id)).toEqual(['pending', 'blocked', 'missing']);
+    expect(getLocalStudyAccessibleBooks(books, admin)).toEqual([]);
+    expect(getLocalStudyAccessibleBooks(books, user, true)).toEqual([]);
+    expect(getLocalStudyAccessibleBooks(books, { ...user, role: UserRole.INSTRUCTOR }, true)).toEqual([]);
+  });
+
   it('never relabels an own STUDY graduated history with zero numeric fields as a new word', () => {
     const words: WordData[] = [1, 2].map((number) => ({ id: `w${number}`, bookId: 'book', number, word: `word${number}`, definition: `meaning${number}` }));
     const histories: LearningHistory[] = [{ wordId: 'w1', bookId: 'book', status: 'graduated', interactionSource: 'STUDY',
