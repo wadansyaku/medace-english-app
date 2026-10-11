@@ -20,7 +20,7 @@ export const ProductFeedbackStatusLink: React.FC<ProductFeedbackStatusLinkProps>
     ? [{ status: 'FIXED', label: '再テスト待ち' }]
     : [{ status: 'NEW', label: '確認待ち' }, { status: 'RETEST_FAIL', label: '再テスト失敗' }, { status: 'FIXED', label: '全体の再テスト待ち' }];
   return (
-    <div className="rounded-2xl border border-orange-200 bg-[#FDF3ED] p-4 text-[#2F1609]" aria-busy={state.loading} data-testid="product-feedback-status">
+    <div className="rounded-2xl border border-medace-200 bg-[#FDF3ED] p-4 text-[#2F1609]" aria-busy={state.loading} data-testid="product-feedback-status">
       <p className="text-sm font-bold">{audience === 'teacher' ? '自分の操作報告' : '操作報告の対応状況'}</p>
       {state.loading && <p className="mt-2 text-sm" role="status">{data ? '件数を更新しています（前回取得した件数を表示）。' : '報告状況を取得しています。'}</p>}
       {(state.error || scopeChanged) && (
@@ -31,9 +31,9 @@ export const ProductFeedbackStatusLink: React.FC<ProductFeedbackStatusLinkProps>
         </div>
       )}
       {data && <div className="mt-2 flex flex-wrap gap-2">
-        {buttons.map(({ status, label }) => <button key={status} type="button" onClick={() => onOpen(status)} className="min-h-11 max-w-full break-words rounded-xl border border-orange-300 bg-white px-3 py-2 text-sm font-bold hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{label} {data.counts[status]}件</button>)}
+        {buttons.map(({ status, label }) => <button key={status} type="button" onClick={() => onOpen(status)} className="min-h-11 max-w-full break-words rounded-xl border border-medace-300 bg-white px-3 py-2 text-sm font-bold hover:bg-medace-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{label} {data.counts[status]}件</button>)}
       </div>}
-      <button type="button" onClick={() => onOpen()} className="mt-2 min-h-11 max-w-full break-words rounded-xl bg-[#F66D0B] px-3 py-2 text-sm font-bold text-[#2F1609] hover:bg-orange-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{openLabel || (audience === 'teacher' ? '報告する・対応を見る' : 'すべての報告を見る')}</button>
+      <button type="button" onClick={() => onOpen()} className="mt-2 min-h-11 max-w-full break-words rounded-xl bg-[#F66D0B] px-3 py-2 text-sm font-bold text-[#2F1609] hover:bg-medace-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2F1609]">{openLabel || (audience === 'teacher' ? '報告する・対応を見る' : 'すべての報告を見る')}</button>
     </div>
   );
 };
