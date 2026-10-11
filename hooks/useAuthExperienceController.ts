@@ -51,6 +51,12 @@ export const useAuthExperienceController = ({
   dispatchNavigation,
   onLogoutReset,
 }: UseAuthExperienceControllerParams) => {
+  // Navigation normalizes the URL in an earlier effect. Capture its original
+  // evidence query during render so session restore can revalidate this tab.
+  const startupLocationRef = useRef(typeof window !== 'undefined' ? {
+    pathname: window.location.pathname,
+    search: window.location.search,
+  } : null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
@@ -115,7 +121,7 @@ export const useAuthExperienceController = ({
   useEffect(() => {
     const initSession = async () => {
       try {
-        if (typeof window !== 'undefined') prepareWorkspaceRestore(window.location.pathname, window.location.search);
+        if (startupLocationRef.current) prepareWorkspaceRestore(startupLocationRef.current.pathname, startupLocationRef.current.search);
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);

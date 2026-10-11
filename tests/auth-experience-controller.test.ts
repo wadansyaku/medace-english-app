@@ -23,6 +23,7 @@ vi.mock('../utils/displayPreferences', () => ({ applyDisplayPreferences: vi.fn()
 import { useAuthExperienceController } from '../hooks/useAuthExperienceController';
 import { navigationReducer, parseNavigationPath, type AppNavigationAction } from '../hooks/useAppNavigation';
 import { OrganizationRole, UserRole, type UserProfile } from '../types';
+import { acceptWorkspaceProfile, captureWorkspaceRequest, clearWorkspaceContext, releaseWorkspaceRequest } from '../services/workspaceContext';
 
 const user: UserProfile = { uid: 'synthetic-user', role: UserRole.STUDENT, displayName: '架空生徒', email: 'synthetic@example.invalid' };
 const restoredAccounts = [
@@ -50,6 +51,31 @@ beforeEach(() => {
 });
 
 describe('authentication keeps one focused task through pending and recovery states', () => {
+  it('restores the original evidence query captured before an earlier navigation effect normalizes the URL', async () => {
+    const storage = new Map<string, string>();
+    const location = { pathname: '/public', search: '?supportSource=staff-login-entry' };
+    vi.stubGlobal('window', { location });
+    vi.stubGlobal('sessionStorage', { getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) });
+    const staff: UserProfile = { ...user, role: UserRole.INSTRUCTOR, organizationRole: OrganizationRole.INSTRUCTOR,
+      workspaceAccess: { workspace: 'instructor', grantVersion: 7, organizationId: 'synthetic-staff-org', availableWorkspaces: ['instructor'] } };
+    let headers: Record<string, string> | undefined;
+    try {
+      acceptWorkspaceProfile(staff);
+      api.getSession.mockImplementationOnce(async () => {
+        const request = captureWorkspaceRequest(); headers = request.headers; releaseWorkspaceRequest(request); return staff;
+      });
+      const f = fixture(location.pathname, location.search);
+      f.render();
+      // useAppNavigation registers its normalization effect before auth restore.
+      location.search = '';
+      await ready(f);
+      expect(headers).toMatchObject({ 'X-MedAce-Workspace': 'instructor', 'X-MedAce-Workspace-Version': '7',
+        'X-MedAce-Workspace-Identity': user.uid, 'X-MedAce-Workspace-Org': 'synthetic-staff-org' });
+      expect(f.render().user).toEqual(staff);
+    } finally { clearWorkspaceContext(); vi.unstubAllGlobals(); }
+  });
+
   it.each(restoredAccounts.flatMap(account => ['/public', '/student', '/public/roles/student'].map(path => ({ ...account, path }))))(
     'normalizes restored $label at $path to its own home without changing the session', async ({ profile, home, path }) => {
       api.getSession.mockResolvedValueOnce(profile);
