@@ -80,6 +80,22 @@ describe('tab-scoped explicit workspace requests', () => {
     await apiGet('/api/session');
     expect(fetch.mock.calls[1][1].headers['X-MedAce-Workspace']).toBeUndefined();
   });
+  it('preserves only a saved staff context when a public evidence link reloads the tab', async () => {
+    acceptWorkspaceProfile(profile('instructor'));
+    prepareWorkspaceRestore('/public', '?supportSource=staff-login-entry');
+    const fetch = vi.fn().mockImplementation(() => Promise.resolve(json(null))); vi.stubGlobal('fetch', fetch);
+    await apiGet('/api/session');
+    expect(fetch.mock.calls[0][1].headers).toMatchObject({ 'X-MedAce-Workspace': 'instructor',
+      'X-MedAce-Workspace-Version': '7', 'X-MedAce-Workspace-Org': 'synthetic-staff-org',
+      'X-MedAce-Workspace-Identity': 'synthetic-workspace-owner' });
+    prepareWorkspaceRestore('/public'); await apiGet('/api/session');
+    expect(fetch.mock.calls[1][1].headers['X-MedAce-Workspace']).toBeUndefined();
+    clearWorkspaceContext();
+    prepareWorkspaceRestore('/public', '?supportSource=staff-login-entry&workspace=service-admin');
+    await apiGet('/api/session');
+    expect(fetch.mock.calls[2][1].headers['X-MedAce-Workspace']).toBeUndefined();
+  });
+
   it('uses a direct staff URL to discover that workspace rather than restoring another role', async () => {
     acceptWorkspaceProfile(profile('service-admin'));
     prepareWorkspaceRestore('/teacher');

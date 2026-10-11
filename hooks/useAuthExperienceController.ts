@@ -115,7 +115,7 @@ export const useAuthExperienceController = ({
   useEffect(() => {
     const initSession = async () => {
       try {
-        if (typeof window !== 'undefined') prepareWorkspaceRestore(window.location.pathname);
+        if (typeof window !== 'undefined') prepareWorkspaceRestore(window.location.pathname, window.location.search);
         const sessionUser = await sessionService.getSession();
         if (sessionUser) {
           setUser(sessionUser);

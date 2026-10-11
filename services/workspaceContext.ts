@@ -29,7 +29,7 @@ export const invalidateWorkspaceRequests = () => {
   requests.clear();
 };
 
-export const prepareWorkspaceRestore = (pathname: string) => {
+export const prepareWorkspaceRestore = (pathname: string, search = '') => {
   const requested = ['/teacher', '/public/roles/instructor'].includes(pathname) ? 'instructor'
     : ['/school-admin', '/public/roles/group-admin'].includes(pathname) ? 'group-admin'
     : ['/service-admin', '/admin-access', '/public/roles/service-admin'].includes(pathname) ? 'service-admin' : undefined;
@@ -39,7 +39,13 @@ export const prepareWorkspaceRestore = (pathname: string) => {
     if (typeof value?.uid === 'string' && isStaffWorkspace(value.access?.workspace)
       && Number.isSafeInteger(value.access.grantVersion) && value.access.grantVersion >= 0) saved = value;
   } catch { /* Ignore invalid local hints; they carry no authority. */ }
-  const restoresStaff = requested || pathname === '/instructor' || pathname === '/admin';
+  const sourceIds = new URLSearchParams(search).getAll('supportSource');
+  // Evidence links preserve a previously verified selection in this tab. The
+  // URL never supplies a role or grant; the session endpoint revalidates the
+  // saved identity, version and organization against current server authority.
+  const readsSupportEvidence = pathname.replace(/\/+$/, '') === '/public'
+    && sourceIds.length === 1 && /^[a-z0-9-]{1,128}$/.test(sourceIds[0]);
+  const restoresStaff = requested || pathname === '/instructor' || pathname === '/admin' || readsSupportEvidence;
   current = restoresStaff ? { ...saved, requested: requested || saved.access?.workspace } : {};
   if (requested && current.access?.workspace !== requested) current.access = undefined;
 };

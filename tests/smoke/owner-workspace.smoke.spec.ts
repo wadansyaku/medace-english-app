@@ -24,12 +24,17 @@ const checkLayout = async (page: Page) => {
 };
 
 for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1366, height: 900 }]) {
-  test(`owner workspace switch preserves scope and keyboard focus at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
+  test(`owner workspace switch preserves scope and focus at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     test.skip(!localTarget, 'Existing disposable local identity/grant only; no deployed account setup');
     const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
     await page.setViewportSize(viewport); await login(page); await checkLayout(page);
     await page.screenshot({ path: testInfo.outputPath('teacher.png'), animations: 'disabled' });
-    await selector(page).focus(); await page.keyboard.press('Space'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+    await selector(page).focus(); await expect(selector(page)).toBeFocused();
+    await page.keyboard.press('Tab'); await expect(selector(page)).not.toBeFocused();
+    await page.keyboard.press('Shift+Tab'); await expect(selector(page)).toBeFocused();
+    // macOS native pickers ignore synthesized arrows even in an isolated select.
+    // Exercise native selection separately from the actual Tab/focus checks.
+    await selector(page).selectOption('group-admin');
     await expect(school(page)).toBeVisible(); await expect(selector(page)).toHaveValue('group-admin');
     await expect(selector(page)).toBeFocused(); await checkLayout(page);
     await page.screenshot({ path: testInfo.outputPath('school.png'), animations: 'disabled' });
@@ -76,4 +81,29 @@ test('failed workspace verification clears the old privileged view and focuses r
   await expect(page.getByTestId('staff-workspace-selector')).toHaveCount(0);
   await page.unroute('**/api/session'); await page.goto('/teacher');
   await page.getByTestId('staff-entry-open-home').click(); await expect(teacher(page)).toBeVisible();
+});
+
+test('an owner staff evidence link retains its verified tab scope across full navigation and return', async ({ page }, testInfo) => {
+  test.skip(!localTarget, 'Disposable local grant only');
+  await login(page);
+  await page.locator('[data-product-support-trigger]').click();
+  const support = page.getByRole('dialog', { name: '公開案内の会話', exact: true });
+  await support.getByRole('textbox', { name: '製品についての質問', exact: true }).fill('講師や学校管理者のログイン入口は？');
+  await support.getByRole('checkbox', { name: 'Bot専用のCloudflare送信に同意する', exact: true }).check();
+  await support.getByTestId('support-submit').click();
+  const evidence = support.getByTestId('support-source');
+  await expect(evidence).toHaveCount(1);
+  await evidence.locator('summary').click();
+  await evidence.getByRole('link', { name: 'この根拠を別のページで読む', exact: true }).click();
+  await expect(page).toHaveURL(/\/public\?supportSource=staff-login-entry$/);
+  const body = page.getByTestId('product-support-source-body');
+  await expect(body).toContainText('staff-login-entry');
+  await expect(body).toContainText('仕様版');
+  await expect(body).toContainText('/teacher');
+  await page.screenshot({ path: testInfo.outputPath('owner-staff-evidence.png'), animations: 'disabled' });
+  await page.reload(); await expect(body).toBeVisible();
+  await page.getByRole('button', { name: '自分の画面へ戻る', exact: true }).click();
+  await expect(teacher(page)).toBeVisible(); await expect(selector(page)).toHaveValue('instructor');
+  const rawIdentity = await page.request.get('/api/session');
+  expect(await rawIdentity.json()).toMatchObject({ uid: 'long-term-ui-320', role: 'STUDENT' });
 });
