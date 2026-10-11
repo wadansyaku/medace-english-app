@@ -35,13 +35,21 @@ export interface ProductFeedbackList {
   canManage: boolean;
   deploymentRevision: string | null;
 }
+export interface ProductFeedbackStatusSummary {
+  counts: Record<ProductFeedbackStatus, number>;
+  canManage: boolean;
+  scope: 'own-current-organization' | 'all';
+  actualDeploymentRevision: string | null;
+  fetchedAt: number;
+}
 export type ProductFeedbackAction =
   | { type: 'triage'; priority: ProductFeedbackPriority; acceptance: string }
   | { type: 'prepare-handoff' }
   | { type: 'record-fix'; revision: string; note: string }
   | { type: 'retest'; passed: boolean; note: string };
 export type ProductFeedbackRequest =
-  | { action: 'list'; cursor?: string }
+  | { action: 'list'; cursor?: string; status?: ProductFeedbackStatus }
+  | { action: 'status-summary' }
   | { action: 'get'; id: string }
   | { action: 'create'; id: string; input: ProductFeedbackInput; privacyConfirmed: true }
   | { action: 'advance'; id: string; expectedRevision: number; mutationId: string; change: ProductFeedbackAction };

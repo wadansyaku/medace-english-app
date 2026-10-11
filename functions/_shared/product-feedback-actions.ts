@@ -1,4 +1,4 @@
-import type { ProductFeedbackReport, ProductFeedbackRequest } from '../../contracts/productFeedback';
+import type { ProductFeedbackReport, ProductFeedbackRequest, ProductFeedbackStatus, ProductFeedbackStatusSummary } from '../../contracts/productFeedback';
 import { advanceFeedback, validateFeedbackInput } from '../../shared/productFeedback';
 import { OrganizationRole, UserRole } from '../../types';
 import { requireRole } from './auth';
@@ -14,11 +14,16 @@ const object = (value: unknown, keys: string[]): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 const id = (value: unknown): string => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : invalid();
+const statuses: ProductFeedbackStatus[] = ['NEW', 'TRIAGED', 'HANDOFF_PREPARED', 'FIXED', 'RETEST_PASS', 'RETEST_FAIL'];
+const isStatus = (value: unknown): value is ProductFeedbackStatus => typeof value === 'string' && statuses.includes(value as ProductFeedbackStatus);
 export const validateProductFeedbackRequest = (value: unknown): ProductFeedbackRequest => {
-  const body = object(value, ['action','cursor','id','input','privacyConfirmed','expectedRevision','mutationId','change']);
+  const body = object(value, ['action','cursor','status','id','input','privacyConfirmed','expectedRevision','mutationId','change']);
   if (body.action === 'list') {
-    object(body, ['action','cursor']);
+    object(body, ['action','cursor','status']);
     if (body.cursor !== undefined && (typeof body.cursor !== 'string' || body.cursor.length > 512)) invalid();
+    if (body.status !== undefined && !isStatus(body.status)) invalid();
+  } else if (body.action === 'status-summary') {
+    object(body, ['action']);
   } else if (body.action === 'get') {
     object(body, ['action','id']); id(body.id);
   } else if (body.action === 'create') {
@@ -61,17 +66,27 @@ export const handleProductFeedback = async (env: AppEnv, user: DbUserRow, raw: u
   }
   const body = validateProductFeedbackRequest(raw);
   const authorized = (row: Row) => { if (!admin && (row.reporter_user_id !== user.id || row.org_id !== orgId)) throw new HttpError(404, '報告が見つかりません。'); };
-  if (body.action === 'list') {
-    let cursor: { at: number; id: string } | undefined;
-    if (body.cursor !== undefined) {
-      try { const value = object(JSON.parse(atob(body.cursor)), ['at','id']); id(value.id); if (!Number.isSafeInteger(value.at) || Number(value.at) < 0) invalid(); cursor = value as typeof cursor; } catch { invalid(); }
+  if (body.action === 'status-summary') {
+    const result = await env.DB.prepare(`SELECT status,COUNT(*) AS count FROM product_feedback_reports WHERE ${admin ? '1=1' : 'reporter_user_id=? AND org_id=?'} GROUP BY status`).bind(...(admin ? [] : [user.id, orgId])).all<{ status: string; count: number }>();
+    if (result.success === false || !result.results) throw new Error('Feedback status read failed');
+    const counts: ProductFeedbackStatusSummary['counts'] = { NEW: 0, TRIAGED: 0, HANDOFF_PREPARED: 0, FIXED: 0, RETEST_PASS: 0, RETEST_FAIL: 0 };
+    for (const row of result.results) {
+      if (!isStatus(row.status) || !Number.isSafeInteger(row.count) || row.count < 0) throw new Error('Feedback status read failed');
+      counts[row.status] = row.count;
     }
-    const filters = [admin ? '1=1' : 'reporter_user_id=? AND org_id=?', ...(cursor ? ['(updated_at < ? OR (updated_at = ? AND id < ?))'] : [])];
-    const values: unknown[] = admin ? [] : [user.id, orgId]; if (cursor) values.push(cursor.at, cursor.at, cursor.id);
+    return { counts, canManage: admin, scope: admin ? 'all' : 'own-current-organization', actualDeploymentRevision: env.DEPLOYMENT_SHA || null, fetchedAt: Date.now() } satisfies ProductFeedbackStatusSummary;
+  }
+  if (body.action === 'list') {
+    let cursor: { at: number; id: string; status?: ProductFeedbackStatus } | undefined;
+    if (body.cursor !== undefined) {
+      try { const value = object(JSON.parse(atob(body.cursor)), ['at','id','status']); id(value.id); if (!Number.isSafeInteger(value.at) || Number(value.at) < 0 || value.status !== body.status) invalid(); cursor = value as typeof cursor; } catch { invalid(); }
+    }
+    const filters = [admin ? '1=1' : 'reporter_user_id=? AND org_id=?', ...(body.status ? ['status=?'] : []), ...(cursor ? ['(updated_at < ? OR (updated_at = ? AND id < ?))'] : [])];
+    const values: unknown[] = admin ? [] : [user.id, orgId]; if (body.status) values.push(body.status); if (cursor) values.push(cursor.at, cursor.at, cursor.id);
     const result = await env.DB.prepare(`SELECT * FROM product_feedback_reports WHERE ${filters.join(' AND ')} ORDER BY updated_at DESC,id DESC LIMIT 101`).bind(...values).all<Row>();
     if (result.success === false || !result.results) throw new Error('Feedback list read failed');
     const rows = result.results.slice(0,100); const last = rows.at(-1);
-    return { reports: rows.map(row => summary(row,user)), canManage: admin, deploymentRevision: env.DEPLOYMENT_SHA || null, nextCursor: result.results.length > 100 && last ? btoa(JSON.stringify({ at: last.updated_at, id: last.id })) : null };
+    return { reports: rows.map(row => summary(row,user)), canManage: admin, deploymentRevision: env.DEPLOYMENT_SHA || null, nextCursor: result.results.length > 100 && last ? btoa(JSON.stringify({ at: last.updated_at, id: last.id, ...(body.status ? { status: body.status } : {}) })) : null };
   }
   if (body.action === 'create') {
     const input = validateFeedbackInput(body.input); const fingerprint = canonical(input); const now = Date.now();
