@@ -1383,6 +1383,12 @@ export interface OrganizationMemberSummary {
   updatedAt: number;
 }
 
+export interface OrganizationEligibleInstructor {
+  userUid: string;
+  displayName: string;
+  email: string;
+}
+
 export interface OrganizationAuditEvent {
   id: number;
   organizationId: string;
@@ -1401,6 +1407,9 @@ export interface OrganizationSettingsSnapshot {
   nameKey: string;
   subscriptionPlan: SubscriptionPlan;
   members: OrganizationMemberSummary[];
+  // Separate operational eligibility from canonical membership and user roles.
+  // Older/local snapshots may omit this field; an explicit empty list is final.
+  eligibleInstructors?: OrganizationEligibleInstructor[];
   cohorts: OrganizationCohort[];
   instructorCohorts: Record<string, string[]>;
   auditEvents: OrganizationAuditEvent[];
