@@ -1,0 +1,23 @@
+# 既存本人への明示的な業務画面アクセス
+
+既存ユーザーの学習者ID・パスワード・プラン・正本所属を保持し、別の明示UID grantで講師・学校管理者・サービス管理者を使い分けるローカル候補。メール一致による昇格、新しい本人アカウント、一般的な複数所属設計は追加しない。実対象の教室は未確定で、本番migration・grant設定・公開・実本人ログインはこの候補では行っていない。旧公開禁止は解除済みであり、対象確認と同一SHAの通常gateを維持する。
+
+## 認可の境界
+
+- 0064はgrant表と原本アップロードleaseのnullable context列だけを追加する。個人UID・メール・grant INSERTをmigrationへ含めない。既存0063の後に適用する。
+- 未指定/personalは従来の本人で学習する。専用入口はパスワード確認後に最新のACTIVE grantを読む。grantがない職員は従来の正本ACTIVE所属/既存ADMIN条件を維持し、失効grantがある場合は従来権限へ自動fallbackしない。
+- リクエストごとにworkspace・UID・教室・grantVersionを指定する。Cookieには選択役割を保存しない。クライアントの指定から権限を作らず、サーバーが現在のgrantと照合する。session GETだけは選択した画面の現在versionを発見できる。
+- 講師は固定のACTIVE教室と担当生徒だけを読む。担当なしは空。学校管理者は固定教室全体、サービス管理者は全教室。actorの教室再読込はgrantを再確認し、学習者subjectの正本所属照合と混同しない。
+- 講師候補/職員一覧には固定教室の有効grantを追加する。既存所属と同UIDは重複しない。元のSTUDENT行や所属・学習履歴は書き換えない。
+- modern sessionのbare ID短縮と誤secretは拒否し、他人の有効sessionを削除しない。token_hashが本当にNULLの旧sessionだけ互換を維持する。ログアウトも秘密を確認してから自分の行を削除する。
+- 明示grantの原本uploadはissuerのUID・workspace・教室・versionとCookieを照合し、使用済みleaseの確認も同じ条件を要求する。body確認後/保存commitでも現在grantを確認する。失効やversion変更で原本receiptを変更しない。従来のcontextなしleaseは従来契約を維持する。
+
+## 切替と再訪
+
+職員画面に現在の役割・教室と切替を表示する。単一の明示職員grantでも自分の学習へ戻れる。一般生徒に職員リンクを追加しない。選択の保存はタブ内sessionStorageだけで、UID/workspace/org/versionの組で画面・Bot・feedbackを分ける。切替開始で旧画面をunmountし、古いAPI応答・プロフィール更新・案内・未保存入力を表示しない。切替後はselect、個人学習のmain、失敗時の回復案内へfocusする。失敗で旧職員画面へ戻さず、再訪時にサーバーで確認し直す。
+
+## 検証と公開前の残件
+
+独立cloneでNode22・型・focused unitを確認。実SQLite unitは3役の認可、旧Cookie互換、改ざん/失効、upload競合とreceipt保持を検証する。標準API runnerに同じ既存合成STUDENTへのgrant回帰を登録し、標準smokeに5viewport/切替/共有Cookie2タブ/履歴/失敗回復を登録する。ローカルfixtureは既存の合成学習者を再利用し、外部DBへ適用しない。最終実行結果・固定SHA・画像は独立deliveryへ記録し、親の正式CI/preview/productionの証拠と区別する。
+
+公開前に、対象教室の本人回答、独立レビュー、統合先Botのreadonly actor resolverへのworkspace投影接続、同一統合SHAの全gate、0063→0064の段階適用、明示UID grant設定と既存データ保持確認が必要。通常認証/sessionの従来補完やstreak更新を含め、全認証がread-onlyとは説明しない。一般の保存要求を受理した後の切替はサーバー処理の取り消しを保証せず、クライアントは旧応答を捨てる。原本uploadのgrant再確認は別途commitまで検証する。実教室運用・実AI・Safari/iPhone・本番本人操作は未受入。

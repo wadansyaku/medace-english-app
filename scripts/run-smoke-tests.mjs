@@ -310,6 +310,7 @@ const cloudflareFiles = [
   'tests/smoke/guest-learning.smoke.spec.ts',
   'tests/smoke/auth-focused.smoke.spec.ts',
   'tests/smoke/staff-login.smoke.spec.ts',
+  'tests/smoke/owner-workspace.smoke.spec.ts',
   'tests/smoke/ui-audit.smoke.spec.ts',
   'tests/smoke/grammar-answer-isolation.smoke.spec.ts',
   'tests/smoke/worksheet-reliability.smoke.spec.ts',

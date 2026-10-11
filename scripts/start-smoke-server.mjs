@@ -149,6 +149,11 @@ try {
     '--file', path.join(cwd, 'tests/fixtures/graduated-review-smoke.sql'),
   ]);
   await runCommand(graduatedFixture.command, graduatedFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
+  const ownerFixture = createNodeToolCommand('wrangler', [
+    'd1', 'execute', 'medace-db', '--local', '--persist-to', persistDir,
+    '--file', path.join(cwd, 'tests/fixtures/owner-workspace-smoke.sql'),
+  ]);
+  await runCommand(ownerFixture.command, ownerFixture.args, { ...baseEnv, CI: '1' }, ['ignore', 'ignore', 'ignore']);
 
   console.log(`Starting smoke server on http://127.0.0.1:${port} ...`);
   // This disposable runtime exercises the live writing contract with a
