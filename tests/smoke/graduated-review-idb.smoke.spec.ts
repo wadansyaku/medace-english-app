@@ -376,3 +376,43 @@ test('native IDB failed read or learning-plan load rejects without reporting zer
   });
   expect(result).toEqual({ planRejected: true, dbCalls: 0, legacyNormalCount: 10, readRejected: true, unchanged: true });
 });
+
+test('native IDB QUIZ-only graduation remains an ordinary new word on identical default and daily start replays', async ({ page, context }) => {
+  await setup(page, context);
+  const result = await page.evaluate(async () => {
+    const fixture = (window as FixtureWindow).graduatedFixture;
+    const bookId = 'quiz-only-book';
+    const wordId = 'quiz-only-word';
+    const tx = fixture.db.transaction([fixture.support.STORES.BOOKS, fixture.support.STORES.WORDS, fixture.support.STORES.HISTORY], 'readwrite');
+    const done = fixture.support.waitForTransaction(tx);
+    tx.objectStore(fixture.support.STORES.BOOKS).put({ id: bookId, title: 'Quiz-only fixture', wordCount: 1,
+      catalogSource: 'USER_GENERATED', accessScope: 'ALL_PLANS', description: JSON.stringify({ createdBy: 'graduate-student' }) });
+    tx.objectStore(fixture.support.STORES.WORDS).put({ id: wordId, bookId, number: 1, word: 'word', definition: 'meaning' });
+    tx.objectStore(fixture.support.STORES.HISTORY).put({ id: `graduate-student_${wordId}`, data: {
+      wordId, bookId, status: 'graduated', interactionSource: 'QUIZ', nextReviewDate: fixture.now - 1,
+      lastStudiedAt: fixture.now - 100_000, interval: 30, easeFactor: 2.5, attemptCount: 5, correctCount: 5, totalResponseTimeMs: 50,
+    } });
+    await done;
+    const overview = await fixture.learning.getBookStudyOverview(fixture.context, 'graduate-student', bookId);
+    const firstBook = await fixture.start('quiz-only-default', bookId, 10, undefined, 'study', 'BOOK_DEFAULT');
+    const beforeBookReplay = await fixture.snapshot();
+    const replayBook = await fixture.start('quiz-only-default', bookId, 10, undefined, 'study', 'BOOK_DEFAULT');
+    const afterBookReplay = await fixture.snapshot();
+    const task = { mode: 'study', intentType: 'TODAY_FOCUS', label: 'Quiz-only daily fixture', selectionPolicy: 'DUE_FIRST',
+      limit: 10, preferredBookIds: [bookId] } as import('../../types').LearningTaskIntent;
+    const firstDaily = await fixture.learning.getDailySessionWords(fixture.context, 'graduate-student', 10, task, 'quiz-only-daily');
+    const beforeDailyReplay = await fixture.snapshot();
+    const replayDaily = await fixture.learning.getDailySessionWords(fixture.context, 'graduate-student', 10, task, 'quiz-only-daily');
+    const afterDailyReplay = await fixture.snapshot();
+    const project = (words: import('../../types').WordData[]) => words.map((word) => ({ id: word.id, long: !!word.longTermReview }));
+    return { overview, firstBook: project(firstBook), replayBook: project(replayBook), firstDaily: project(firstDaily), replayDaily: project(replayDaily),
+      bookReplayUnchanged: JSON.stringify(beforeBookReplay) === JSON.stringify(afterBookReplay),
+      dailyReplayUnchanged: JSON.stringify(beforeDailyReplay) === JSON.stringify(afterDailyReplay) };
+  });
+  expect(result.overview).toMatchObject({ totalCount: 1, studiedCount: 0, newCount: 1, dueCount: 0, longTermReviewAvailableCount: 0 });
+  expect(result.firstBook).toEqual([{ id: 'quiz-only-word', long: false }]);
+  expect(result.replayBook).toEqual(result.firstBook);
+  expect(result.firstDaily).toEqual(result.firstBook);
+  expect(result.replayDaily).toEqual(result.firstDaily);
+  expect(result).toMatchObject({ bookReplayUnchanged: true, dailyReplayUnchanged: true });
+});

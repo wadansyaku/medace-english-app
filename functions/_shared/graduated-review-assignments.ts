@@ -101,7 +101,7 @@ const readCurrentStartWords = async (
         || !Number.isFinite(row.current_due) || !Number.isFinite(row.current_last) || row.current_due! > now) return [];
       return [{ ...toWordData(row), longTermReview: true }];
     }
-    if (row.current_status === 'graduated') return [];
+    if (row.current_source === 'STUDY' && row.current_status === 'graduated') return [];
     if (options.taskIntent?.selectionPolicy === 'BOOK_DUE_ONLY'
       && (row.current_source !== 'STUDY' || !Number.isFinite(row.current_due) || row.current_due! > now
         || !(row.current_attempts! > 0 || row.current_interval! > 0))) return [];

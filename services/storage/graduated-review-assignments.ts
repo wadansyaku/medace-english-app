@@ -149,7 +149,7 @@ export const allocateLocalGraduatedReviewSession = async ({
               if (graduatedIds.has(word.id) && !isDueGraduatedHistory(current || {
                 status: 'new', interactionSource: 'STUDY', nextReviewDate: Infinity, lastStudiedAt: 0,
               }, now)) return [];
-              if (!graduatedIds.has(word.id) && (current?.status === 'graduated'
+              if (!graduatedIds.has(word.id) && ((current?.interactionSource === 'STUDY' && current.status === 'graduated')
                 || (selectionPolicy === 'BOOK_DUE_ONLY' && (!current || !isMasteryProgressHistory(current)
                   || !Number.isFinite(current.nextReviewDate) || !isDueMasteryHistory(current, now))))) return [];
               return [{ ...projectWordHintAssetsForLearner(word), ...(graduatedIds.has(word.id) ? { longTermReview: true } : {}) }];

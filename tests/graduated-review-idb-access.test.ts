@@ -41,4 +41,15 @@ describe('local graduated-review authorization snapshot', () => {
     expect(buildBookSessionWords({ words, histories, limit: 10, now: 10, selectionPolicy: 'BOOK_NEW_ONLY', wordRange: { start: 1, end: 2 } })
       .map((word) => word.id)).toEqual(['w2']);
   });
+
+  it('keeps a QUIZ-only graduated word in ordinary default and new-only selection while strict due-only excludes it', () => {
+    const words: WordData[] = [{ id: 'quiz-word', bookId: 'book', number: 1, word: 'word', definition: 'meaning' }];
+    const histories: LearningHistory[] = [{ wordId: 'quiz-word', bookId: 'book', status: 'graduated', interactionSource: 'QUIZ',
+      lastStudiedAt: 1, nextReviewDate: 2, interval: 30, easeFactor: 2.5, attemptCount: 5, correctCount: 5, totalResponseTimeMs: 0 }];
+    for (const selectionPolicy of ['BOOK_DEFAULT', 'BOOK_NEW_ONLY'] as const) {
+      expect(buildBookSessionWords({ words, histories, limit: 10, now: 10, selectionPolicy, wordRange: { start: 1, end: 1 } })
+        .map((word) => word.id)).toEqual(['quiz-word']);
+    }
+    expect(buildBookSessionWords({ words, histories, limit: 10, now: 10, selectionPolicy: 'BOOK_DUE_ONLY' })).toEqual([]);
+  });
 });

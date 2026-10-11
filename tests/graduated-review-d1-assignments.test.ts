@@ -232,6 +232,24 @@ describe('graduated review production SQL on real SQLite transactions', () => {
     expect(words.every(word => word.longTermReview)).toBe(true); expect(new Set(ids(words)).size).toBe(words.length);
   });
 
+  it.each(['book-default', 'daily'] as const)('preserves a quiz-only graduated word as ordinary new study on %s initial start and replay', async route => {
+    const f = setup(0);
+    f.sqlite.exec(`DELETE FROM words WHERE book_id='a' AND id!='a-001';
+      UPDATE learning_histories SET interaction_source='QUIZ',status='graduated' WHERE word_id='a-001'`);
+    expect(await handleGetBookStudyOverview(f.env, f.user, 'a')).toMatchObject({
+      totalCount: 1, studiedCount: 0, newCount: 1, dueCount: 0, longTermReviewAvailableCount: 0,
+    });
+    const intent = task('a', { selectionPolicy: 'BOOK_DEFAULT', preferredBookIds: ['a'] });
+    const start = () => route === 'book-default'
+      ? handleGetBookSession(f.env, f.user, 'a', 20, intent, 'quiz-source-ordinary')
+      : handleGetDailySessionWords(f.env, f.user, 20, intent, 'quiz-source-ordinary');
+    const first = await start(); const retry = await start();
+    expect(ids(first)).toEqual(['a-001']); expect(ids(retry)).toEqual(['a-001']);
+    expect(graduated(first)).toHaveLength(0); expect(graduated(retry)).toHaveLength(0);
+    expect(count(f, 'long_term_review_starts')).toBe(1); expect(count(f, 'graduated_review_allocations')).toBe(0);
+    expect(JSON.parse(String(f.sqlite.prepare('SELECT result_word_ids_json FROM long_term_review_starts').get()!.result_word_ids_json))).toEqual(['a-001']);
+  });
+
   it('rejects future, quiz, foreign-user, mismatched-book and unapproved/private candidates in both daily sessions and overview', async () => {
     const f = setup(0);
     f.sqlite.exec(`UPDATE learning_histories SET next_review_date=${now + 1} WHERE word_id='a-001';
