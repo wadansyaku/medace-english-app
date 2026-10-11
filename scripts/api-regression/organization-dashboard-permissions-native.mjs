@@ -58,6 +58,16 @@ try {
   };
   await denied('permission-teacher',{},'canonical assigned teacher');
   await denied('permission-unassigned-teacher',{},'canonical unassigned teacher');
+  if(process.env.MEDACE_VERIFY_WORKSPACE_REVOCATION==='1') {
+    check(!(await call('permission-teacher')).data.errorCode,'ordinary teacher scope denial remains unmarked');
+    for(const headers of [
+      {...permissionWorkspaceHeaders('instructor'),'X-MedAce-Workspace-Identity':'permission-foreign'},
+      {...permissionWorkspaceHeaders('instructor'),'X-MedAce-Workspace-Org':'permission-org-b'},
+    ]) {
+      const scope=await call('permission-owner','getAllStudentsProgress',headers);
+      check(scope.status===403&&!scope.data.errorCode,'forged identity or classroom denial remains unmarked');
+    }
+  }
   await denied('permission-owner',permissionWorkspaceHeaders('instructor'),'owner unassigned teacher');
   const noAssigned=await call('permission-owner','getAllStudentsProgress',permissionWorkspaceHeaders('instructor'));
   check(noAssigned.status===200&&noAssigned.data.length===0,'owner unassigned progress stays empty');
@@ -85,6 +95,12 @@ try {
   ]) {
     await db.prepare(sql).run();
     await denied('permission-owner',permissionWorkspaceHeaders('group-admin'),label);
+    if(process.env.MEDACE_VERIFY_WORKSPACE_REVOCATION==='1') {
+      const denied=await call('permission-owner','getOrganizationDashboardSnapshot',permissionWorkspaceHeaders('group-admin'));
+      check(denied.status===403&&denied.data.errorCode==='WORKSPACE_ACCESS_REVOKED','latest grant loss has an explicit scoped machine marker');
+      check(JSON.stringify(denied.data.workspaceContext)===JSON.stringify({uid:'permission-owner',workspace:'group-admin',organizationId:'permission-org-a',grantVersion:7}),
+        'machine marker identifies the rejected request context instead of a newer profile');
+    }
     await db.batch([db.prepare("UPDATE workspace_access_grants SET status='ACTIVE',grant_version=7,school_admin_access=1 WHERE user_id='permission-owner'"),
       db.prepare("UPDATE organizations SET status='ACTIVE' WHERE id='permission-org-a'")]);
   }
