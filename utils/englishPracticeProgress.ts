@@ -13,6 +13,7 @@ import {
   getEnglishPracticeLaneLabel,
 } from '../shared/englishPractice';
 import { getReadingQuestionKindLabel, type ReadingQuestionKind } from './readingPractice';
+import { normalizeCuratedPracticeReview, type CuratedPracticeReview } from './englishPracticeReview';
 
 export { ENGLISH_PRACTICE_LANE_IDS, getEnglishPracticeLaneLabel };
 export type { EnglishPracticeAttemptMode, EnglishPracticeLaneId };
@@ -40,6 +41,8 @@ export interface EnglishPracticeAttemptInput {
   syncStatus?: EnglishPracticeAttemptSyncStatus;
   // Retained on this device only; the current remote attempt contract stores scope/level.
   curatedQuestionId?: string;
+  /** Question, answer and feedback snapshot; excluded from the cloud attempt payload. */
+  review?: CuratedPracticeReview;
 }
 
 export interface EnglishPracticeAttemptRecord extends EnglishPracticeAttemptInput {
@@ -202,6 +205,7 @@ const normalizeAttemptRecord = (attempt: EnglishPracticeAttemptRecord): EnglishP
   ...attempt,
   clientAttemptId: attempt.clientAttemptId || attempt.id,
   syncStatus: attempt.syncStatus === 'pending' ? 'pending' : 'synced',
+  review: normalizeCuratedPracticeReview(attempt.review, attempt),
 });
 
 const normalizeProgress = (
@@ -489,26 +493,38 @@ export const loadEnglishPracticeProgress = (
   if (!raw) return createEmptyEnglishPracticeProgress(userUid);
 
   try {
-    return normalizeProgress(userUid, JSON.parse(raw) as Partial<EnglishPracticeProgress>);
+    const parsed = JSON.parse(raw) as Partial<EnglishPracticeProgress> | null;
+    if (!parsed || parsed.userUid !== userUid) return createEmptyEnglishPracticeProgress(userUid);
+    return normalizeProgress(userUid, parsed);
   } catch {
     return createEmptyEnglishPracticeProgress(userUid);
   }
 };
 
+export interface EnglishPracticeSaveResult {
+  progress: EnglishPracticeProgress;
+  persisted: boolean;
+}
+
+export const persistEnglishPracticeProgress = (
+  progress: EnglishPracticeProgress,
+  storage: EnglishPracticeStorage | null = getStorage(),
+): EnglishPracticeSaveResult => {
+  const normalized = normalizeProgress(progress.userUid, progress);
+  if (!storage) return { progress: normalized, persisted: false };
+  try {
+    storage.setItem(getStorageKey(normalized.userUid), JSON.stringify(normalized));
+    return { progress: normalized, persisted: true };
+  } catch {
+    return { progress: normalized, persisted: false };
+  }
+};
+
+// Preserve the existing progress-returning contract for callers that do not render save state.
 export const saveEnglishPracticeProgress = (
   progress: EnglishPracticeProgress,
   storage: EnglishPracticeStorage | null = getStorage(),
-): EnglishPracticeProgress => {
-  const normalized = normalizeProgress(progress.userUid, progress);
-  if (storage) {
-    try {
-      storage.setItem(getStorageKey(normalized.userUid), JSON.stringify(normalized));
-    } catch {
-      return normalized;
-    }
-  }
-  return normalized;
-};
+): EnglishPracticeProgress => persistEnglishPracticeProgress(progress, storage).progress;
 
 export const clearEnglishPracticeProgress = (
   userUid: string,

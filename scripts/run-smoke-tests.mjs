@@ -313,6 +313,7 @@ const cloudflareFiles = [
   'tests/smoke/owner-workspace.smoke.spec.ts',
   'tests/smoke/ui-audit.smoke.spec.ts',
   'tests/smoke/grammar-answer-isolation.smoke.spec.ts',
+  'tests/smoke/english-practice-review.smoke.spec.ts',
   'tests/smoke/worksheet-reliability.smoke.spec.ts',
   'tests/smoke/writing-ops-recovery.smoke.spec.ts',
   'tests/smoke/writing-drafts-budget.smoke.spec.ts',
