@@ -41,6 +41,7 @@ import {
   type CuratedTranslationPracticeItem,
 } from '../../utils/translationQuestionBank';
 import type { JapaneseTranslationOrderAssessment } from '../../utils/japaneseTranslationOrder';
+import { createGrammarPracticeReview, createTranslationPracticeReview } from '../../utils/englishPracticeReview';
 import { learningService } from '../../services/learning';
 import {
   ENGLISH_PRACTICE_SAMPLE_BOOK_ID,
@@ -48,13 +49,14 @@ import {
   loadEnglishPracticeProgress,
   markEnglishPracticeAttemptSynced,
   recordEnglishPracticeAttempt,
-  saveEnglishPracticeProgress,
+  persistEnglishPracticeProgress,
   summarizeEnglishPracticeProgress,
   toEnglishPracticeStoragePayload,
   type EnglishPracticeAttemptInput,
 } from '../../utils/englishPracticeProgress';
 import ReadingPracticeView from './ReadingPracticeView';
 import JapaneseTranslationFeedbackCard from './JapaneseTranslationFeedbackCard';
+import EnglishPracticeReviewHistory from './EnglishPracticeReviewHistory';
 import {
   buildReadingPracticePassages,
   getReadingQuestionKindLabel,
@@ -247,6 +249,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
   const [practiceSyncRetry, setPracticeSyncRetry] = useState(0);
   const [practiceSyncing, setPracticeSyncing] = useState(false);
   const [practiceProgress, setPracticeProgress] = useState(() => loadEnglishPracticeProgress(user.uid));
+  const [practiceLocalSaveFailed, setPracticeLocalSaveFailed] = useState(false);
+  const [practiceLocalSaveRetry, setPracticeLocalSaveRetry] = useState(0);
   const pendingPracticeSyncRef = React.useRef<Set<string>>(new Set());
   const practiceSyncRetryQueuedRef = React.useRef(false);
 
@@ -276,20 +280,28 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
     () => selectDefaultScopeIds(getGrammarScopesForPracticeSelection({ mode: 'GRAMMAR_CLOZE' }), practiceLevel),
   );
 
+  const activePracticeUidRef = React.useRef(user.uid);
+  activePracticeUidRef.current = user.uid;
   React.useEffect(() => {
+    pendingPracticeSyncRef.current.clear();
+    practiceSyncRetryQueuedRef.current = false;
+    setPracticeSyncError(null);
+    setPracticeSyncing(false);
     setPracticeProgress(loadEnglishPracticeProgress(user.uid));
   }, [user.uid]);
 
   React.useEffect(() => {
-    saveEnglishPracticeProgress(practiceProgress);
+    const result = persistEnglishPracticeProgress(practiceProgress);
+    setPracticeLocalSaveFailed(!result.persisted && practiceProgress.attempts.some(attempt => attempt.review));
     // Release completed requests after the synced marker has reached local storage.
     for (const attempt of practiceProgress.attempts) {
       if (attempt.syncStatus === 'synced') pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
     }
     setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
-  }, [practiceProgress]);
+  }, [practiceProgress, practiceLocalSaveRetry]);
 
   React.useEffect(() => {
+    if (practiceProgress.userUid !== user.uid) return;
     const pendingAttempts = getPendingEnglishPracticeAttempts(practiceProgress)
       .filter((attempt) => !pendingPracticeSyncRef.current.has(attempt.clientAttemptId))
       .slice(0, 8);
@@ -306,6 +318,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         user.uid,
         toEnglishPracticeStoragePayload(attempt),
       ).then((result) => {
+        if (activePracticeUidRef.current !== user.uid) return;
         if (result?.projectionStatus === 'PENDING') {
           pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
           setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
@@ -313,8 +326,10 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           return;
         }
         if (result?.projectionStatus !== 'COMPLETE') throw new Error('英語演習の保存と進捗を確認できませんでした。');
-        setPracticeProgress((current) => markEnglishPracticeAttemptSynced(current, attempt.clientAttemptId));
+        setPracticeProgress((current) => current.userUid === user.uid
+          ? markEnglishPracticeAttemptSynced(current, attempt.clientAttemptId) : current);
       }).catch((error) => {
+        if (activePracticeUidRef.current !== user.uid) return;
         console.error('English practice attempt sync failed', error);
         pendingPracticeSyncRef.current.delete(attempt.clientAttemptId);
         setPracticeSyncing(pendingPracticeSyncRef.current.size > 0);
@@ -577,6 +592,8 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       scopeLabelJa: item.grammarScope.labelJa,
       level: item.feedback?.level ?? practiceLevel,
       curatedQuestionId: item.source === 'curated' ? item.feedback?.questionId : undefined,
+      review: createGrammarPracticeReview(item, item.kind === 'GRAMMAR_CLOZE'
+        ? grammarSelections[item.id] ?? '' : grammarOrders[item.id] ?? [], correct),
     });
   };
 
@@ -595,6 +612,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       scopeLabelJa: item.grammarScope.labelJa,
       level: item.level,
       curatedQuestionId: item.questionId,
+      review: createTranslationPracticeReview(item, 'JA_TRANSLATION_ORDER', translationOrders[item.id] ?? [], assessment),
     });
   };
 
@@ -619,6 +637,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
       score: assessment.feedback?.score, maxScore: assessment.feedback?.maxScore,
       scopeId: item.grammarScope.scopeId, scopeLabelJa: item.grammarScope.labelJa,
       level: item.level, curatedQuestionId: item.questionId,
+      review: createTranslationPracticeReview(item, 'JA_TRANSLATION_INPUT', input, assessment),
     }, assessment.feedback ? { translationFeedback: assessment.feedback } : undefined);
   };
 
@@ -1594,6 +1613,13 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
 
   const renderPracticeNotices = () => (
     <>
+      {practiceLocalSaveFailed && practiceProgress.userUid === user.uid && (
+        <section role="status" aria-live="polite" data-testid="english-practice-local-save-error" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p>この端末に答案・問題の詳細を保存できませんでした。この画面では見直せますが、再読込すると失われる可能性があります。</p>
+          <button type="button" onClick={() => setPracticeLocalSaveRetry(value => value + 1)}
+            className="mt-3 min-h-11 rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold">端末の保存を再試行</button>
+        </section>
+      )}
       {practiceSyncError && (getPendingEnglishPracticeAttempts(practiceProgress).length > 0 || practiceSyncing) && (
         <section role="alert" data-testid="english-practice-save-error" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
           <p>{practiceSyncing ? '同じ回答で保存と進捗を再確認しています。完了までお待ちください。' : practiceSyncError}</p>
@@ -1650,6 +1676,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           {renderPracticeMeta()}
           {renderPracticeNotices()}
           {renderActiveLane()}
+          <EnglishPracticeReviewHistory attempts={practiceProgress.userUid === user.uid ? practiceProgress.attempts : []} />
         </div>
       </div>
     );
@@ -1685,6 +1712,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
           {renderPracticeMeta()}
           {renderPracticeNotices()}
           {renderActiveLane()}
+          <EnglishPracticeReviewHistory attempts={practiceProgress.userUid === user.uid ? practiceProgress.attempts : []} />
         </div>
       </div>
     );
@@ -1728,6 +1756,7 @@ const EnglishPracticeHub: React.FC<EnglishPracticeHubProps> = ({
         {renderPracticeMeta()}
         {renderPracticeNotices()}
         {renderActiveLane()}
+        <EnglishPracticeReviewHistory attempts={practiceProgress.userUid === user.uid ? practiceProgress.attempts : []} />
       </section>
     </div>
   );

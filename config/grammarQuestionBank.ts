@@ -3,6 +3,8 @@ import { EnglishLevel, type GrammarCurriculumScopeId } from '../types';
 /** Newly authored exercises, never copied from licensed materials or AI review queues. */
 export interface OriginalGrammarQuestion {
   id: string;
+  /** Increment when this question's prompt, accepted answers or feedback changes. */
+  version: number;
   scopeId: GrammarCurriculumScopeId;
   level: EnglishLevel;
   recommendedGradeJa: string;
@@ -21,6 +23,7 @@ export interface OriginalGrammarQuestion {
 
 export interface GrammarQuestionFeedback {
   questionId: string;
+  questionVersion?: number;
   level: EnglishLevel;
   recommendedGradeJa: string;
   translationJa: string;
@@ -43,7 +46,7 @@ const question = (
   alternateOrders: readonly (readonly number[])[] = [],
   alternativeNotesJa: readonly string[] = [],
 ): OriginalGrammarQuestion => ({
-  id: `grammar-original-20261003-${key}`, scopeId, level,
+  id: `grammar-original-20261003-${key}`, version: 1, scopeId, level,
   recommendedGradeJa: gradeByLevel[level], contextJa, clozeSentence, answer,
   options: [answer, ...distractors.map(([text]) => text)],
   sourceSentence: clozeSentence.replace('____', answer), translationJa, explanationJa,

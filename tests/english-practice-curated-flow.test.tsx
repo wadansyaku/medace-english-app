@@ -90,6 +90,36 @@ beforeEach(() => {
 });
 
 describe('authored grammar in the practice hub', () => {
+  it('keeps pending answers and review details with their UID during a user change', async () => {
+    let finish!: (value: unknown) => void;
+    api.recordEnglishPracticeAttempt.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    let tree = await settle(); const source = authoredQuestion(tree);
+    button(tree, source.answer).props.onClick(); tree = render();
+    button(tree, '判定する').props.onClick(); tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    currentUser = { ...user, uid: 'another-synthetic-user' };
+    tree = await settle();
+    expect(api.recordEnglishPracticeAttempt).toHaveBeenCalledTimes(1);
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][0]).toBe(user.uid);
+    expect(renderToStaticMarkup(tree)).not.toContain('english-practice-review-history');
+    finish({ projectionStatus: 'PENDING' }); tree = await settle();
+    expect(renderToStaticMarkup(tree)).not.toContain('english-practice-save-error');
+    expect(renderToStaticMarkup(tree)).not.toContain('english-practice-review-history');
+  });
+
+  it('keeps the submitted answer and the question version locally without extending the cloud payload', async () => {
+    let tree = await settle();
+    const source = authoredQuestion(tree);
+    const wrong = source.options.find(option => option !== source.answer)!;
+    button(tree, wrong).props.onClick(); tree = render();
+    button(tree, '判定する').props.onClick(); tree = await settle();
+    const progress = hooks.slots.find(slot => slot?.userUid === user.uid && Array.isArray(slot.attempts));
+    expect(progress.attempts[0].review).toMatchObject({
+      questionId: source.id, questionVersion: 1, submittedAnswer: wrong,
+      assessment: 'incorrect', referenceAnswer: source.answer, explanationJa: source.explanationJa,
+    });
+    expect(api.recordEnglishPracticeAttempt.mock.calls[0][1]).not.toHaveProperty('review');
+  });
   it('keeps the recovery notice until the identical retry is confirmed and rejects concurrent retry callbacks', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {

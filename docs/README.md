@@ -1,3 +1,5 @@
+2026-10-13: [文法・和訳の出題時情報を端末で保持するローカル候補](./analysis/2026-10-13-practice-review-local-candidate.md)。B2の端末部分と保存失敗表示/端末retryまで。3140unit・通信遮断Chrome57件成功。cloud問題版保存・正式公開gateは未実施。
+
 2026-10-11 既存本人の3業務画面候補: 正本STUDENT・所属・学習・パスワードを保持し、明示UID grantとタブ内リクエストcontextで講師/学校管理者の固定教室とサービス管理者の全教室を分離する。modern短縮Cookieを共通認証で拒否。0064はschemaのみ、本人対象教室未確定のため本番grant/公開は未実施。旧公開禁止は解除済み、同一統合SHAの通常gateと対象確認を維持する。[認可・保存・受入境界](./analysis/2026-10-11-explicit-owner-workspaces.md)。
 
 2026-10-11 長期復習の接続: PR69/main `4e70b66`を本番反映し、production `38141884879`・main CI成功。公式334＋25回帰と配備後5件、Macの読み取り29件、0062の制約・教材hash・学習記録集計保持を確認。開始時の原子的な日枠、同開始の再送、Cloud/IDBと章・日次の表示を統一した。実教室・長期記憶効果は未検証。[実装・検証・復旧の境界](./analysis/2026-10-11-bounded-long-term-review.md)。

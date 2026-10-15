@@ -46,7 +46,8 @@ const toPracticeItem = (
     },
     sourceSentence: question.sourceSentence,
     feedback: {
-      questionId: question.id, level: question.level, recommendedGradeJa: question.recommendedGradeJa,
+      questionId: question.id, questionVersion: question.version,
+      level: question.level, recommendedGradeJa: question.recommendedGradeJa,
       translationJa: question.translationJa, explanationJa: question.explanationJa,
       distractorReasons: question.distractorReasons, alternativeNotesJa: question.alternativeNotesJa,
     },
